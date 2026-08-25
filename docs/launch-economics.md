@@ -8,7 +8,7 @@ second source of truth for launch execution.
 The contract owns:
 
 - immutable `virtual_quote` and `migration_quote_target` snapshots;
-- initial Meme allocation, curve inventory, and pool provision balances;
+- protocol Meme graduation fee, curve inventory, and pool provision balances;
 - Quote migration-fee balance partitioning;
 - exact conservation and lifecycle enforcement; and
 - the eventual terminal-buy cap and asset migration.
