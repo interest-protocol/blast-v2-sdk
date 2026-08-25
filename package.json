@@ -1,0 +1,18 @@
+{
+  "name": "@blast-fun/sdk",
+  "version": "0.0.0",
+  "description": "Deterministic off-chain previews, reads, and transaction builders for Blast V2",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
+  }
+}
