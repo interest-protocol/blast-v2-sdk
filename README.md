@@ -1,7 +1,7 @@
 # Blast SDK
 
-The launchpad SDK lives in `src/launchpad/`. It mirrors the completed Sui
-launch ABI without becoming a second source of truth for protocol execution.
+The SDK mirrors the completed Sui launchpad and vesting ABIs without becoming a
+second source of truth for protocol execution.
 
 It provides:
 
@@ -82,19 +82,86 @@ After a canonical network release is registered, initialize the client without
 copying addresses into the application:
 
 ```ts
+import { blastLaunchpad } from "@blast-fun/sdk/launchpad";
+import { blastVesting } from "@blast-fun/sdk/vesting";
 import {
   getBlastDeployment,
   launchpadDeployment,
+  vestingDeployment,
 } from "@blast-fun/sdk/deployments";
 
 const blast = getBlastDeployment("testnet");
-const extension = blastLaunchpad(launchpadDeployment(blast));
+const launchpadExtension = blastLaunchpad(launchpadDeployment(blast));
+const vestingExtension = blastVesting(vestingDeployment(blast));
 ```
 
 For local or unreleased deployments, validate one manifest with
-`defineBlastDeployment`, then pass it through `launchpadDeployment`. The
+`defineBlastDeployment`, then pass it through the matching deployment helper. The
 built-in registry remains empty until publish output supplies real IDs; the SDK
 does not ship placeholder addresses.
+
+## Vesting
+
+`@blast-fun/sdk/vesting` supports the independent `linear` and `checkpoints`
+modules. It validates creation inputs, builds atomic create-and-share
+transactions, decodes live shared objects, reads `TableVec` checkpoints by
+dynamic-field index, and mirrors vesting math with `bigint`.
+
+```ts
+import { blastVesting } from "@blast-fun/sdk/vesting";
+
+const client = new SuiGrpcClient({
+  network: "testnet",
+  baseUrl: "https://fullnode.testnet.sui.io:443",
+}).$extend(
+  blastVesting({
+    packageId: "0x...",
+    originalPackageId: "0x...",
+  }),
+);
+
+const currentTimestampMs =
+  await client.blastVesting.getCurrentTimestampMs();
+const transaction = client.blastVesting.tx.createCheckpointCancelable({
+  coinType: "0x2::sui::SUI",
+  totalAmount: 1_000n,
+  beneficiary: "0xb0b",
+  refundRecipient: "0xcafe",
+  cancelCapRecipient: "0xca11",
+  currentTimestampMs,
+  checkpoints: [
+    { timestampMs: currentTimestampMs + 60_000n, cumulativeAmount: 200n },
+    { timestampMs: currentTimestampMs + 120_000n, cumulativeAmount: 456n },
+    { timestampMs: currentTimestampMs + 300_000n, cumulativeAmount: 1_000n },
+  ],
+});
+```
+
+Checkpoint amounts are cumulative. At the second checkpoint, `456` total units
+are vested, so that checkpoint adds `456 - 200 = 256` units. The final
+cumulative amount must equal `totalAmount`.
+
+Read and interact with a position without copying object metadata:
+
+```ts
+const position = await client.blastVesting.getVesting("0x...");
+const preview = await client.blastVesting.preview(
+  position.objectId,
+  BigInt(Date.now()),
+);
+const claimTransaction = client.blastVesting.tx.claim(position);
+
+if (position.kind === "checkpoints") {
+  const checkpoints = await client.blastVesting.getAllCheckpoints(position);
+}
+```
+
+The SDK requires 60 seconds between the checked current time and the first
+vesting boundary. `getCurrentTimestampMs` reads the authoritative Sui `Clock`;
+transaction builders fall back to `Date.now()` when no timestamp is supplied.
+Set `minimumLeadTimeMs` explicitly only when the application has a different
+submission policy. The contract checks the on-chain `Clock` again during
+execution.
 
 ## Generated Meme package
 

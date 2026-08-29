@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./deployments": "./src/deployments/index.ts",
     "./launchpad": "./src/launchpad/index.ts",
-    "./launchpad/template": "./src/launchpad/template.ts"
+    "./launchpad/template": "./src/launchpad/template.ts",
+    "./vesting": "./src/vesting/index.ts"
   },
   "engines": {
     "node": ">=22.18"

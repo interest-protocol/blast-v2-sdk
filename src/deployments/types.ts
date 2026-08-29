@@ -1,4 +1,5 @@
 import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
+import type { VestingDeployment } from "../vesting/transactions.ts";
 import type {
   SharedObjectIdentity,
   SuiPackageReference,
@@ -16,6 +17,7 @@ export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
 export type BlastPackages = Readonly<
   Record<string, SuiPackageReference> & {
     launchpad: SuiPackageReference;
+    vesting?: SuiPackageReference;
   }
 >;
 
@@ -47,3 +49,4 @@ export type BlastDeploymentRegistry = Readonly<
 >;
 
 export type LaunchpadDeploymentConstants = LaunchpadDeployment;
+export type VestingDeploymentConstants = VestingDeployment;

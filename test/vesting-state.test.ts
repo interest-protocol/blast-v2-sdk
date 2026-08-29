@@ -1,0 +1,194 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { bcs } from "@mysten/sui/bcs";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
+
+import {
+  checkpointBcs,
+  checkpointVestingBcs,
+  clockBcs,
+  decodeVestingObject,
+  getAllCheckpoints,
+  getCheckpointVestedAt,
+  getCurrentTimestampMs,
+  linearVestingBcs,
+} from "../src/vesting/state.ts";
+
+const objectId = "0xc";
+const tableId = "0xd";
+const beneficiary = "0xb0b";
+const refundRecipient = "0xcafe";
+const coinType = "0x2::sui::SUI";
+const checkpointType = "0x1::checkpoints::Checkpoint";
+
+const uid = (id: string) => ({ id: { bytes: id } });
+const balance = (value: bigint) => ({ value });
+
+test("decodes linear custody and derives its original total", () => {
+  const state = decodeVestingObject({
+    objectId,
+    initialSharedVersion: "7",
+    mutable: true,
+    type: `0x1::linear::Vesting<${coinType}>`,
+    content: linearVestingBcs
+      .serialize({
+        id: uid(objectId),
+        balance: balance(700n),
+        beneficiary,
+        cancel_refund_recipient: refundRecipient,
+        start_ms: 1_000n,
+        cliff_ms: 200n,
+        period_ms: 100n,
+        periods: 10n,
+        released: 300n,
+      })
+      .toBytes(),
+  });
+
+  assert.equal(state.kind, "linear");
+  assert.equal(state.totalAmount, 1_000n);
+  assert.equal(state.balance, 700n);
+  assert.equal(state.released, 300n);
+  assert.equal(state.refundRecipient?.endsWith("cafe"), true);
+  if (state.kind === "linear") {
+    assert.equal(state.endMs, 2_000n);
+    assert.deepEqual(state.schedule, {
+      startMs: 1_000n,
+      cliffMs: 200n,
+      periodMs: 100n,
+      periods: 10n,
+    });
+  }
+});
+
+test("decodes checkpoint table identity and reads every indexed field", async () => {
+  const state = decodeVestingObject({
+    objectId,
+    initialSharedVersion: "8",
+    mutable: true,
+    type: `0x1::checkpoints::Vesting<${coinType}>`,
+    content: checkpointVestingBcs
+      .serialize({
+        id: uid(objectId),
+        balance: balance(800n),
+        beneficiary,
+        cancel_refund_recipient: null,
+        checkpoints: {
+          contents: { id: uid(tableId), size: 3n },
+        },
+        released: 200n,
+      })
+      .toBytes(),
+  });
+  assert.equal(state.kind, "checkpoints");
+  if (state.kind !== "checkpoints") return;
+  assert.equal(state.checkpointTableId.endsWith("0d"), true);
+  assert.equal(state.checkpointCount, 3n);
+  assert.equal(state.totalAmount, 1_000n);
+
+  const values = [
+    { timestampMs: 100n, cumulativeAmount: 200n },
+    { timestampMs: 250n, cumulativeAmount: 456n },
+    { timestampMs: 700n, cumulativeAmount: 1_000n },
+  ];
+  let reads = 0;
+  const client = {
+    core: {
+      getDynamicField: async (options: {
+        parentId: string;
+        name: { bcs: Uint8Array };
+      }) => {
+        reads += 1;
+        assert.equal(options.parentId.endsWith("0d"), true);
+        const index = Number(BigInt(bcs.u64().parse(options.name.bcs)));
+        const value = values[index]!;
+        return {
+          dynamicField: {
+            value: {
+              type: checkpointType,
+              bcs: checkpointBcs
+                .serialize({
+                  timestamp_ms: value.timestampMs,
+                  cumulative_amount: value.cumulativeAmount,
+                })
+                .toBytes(),
+            },
+          },
+        };
+      },
+    },
+  } as unknown as ClientWithCoreApi;
+
+  assert.deepEqual(await getAllCheckpoints(client, state), values);
+  reads = 0;
+  assert.equal(await getCheckpointVestedAt(client, state, 250n), 456n);
+  assert.equal(reads, 3);
+});
+
+test("reads the authoritative Sui Clock", async () => {
+  const client = {
+    core: {
+      getObject: async () => ({
+        object: {
+          objectId: SUI_CLOCK_OBJECT_ID,
+          owner: {
+            $kind: "Shared",
+            Shared: { initialSharedVersion: "1" },
+          },
+          type: "0x2::clock::Clock",
+          content: clockBcs
+            .serialize({
+              id: uid(SUI_CLOCK_OBJECT_ID),
+              timestamp_ms: 123_456n,
+            })
+            .toBytes(),
+        },
+      }),
+    },
+  } as unknown as ClientWithCoreApi;
+
+  assert.equal(await getCurrentTimestampMs(client), 123_456n);
+});
+
+test("rejects an object with a mismatched UID or package", () => {
+  const content = linearVestingBcs
+    .serialize({
+      id: uid("0xf"),
+      balance: balance(1n),
+      beneficiary,
+      cancel_refund_recipient: null,
+      start_ms: 1n,
+      cliff_ms: 0n,
+      period_ms: 1n,
+      periods: 1n,
+      released: 0n,
+    })
+    .toBytes();
+  assert.throws(
+    () =>
+      decodeVestingObject({
+        objectId,
+        initialSharedVersion: "7",
+        mutable: true,
+        type: `0x1::linear::Vesting<${coinType}>`,
+        content,
+      }),
+    /mismatched UID/,
+  );
+  assert.throws(
+    () =>
+      decodeVestingObject(
+        {
+          objectId: "0xf",
+          initialSharedVersion: "7",
+          mutable: true,
+          type: `0x1::linear::Vesting<${coinType}>`,
+          content,
+        },
+        "0x9",
+      ),
+    /unexpected package/,
+  );
+});

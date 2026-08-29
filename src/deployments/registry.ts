@@ -8,6 +8,7 @@ import type {
   BlastDeploymentRegistry,
   BlastNetwork,
   LaunchpadDeploymentConstants,
+  VestingDeploymentConstants,
 } from "./types.ts";
 import { BLAST_NETWORKS } from "./types.ts";
 
@@ -88,6 +89,19 @@ export function launchpadDeployment(
       objects.protocolAuthority,
       false,
     ),
+  };
+}
+
+export function vestingDeployment(
+  deployment: BlastDeployment,
+): VestingDeploymentConstants {
+  const packageReference = deployment.packages.vesting;
+  if (!packageReference) {
+    throw new TypeError("packages.vesting is required");
+  }
+  return {
+    packageId: packageReference.packageId,
+    originalPackageId: packageReference.originalPackageId,
   };
 }
 
