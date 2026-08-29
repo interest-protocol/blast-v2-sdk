@@ -4,6 +4,9 @@
   "description": "Deterministic off-chain previews, reads, and transaction builders for Blast V2",
   "private": true,
   "type": "module",
+  "exports": {
+    "./launchpad/template": "./src/launchpad/template.ts"
+  },
   "engines": {
     "node": ">=22.18"
   },
@@ -11,7 +14,13 @@
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc"
   },
+  "peerDependencies": {
+    "@mysten/move-bytecode-template": "^0.4.1",
+    "@mysten/sui": "^2.26.2"
+  },
   "devDependencies": {
+    "@mysten/move-bytecode-template": "0.4.1",
+    "@mysten/sui": "2.26.2",
     "@types/node": "^24.3.0",
     "typescript": "^5.9.2"
   }
