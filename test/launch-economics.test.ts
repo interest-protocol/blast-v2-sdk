@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { deriveLaunchEconomics } from "../src/launch-economics.ts";
+import { deriveLaunchEconomics } from "../src/launchpad/economics.ts";
 
 test("derives the complete worked SUI outcome", () => {
   assert.deepEqual(
@@ -112,6 +112,6 @@ test("rejects a non-positive curve input", () => {
         migrationQuoteTarget: 1n,
         quoteMigrationFeeBps: 0n,
       }),
-    /virtualQuote must be positive/,
+    /virtualQuote must be a positive u64/,
   );
 });

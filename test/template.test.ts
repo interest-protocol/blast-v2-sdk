@@ -4,14 +4,20 @@ import test from "node:test";
 
 import { deserialize, get_constants } from "@mysten/move-bytecode-template";
 import { bcs } from "@mysten/sui/bcs";
-import { normalizeSuiObjectId } from "@mysten/sui/utils";
+import {
+  MOVE_STDLIB_ADDRESS,
+  normalizeSuiObjectId,
+  SUI_FRAMEWORK_ADDRESS,
+} from "@mysten/sui/utils";
 
 import {
   buildMemePackageBytecode,
   deriveMemeTemplateIdentifiers,
 } from "../src/launchpad/template.ts";
+import { LaunchpadTransactions } from "../src/launchpad/transactions.ts";
 
 const blastPackageId = normalizeSuiObjectId("0xb1a57");
+const latestBlastPackageId = normalizeSuiObjectId("0xb1a58");
 const options = {
   symbol: "DOG COIN",
   name: "Dog Coin",
@@ -224,6 +230,64 @@ test("keeps constant fields independent when values match placeholders", async (
   }
 });
 
+test("publishes against 0x1, 0x2, and Blast, then makes the package immutable", async () => {
+  const tx = new LaunchpadTransactions({
+    packageId: latestBlastPackageId,
+    originalPackageId: blastPackageId,
+    packageVersion: {
+      objectId: "0x3",
+      initialSharedVersion: "10",
+      mutable: false,
+    },
+    launchConfig: {
+      objectId: "0x4",
+      initialSharedVersion: "11",
+      mutable: false,
+    },
+    runtimeConfig: {
+      objectId: "0x5",
+      initialSharedVersion: "12",
+      mutable: false,
+    },
+    protocolAuthority: {
+      objectId: "0x6",
+      initialSharedVersion: "13",
+      mutable: false,
+    },
+  }).publishMeme(options);
+
+  await tx.prepareForSerialization({});
+  const commands = tx.getData().commands;
+  assert.equal(commands[0]?.$kind, "Publish");
+  if (commands[0]?.$kind === "Publish") {
+    assert.equal(commands[0].Publish.modules.length, 1);
+    assert.deepEqual(commands[0].Publish.dependencies, [
+      MOVE_STDLIB_ADDRESS,
+      SUI_FRAMEWORK_ADDRESS,
+      latestBlastPackageId,
+    ]);
+    const publishedModule = Buffer.from(
+      commands[0].Publish.modules[0] ?? "",
+      "base64",
+    );
+    const compiled = deserialize(publishedModule) as {
+      address_identifiers: string[];
+    };
+    assert.ok(compiled.address_identifiers.includes(blastPackageId.slice(2)));
+    assert.ok(
+      !compiled.address_identifiers.includes(latestBlastPackageId.slice(2)),
+    );
+  }
+  assert.equal(commands[1]?.$kind, "MoveCall");
+  if (commands[1]?.$kind === "MoveCall") {
+    assert.equal(commands[1].MoveCall.package, SUI_FRAMEWORK_ADDRESS);
+    assert.equal(commands[1].MoveCall.module, "package");
+    assert.equal(commands[1].MoveCall.function, "make_immutable");
+    assert.deepEqual(commands[1].MoveCall.arguments, [
+      { Result: 0, $kind: "Result" },
+    ]);
+  }
+});
 test("rejects invalid policy, dependency, and identifier inputs", async () => {
   await assert.rejects(
     buildMemePackageBytecode(

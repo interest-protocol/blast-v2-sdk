@@ -1,0 +1,49 @@
+import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
+import type {
+  SharedObjectIdentity,
+  SuiPackageReference,
+} from "../lib/sui.ts";
+
+export const BLAST_NETWORKS = [
+  "mainnet",
+  "testnet",
+  "devnet",
+  "localnet",
+] as const;
+
+export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
+
+export type BlastPackages = Readonly<
+  Record<string, SuiPackageReference> & {
+    launchpad: SuiPackageReference;
+  }
+>;
+
+/**
+ * Canonical shared-object identities for one deployment.
+ *
+ * Mutability is intentionally absent because it belongs to each Move call,
+ * not to the on-chain object. Transaction builders add the required value.
+ */
+export type BlastSharedObjects = Readonly<
+  Record<string, SharedObjectIdentity> & {
+    packageVersion: SharedObjectIdentity;
+    launchConfig: SharedObjectIdentity;
+    runtimeConfig: SharedObjectIdentity;
+    protocolAuthority: SharedObjectIdentity;
+    packageAdmin?: SharedObjectIdentity;
+  }
+>;
+
+export type BlastDeployment = Readonly<{
+  network: BlastNetwork;
+  chainIdentifier: string;
+  packages: BlastPackages;
+  sharedObjects: BlastSharedObjects;
+}>;
+
+export type BlastDeploymentRegistry = Readonly<
+  Partial<Record<BlastNetwork, BlastDeployment>>
+>;
+
+export type LaunchpadDeploymentConstants = LaunchpadDeployment;

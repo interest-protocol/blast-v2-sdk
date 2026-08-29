@@ -5,6 +5,9 @@
   "private": true,
   "type": "module",
   "exports": {
+    ".": "./src/index.ts",
+    "./deployments": "./src/deployments/index.ts",
+    "./launchpad": "./src/launchpad/index.ts",
     "./launchpad/template": "./src/launchpad/template.ts"
   },
   "engines": {

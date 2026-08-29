@@ -1,3 +1,5 @@
+import { requirePositiveU64 } from "../lib/integers.ts";
+
 const BASIS_POINTS_DENOMINATOR = 10_000n;
 
 export type LaunchEconomicsInput = {
@@ -37,11 +39,11 @@ export function deriveLaunchEconomics(
     quoteMigrationFeeBps,
   } = input;
 
-  requirePositive("initialMemeSupply", initialMemeSupply);
-  requirePositive("curveMemeInventory", curveMemeInventory);
-  requirePositive("poolMemeProvision", poolMemeProvision);
-  requirePositive("virtualQuote", virtualQuote);
-  requirePositive("migrationQuoteTarget", migrationQuoteTarget);
+  requirePositiveU64("initialMemeSupply", initialMemeSupply);
+  requirePositiveU64("curveMemeInventory", curveMemeInventory);
+  requirePositiveU64("poolMemeProvision", poolMemeProvision);
+  requirePositiveU64("virtualQuote", virtualQuote);
+  requirePositiveU64("migrationQuoteTarget", migrationQuoteTarget);
 
   if (curveMemeInventory + poolMemeProvision > initialMemeSupply) {
     throw new RangeError(
@@ -83,10 +85,4 @@ export function deriveLaunchEconomics(
 
 function ceilDiv(numerator: bigint, denominator: bigint): bigint {
   return (numerator + denominator - 1n) / denominator;
-}
-
-function requirePositive(name: string, value: bigint): void {
-  if (value <= 0n) {
-    throw new RangeError(`${name} must be positive`);
-  }
 }
