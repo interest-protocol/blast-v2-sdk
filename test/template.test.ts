@@ -45,11 +45,11 @@ test("locks the embedded artifact to the eight source constants", async () => {
       xIdentityHash: creatorIdentityBytes,
     },
   };
-  const bytecode = await buildMemePackageBytecode(defaults, "0x9d72");
+  const bytecode = await buildMemePackageBytecode(defaults, "0xda74");
 
   assert.equal(
     createHash("sha256").update(bytecode).digest("hex"),
-    "3168a68c91959aabf6d44571f9a3ff68956cbdc4c26293126c6d22f4ebd48c31",
+    "6747a1c0711a6ff8b94f7fc3f015f462e7ce11ec4b2d58ff2b2bd416357309c1",
   );
   assert.deepEqual(get_constants(bytecode), [
     {
