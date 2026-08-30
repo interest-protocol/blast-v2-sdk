@@ -41,3 +41,18 @@ preview.
 - Validate inputs only enough to reject impossible canonical states; do not
   duplicate contract admission policy that may legitimately change.
 - Run `npm run typecheck` and `npm test` before committing.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues for `interest-protocol/blast-v2-sdk`.
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default Matt triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use the single-context domain layout. See `docs/agents/domain.md`.
