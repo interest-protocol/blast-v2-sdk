@@ -350,6 +350,7 @@ export type LaunchpadEventPosition = {
 };
 
 type DecodedLaunchpadEventBase = {
+  source: "launchpad";
   emitterPackageId: string;
   sender: string;
   position: LaunchpadEventPosition;
@@ -415,6 +416,7 @@ export function decodeLaunchpadEvent(
   const kind = payloadTag.name as LaunchpadEventKind;
   const payload = launchpadEventBcs[kind].parse(event.bcs);
   return {
+    source: "launchpad",
     kind,
     payload,
     emitterPackageId: currentPackageId,
