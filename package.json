@@ -9,6 +9,7 @@
     "./deployments": "./src/deployments/index.ts",
     "./launchpad": "./src/launchpad/index.ts",
     "./launchpad/template": "./src/launchpad/template.ts",
+    "./migrators": "./src/migrators/index.ts",
     "./vesting": "./src/vesting/index.ts"
   },
   "engines": {

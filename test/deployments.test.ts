@@ -6,6 +6,7 @@ import {
   defineBlastDeployment,
   getBlastDeployment,
   launchpadDeployment,
+  migratorsDeployment,
   vestingDeployment,
 } from "../src/deployments/index.ts";
 
@@ -16,6 +17,10 @@ const deployment = defineBlastDeployment({
     launchpad: {
       packageId: "0x123",
       originalPackageId: "0x122",
+    },
+    migrators: {
+      packageId: "0x323",
+      originalPackageId: "0x322",
     },
     vesting: {
       packageId: "0x223",
@@ -28,6 +33,7 @@ const deployment = defineBlastDeployment({
     runtimeConfig: { objectId: "0x4", initialSharedVersion: "12" },
     protocolAuthority: { objectId: "0x5", initialSharedVersion: "13" },
     packageAdmin: { objectId: "0x6", initialSharedVersion: "14" },
+    venueConfig: { objectId: "0x7", initialSharedVersion: "15" },
   },
 });
 
@@ -84,6 +90,46 @@ test("derives the independent vesting package reference", () => {
     originalPackageId:
       "0x0000000000000000000000000000000000000000000000000000000000000222",
   });
+});
+
+test("derives migrator package and shared-object references", () => {
+  assert.deepEqual(migratorsDeployment(deployment), {
+    packageId:
+      "0x0000000000000000000000000000000000000000000000000000000000000323",
+    originalPackageId:
+      "0x0000000000000000000000000000000000000000000000000000000000000322",
+    launchpad: launchpadDeployment(deployment),
+    venueConfig: {
+      objectId:
+        "0x0000000000000000000000000000000000000000000000000000000000000007",
+      initialSharedVersion: "15",
+      mutable: false,
+    },
+  });
+});
+
+test("requires migrator deployment constants only when requested", () => {
+  assert.throws(
+    () =>
+      migratorsDeployment({
+        ...deployment,
+        packages: { launchpad: deployment.packages.launchpad },
+      }),
+    /packages\.migrators is required/,
+  );
+  assert.throws(
+    () =>
+      migratorsDeployment({
+        ...deployment,
+        sharedObjects: {
+          packageVersion: deployment.sharedObjects.packageVersion,
+          launchConfig: deployment.sharedObjects.launchConfig,
+          runtimeConfig: deployment.sharedObjects.runtimeConfig,
+          protocolAuthority: deployment.sharedObjects.protocolAuthority,
+        },
+      }),
+    /sharedObjects\.venueConfig is required/,
+  );
 });
 
 test("does not invent constants before a canonical release", () => {

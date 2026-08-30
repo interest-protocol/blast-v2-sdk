@@ -8,6 +8,7 @@ import type {
   BlastDeploymentRegistry,
   BlastNetwork,
   LaunchpadDeploymentConstants,
+  MigratorsDeploymentConstants,
   VestingDeploymentConstants,
 } from "./types.ts";
 import { BLAST_NETWORKS } from "./types.ts";
@@ -102,6 +103,25 @@ export function vestingDeployment(
   return {
     packageId: packageReference.packageId,
     originalPackageId: packageReference.originalPackageId,
+  };
+}
+
+export function migratorsDeployment(
+  deployment: BlastDeployment,
+): MigratorsDeploymentConstants {
+  const packageReference = deployment.packages.migrators;
+  if (!packageReference) {
+    throw new TypeError("packages.migrators is required");
+  }
+  const venueConfig = deployment.sharedObjects.venueConfig;
+  if (!venueConfig) {
+    throw new TypeError("sharedObjects.venueConfig is required");
+  }
+  return {
+    packageId: packageReference.packageId,
+    originalPackageId: packageReference.originalPackageId,
+    launchpad: launchpadDeployment(deployment),
+    venueConfig: sharedObjectReference(venueConfig, false),
   };
 }
 
