@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./blast-sui": "./src/blast-sui/index.ts",
     "./deployments": "./src/deployments/index.ts",
     "./launchpad": "./src/launchpad/index.ts",
     "./launchpad/template": "./src/launchpad/template.ts",
