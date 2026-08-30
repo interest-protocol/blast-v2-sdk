@@ -5290,7 +5290,7 @@
           "functions": [
             {
               "name": "assert_price_within_bps",
-              "sdk": "move-composition",
+              "sdk": "sdk-arithmetic",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -5304,7 +5304,7 @@
             },
             {
               "name": "assert_residual_within_bps",
-              "sdk": "move-composition",
+              "sdk": "sdk-arithmetic",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -5316,7 +5316,7 @@
             },
             {
               "name": "minimum_utilized_amount",
-              "sdk": "move-composition",
+              "sdk": "sdk-arithmetic",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -5329,7 +5329,7 @@
             },
             {
               "name": "sqrt_price_x64",
-              "sdk": "move-composition",
+              "sdk": "sdk-arithmetic",
               "entry": false,
               "typeParameters": [],
               "parameters": [

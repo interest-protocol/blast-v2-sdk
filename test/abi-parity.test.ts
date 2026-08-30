@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
@@ -7,8 +7,16 @@ const artifactUrl = new URL(
   "../abi/production-launchpad-v1.json",
   import.meta.url,
 );
+const siblingContractsManifestUrl = new URL(
+  "../../contracts/sui/launchpad/Move.toml",
+  import.meta.url,
+);
 
-test("matches the frozen production Move ABI", () => {
+test("matches the frozen production Move ABI", {
+  skip: existsSync(siblingContractsManifestUrl)
+    ? false
+    : "requires the sibling blast-v2 contracts checkout",
+}, () => {
   const result = spawnSync(
     process.execPath,
     ["scripts/check-contract-abi.mjs", "../contracts"],

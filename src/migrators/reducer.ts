@@ -295,7 +295,7 @@ function reduceNativeFact(
         ...next,
         returnedCoinRecipients: {
           ...state.returnedCoinRecipients,
-          [normalized.position.transactionDigest]: normalized,
+          [factId]: normalized,
         },
       };
   }
@@ -356,5 +356,8 @@ function nativeFactId(fact: NativeReconstructionFact): string {
   if (fact.kind === "creatorCapOwnership") {
     return `${fact.checkpoint}:ownership:${fact.creatorCapId}`;
   }
-  return `${fact.position.checkpoint}:${fact.position.transactionDigest}:${fact.kind}`;
+  if (fact.kind === "returnedCoinRecipients") {
+    return `${fact.position.transactionDigest}:${fact.kind}:${fact.memeCoin.objectId}:${fact.quoteCoin.objectId}`;
+  }
+  return `${fact.position.transactionDigest}:${fact.kind}:${fact.packageId}`;
 }

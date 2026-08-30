@@ -76,12 +76,58 @@ export type LaunchpadConfigProjection = {
   migrationWitnesses: Readonly<Record<string, true>>;
 };
 
+export type LaunchpadAdministrationProjection = {
+  admins: Readonly<Record<string, {
+    adminCapId: string;
+    recipient: string | null;
+    active: boolean;
+    destroyed: boolean;
+    wasActiveAtDestruction: boolean | null;
+  }>>;
+  creatorCapClaims: Readonly<Record<string, {
+    memeType: string;
+    creator: string;
+    xIdentityHash: Uint8Array | null;
+    xClaimExpiryMs: bigint | null;
+  }>>;
+  packageAdmin: {
+    packageAdminId: string;
+    publisherId: string;
+    upgradeCapId: string;
+    packageId: string;
+    packageVersion: bigint;
+    policy: number;
+  } | null;
+  pendingSuperAdminTransfer: {
+    recipient: string;
+    executeAfterMs: bigint;
+  } | null;
+  superAdmin: {
+    previousCapId: string;
+    capId: string;
+    recipient: string;
+  } | null;
+  pendingUpgrade: {
+    packageId: string;
+    packageVersion: bigint;
+    policy: number;
+    digest: Uint8Array;
+  } | null;
+  lastUpgradeCommit: {
+    packageId: string;
+    previousVersion: bigint;
+    newVersion: bigint;
+  } | null;
+  xClaimSignerPublicKey: Uint8Array | null;
+};
+
 export type LaunchpadEventProjection = {
   appliedEventIds: Readonly<Record<string, true>>;
   eventCounts: Readonly<Record<LaunchpadEventKind, number>>;
   launches: Readonly<Record<string, LaunchEventProjection>>;
   tickets: Readonly<Record<string, LaunchTicketEventProjection>>;
   config: LaunchpadConfigProjection;
+  administration: LaunchpadAdministrationProjection;
 };
 
 export function createLaunchpadEventProjection(): LaunchpadEventProjection {
@@ -100,6 +146,16 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
       graduationDefaults: null,
       quotes: {},
       migrationWitnesses: {},
+    },
+    administration: {
+      admins: {},
+      creatorCapClaims: {},
+      packageAdmin: null,
+      pendingSuperAdminTransfer: null,
+      superAdmin: null,
+      pendingUpgrade: null,
+      lastUpgradeCommit: null,
+      xClaimSignerPublicKey: null,
     },
   };
 }
@@ -322,20 +378,157 @@ export function reduceLaunchpadEvent(
       delete migrationWitnesses[event.payload.migration_witness];
       return updateConfig(next, { ...state.config, migrationWitnesses });
     }
-    case "AdminDestroyed":
-    case "AdminGranted":
-    case "AdminRevoked":
-    case "CreatorCapClaimed":
-    case "PackageAdminCreated":
-    case "SuperAdminTransferCancelled":
-    case "SuperAdminTransferred":
+    case "AdminGranted": {
+      const payload = event.payload;
+      return updateAdministration(next, {
+        ...state.administration,
+        admins: {
+          ...state.administration.admins,
+          [payload.admin_cap_id]: {
+            adminCapId: payload.admin_cap_id,
+            recipient: payload.recipient,
+            active: true,
+            destroyed: false,
+            wasActiveAtDestruction: null,
+          },
+        },
+      });
+    }
+    case "AdminRevoked": {
+      const payload = event.payload;
+      const previous = state.administration.admins[payload.admin_cap_id];
+      return updateAdministration(next, {
+        ...state.administration,
+        admins: {
+          ...state.administration.admins,
+          [payload.admin_cap_id]: {
+            adminCapId: payload.admin_cap_id,
+            recipient: previous?.recipient ?? null,
+            active: false,
+            destroyed: false,
+            wasActiveAtDestruction: null,
+          },
+        },
+      });
+    }
+    case "AdminDestroyed": {
+      const payload = event.payload;
+      const previous = state.administration.admins[payload.admin_cap_id];
+      return updateAdministration(next, {
+        ...state.administration,
+        admins: {
+          ...state.administration.admins,
+          [payload.admin_cap_id]: {
+            adminCapId: payload.admin_cap_id,
+            recipient: previous?.recipient ?? null,
+            active: false,
+            destroyed: true,
+            wasActiveAtDestruction: payload.was_active,
+          },
+        },
+      });
+    }
+    case "CreatorCapClaimed": {
+      const payload = event.payload;
+      return updateAdministration(next, {
+        ...state.administration,
+        creatorCapClaims: {
+          ...state.administration.creatorCapClaims,
+          [payload.meme]: {
+            memeType: payload.meme,
+            creator: payload.creator,
+            xIdentityHash: payload.x_identity_hash,
+            xClaimExpiryMs: payload.x_claim_expiry_ms,
+          },
+        },
+      });
+    }
+    case "PackageAdminCreated": {
+      const payload = event.payload;
+      return updateAdministration(next, {
+        ...state.administration,
+        packageAdmin: {
+          packageAdminId: payload.package_admin_id,
+          publisherId: payload.publisher_id,
+          upgradeCapId: payload.upgrade_cap_id,
+          packageId: payload.package_id,
+          packageVersion: payload.package_version,
+          policy: payload.policy,
+        },
+      });
+    }
     case "SuperAdminTransferStarted":
+      return updateAdministration(next, {
+        ...state.administration,
+        pendingSuperAdminTransfer: {
+          recipient: event.payload.recipient,
+          executeAfterMs: event.payload.execute_after_ms,
+        },
+      });
+    case "SuperAdminTransferCancelled":
+      return updateAdministration(next, {
+        ...state.administration,
+        pendingSuperAdminTransfer: null,
+      });
+    case "SuperAdminTransferred":
+      return updateAdministration(next, {
+        ...state.administration,
+        pendingSuperAdminTransfer: null,
+        superAdmin: {
+          previousCapId: event.payload.previous_super_admin_cap_id,
+          capId: event.payload.new_super_admin_cap_id,
+          recipient: event.payload.recipient,
+        },
+      });
     case "UpgradeAuthorized":
-    case "UpgradeCommitted":
-    case "UpgradePolicyRestricted":
-    case "XClaimSignerRevoked":
+      return updateAdministration(next, {
+        ...state.administration,
+        pendingUpgrade: {
+          packageId: event.payload.package_id,
+          packageVersion: event.payload.package_version,
+          policy: event.payload.policy,
+          digest: event.payload.digest,
+        },
+      });
+    case "UpgradeCommitted": {
+      const payload = event.payload;
+      const packageAdmin = state.administration.packageAdmin;
+      return updateAdministration(next, {
+        ...state.administration,
+        packageAdmin: packageAdmin
+          ? {
+              ...packageAdmin,
+              packageId: payload.new_package_id,
+              packageVersion: payload.new_version,
+            }
+          : null,
+        pendingUpgrade: null,
+        lastUpgradeCommit: {
+          packageId: payload.new_package_id,
+          previousVersion: payload.previous_version,
+          newVersion: payload.new_version,
+        },
+      });
+    }
+    case "UpgradePolicyRestricted": {
+      const packageAdmin = state.administration.packageAdmin;
+      return updateAdministration(next, {
+        ...state.administration,
+        packageAdmin: packageAdmin
+          ? { ...packageAdmin, policy: event.payload.new_policy }
+          : null,
+      });
+    }
     case "XClaimSignerSet":
-      return next;
+      return updateAdministration(next, {
+        ...state.administration,
+        xClaimSignerPublicKey: event.payload.signer_public_key,
+      });
+    case "XClaimSignerRevoked":
+      return updateAdministration(next, {
+        ...state.administration,
+        xClaimSignerPublicKey: null,
+      });
   }
 }
 
@@ -357,4 +550,11 @@ function updateConfig(
   config: LaunchpadConfigProjection,
 ): LaunchpadEventProjection {
   return { ...state, config };
+}
+
+function updateAdministration(
+  state: LaunchpadEventProjection,
+  administration: LaunchpadAdministrationProjection,
+): LaunchpadEventProjection {
+  return { ...state, administration };
 }

@@ -9,8 +9,11 @@ It provides:
 - BCS decoding for live `Launch<Meme, Quote>` objects through the transport-
   neutral Sui Core API;
 - executable transactions for launch creation, trades, creator claims, and fee
-  claims; and
-- composable Move-call helpers for adapter-owned migration transactions.
+  claims;
+- composable Move-call helpers for adapter-owned migration transactions;
+- complete migration and LP-fee transactions for Bluefin, Cetus, MMT, Turbos,
+  and Full Sail; and
+- typed BCS event decoding and deterministic launch-to-vault replay.
 
 ## Client extension
 
@@ -99,6 +102,24 @@ For local or unreleased deployments, validate one manifest with
 `defineBlastDeployment`, then pass it through the matching deployment helper. The
 built-in registry remains empty until publish output supplies real IDs; the SDK
 does not ship placeholder addresses.
+
+## Migrators
+
+`@blast-fun/sdk/migrators` supports every production migration and LP-fee route
+for Bluefin, Cetus, MMT, Turbos, and Full Sail. Route options make coin order
+and new-pool or existing-pool selection explicit. Turbos also requires its
+`FeeType` and a `bigint` deadline.
+
+The migrator client reads `LpVault` objects from BCS and reads venue-tier
+dynamic fields with original package type identity. If a tier field does not
+exist, the client returns the documented compiled default. It does not convert
+transport failures or corrupt fields into defaults.
+
+The event reducers require Sui checkpoint, transaction digest, and event index
+metadata. Stable replay identity uses transaction digest plus event index;
+checkpoint remains ordering metadata. Transaction effects provide package
+publication and returned-coin recipient facts. Object ownership reads provide
+the current `CreatorCap` owner. Blast events do not provide these native facts.
 
 ## Vesting
 
@@ -221,7 +242,14 @@ Use Node 22.18 or newer:
 npm install
 npm run typecheck
 npm test
+npm run check:abi
 ```
 
+The default test suite runs the live ABI comparison when the sibling
+`contracts/` checkout is available. `npm run check:abi` is the explicit
+cross-repository release gate.
+
 See [docs/launch-economics.md](docs/launch-economics.md) for the endpoint and
-valuation formulas.
+valuation formulas. See
+[docs/launchpad-abi-coverage.md](docs/launchpad-abi-coverage.md) for the frozen
+ABI baseline and the complete SDK coverage matrix.

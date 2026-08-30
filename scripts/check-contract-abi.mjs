@@ -216,7 +216,8 @@ function classifyFunction(packageName, moduleName, functionName) {
   }
   if (key === "launch_ticket::new") return "template-builder";
   if (moduleName === "creator_authority") return "template-internal";
-  if (moduleName === "fees" || moduleName === "migration_math") return "move-composition";
+  if (moduleName === "migration_math") return "sdk-arithmetic";
+  if (moduleName === "fees") return "move-composition";
   if (
     moduleName === "acl" ||
     moduleName === "launch_config" ||

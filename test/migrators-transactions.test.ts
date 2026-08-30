@@ -122,6 +122,9 @@ test("builds the complete Bluefin migration with frozen mutability", () => {
     true,
     false,
   ]);
+  assertSharedArgumentIds(tx, [
+    "0x10", "0x2", "0x4", "0x60", "0x11", "0x12", "0x13", "0x6",
+  ]);
 });
 
 test("builds Bluefin LP-fee collection without unhandled results", () => {
@@ -135,6 +138,7 @@ test("builds Bluefin LP-fee collection without unhandled results", () => {
 
   assert.deepEqual(moveFunctions(tx), ["bluefin::collect_fees"]);
   assert.deepEqual(sharedMutability(tx), [true, false, false, true, false]);
+  assertSharedArgumentIds(tx, ["0x20", "0x4", "0x21", "0x22", "0x6"]);
   assert.equal(tx.getData().commands.length, 1);
 });
 
@@ -169,6 +173,9 @@ test("routes both MMT migration orientations with frozen shared inputs", () => {
       false,
       false,
     ]);
+    assertSharedArgumentIds(tx, [
+      "0x10", "0x2", "0x4", "0x60", "0x11", "0x12", "0x13", "0x6",
+    ]);
   }
 });
 
@@ -186,6 +193,7 @@ test("routes both MMT collection orientations without unhandled results", () => 
 
     assert.deepEqual(moveFunctions(tx), [`mmt::collect_fees_meme_${memeSide}`]);
     assert.deepEqual(sharedMutability(tx), [true, false, true, false, false]);
+    assertSharedArgumentIds(tx, ["0x20", "0x4", "0x21", "0x22", "0x6"]);
     assert.equal(tx.getData().commands.length, 1);
   }
 });
@@ -224,6 +232,9 @@ test("routes all four Cetus migration combinations", () => {
         true,
         false,
       ]);
+      assertSharedArgumentIds(tx, [
+        "0x10", "0x2", "0x4", "0x60", "0x11", "0x12", "0x14", "0x6",
+      ]);
       assert.equal(tx.getData().commands.length, 1);
     }
   }
@@ -245,6 +256,7 @@ test("routes both Cetus LP-fee collection orientations", () => {
       `cetus::collect_fees_meme_${memeSide}`,
     ]);
     assert.deepEqual(sharedMutability(tx), [true, false, false, true]);
+    assertSharedArgumentIds(tx, ["0x20", "0x4", "0x21", "0x22"]);
     assert.equal(tx.getData().commands.length, 1);
   }
 });
@@ -294,6 +306,18 @@ test("routes all four Turbos migrations with a third fee type", () => {
           ? [true, false, false, false, true, true, false, true, false, false]
           : [true, false, false, false, true, true, true, false, false],
       );
+      assertSharedArgumentIds(
+        tx,
+        poolKind === "new"
+          ? [
+              "0x10", "0x2", "0x4", "0x60", "0x11", "0x14", "0x15",
+              "0x16", "0x6", "0x17",
+            ]
+          : [
+              "0x10", "0x2", "0x4", "0x60", "0x11", "0x14", "0x16",
+              "0x6", "0x17",
+            ],
+      );
       assert.equal(pureInputCount(tx), 1);
       assert.equal(tx.getData().commands.length, 1);
     }
@@ -326,6 +350,9 @@ test("routes both Turbos collection orientations and validates deadline", () => 
       true,
       false,
       false,
+    ]);
+    assertSharedArgumentIds(tx, [
+      "0x20", "0x4", "0x21", "0x22", "0x6", "0x23",
     ]);
     assert.equal(pureInputCount(tx), 1);
     assert.equal(tx.getData().commands.length, 1);
@@ -372,6 +399,10 @@ test("routes all four Full Sail migrations including rewarder custody", () => {
         true,
         false,
       ]);
+      assertSharedArgumentIds(tx, [
+        "0x10", "0x2", "0x4", "0x60", "0x11", "0x12", "0x13", "0x14",
+        "0x6",
+      ]);
       assert.equal(tx.getData().commands.length, 1);
     }
   }
@@ -393,6 +424,7 @@ test("routes both Full Sail collection orientations without rewarder inputs", ()
       `fullsail::collect_fees_meme_${memeSide}`,
     ]);
     assert.deepEqual(sharedMutability(tx), [true, false, false, true]);
+    assertSharedArgumentIds(tx, ["0x20", "0x4", "0x21", "0x22"]);
     assert.equal(tx.getData().commands.length, 1);
   }
 });
@@ -419,9 +451,30 @@ function moveTypeArguments(tx: Transaction): string[][] {
 }
 
 function sharedMutability(tx: Transaction): boolean[] {
-  return tx.getData().inputs.flatMap((input) =>
-    input.$kind === "Object" && input.Object.$kind === "SharedObject"
-      ? [input.Object.SharedObject.mutable]
+  return sharedMoveArguments(tx).map((argument) => argument.mutable);
+}
+
+function assertSharedArgumentIds(tx: Transaction, objectIds: string[]): void {
+  assert.deepEqual(
+    sharedMoveArguments(tx).map((argument) => argument.objectId),
+    objectIds.map((objectId) =>
+      `0x${objectId.replace(/^0x/, "").padStart(64, "0")}`,
+    ),
+  );
+}
+
+function sharedMoveArguments(tx: Transaction) {
+  const data = tx.getData();
+  return data.commands.flatMap((command) =>
+    command.$kind === "MoveCall"
+      ? command.MoveCall.arguments.flatMap((argument) => {
+          if (argument.$kind !== "Input") return [];
+          const input = data.inputs[argument.Input];
+          return input?.$kind === "Object" &&
+            input.Object.$kind === "SharedObject"
+            ? [input.Object.SharedObject]
+            : [];
+        })
       : [],
   );
 }

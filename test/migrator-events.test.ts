@@ -158,6 +158,26 @@ test("requires migrator event positions and current/original identities", () => 
   );
 });
 
+test("uses transaction digest and event index as migrator replay identity", () => {
+  const first = decodeMigratorEvent(
+    migratorSuiEvent("VaultCreated", {}, 0),
+    migratorPackages,
+  );
+  const correctedCheckpoint = decodeMigratorEvent(
+    { ...migratorSuiEvent("VaultCreated", {}, 0), checkpoint: "10" },
+    migratorPackages,
+  );
+  const projection = reduceLaunchpadProductInput(
+    createLaunchpadProductProjection(),
+    first,
+  );
+
+  assert.equal(
+    reduceLaunchpadProductInput(projection, correctedCheckpoint),
+    projection,
+  );
+});
+
 test("keeps transaction-effects and ownership facts separate from events", () => {
   const nativeInputs = [
     {
@@ -182,6 +202,14 @@ test("keeps transaction-effects and ownership facts separate from events", () =>
       memeCoin: { objectId: "0x60", recipient: "0x61" },
       quoteCoin: { objectId: "0x62", recipient: "0x63" },
     },
+    {
+      source: "transactionEffects" as const,
+      kind: "returnedCoinRecipients" as const,
+      position: { checkpoint: 12n, transactionDigest: "claim-tx" },
+      claim: "lpCreatorFees" as const,
+      memeCoin: { objectId: "0x64", recipient: "0x65" },
+      quoteCoin: { objectId: "0x66", recipient: "0x67" },
+    },
   ];
 
   const projection = nativeInputs.reduce(
@@ -198,9 +226,13 @@ test("keeps transaction-effects and ownership facts separate from events", () =>
     projection.native.creatorCapOwners[normalizeSuiObjectId("0x50")]?.owner,
     normalizeSuiObjectId("0x51"),
   );
-  assert.equal(
-    projection.native.returnedCoinRecipients["claim-tx"]?.quoteCoin.recipient,
-    normalizeSuiObjectId("0x63"),
+  const returnedClaims = Object.values(
+    projection.native.returnedCoinRecipients,
+  );
+  assert.equal(returnedClaims.length, 2);
+  assert.deepEqual(
+    returnedClaims.map((fact) => fact.quoteCoin.recipient).sort(),
+    [normalizeSuiObjectId("0x63"), normalizeSuiObjectId("0x67")].sort(),
   );
   assert.equal("creatorCapOwners" in projection.launchpad, false);
   assert.equal("returnedCoinRecipients" in projection.migrators, false);

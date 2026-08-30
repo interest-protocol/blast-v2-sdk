@@ -270,6 +270,6 @@ export function decodeMigratorEvent(
 }
 
 export function migratorEventId(event: DecodedMigratorEvent): string {
-  const { checkpoint, transactionDigest, eventIndex } = event.position;
-  return `${checkpoint}:${transactionDigest}:${eventIndex}`;
+  const { transactionDigest, eventIndex } = event.position;
+  return `${transactionDigest}:${eventIndex}`;
 }

@@ -110,6 +110,46 @@ test("constructs a buy with exact-balance coin selection and output routing", ()
   ].map(normalizedShared));
 });
 
+test("constructs a sell and routes the returned Quote coin", () => {
+  const sdk = new LaunchpadTransactions(deployment);
+  const tx = sdk.sell({
+    ...types,
+    launch: shared("0xc", "20", true),
+    memeAmount: 1_000n,
+    minQuoteOut: 900n,
+    recipient: "0xd",
+  });
+
+  assert.deepEqual(moveFunctions(tx), ["launch::sell"]);
+  assert.equal(tx.getData().commands[0]?.$kind, "$Intent");
+  assert.equal(tx.getData().commands.at(-1)?.$kind, "TransferObjects");
+});
+
+test("routes both creator-cap claim results", () => {
+  const sdk = new LaunchpadTransactions(deployment);
+  const tx = sdk.claimCreatorCap({
+    ...types,
+    launch: shared("0xc", "20", true),
+    recipient: "0xd",
+  });
+
+  assert.deepEqual(moveFunctions(tx), ["launch::claim_creator_cap"]);
+  assert.equal(transferObjectCount(tx), 2);
+});
+
+test("routes both creator launch-fee coins", () => {
+  const sdk = new LaunchpadTransactions(deployment);
+  const tx = sdk.claimCreatorFees({
+    ...types,
+    launch: shared("0xc", "20", true),
+    creatorCapId: "0xe",
+    recipient: "0xd",
+  });
+
+  assert.deepEqual(moveFunctions(tx), ["launch::claim_creator_fees"]);
+  assert.equal(transferObjectCount(tx), 2);
+});
+
 test("composes admin sign-in with a protocol fee claim", () => {
   const sdk = new LaunchpadTransactions(deployment);
   const tx = sdk.claimProtocolFees({
@@ -233,4 +273,11 @@ function normalizedShared<const Mutable extends boolean>(
     ...reference,
     objectId: normalizeSuiObjectId(reference.objectId),
   };
+}
+
+function transferObjectCount(tx: Transaction): number {
+  const transfer = tx.getData().commands.at(-1);
+  return transfer?.$kind === "TransferObjects"
+    ? transfer.TransferObjects.objects.length
+    : 0;
 }

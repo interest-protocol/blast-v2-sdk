@@ -430,6 +430,6 @@ export function decodeLaunchpadEvent(
 }
 
 export function launchpadEventId(event: DecodedLaunchpadEvent): string {
-  const { checkpoint, transactionDigest, eventIndex } = event.position;
-  return `${checkpoint}:${transactionDigest}:${eventIndex}`;
+  const { transactionDigest, eventIndex } = event.position;
+  return `${transactionDigest}:${eventIndex}`;
 }
