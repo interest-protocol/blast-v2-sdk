@@ -69,25 +69,26 @@ export type CreatorIdentity =
   | { kind: "x"; identityHash: Uint8Array }
   | null;
 
-export type LaunchState = CurveState & SharedObjectReference<true> & {
-  memeType: string;
-  quoteType: string;
-  lifecycle: LaunchLifecycle;
-  sellBurnBps: bigint;
-  quoteMigrationFeeBps: bigint;
-  protocolMemeGraduationFeeBps: bigint;
-  memeLiquidityProvisionBps: bigint;
-  migrationWitnessType: string;
-  pendingBurn: bigint;
-  protocolMemeGraduationFee: bigint;
-  memeLiquidityProvision: bigint;
-  protocolMemeTradeFees: bigint;
-  creatorMemeTradeFees: bigint;
-  protocolQuoteTradeFees: bigint;
-  creatorQuoteTradeFees: bigint;
-  metadataCapId: string | null;
-  creatorIdentity: CreatorIdentity;
-};
+export type LaunchState = CurveState &
+  SharedObjectReference<true> & {
+    memeType: string;
+    quoteType: string;
+    lifecycle: LaunchLifecycle;
+    sellBurnBps: bigint;
+    quoteMigrationFeeBps: bigint;
+    protocolMemeGraduationFeeBps: bigint;
+    memeLiquidityProvisionBps: bigint;
+    migrationWitnessType: string;
+    pendingBurn: bigint;
+    protocolMemeGraduationFee: bigint;
+    memeLiquidityProvision: bigint;
+    protocolMemeTradeFees: bigint;
+    creatorMemeTradeFees: bigint;
+    protocolQuoteTradeFees: bigint;
+    creatorQuoteTradeFees: bigint;
+    metadataCapId: string | null;
+    creatorIdentity: CreatorIdentity;
+  };
 
 export type LaunchObject = SharedObjectReference<true> & {
   type: string;
@@ -104,7 +105,9 @@ export function decodeLaunchObject(
     throw new TypeError(`object ${object.objectId} is not a launch`);
   }
   if (tag.typeParams.length !== 2) {
-    throw new TypeError(`launch ${object.objectId} must have two type arguments`);
+    throw new TypeError(
+      `launch ${object.objectId} must have two type arguments`,
+    );
   }
   if (
     originalPackageId !== undefined &&
@@ -144,9 +147,7 @@ export function decodeLaunchObject(
     migrationQuoteTarget: toBigInt(parsed.migration_quote_target),
     quoteFeeBps: toBigInt(parsed.quote_fee_bps.value),
     memeFeeBps: toBigInt(parsed.meme_fee_bps.value),
-    quoteMigrationFeeBps: toBigInt(
-      parsed.quote_migration_fee_bps.value,
-    ),
+    quoteMigrationFeeBps: toBigInt(parsed.quote_migration_fee_bps.value),
     protocolMemeGraduationFeeBps: toBigInt(
       parsed.protocol_meme_graduation_fee_bps.value,
     ),
@@ -162,21 +163,11 @@ export function decodeLaunchObject(
     protocolMemeGraduationFee: toBigInt(
       parsed.protocol_meme_graduation_fee.value,
     ),
-    memeLiquidityProvision: toBigInt(
-      parsed.meme_liquidity_provision.value,
-    ),
-    protocolMemeTradeFees: toBigInt(
-      parsed.fee_ledger.protocol_meme.value,
-    ),
-    creatorMemeTradeFees: toBigInt(
-      parsed.fee_ledger.creator_meme.value,
-    ),
-    protocolQuoteTradeFees: toBigInt(
-      parsed.fee_ledger.protocol_quote.value,
-    ),
-    creatorQuoteTradeFees: toBigInt(
-      parsed.fee_ledger.creator_quote.value,
-    ),
+    memeLiquidityProvision: toBigInt(parsed.meme_liquidity_provision.value),
+    protocolMemeTradeFees: toBigInt(parsed.fee_ledger.protocol_meme.value),
+    creatorMemeTradeFees: toBigInt(parsed.fee_ledger.creator_meme.value),
+    protocolQuoteTradeFees: toBigInt(parsed.fee_ledger.protocol_quote.value),
+    creatorQuoteTradeFees: toBigInt(parsed.fee_ledger.creator_quote.value),
     metadataCapId,
     creatorIdentity: decodeCreatorIdentity(parsed.creator_authority),
   };

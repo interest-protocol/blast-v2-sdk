@@ -1,5 +1,5 @@
-import { bcs } from "@mysten/sui/bcs";
 import type { BcsType } from "@mysten/sui/bcs";
+import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import {
   normalizeStructTag,
@@ -7,9 +7,8 @@ import {
   normalizeSuiObjectId,
   parseStructTag,
 } from "@mysten/sui/utils";
-
-import { requireU128, requireU64 } from "../lib/integers.ts";
 import type { LaunchpadEventPosition } from "../launchpad/events.ts";
+import { requireU64, requireU128 } from "../lib/integers.ts";
 
 type MigratorEventFieldDescriptor =
   | "id"
@@ -151,7 +150,9 @@ const TypeNameBcs = bcs
       name: { bytes: Array.from(new TextEncoder().encode(value)) },
     }),
     output: (value) =>
-      normalizeStructTag(new TextDecoder().decode(Uint8Array.from(value.name.bytes))),
+      normalizeStructTag(
+        new TextDecoder().decode(Uint8Array.from(value.name.bytes)),
+      ),
   });
 
 const MIGRATOR_EVENT_FIELD_BCS: Record<

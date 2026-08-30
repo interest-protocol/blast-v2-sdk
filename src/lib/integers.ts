@@ -1,10 +1,13 @@
 declare const U64_BRAND: unique symbol;
 declare const U128_BRAND: unique symbol;
+declare const BASIS_POINTS_BRAND: unique symbol;
 
 /** A `bigint` that has passed the Move `u64` range check. */
 export type U64 = bigint & { readonly [U64_BRAND]: true };
 /** A `bigint` that has passed the Move `u128` range check. */
 export type U128 = bigint & { readonly [U128_BRAND]: true };
+/** A `u64` that has passed the inclusive 0 through 10,000 basis-point check. */
+export type BasisPoints = U64 & { readonly [BASIS_POINTS_BRAND]: true };
 
 export const U64_MAX = (1n << 64n) - 1n;
 export const U128_MAX = (1n << 128n) - 1n;
@@ -35,21 +38,15 @@ export function requireU128(name: string, value: bigint): U128 {
 }
 
 /** Requires a basis-point value in the inclusive range 0 through 10,000. */
-export function requireBasisPoints(name: string, value: bigint): U64 {
+export function requireBasisPoints(name: string, value: bigint): BasisPoints {
   if (value < 0n || value > BASIS_POINTS_DENOMINATOR) {
-    throw new RangeError(
-      `${name} must be between 0 and 10,000 basis points`,
-    );
+    throw new RangeError(`${name} must be between 0 and 10,000 basis points`);
   }
-  return value as U64;
+  return value as BasisPoints;
 }
 
 /** Adds two values and requires the result to remain a Move `u64`. */
-export function checkedAddU64(
-  name: string,
-  left: bigint,
-  right: bigint,
-): U64 {
+export function checkedAddU64(name: string, left: bigint, right: bigint): U64 {
   return requireU64(name, left + right);
 }
 

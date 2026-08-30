@@ -89,7 +89,9 @@ test("locks the embedded artifact to the eight source constants", async () => {
     },
     {
       type_: "U64",
-      value_bcs: Array.from(bcs.u64().serialize(defaults.sellBurnBps).toBytes()),
+      value_bcs: Array.from(
+        bcs.u64().serialize(defaults.sellBurnBps).toBytes(),
+      ),
     },
   ]);
 });
@@ -113,7 +115,8 @@ test("patches identifiers, constants, and the Blast dependency", async () => {
 
   const launchTicketModule = compiled.module_handles.findIndex(
     (handle) =>
-      compiled.address_identifiers[handle.address] === blastPackageId.slice(2) &&
+      compiled.address_identifiers[handle.address] ===
+        blastPackageId.slice(2) &&
       compiled.identifiers[handle.name] === "launch_ticket",
   );
   assert.notEqual(launchTicketModule, -1);
@@ -145,9 +148,7 @@ test("patches identifiers, constants, and the Blast dependency", async () => {
     },
     {
       type_: "Vector(U8)",
-      value_bcs: Array.from(
-        bcs.string().serialize(options.iconUrl).toBytes(),
-      ),
+      value_bcs: Array.from(bcs.string().serialize(options.iconUrl).toBytes()),
     },
     {
       type_: "Vector(U8)",

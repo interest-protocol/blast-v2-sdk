@@ -1,9 +1,9 @@
-import { Transaction } from "@mysten/sui/transactions";
 import type {
   TransactionObjectArgument,
   TransactionObjectInput,
   TransactionResult,
 } from "@mysten/sui/transactions";
+import { Transaction } from "@mysten/sui/transactions";
 import {
   MOVE_STDLIB_ADDRESS,
   normalizeStructTag,
@@ -12,14 +12,11 @@ import {
   SUI_FRAMEWORK_ADDRESS,
 } from "@mysten/sui/utils";
 
-import {
-  requirePositiveU64,
-  requireU64,
-} from "../lib/integers.ts";
-import { normalizeSharedObjectReference } from "../lib/sui.ts";
+import { requirePositiveU64, requireU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
-import { buildMemePackageBytecode } from "./template.ts";
+import { normalizeSharedObjectReference } from "../lib/sui.ts";
 import type { MemeTemplateOptions } from "./template.ts";
+import { buildMemePackageBytecode } from "./template.ts";
 
 export type { SharedObjectReference } from "../lib/sui.ts";
 
@@ -62,7 +59,12 @@ export class LaunchpadCalls {
         ],
         arguments: [
           tx.object(options.ticket),
-          sharedObject(tx, "packageVersion", this.deployment.packageVersion, false),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.packageVersion,
+            false,
+          ),
           sharedObject(tx, "launchConfig", this.deployment.launchConfig, false),
         ],
       });
@@ -94,8 +96,18 @@ export class LaunchpadCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "launch", options.launch, true),
-          sharedObject(tx, "packageVersion", this.deployment.packageVersion, false),
-          sharedObject(tx, "runtimeConfig", this.deployment.runtimeConfig, false),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.packageVersion,
+            false,
+          ),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.runtimeConfig,
+            false,
+          ),
           tx.object(options.quoteCoin),
           tx.pure.u64(options.minMemeOut),
         ],
@@ -117,8 +129,18 @@ export class LaunchpadCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "launch", options.launch, true),
-          sharedObject(tx, "packageVersion", this.deployment.packageVersion, false),
-          sharedObject(tx, "runtimeConfig", this.deployment.runtimeConfig, false),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.packageVersion,
+            false,
+          ),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.runtimeConfig,
+            false,
+          ),
           tx.object(options.memeCoin),
           tx.pure.u64(options.minQuoteOut),
         ],
@@ -138,13 +160,21 @@ export class LaunchpadCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "launch", options.launch, true),
-          sharedObject(tx, "packageVersion", this.deployment.packageVersion, false),
-          sharedObject(tx, "runtimeConfig", this.deployment.runtimeConfig, false),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.packageVersion,
+            false,
+          ),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.runtimeConfig,
+            false,
+          ),
           tx.pure.option(
             "vector<u8>",
-            options.xAttestation
-              ? Array.from(options.xAttestation)
-              : null,
+            options.xAttestation ? Array.from(options.xAttestation) : null,
           ),
           tx.object.clock(),
         ],
@@ -164,7 +194,12 @@ export class LaunchpadCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "launch", options.launch, true),
-          sharedObject(tx, "packageVersion", this.deployment.packageVersion, false),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.packageVersion,
+            false,
+          ),
           tx.object(options.creatorCap),
         ],
       });
@@ -181,7 +216,12 @@ export class LaunchpadCalls {
             this.deployment.protocolAuthority,
             false,
           ),
-          sharedObject(tx, "packageVersion", this.deployment.packageVersion, false),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.packageVersion,
+            false,
+          ),
           tx.object(options.adminCap),
         ],
       });
@@ -200,7 +240,12 @@ export class LaunchpadCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "launch", options.launch, true),
-          sharedObject(tx, "packageVersion", this.deployment.packageVersion, false),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.packageVersion,
+            false,
+          ),
           tx.object(options.adminWitness),
         ],
       });
@@ -223,7 +268,12 @@ export class LaunchpadCalls {
         ],
         arguments: [
           sharedObject(tx, "launch", options.launch, true),
-          sharedObject(tx, "packageVersion", this.deployment.packageVersion, false),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.packageVersion,
+            false,
+          ),
           sharedObject(tx, "currency", options.currency, true),
         ],
       });
@@ -259,9 +309,7 @@ export class LaunchpadTransactions {
     this.call = new LaunchpadCalls(deployment);
   }
 
-  publishMeme(
-    options: MemeTemplateOptions,
-  ): Transaction {
+  publishMeme(options: MemeTemplateOptions): Transaction {
     const tx = new Transaction();
     const upgradeCap = tx.add(async (innerTx) => {
       const module = await buildMemePackageBytecode(
@@ -284,9 +332,7 @@ export class LaunchpadTransactions {
     return tx;
   }
 
-  createLaunch(
-    options: MigrationTypes & { ticketId: string },
-  ): Transaction {
+  createLaunch(options: MigrationTypes & { ticketId: string }): Transaction {
     const tx = new Transaction();
     const launch = tx.add(
       this.call.createLaunch({ ...options, ticket: options.ticketId }),
@@ -356,9 +402,7 @@ export class LaunchpadTransactions {
     },
   ): Transaction {
     const tx = new Transaction();
-    const claimResult = tx.add(
-      this.call.claimCreatorCap(options),
-    );
+    const claimResult = tx.add(this.call.claimCreatorCap(options));
     const creatorCap = claimResult[0]!;
     const metadataCap = claimResult[1]!;
     tx.transferObjects(

@@ -18,6 +18,10 @@
   "scripts": {
     "check:abi": "node scripts/check-contract-abi.mjs ../contracts",
     "check:abi:write": "node scripts/check-contract-abi.mjs ../contracts --write",
+    "check": "npm run check:abi && npm run format:check && npm run lint && npm run typecheck && npm test",
+    "format": "biome format --write . && biome check --write --only=assist/source/organizeImports .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc"
   },
@@ -26,9 +30,10 @@
     "@mysten/sui": "^2.26.2"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.11",
     "@mysten/move-bytecode-template": "0.4.1",
     "@mysten/sui": "2.26.2",
     "@types/node": "^24.3.0",
-    "typescript": "^5.9.2"
+    "typescript": "^7.0.2"
   }
 }

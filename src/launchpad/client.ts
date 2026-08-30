@@ -2,26 +2,19 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
-
-import { previewBuy, previewSell } from "./curve.ts";
 import type { BuyPreview, SellPreview } from "./curve.ts";
-import { getLaunch } from "./state.ts";
+import { previewBuy, previewSell } from "./curve.ts";
 import type { LaunchState } from "./state.ts";
-import {
-  LaunchpadCalls,
-  LaunchpadTransactions,
-} from "./transactions.ts";
+import { getLaunch } from "./state.ts";
 import type { LaunchpadDeployment } from "./transactions.ts";
+import { LaunchpadCalls, LaunchpadTransactions } from "./transactions.ts";
 
 export class LaunchpadClient {
   readonly call: LaunchpadCalls;
   readonly tx: LaunchpadTransactions;
   readonly #client: ClientWithCoreApi;
 
-  constructor(
-    client: ClientWithCoreApi,
-    deployment: LaunchpadDeployment,
-  ) {
+  constructor(client: ClientWithCoreApi, deployment: LaunchpadDeployment) {
     this.#client = client;
     this.call = new LaunchpadCalls(deployment);
     this.tx = new LaunchpadTransactions(deployment);
@@ -35,10 +28,7 @@ export class LaunchpadClient {
     );
   }
 
-  async previewBuy(
-    launchId: string,
-    quoteAmount: bigint,
-  ): Promise<BuyPreview> {
+  async previewBuy(launchId: string, quoteAmount: bigint): Promise<BuyPreview> {
     const launch = await this.getLiveLaunch(launchId);
     return previewBuy(launch, quoteAmount);
   }
@@ -66,9 +56,7 @@ export type LaunchpadExtensionOptions<Name extends string> =
   LaunchpadDeployment & { name?: Name };
 
 /** Adds a typed `blastLaunchpad` extension to any Sui Core API client. */
-export function blastLaunchpad<
-  const Name extends string = "blastLaunchpad",
->({
+export function blastLaunchpad<const Name extends string = "blastLaunchpad">({
   name = "blastLaunchpad" as Name,
   ...deployment
 }: LaunchpadExtensionOptions<Name>): SuiClientRegistration<

@@ -74,11 +74,9 @@ export function deriveLaunchEconomics(
     curveMemeReleased,
     quoteMigrationFee,
     netQuote,
-    openingValuation:
-      (initialMemeSupply * virtualQuote) / curveMemeInventory,
+    openingValuation: (initialMemeSupply * virtualQuote) / curveMemeInventory,
     curveTerminalValuation:
       (initialMemeSupply * effectiveTerminalQuote) / terminalCurveMeme,
-    dexOpeningValuation:
-      (initialMemeSupply * netQuote) / poolMemeProvision,
+    dexOpeningValuation: (initialMemeSupply * netQuote) / poolMemeProvision,
   };
 }

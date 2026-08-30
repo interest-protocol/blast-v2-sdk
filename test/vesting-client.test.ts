@@ -3,10 +3,7 @@ import test from "node:test";
 
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 
-import {
-  blastVesting,
-  VestingClient,
-} from "../src/vesting/client.ts";
+import { blastVesting, VestingClient } from "../src/vesting/client.ts";
 
 test("registers the typed vesting client extension", () => {
   const client = new SuiGrpcClient({

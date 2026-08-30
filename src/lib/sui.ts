@@ -1,7 +1,4 @@
-import {
-  isValidSuiObjectId,
-  normalizeSuiObjectId,
-} from "@mysten/sui/utils";
+import { isValidSuiObjectId, normalizeSuiObjectId } from "@mysten/sui/utils";
 
 import { normalizePositiveU64 } from "./integers.ts";
 
@@ -39,9 +36,7 @@ export function normalizeSharedObjectIdentity(
   };
 }
 
-export function normalizeSharedObjectReference<
-  const Mutable extends boolean,
->(
+export function normalizeSharedObjectReference<const Mutable extends boolean>(
   name: string,
   reference: SharedObjectReference<Mutable>,
   mutable: Mutable,

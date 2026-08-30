@@ -35,10 +35,7 @@ const DEFAULT_CREATOR_IDENTITY_BYTES = fromHex(
 const defaults = {
   symbol: bcs.string().serialize("MEME").toBytes(),
   name: bcs.string().serialize("Blast Meme").toBytes(),
-  description: bcs
-    .string()
-    .serialize("A Meme launched on Blast")
-    .toBytes(),
+  description: bcs.string().serialize("A Meme launched on Blast").toBytes(),
   iconUrl: bcs.string().serialize("https://blast.fun/meme.png").toBytes(),
   creatorIdentityBytes: bcs
     .vector(bcs.u8())
@@ -234,9 +231,10 @@ function validateOptions(options: MemeTemplateOptions) {
   };
 }
 
-function validateCreatorIdentity(
-  identity: MemeCreatorIdentityInput,
-): { bytes: Uint8Array; isX: boolean } {
+function validateCreatorIdentity(identity: MemeCreatorIdentityInput): {
+  bytes: Uint8Array;
+  isX: boolean;
+} {
   if (typeof identity !== "object" || identity === null) {
     throw new TypeError("creatorIdentity is required");
   }
@@ -246,7 +244,9 @@ function validateCreatorIdentity(
     }
     const address = normalizeSuiObjectId(identity.address);
     if (!isValidSuiObjectId(address) || address === ZERO_ADDRESS) {
-      throw new RangeError("creatorIdentity.address must be a nonzero Sui address");
+      throw new RangeError(
+        "creatorIdentity.address must be a nonzero Sui address",
+      );
     }
     return { bytes: bcs.Address.serialize(address).toBytes(), isX: false };
   }
@@ -255,7 +255,9 @@ function validateCreatorIdentity(
       !(identity.xIdentityHash instanceof Uint8Array) ||
       identity.xIdentityHash.length !== 32
     ) {
-      throw new RangeError("creatorIdentity.xIdentityHash must contain 32 bytes");
+      throw new RangeError(
+        "creatorIdentity.xIdentityHash must contain 32 bytes",
+      );
     }
     return { bytes: Uint8Array.from(identity.xIdentityHash), isX: true };
   }
@@ -284,7 +286,9 @@ function normalizeBlastPackageId(packageId: string): string {
     throw new TypeError("blastPackageId must be a valid Sui package ID");
   }
   if (SYSTEM_ADDRESSES.has(normalized)) {
-    throw new RangeError("blastPackageId must identify the deployed Blast package");
+    throw new RangeError(
+      "blastPackageId must identify the deployed Blast package",
+    );
   }
   return normalized;
 }
@@ -451,5 +455,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }

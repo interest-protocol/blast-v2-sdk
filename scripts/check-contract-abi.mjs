@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
 import {
-  mkdtempSync,
   mkdirSync,
-  readFileSync,
+  mkdtempSync,
   readdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -87,7 +87,9 @@ function summarizePackage(packagePath, packageName) {
     { encoding: "utf8" },
   );
   if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || `failed to summarize ${packageName}`);
+    throw new Error(
+      result.stderr || result.stdout || `failed to summarize ${packageName}`,
+    );
   }
 
   const packageDirectory = join(outputDirectory, packageName);
@@ -189,17 +191,32 @@ function normalizeType(type) {
 
 function classifyFunction(packageName, moduleName, functionName) {
   if (packageName === "meme_template") {
-    throw new Error(`unexpected public function ${packageName}::${moduleName}::${functionName}`);
+    throw new Error(
+      `unexpected public function ${packageName}::${moduleName}::${functionName}`,
+    );
   }
   if (packageName === "blast_fun_migrators") {
-    if (moduleName === "vault") return "builder";
-    if (functionName === "set_tier") return "intentional-admin-exclusion";
-    if (functionName.startsWith("migrate") || functionName.startsWith("collect_fees")) {
-      return "builder";
-    }
-    throw new Error(`unclassified function ${packageName}::${moduleName}::${functionName}`);
+    return classifyMigratorFunction(moduleName, functionName);
   }
 
+  return classifyLaunchpadFunction(packageName, moduleName, functionName);
+}
+
+function classifyMigratorFunction(moduleName, functionName) {
+  if (moduleName === "vault") return "builder";
+  if (functionName === "set_tier") return "intentional-admin-exclusion";
+  if (
+    functionName.startsWith("migrate") ||
+    functionName.startsWith("collect_fees")
+  ) {
+    return "builder";
+  }
+  throw new Error(
+    `unclassified function blast_fun_migrators::${moduleName}::${functionName}`,
+  );
+}
+
+function classifyLaunchpadFunction(packageName, moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
   const builders = new Set([
     "launch::new",
@@ -211,20 +228,18 @@ function classifyFunction(packageName, moduleName, functionName) {
     "launch::claim_protocol_fees",
   ]);
   if (builders.has(key)) return "builder";
-  if (key === "launch::migrate" || key === "launch::redeem_migration" || key === "acl::sign_in") {
+  if (
+    key === "launch::migrate" ||
+    key === "launch::redeem_migration" ||
+    key === "acl::sign_in"
+  ) {
     return "compositional";
   }
   if (key === "launch_ticket::new") return "template-builder";
   if (moduleName === "creator_authority") return "template-internal";
   if (moduleName === "migration_math") return "sdk-arithmetic";
   if (moduleName === "fees") return "move-composition";
-  if (
-    moduleName === "acl" ||
-    moduleName === "launch_config" ||
-    moduleName === "package_admin" ||
-    (moduleName === "runtime_config" && functionName.startsWith("set_")) ||
-    key === "runtime_config::revoke_x_claim_signer"
-  ) {
+  if (isIntentionalAdminExclusion(moduleName, functionName, key)) {
     return "intentional-admin-exclusion";
   }
   if (
@@ -234,4 +249,14 @@ function classifyFunction(packageName, moduleName, functionName) {
     return "move-composition";
   }
   throw new Error(`unclassified function ${packageName}::${key}`);
+}
+
+function isIntentionalAdminExclusion(moduleName, functionName, key) {
+  return (
+    moduleName === "acl" ||
+    moduleName === "launch_config" ||
+    moduleName === "package_admin" ||
+    (moduleName === "runtime_config" && functionName.startsWith("set_")) ||
+    key === "runtime_config::revoke_x_claim_signer"
+  );
 }

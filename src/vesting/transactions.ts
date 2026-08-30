@@ -1,31 +1,22 @@
-import { Transaction } from "@mysten/sui/transactions";
 import type {
   TransactionObjectArgument,
   TransactionObjectInput,
   TransactionResult,
 } from "@mysten/sui/transactions";
-import {
-  normalizeStructTag,
-  normalizeSuiAddress,
-} from "@mysten/sui/utils";
+import { Transaction } from "@mysten/sui/transactions";
+import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import { requirePositiveU64, requireU64 } from "../lib/integers.ts";
+import type { SharedObjectReference, SuiPackageReference } from "../lib/sui.ts";
 import {
   normalizeSharedObjectReference,
   normalizeSuiPackageReference,
 } from "../lib/sui.ts";
-import type {
-  SharedObjectReference,
-  SuiPackageReference,
-} from "../lib/sui.ts";
+import type { LinearSchedule, VestingCheckpoint } from "./schedules.ts";
 import {
   linearEndMs,
   validateCheckpointSchedule,
   validateLinearSchedule,
-} from "./schedules.ts";
-import type {
-  LinearSchedule,
-  VestingCheckpoint,
 } from "./schedules.ts";
 
 export type { SharedObjectReference } from "../lib/sui.ts";
@@ -69,14 +60,12 @@ export class VestingCalls {
     this.deployment = normalizeDeployment(deployment);
   }
 
-  newLinearIrrevocable(
-    options: {
-      coinType: string;
-      funds: TransactionObjectInput;
-      beneficiary: string;
-      schedule: LinearSchedule;
-    },
-  ) {
+  newLinearIrrevocable(options: {
+    coinType: string;
+    funds: TransactionObjectInput;
+    beneficiary: string;
+    schedule: LinearSchedule;
+  }) {
     const coinType = normalizeStructTag(options.coinType);
     validateLinearArguments(options.schedule);
     return (tx: Transaction): TransactionObjectArgument =>
@@ -85,7 +74,9 @@ export class VestingCalls {
         typeArguments: [coinType],
         arguments: [
           tx.object(options.funds),
-          tx.pure.address(normalizeNonzeroAddress("beneficiary", options.beneficiary)),
+          tx.pure.address(
+            normalizeNonzeroAddress("beneficiary", options.beneficiary),
+          ),
           tx.pure.u64(options.schedule.startMs),
           tx.pure.u64(options.schedule.cliffMs),
           tx.pure.u64(options.schedule.periodMs),
@@ -95,15 +86,13 @@ export class VestingCalls {
       });
   }
 
-  newLinearCancelable(
-    options: {
-      coinType: string;
-      funds: TransactionObjectInput;
-      beneficiary: string;
-      refundRecipient: string;
-      schedule: LinearSchedule;
-    },
-  ) {
+  newLinearCancelable(options: {
+    coinType: string;
+    funds: TransactionObjectInput;
+    beneficiary: string;
+    refundRecipient: string;
+    schedule: LinearSchedule;
+  }) {
     const coinType = normalizeStructTag(options.coinType);
     validateLinearArguments(options.schedule);
     return (tx: Transaction): TransactionResult =>
@@ -112,7 +101,9 @@ export class VestingCalls {
         typeArguments: [coinType],
         arguments: [
           tx.object(options.funds),
-          tx.pure.address(normalizeNonzeroAddress("beneficiary", options.beneficiary)),
+          tx.pure.address(
+            normalizeNonzeroAddress("beneficiary", options.beneficiary),
+          ),
           tx.pure.address(
             normalizeNonzeroAddress("refundRecipient", options.refundRecipient),
           ),
@@ -153,14 +144,12 @@ export class VestingCalls {
     };
   }
 
-  newCheckpointIrrevocable(
-    options: {
-      coinType: string;
-      funds: TransactionObjectInput;
-      beneficiary: string;
-      schedule: TransactionObjectInput;
-    },
-  ) {
+  newCheckpointIrrevocable(options: {
+    coinType: string;
+    funds: TransactionObjectInput;
+    beneficiary: string;
+    schedule: TransactionObjectInput;
+  }) {
     const coinType = normalizeStructTag(options.coinType);
     return (tx: Transaction): TransactionObjectArgument =>
       tx.moveCall({
@@ -168,22 +157,22 @@ export class VestingCalls {
         typeArguments: [coinType],
         arguments: [
           tx.object(options.funds),
-          tx.pure.address(normalizeNonzeroAddress("beneficiary", options.beneficiary)),
+          tx.pure.address(
+            normalizeNonzeroAddress("beneficiary", options.beneficiary),
+          ),
           tx.object(options.schedule),
           tx.object.clock(),
         ],
       });
   }
 
-  newCheckpointCancelable(
-    options: {
-      coinType: string;
-      funds: TransactionObjectInput;
-      beneficiary: string;
-      refundRecipient: string;
-      schedule: TransactionObjectInput;
-    },
-  ) {
+  newCheckpointCancelable(options: {
+    coinType: string;
+    funds: TransactionObjectInput;
+    beneficiary: string;
+    refundRecipient: string;
+    schedule: TransactionObjectInput;
+  }) {
     const coinType = normalizeStructTag(options.coinType);
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
@@ -191,7 +180,9 @@ export class VestingCalls {
         typeArguments: [coinType],
         arguments: [
           tx.object(options.funds),
-          tx.pure.address(normalizeNonzeroAddress("beneficiary", options.beneficiary)),
+          tx.pure.address(
+            normalizeNonzeroAddress("beneficiary", options.beneficiary),
+          ),
           tx.pure.address(
             normalizeNonzeroAddress("refundRecipient", options.refundRecipient),
           ),
@@ -223,10 +214,7 @@ export class VestingCalls {
       tx.moveCall({
         target: `${this.deployment.packageId}::${position.kind}::claim`,
         typeArguments: [position.coinType],
-        arguments: [
-          sharedObject(tx, "vesting", position),
-          tx.object.clock(),
-        ],
+        arguments: [sharedObject(tx, "vesting", position), tx.object.clock()],
       });
     };
   }
@@ -252,10 +240,7 @@ export class VestingCalls {
       tx.moveCall({
         target: `${this.deployment.packageId}::${position.kind}::close_irrevocable`,
         typeArguments: [position.coinType],
-        arguments: [
-          sharedObject(tx, "vesting", position),
-          tx.object.clock(),
-        ],
+        arguments: [sharedObject(tx, "vesting", position), tx.object.clock()],
       });
     };
   }

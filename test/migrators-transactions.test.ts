@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { Transaction } from "@mysten/sui/transactions";
-
+import type { SharedObjectReference } from "../src/lib/sui.ts";
+import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
 import {
   MigratorCalls,
   MigratorTransactions,
 } from "../src/migrators/transactions.ts";
-import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
-import type { SharedObjectReference } from "../src/lib/sui.ts";
 
 function shared<const Mutable extends boolean>(
   objectId: string,
@@ -123,7 +122,14 @@ test("builds the complete Bluefin migration with frozen mutability", () => {
     false,
   ]);
   assertSharedArgumentIds(tx, [
-    "0x10", "0x2", "0x4", "0x60", "0x11", "0x12", "0x13", "0x6",
+    "0x10",
+    "0x2",
+    "0x4",
+    "0x60",
+    "0x11",
+    "0x12",
+    "0x13",
+    "0x6",
   ]);
 });
 
@@ -174,7 +180,14 @@ test("routes both MMT migration orientations with frozen shared inputs", () => {
       false,
     ]);
     assertSharedArgumentIds(tx, [
-      "0x10", "0x2", "0x4", "0x60", "0x11", "0x12", "0x13", "0x6",
+      "0x10",
+      "0x2",
+      "0x4",
+      "0x60",
+      "0x11",
+      "0x12",
+      "0x13",
+      "0x6",
     ]);
   }
 });
@@ -233,7 +246,14 @@ test("routes all four Cetus migration combinations", () => {
         false,
       ]);
       assertSharedArgumentIds(tx, [
-        "0x10", "0x2", "0x4", "0x60", "0x11", "0x12", "0x14", "0x6",
+        "0x10",
+        "0x2",
+        "0x4",
+        "0x60",
+        "0x11",
+        "0x12",
+        "0x14",
+        "0x6",
       ]);
       assert.equal(tx.getData().commands.length, 1);
     }
@@ -310,12 +330,27 @@ test("routes all four Turbos migrations with a third fee type", () => {
         tx,
         poolKind === "new"
           ? [
-              "0x10", "0x2", "0x4", "0x60", "0x11", "0x14", "0x15",
-              "0x16", "0x6", "0x17",
+              "0x10",
+              "0x2",
+              "0x4",
+              "0x60",
+              "0x11",
+              "0x14",
+              "0x15",
+              "0x16",
+              "0x6",
+              "0x17",
             ]
           : [
-              "0x10", "0x2", "0x4", "0x60", "0x11", "0x14", "0x16",
-              "0x6", "0x17",
+              "0x10",
+              "0x2",
+              "0x4",
+              "0x60",
+              "0x11",
+              "0x14",
+              "0x16",
+              "0x6",
+              "0x17",
             ],
       );
       assert.equal(pureInputCount(tx), 1);
@@ -351,9 +386,7 @@ test("routes both Turbos collection orientations and validates deadline", () => 
       false,
       false,
     ]);
-    assertSharedArgumentIds(tx, [
-      "0x20", "0x4", "0x21", "0x22", "0x6", "0x23",
-    ]);
+    assertSharedArgumentIds(tx, ["0x20", "0x4", "0x21", "0x22", "0x6", "0x23"]);
     assert.equal(pureInputCount(tx), 1);
     assert.equal(tx.getData().commands.length, 1);
     assert.throws(
@@ -400,7 +433,14 @@ test("routes all four Full Sail migrations including rewarder custody", () => {
         false,
       ]);
       assertSharedArgumentIds(tx, [
-        "0x10", "0x2", "0x4", "0x60", "0x11", "0x12", "0x13", "0x14",
+        "0x10",
+        "0x2",
+        "0x4",
+        "0x60",
+        "0x11",
+        "0x12",
+        "0x13",
+        "0x14",
         "0x6",
       ]);
       assert.equal(tx.getData().commands.length, 1);
@@ -430,11 +470,13 @@ test("routes both Full Sail collection orientations without rewarder inputs", ()
 });
 
 function moveFunctions(tx: Transaction): string[] {
-  return tx.getData().commands.flatMap((command) =>
-    command.$kind === "MoveCall"
-      ? [`${command.MoveCall.module}::${command.MoveCall.function}`]
-      : [],
-  );
+  return tx
+    .getData()
+    .commands.flatMap((command) =>
+      command.$kind === "MoveCall"
+        ? [`${command.MoveCall.module}::${command.MoveCall.function}`]
+        : [],
+    );
 }
 
 function transferObjectCount(tx: Transaction): number {
@@ -445,9 +487,11 @@ function transferObjectCount(tx: Transaction): number {
 }
 
 function moveTypeArguments(tx: Transaction): string[][] {
-  return tx.getData().commands.flatMap((command) =>
-    command.$kind === "MoveCall" ? [command.MoveCall.typeArguments] : [],
-  );
+  return tx
+    .getData()
+    .commands.flatMap((command) =>
+      command.$kind === "MoveCall" ? [command.MoveCall.typeArguments] : [],
+    );
 }
 
 function sharedMutability(tx: Transaction): boolean[] {
@@ -457,8 +501,8 @@ function sharedMutability(tx: Transaction): boolean[] {
 function assertSharedArgumentIds(tx: Transaction, objectIds: string[]): void {
   assert.deepEqual(
     sharedMoveArguments(tx).map((argument) => argument.objectId),
-    objectIds.map((objectId) =>
-      `0x${objectId.replace(/^0x/, "").padStart(64, "0")}`,
+    objectIds.map(
+      (objectId) => `0x${objectId.replace(/^0x/, "").padStart(64, "0")}`,
     ),
   );
 }
@@ -484,7 +528,8 @@ function pureInputCount(tx: Transaction): number {
 }
 
 function normalizedType(type: string): string {
-  return type.replace(/^0x([0-9a-f]+)::/, (_match, address: string) =>
-    `0x${address.padStart(64, "0")}::`,
+  return type.replace(
+    /^0x([0-9a-f]+)::/,
+    (_match, address: string) => `0x${address.padStart(64, "0")}::`,
   );
 }

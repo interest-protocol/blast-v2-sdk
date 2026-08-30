@@ -12,8 +12,7 @@ import {
 const objectId = "0xc";
 const metadataCapId = "0xd";
 const creator = "0xe";
-const migrationWitness =
-  `${"0".repeat(63)}b::adapter::WITNESS`;
+const migrationWitness = `${"0".repeat(63)}b::adapter::WITNESS`;
 
 const uid = (id: string) => ({ id: { bytes: id } });
 const balance = (value: bigint) => ({ value });

@@ -8,19 +8,13 @@ import {
   SUI_CLOCK_OBJECT_ID,
 } from "@mysten/sui/utils";
 
-import {
-  normalizePositiveU64,
-  requireU64,
-} from "../lib/integers.ts";
+import { normalizePositiveU64, requireU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
+import type { LinearSchedule, VestingCheckpoint } from "./schedules.ts";
 import {
+  checkpointVestedAt,
   MAX_CHECKPOINT_PAGE_SIZE,
   MAX_CHECKPOINTS,
-  checkpointVestedAt,
-} from "./schedules.ts";
-import type {
-  LinearSchedule,
-  VestingCheckpoint,
 } from "./schedules.ts";
 
 const IdBcs = bcs.struct("ID", { bytes: bcs.Address });
@@ -148,9 +142,7 @@ export function decodeVestingObject(
       coinType,
       balance,
       beneficiary: normalizeSuiAddress(parsed.beneficiary),
-      refundRecipient: normalizeOptionalAddress(
-        parsed.cancel_refund_recipient,
-      ),
+      refundRecipient: normalizeOptionalAddress(parsed.cancel_refund_recipient),
       released,
       totalAmount: balance + released,
       schedule,

@@ -1,12 +1,11 @@
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
-
-import { requireU64 } from "../lib/integers.ts";
 import type { DecodedLaunchpadEvent } from "../launchpad/events.ts";
+import type { LaunchpadEventProjection } from "../launchpad/reducer.ts";
 import {
   createLaunchpadEventProjection,
   reduceLaunchpadEvent,
 } from "../launchpad/reducer.ts";
-import type { LaunchpadEventProjection } from "../launchpad/reducer.ts";
+import { requireU64 } from "../lib/integers.ts";
 import type { DecodedMigratorEvent, MigratorEventKind } from "./events.ts";
 import { migratorEventId, migratorEventSpecs } from "./events.ts";
 
@@ -93,11 +92,12 @@ export type NativeFactProjection = {
   appliedFactIds: Readonly<Record<string, true>>;
   packagePublications: Readonly<Record<string, PackagePublicationFact>>;
   creatorCapOwners: Readonly<
-    Record<string, { source: "objectOwnership"; checkpoint: bigint; owner: string }>
+    Record<
+      string,
+      { source: "objectOwnership"; checkpoint: bigint; owner: string }
+    >
   >;
-  returnedCoinRecipients: Readonly<
-    Record<string, ReturnedCoinRecipientsFact>
-  >;
+  returnedCoinRecipients: Readonly<Record<string, ReturnedCoinRecipientsFact>>;
 };
 
 export type LaunchpadProductProjection = {

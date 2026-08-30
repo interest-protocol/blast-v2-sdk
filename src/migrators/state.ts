@@ -1,6 +1,6 @@
 import { bcs } from "@mysten/sui/bcs";
-import { ObjectError } from "@mysten/sui/client";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { ObjectError } from "@mysten/sui/client";
 import {
   normalizeStructTag,
   normalizeSuiAddress,
@@ -86,13 +86,17 @@ export function decodeLpVaultObject(
     throw new TypeError(`object ${object.objectId} is not an LP vault`);
   }
   if (tag.typeParams.length !== 2) {
-    throw new TypeError(`LP vault ${object.objectId} must have two type arguments`);
+    throw new TypeError(
+      `LP vault ${object.objectId} must have two type arguments`,
+    );
   }
   if (
     originalPackageId !== undefined &&
     tag.address !== normalizeSuiAddress(originalPackageId)
   ) {
-    throw new TypeError(`LP vault ${object.objectId} has an unexpected package`);
+    throw new TypeError(
+      `LP vault ${object.objectId} has an unexpected package`,
+    );
   }
   if (object.mutable !== true) {
     throw new TypeError(`LP vault ${object.objectId} must be mutable`);
@@ -160,9 +164,7 @@ export async function getVenueTier(
         bcs: TierKeyBcs.serialize({}).toBytes(),
       },
     });
-    const expectedType = normalizeStructTag(
-      `${original}::venue_config::Tier`,
-    );
+    const expectedType = normalizeStructTag(`${original}::venue_config::Tier`);
     if (normalizeStructTag(dynamicField.value.type) !== expectedType) {
       throw new TypeError(`venue ${venue} tier has an unexpected type`);
     }

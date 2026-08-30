@@ -1,19 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { Transaction } from "@mysten/sui/transactions";
-import {
-  normalizeSuiObjectId,
-  SUI_CLOCK_OBJECT_ID,
-} from "@mysten/sui/utils";
-
-import {
-  VestingTransactions,
-} from "../src/vesting/transactions.ts";
+import type { Transaction } from "@mysten/sui/transactions";
+import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
 import type {
   SharedObjectReference,
   VestingDeployment,
 } from "../src/vesting/transactions.ts";
+import { VestingTransactions } from "../src/vesting/transactions.ts";
 
 const deployment: VestingDeployment = {
   packageId: "0x123",
@@ -85,9 +79,7 @@ test("uses decoded position metadata for claim, cancel, and close", () => {
     ...shared("0xc", "20", true),
   };
 
-  assert.deepEqual(moveFunctions(sdk.claim(position)), [
-    "checkpoints::claim",
-  ]);
+  assert.deepEqual(moveFunctions(sdk.claim(position)), ["checkpoints::claim"]);
   assert.deepEqual(
     moveFunctions(sdk.cancel({ ...position, cancelCapId: "0xd" })),
     ["checkpoints::cancel"],
@@ -145,9 +137,11 @@ function shared<const Mutable extends boolean>(
 }
 
 function moveCalls(tx: Transaction) {
-  return tx.getData().commands.flatMap((command) =>
-    command.$kind === "MoveCall" ? [command.MoveCall] : [],
-  );
+  return tx
+    .getData()
+    .commands.flatMap((command) =>
+      command.$kind === "MoveCall" ? [command.MoveCall] : [],
+    );
 }
 
 function moveFunctions(tx: Transaction): string[] {
@@ -155,11 +149,13 @@ function moveFunctions(tx: Transaction): string[] {
 }
 
 function sharedInputs(tx: Transaction): SharedObjectReference[] {
-  return tx.getData().inputs.flatMap((input) =>
-    input.$kind === "Object" && input.Object.$kind === "SharedObject"
-      ? [input.Object.SharedObject]
-      : [],
-  );
+  return tx
+    .getData()
+    .inputs.flatMap((input) =>
+      input.$kind === "Object" && input.Object.$kind === "SharedObject"
+        ? [input.Object.SharedObject]
+        : [],
+    );
 }
 
 function normalizedShared<const Mutable extends boolean>(

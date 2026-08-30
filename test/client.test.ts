@@ -3,10 +3,7 @@ import test from "node:test";
 
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 
-import {
-  blastLaunchpad,
-  LaunchpadClient,
-} from "../src/launchpad/client.ts";
+import { blastLaunchpad, LaunchpadClient } from "../src/launchpad/client.ts";
 
 test("registers the typed launchpad client extension", () => {
   const client = new SuiGrpcClient({

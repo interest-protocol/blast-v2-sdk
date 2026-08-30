@@ -1,7 +1,4 @@
-import type {
-  DecodedLaunchpadEvent,
-  LaunchpadEventKind,
-} from "./events.ts";
+import type { DecodedLaunchpadEvent, LaunchpadEventKind } from "./events.ts";
 import { launchpadEventId, launchpadEventSpecs } from "./events.ts";
 
 export type LaunchMigrationProjection = {
@@ -68,28 +65,35 @@ export type LaunchpadConfigProjection = {
     memeLiquidityProvisionBps: bigint;
   } | null;
   quotes: Readonly<
-    Record<
-      string,
-      { virtualQuote: bigint; migrationQuoteTarget: bigint }
-    >
+    Record<string, { virtualQuote: bigint; migrationQuoteTarget: bigint }>
   >;
   migrationWitnesses: Readonly<Record<string, true>>;
 };
 
 export type LaunchpadAdministrationProjection = {
-  admins: Readonly<Record<string, {
-    adminCapId: string;
-    recipient: string | null;
-    active: boolean;
-    destroyed: boolean;
-    wasActiveAtDestruction: boolean | null;
-  }>>;
-  creatorCapClaims: Readonly<Record<string, {
-    memeType: string;
-    creator: string;
-    xIdentityHash: Uint8Array | null;
-    xClaimExpiryMs: bigint | null;
-  }>>;
+  admins: Readonly<
+    Record<
+      string,
+      {
+        adminCapId: string;
+        recipient: string | null;
+        active: boolean;
+        destroyed: boolean;
+        wasActiveAtDestruction: boolean | null;
+      }
+    >
+  >;
+  creatorCapClaims: Readonly<
+    Record<
+      string,
+      {
+        memeType: string;
+        creator: string;
+        xIdentityHash: Uint8Array | null;
+        xClaimExpiryMs: bigint | null;
+      }
+    >
+  >;
   packageAdmin: {
     packageAdminId: string;
     publisherId: string;
@@ -217,8 +221,7 @@ export function reduceLaunchpadEvent(
             memeReserve: payload.meme_reserve,
             realQuoteReserve: payload.real_quote_reserve,
             pendingBurn: payload.pending_burn,
-            protocolMemeGraduationFee:
-              payload.protocol_meme_graduation_fee,
+            protocolMemeGraduationFee: payload.protocol_meme_graduation_fee,
             memeLiquidityProvision: payload.meme_liquidity_provision,
             protocolMemeFees: payload.protocol_meme_trade_fees,
             creatorMemeFees: payload.creator_meme_trade_fees,
@@ -231,8 +234,7 @@ export function reduceLaunchpadEvent(
             quoteMigrationFeeBps: payload.quote_migration_fee_bps,
             protocolMemeGraduationFeeBps:
               payload.protocol_meme_graduation_fee_bps,
-            memeLiquidityProvisionBps:
-              payload.meme_liquidity_provision_bps,
+            memeLiquidityProvisionBps: payload.meme_liquidity_provision_bps,
             migration: null,
           },
         },
@@ -326,8 +328,7 @@ export function reduceLaunchpadEvent(
       return updateConfig(next, {
         ...state.config,
         graduationDefaults: {
-          quoteMigrationFeeBps:
-            event.payload.new_quote_migration_fee_bps,
+          quoteMigrationFeeBps: event.payload.new_quote_migration_fee_bps,
           protocolMemeGraduationFeeBps:
             event.payload.new_protocol_meme_graduation_fee_bps,
           memeLiquidityProvisionBps:

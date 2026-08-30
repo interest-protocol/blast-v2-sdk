@@ -2,18 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { Transaction } from "@mysten/sui/transactions";
-import {
-  normalizeSuiObjectId,
-  SUI_CLOCK_OBJECT_ID,
-} from "@mysten/sui/utils";
-
-import {
-  LaunchpadCalls,
-  LaunchpadTransactions,
-} from "../src/launchpad/transactions.ts";
+import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
 import type {
   LaunchpadDeployment,
   SharedObjectReference,
+} from "../src/launchpad/transactions.ts";
+import {
+  LaunchpadCalls,
+  LaunchpadTransactions,
 } from "../src/launchpad/transactions.ts";
 
 function shared<const Mutable extends boolean>(
@@ -53,10 +49,12 @@ test("constructs an atomic create-and-share transaction", () => {
       $kind: "Result",
     });
   }
-  assert.deepEqual(sharedInputs(tx), [
-    shared("0x2", "10", false),
-    shared("0x3", "11", false),
-  ].map(normalizedShared));
+  assert.deepEqual(
+    sharedInputs(tx),
+    [shared("0x2", "10", false), shared("0x3", "11", false)].map(
+      normalizedShared,
+    ),
+  );
 });
 
 test("constructs the generated Meme publish and makes it immutable", async () => {
@@ -87,7 +85,10 @@ test("constructs the generated Meme publish and makes it immutable", async () =>
     assert.equal(makeImmutable.MoveCall.module, "package");
     assert.equal(makeImmutable.MoveCall.function, "make_immutable");
   }
-  assert.equal((await tx.build({ onlyTransactionKind: true })).length > 0, true);
+  assert.equal(
+    (await tx.build({ onlyTransactionKind: true })).length > 0,
+    true,
+  );
 });
 
 test("constructs a buy with exact-balance coin selection and output routing", () => {
@@ -103,11 +104,14 @@ test("constructs a buy with exact-balance coin selection and output routing", ()
   assert.deepEqual(moveFunctions(tx), ["launch::buy"]);
   assert.equal(tx.getData().commands[0]?.$kind, "$Intent");
   assert.equal(tx.getData().commands.at(-1)?.$kind, "TransferObjects");
-  assert.deepEqual(sharedInputs(tx), [
-    shared("0xc", "20", true),
-    shared("0x2", "10", false),
-    shared("0x4", "12", false),
-  ].map(normalizedShared));
+  assert.deepEqual(
+    sharedInputs(tx),
+    [
+      shared("0xc", "20", true),
+      shared("0x2", "10", false),
+      shared("0x4", "12", false),
+    ].map(normalizedShared),
+  );
 });
 
 test("constructs a sell and routes the returned Quote coin", () => {
@@ -259,11 +263,13 @@ function moveFunctions(tx: Transaction): string[] {
 }
 
 function sharedInputs(tx: Transaction): SharedObjectReference[] {
-  return tx.getData().inputs.flatMap((input) =>
-    input.$kind === "Object" && input.Object.$kind === "SharedObject"
-      ? [input.Object.SharedObject]
-      : [],
-  );
+  return tx
+    .getData()
+    .inputs.flatMap((input) =>
+      input.$kind === "Object" && input.Object.$kind === "SharedObject"
+        ? [input.Object.SharedObject]
+        : [],
+    );
 }
 
 function normalizedShared<const Mutable extends boolean>(

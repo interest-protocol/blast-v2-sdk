@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { BasisPoints, U64, U128 } from "../src/lib/integers.ts";
 import {
   BASIS_POINTS_DENOMINATOR,
   checkedAddU64,
@@ -9,12 +10,10 @@ import {
   normalizePositiveU64,
   requireBasisPoints,
   requirePositiveU64,
-  requireU128,
   requireU64,
-  type U128,
-  U128_MAX,
-  type U64,
+  requireU128,
   U64_MAX,
+  U128_MAX,
 } from "../src/lib/integers.ts";
 
 test("accepts the complete u64 range", () => {
@@ -26,12 +25,26 @@ test("accepts the complete u64 range", () => {
   assert.doesNotThrow(() => requirePositiveU64("value", U64_MAX));
 });
 
+test("brands validated basis points separately from general u64 values", () => {
+  const basisPoints: BasisPoints = requireBasisPoints("fee", 100n);
+  const generalU64: U64 = requireU64("amount", 100n);
+  assert.equal(basisPoints, 100n);
+  assert.equal(generalU64, 100n);
+  // @ts-expect-error A range-checked u64 is not automatically basis points.
+  const invalidRate: BasisPoints = generalU64;
+  assert.equal(invalidRate, 100n);
+});
+
+test("accepts only the inclusive basis-point range", () => {
+  assert.equal(requireBasisPoints("fee", 0n), 0n);
+  assert.equal(requireBasisPoints("fee", BASIS_POINTS_DENOMINATOR), 10_000n);
+  assert.throws(() => requireBasisPoints("fee", -1n), RangeError);
+  assert.throws(() => requireBasisPoints("fee", 10_001n), RangeError);
+});
+
 test("rejects values outside the requested u64 range", () => {
   assert.throws(() => requireU64("value", -1n), /value must be a u64/);
-  assert.throws(
-    () => requireU64("value", U64_MAX + 1n),
-    /value must be a u64/,
-  );
+  assert.throws(() => requireU64("value", U64_MAX + 1n), /value must be a u64/);
   assert.throws(
     () => requirePositiveU64("value", 0n),
     /value must be a positive u64/,

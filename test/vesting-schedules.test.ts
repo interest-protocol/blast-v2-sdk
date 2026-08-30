@@ -54,20 +54,11 @@ test("derives claimable and unvested amounts from cumulative state", () => {
 
 test("rejects schedules the constructors cannot accept", () => {
   assert.throws(
-    () =>
-      validateLinearSchedule(
-        { ...linear, startMs: 100_000n },
-        40_001n,
-      ),
+    () => validateLinearSchedule({ ...linear, startMs: 100_000n }, 40_001n),
     /minimumLeadTimeMs/,
   );
   assert.throws(
-    () =>
-      validateLinearSchedule(
-        { ...linear, cliffMs: 1_001n },
-        0n,
-        0n,
-      ),
+    () => validateLinearSchedule({ ...linear, cliffMs: 1_001n }, 0n, 0n),
     /cliffMs must not exceed/,
   );
   assert.throws(

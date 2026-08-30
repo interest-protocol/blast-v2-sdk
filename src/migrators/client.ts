@@ -2,11 +2,10 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
-
-import { getLpVault, getVenueTier } from "./state.ts";
 import type { LpVaultState, MigratorVenue, VenueTier } from "./state.ts";
-import { MigratorCalls, MigratorTransactions } from "./transactions.ts";
+import { getLpVault, getVenueTier } from "./state.ts";
 import type { MigratorsDeployment } from "./transactions.ts";
+import { MigratorCalls, MigratorTransactions } from "./transactions.ts";
 
 export class MigratorsClient {
   readonly call: MigratorCalls;
@@ -41,9 +40,7 @@ export type MigratorsExtensionOptions<Name extends string> =
   MigratorsDeployment & { name?: Name };
 
 /** Adds a typed `blastMigrators` extension to any Sui Core API client. */
-export function blastMigrators<
-  const Name extends string = "blastMigrators",
->({
+export function blastMigrators<const Name extends string = "blastMigrators">({
   name = "blastMigrators" as Name,
   ...deployment
 }: MigratorsExtensionOptions<Name>): SuiClientRegistration<

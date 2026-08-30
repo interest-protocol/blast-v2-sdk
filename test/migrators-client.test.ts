@@ -2,12 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-
-import {
-  blastMigrators,
-  MigratorsClient,
-} from "../src/migrators/client.ts";
 import type { SharedObjectReference } from "../src/lib/sui.ts";
+import { blastMigrators, MigratorsClient } from "../src/migrators/client.ts";
 
 function shared<const Mutable extends boolean>(
   objectId: string,

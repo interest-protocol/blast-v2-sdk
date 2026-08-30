@@ -2,12 +2,9 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
-
+import type { VestingCheckpoint, VestingPreview } from "./schedules.ts";
 import { linearVestedAt, vestingPreview } from "./schedules.ts";
-import type {
-  VestingCheckpoint,
-  VestingPreview,
-} from "./schedules.ts";
+import type { CheckpointVestingState, VestingState } from "./state.ts";
 import {
   getAllCheckpoints,
   getCheckpointPage,
@@ -15,15 +12,8 @@ import {
   getCurrentTimestampMs,
   getVesting,
 } from "./state.ts";
-import type {
-  CheckpointVestingState,
-  VestingState,
-} from "./state.ts";
-import {
-  VestingCalls,
-  VestingTransactions,
-} from "./transactions.ts";
 import type { VestingDeployment } from "./transactions.ts";
+import { VestingCalls, VestingTransactions } from "./transactions.ts";
 
 export class VestingClient {
   readonly call: VestingCalls;
@@ -77,8 +67,9 @@ export class VestingClient {
   }
 }
 
-export type VestingExtensionOptions<Name extends string> =
-  VestingDeployment & { name?: Name };
+export type VestingExtensionOptions<Name extends string> = VestingDeployment & {
+  name?: Name;
+};
 
 /** Adds a typed `blastVesting` extension to any Sui Core API client. */
 export function blastVesting<const Name extends string = "blastVesting">({

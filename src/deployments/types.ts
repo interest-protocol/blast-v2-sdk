@@ -1,10 +1,7 @@
 import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
+import type { SharedObjectIdentity, SuiPackageReference } from "../lib/sui.ts";
 import type { MigratorsDeployment } from "../migrators/transactions.ts";
 import type { VestingDeployment } from "../vesting/transactions.ts";
-import type {
-  SharedObjectIdentity,
-  SuiPackageReference,
-} from "../lib/sui.ts";
 
 export const BLAST_NETWORKS = [
   "mainnet",

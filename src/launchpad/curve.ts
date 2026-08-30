@@ -60,18 +60,18 @@ export function previewBuy(
   requirePositiveU64("quoteSupplied", quoteSupplied);
 
   if (state.realQuoteReserve >= state.migrationQuoteTarget) {
-    throw new RangeError("buy preview requires Quote below the migration target");
+    throw new RangeError(
+      "buy preview requires Quote below the migration target",
+    );
   }
 
-  const quoteRemaining =
-    state.migrationQuoteTarget - state.realQuoteReserve;
+  const quoteRemaining = state.migrationQuoteTarget - state.realQuoteReserve;
   const suppliedFee = applyBpsUp(quoteSupplied, state.quoteFeeBps);
   const suppliedNet = quoteSupplied - suppliedFee;
   let quoteInGross = quoteSupplied;
 
   if (suppliedNet > quoteRemaining) {
-    const feeComplement =
-      BASIS_POINTS_DENOMINATOR - state.quoteFeeBps;
+    const feeComplement = BASIS_POINTS_DENOMINATOR - state.quoteFeeBps;
     if (feeComplement === 0n) {
       throw new RangeError("quoteFeeBps leaves no net Quote input");
     }
@@ -89,8 +89,7 @@ export function previewBuy(
 
   const effectiveQuoteAfter =
     state.virtualQuote + state.realQuoteReserve + quoteInNet;
-  const memeOutGross =
-    (state.memeReserve * quoteInNet) / effectiveQuoteAfter;
+  const memeOutGross = (state.memeReserve * quoteInNet) / effectiveQuoteAfter;
   requirePositiveOutput("memeOutGross", memeOutGross);
 
   const memeFee = applyBpsUp(memeOutGross, state.memeFeeBps);
@@ -114,8 +113,7 @@ export function previewBuy(
     memeOutNet,
     memeReserveAfter: state.memeReserve - memeOutGross,
     realQuoteReserveAfter,
-    crossedThreshold:
-      realQuoteReserveAfter >= state.migrationQuoteTarget,
+    crossedThreshold: realQuoteReserveAfter >= state.migrationQuoteTarget,
   };
 }
 
@@ -146,11 +144,7 @@ export function previewSell(
           BASIS_POINTS_DENOMINATOR,
           state.migrationQuoteTarget,
         );
-  const burnBps = mulDivDown(
-    progressBps,
-    maxBurnBps,
-    BASIS_POINTS_DENOMINATOR,
-  );
+  const burnBps = mulDivDown(progressBps, maxBurnBps, BASIS_POINTS_DENOMINATOR);
   const pendingBurnDelta = applyBpsUp(memeInAfterFee, burnBps);
   const memeInEffective = memeInAfterFee - pendingBurnDelta;
   requirePositiveOutput("memeInEffective", memeInEffective);
@@ -161,8 +155,7 @@ export function previewSell(
     memeInEffective,
   );
   const effectiveQuote = state.virtualQuote + state.realQuoteReserve;
-  const quoteOutGross =
-    (effectiveQuote * memeInEffective) / memeReserveAfter;
+  const quoteOutGross = (effectiveQuote * memeInEffective) / memeReserveAfter;
   requirePositiveOutput("quoteOutGross", quoteOutGross);
 
   if (quoteOutGross > state.realQuoteReserve) {

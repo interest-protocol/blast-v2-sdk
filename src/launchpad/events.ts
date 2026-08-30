@@ -1,5 +1,5 @@
-import { bcs } from "@mysten/sui/bcs";
 import type { BcsType } from "@mysten/sui/bcs";
+import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import {
   normalizeStructTag,
@@ -263,10 +263,7 @@ type DescriptorOutput<Descriptor extends EventFieldDescriptor> =
 export type LaunchpadEventPayloads = {
   [Kind in LaunchpadEventKind]: {
     [Field in keyof (typeof launchpadEventSpecs)[Kind]]: DescriptorOutput<
-      Extract<
-        (typeof launchpadEventSpecs)[Kind][Field],
-        EventFieldDescriptor
-      >
+      Extract<(typeof launchpadEventSpecs)[Kind][Field], EventFieldDescriptor>
     >;
   };
 };
@@ -286,21 +283,24 @@ const IdBcs = bcs.struct("ID", { bytes: bcs.Address }).transform({
 const AsciiStringBcs = bcs.struct("AsciiString", {
   bytes: bcs.vector(bcs.u8()),
 });
-const TypeNameBcs = bcs
-  .struct("TypeName", { name: AsciiStringBcs })
-  .transform({
-    input: (value: string) => ({
-      name: { bytes: Array.from(new TextEncoder().encode(value)) },
-    }),
-    output: (value) =>
-      normalizeStructTag(new TextDecoder().decode(Uint8Array.from(value.name.bytes))),
-  });
+const TypeNameBcs = bcs.struct("TypeName", { name: AsciiStringBcs }).transform({
+  input: (value: string) => ({
+    name: { bytes: Array.from(new TextEncoder().encode(value)) },
+  }),
+  output: (value) =>
+    normalizeStructTag(
+      new TextDecoder().decode(Uint8Array.from(value.name.bytes)),
+    ),
+});
 const BytesBcs = bcs.vector(bcs.u8()).transform({
   input: (value: Uint8Array) => Array.from(value),
   output: (value) => Uint8Array.from(value),
 });
 
-const EVENT_FIELD_BCS: Record<EventFieldDescriptor, BcsType<unknown, unknown>> = {
+const EVENT_FIELD_BCS: Record<
+  EventFieldDescriptor,
+  BcsType<unknown, unknown>
+> = {
   id: IdBcs as BcsType<unknown, unknown>,
   typeName: TypeNameBcs as BcsType<unknown, unknown>,
   address: AddressBcs as BcsType<unknown, unknown>,
@@ -404,7 +404,9 @@ export function decodeLaunchpadEvent(
   }
   requireU64("launchpad event checkpoint", checkpoint);
   if (!Number.isSafeInteger(event.eventIndex) || event.eventIndex < 0) {
-    throw new RangeError("launchpad event index must be a non-negative integer");
+    throw new RangeError(
+      "launchpad event index must be a non-negative integer",
+    );
   }
   if (!event.transactionDigest) {
     throw new TypeError("launchpad event transaction digest is required");

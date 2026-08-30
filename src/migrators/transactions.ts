@@ -1,20 +1,22 @@
-import { Transaction } from "@mysten/sui/transactions";
 import type {
   TransactionObjectArgument,
   TransactionObjectInput,
   TransactionResult,
 } from "@mysten/sui/transactions";
+import { Transaction } from "@mysten/sui/transactions";
 import {
   normalizeStructTag,
   normalizeSuiAddress,
   normalizeSuiObjectId,
 } from "@mysten/sui/utils";
-
-import { requireU64 } from "../lib/integers.ts";
-import type { LaunchpadDeployment, LaunchTypes } from "../launchpad/transactions.ts";
+import type {
+  LaunchpadDeployment,
+  LaunchTypes,
+} from "../launchpad/transactions.ts";
 import { LaunchpadCalls } from "../launchpad/transactions.ts";
-import { normalizeSharedObjectReference } from "../lib/sui.ts";
+import { requireU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
+import { normalizeSharedObjectReference } from "../lib/sui.ts";
 import type { MigratorVenue } from "./state.ts";
 
 export type MigratorsDeployment = {
@@ -546,9 +548,7 @@ export class MigratorTransactions {
     return tx;
   }
 
-  migrateMmt(
-    options: Parameters<MigratorCalls["migrateMmt"]>[0],
-  ): Transaction {
+  migrateMmt(options: Parameters<MigratorCalls["migrateMmt"]>[0]): Transaction {
     const tx = new Transaction();
     tx.add(this.call.migrateMmt(options));
     return tx;

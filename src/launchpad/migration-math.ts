@@ -3,8 +3,8 @@ import {
   mulDivUp,
   requireBasisPoints,
   requirePositiveU64,
-  requireU128,
   requireU64,
+  requireU128,
 } from "../lib/integers.ts";
 
 /** Mirrors `migration_math::sqrt_price_x64` over atomic Meme/Quote units. */
@@ -27,11 +27,7 @@ export function assertPriceWithinBps(
   requireBasisPoints("maxDeviationBps", maxDeviationBps);
   requireU128("actualSqrtPriceX64", actualSqrtPriceX64);
 
-  const expectedRatioQ128 = ratioQ128(
-    memeAmount,
-    quoteAmount,
-    memeIsCoinA,
-  );
+  const expectedRatioQ128 = ratioQ128(memeAmount, quoteAmount, memeIsCoinA);
   const actualRatioQ128 = actualSqrtPriceX64 * actualSqrtPriceX64;
   const difference =
     actualRatioQ128 >= expectedRatioQ128
@@ -40,8 +36,7 @@ export function assertPriceWithinBps(
 
   if (
     difference > expectedRatioQ128 ||
-    difference * BASIS_POINTS_DENOMINATOR >
-      expectedRatioQ128 * maxDeviationBps
+    difference * BASIS_POINTS_DENOMINATOR > expectedRatioQ128 * maxDeviationBps
   ) {
     throw new RangeError(
       `price deviation exceeds ${maxDeviationBps} basis points`,
@@ -67,9 +62,7 @@ export function assertResidualWithinBps(
   requireU64("sourceAmount", sourceAmount);
   requireU64("residualAmount", residualAmount);
   if (residualAmount > maximumResidualAmount(sourceAmount, maxResidualBps)) {
-    throw new RangeError(
-      `residual exceeds ${maxResidualBps} basis points`,
-    );
+    throw new RangeError(`residual exceeds ${maxResidualBps} basis points`);
   }
 }
 
@@ -98,9 +91,5 @@ function integerSqrt(value: bigint): bigint {
 
 function maximumResidualAmount(amount: bigint, maxResidualBps: bigint): bigint {
   requireBasisPoints("maxResidualBps", maxResidualBps);
-  return mulDivUp(
-    amount,
-    maxResidualBps,
-    BASIS_POINTS_DENOMINATOR,
-  );
+  return mulDivUp(amount, maxResidualBps, BASIS_POINTS_DENOMINATOR);
 }

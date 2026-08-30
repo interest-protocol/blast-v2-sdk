@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { ObjectError } from "@mysten/sui/client";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { ObjectError } from "@mysten/sui/client";
 
 import {
   decodeLpVaultObject,
@@ -103,12 +102,7 @@ test("reads a pinned venue tier using original-package type identity", async () 
     },
   } as unknown as ClientWithCoreApi;
 
-  const tier = await getVenueTier(
-    client,
-    "0xe",
-    "cetus",
-    originalPackageId,
-  );
+  const tier = await getVenueTier(client, "0xe", "cetus", originalPackageId);
 
   assert.deepEqual(tier, {
     venue: "cetus",

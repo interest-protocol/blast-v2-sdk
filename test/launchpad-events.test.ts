@@ -5,15 +5,14 @@ import test from "node:test";
 import type { BcsType } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { normalizeSuiObjectId } from "@mysten/sui/utils";
-
+import type {
+  LaunchpadEventKind,
+  LaunchpadEventPackageIdentity,
+} from "../src/launchpad/events.ts";
 import {
   decodeLaunchpadEvent,
   launchpadEventBcs,
   launchpadEventSpecs,
-} from "../src/launchpad/events.ts";
-import type {
-  LaunchpadEventKind,
-  LaunchpadEventPackageIdentity,
 } from "../src/launchpad/events.ts";
 import {
   createLaunchpadEventProjection,
@@ -50,62 +49,86 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
 
 test("replays lifecycle, reserves, and launch fee totals from ordered events", () => {
   const events = [
-    decoded("LaunchCreated", {
-      launch_id: "0xc",
-      meme_reserve: 800n,
-      real_quote_reserve: 0n,
-      pending_burn: 10n,
-      protocol_meme_graduation_fee: 20n,
-      meme_liquidity_provision: 200n,
-      protocol_meme_trade_fees: 0n,
-      creator_meme_trade_fees: 0n,
-      protocol_quote_trade_fees: 0n,
-      creator_quote_trade_fees: 0n,
-    }, 0),
-    decoded("Bought", {
-      launch_id: "0xc",
-      meme_reserve: 700n,
-      real_quote_reserve: 100n,
-      pending_burn_total: undefined,
-      protocol_meme_fee_total: 2n,
-      creator_meme_fee_total: 3n,
-      protocol_quote_fee_total: 4n,
-      creator_quote_fee_total: 5n,
-      crossed_threshold: false,
-    }, 1),
-    decoded("Sold", {
-      launch_id: "0xc",
-      meme_reserve: 720n,
-      real_quote_reserve: 80n,
-      pending_burn_total: 12n,
-      protocol_meme_fee_total: 6n,
-      creator_meme_fee_total: 7n,
-      protocol_quote_fee_total: 8n,
-      creator_quote_fee_total: 9n,
-    }, 2),
-    decoded("Bought", {
-      launch_id: "0xc",
-      meme_reserve: 600n,
-      real_quote_reserve: 200n,
-      protocol_meme_fee_total: 10n,
-      creator_meme_fee_total: 11n,
-      protocol_quote_fee_total: 12n,
-      creator_quote_fee_total: 13n,
-      crossed_threshold: true,
-    }, 3),
-    decoded("CreatorFeesClaimed", {
-      launch_id: "0xc",
-      meme_amount: 11n,
-      quote_amount: 13n,
-    }, 4),
-    decoded("Migrated", {
-      launch_id: "0xc",
-      migration_meme: 200n,
-      migration_quote: 190n,
-      disposed_meme: 612n,
-      protocol_meme_fee_total: 30n,
-      protocol_quote_fee_total: 31n,
-    }, 5),
+    decoded(
+      "LaunchCreated",
+      {
+        launch_id: "0xc",
+        meme_reserve: 800n,
+        real_quote_reserve: 0n,
+        pending_burn: 10n,
+        protocol_meme_graduation_fee: 20n,
+        meme_liquidity_provision: 200n,
+        protocol_meme_trade_fees: 0n,
+        creator_meme_trade_fees: 0n,
+        protocol_quote_trade_fees: 0n,
+        creator_quote_trade_fees: 0n,
+      },
+      0,
+    ),
+    decoded(
+      "Bought",
+      {
+        launch_id: "0xc",
+        meme_reserve: 700n,
+        real_quote_reserve: 100n,
+        pending_burn_total: undefined,
+        protocol_meme_fee_total: 2n,
+        creator_meme_fee_total: 3n,
+        protocol_quote_fee_total: 4n,
+        creator_quote_fee_total: 5n,
+        crossed_threshold: false,
+      },
+      1,
+    ),
+    decoded(
+      "Sold",
+      {
+        launch_id: "0xc",
+        meme_reserve: 720n,
+        real_quote_reserve: 80n,
+        pending_burn_total: 12n,
+        protocol_meme_fee_total: 6n,
+        creator_meme_fee_total: 7n,
+        protocol_quote_fee_total: 8n,
+        creator_quote_fee_total: 9n,
+      },
+      2,
+    ),
+    decoded(
+      "Bought",
+      {
+        launch_id: "0xc",
+        meme_reserve: 600n,
+        real_quote_reserve: 200n,
+        protocol_meme_fee_total: 10n,
+        creator_meme_fee_total: 11n,
+        protocol_quote_fee_total: 12n,
+        creator_quote_fee_total: 13n,
+        crossed_threshold: true,
+      },
+      3,
+    ),
+    decoded(
+      "CreatorFeesClaimed",
+      {
+        launch_id: "0xc",
+        meme_amount: 11n,
+        quote_amount: 13n,
+      },
+      4,
+    ),
+    decoded(
+      "Migrated",
+      {
+        launch_id: "0xc",
+        migration_meme: 200n,
+        migration_quote: 190n,
+        disposed_meme: 612n,
+        protocol_meme_fee_total: 30n,
+        protocol_quote_fee_total: 31n,
+      },
+      5,
+    ),
   ];
 
   const projection = events.reduce(
@@ -134,37 +157,61 @@ test("replays lifecycle, reserves, and launch fee totals from ordered events", (
 
 test("replays launchpad capability, signer, and package administration facts", () => {
   const beforeRevocation = [
-    decoded("AdminGranted", {
-      admin_cap_id: "0x70",
-      recipient: "0x71",
-    }, 30),
-    decoded("CreatorCapClaimed", {
-      meme: "0xa::meme::MEME",
-      creator: "0x72",
-      x_identity_hash: new Uint8Array([7, 2]),
-      x_claim_expiry_ms: 99n,
-    }, 31),
-    decoded("PackageAdminCreated", {
-      package_admin_id: "0x73",
-      publisher_id: "0x74",
-      upgrade_cap_id: "0x75",
-      package_id: "0x76",
-      package_version: 1n,
-      policy: 0,
-    }, 32),
-    decoded("SuperAdminTransferStarted", {
-      recipient: "0x77",
-      execute_after_ms: 100n,
-    }, 33),
-    decoded("UpgradeAuthorized", {
-      package_id: "0x78",
-      package_version: 2n,
-      policy: 1,
-      digest: new Uint8Array([8]),
-    }, 34),
-    decoded("XClaimSignerSet", {
-      signer_public_key: new Uint8Array([9]),
-    }, 35),
+    decoded(
+      "AdminGranted",
+      {
+        admin_cap_id: "0x70",
+        recipient: "0x71",
+      },
+      30,
+    ),
+    decoded(
+      "CreatorCapClaimed",
+      {
+        meme: "0xa::meme::MEME",
+        creator: "0x72",
+        x_identity_hash: new Uint8Array([7, 2]),
+        x_claim_expiry_ms: 99n,
+      },
+      31,
+    ),
+    decoded(
+      "PackageAdminCreated",
+      {
+        package_admin_id: "0x73",
+        publisher_id: "0x74",
+        upgrade_cap_id: "0x75",
+        package_id: "0x76",
+        package_version: 1n,
+        policy: 0,
+      },
+      32,
+    ),
+    decoded(
+      "SuperAdminTransferStarted",
+      {
+        recipient: "0x77",
+        execute_after_ms: 100n,
+      },
+      33,
+    ),
+    decoded(
+      "UpgradeAuthorized",
+      {
+        package_id: "0x78",
+        package_version: 2n,
+        policy: 1,
+        digest: new Uint8Array([8]),
+      },
+      34,
+    ),
+    decoded(
+      "XClaimSignerSet",
+      {
+        signer_public_key: new Uint8Array([9]),
+      },
+      35,
+    ),
   ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
 
   assert.equal(
@@ -180,36 +227,63 @@ test("replays launchpad capability, signer, and package administration facts", (
     beforeRevocation.administration.pendingSuperAdminTransfer?.executeAfterMs,
     100n,
   );
-  assert.equal(beforeRevocation.administration.pendingUpgrade?.packageVersion, 2n);
+  assert.equal(
+    beforeRevocation.administration.pendingUpgrade?.packageVersion,
+    2n,
+  );
 
   const projection = [
     decoded("AdminRevoked", { admin_cap_id: "0x70" }, 36),
-    decoded("AdminDestroyed", {
-      admin_cap_id: "0x70",
-      was_active: false,
-    }, 37),
+    decoded(
+      "AdminDestroyed",
+      {
+        admin_cap_id: "0x70",
+        was_active: false,
+      },
+      37,
+    ),
     decoded("SuperAdminTransferCancelled", { recipient: "0x77" }, 38),
-    decoded("SuperAdminTransferStarted", {
-      recipient: "0x79",
-      execute_after_ms: 101n,
-    }, 39),
-    decoded("SuperAdminTransferred", {
-      previous_super_admin_cap_id: "0x7a",
-      new_super_admin_cap_id: "0x7b",
-      recipient: "0x79",
-    }, 40),
-    decoded("UpgradePolicyRestricted", {
-      previous_policy: 0,
-      new_policy: 1,
-    }, 41),
-    decoded("UpgradeCommitted", {
-      new_package_id: "0x78",
-      previous_version: 1n,
-      new_version: 2n,
-    }, 42),
-    decoded("XClaimSignerRevoked", {
-      previous_public_key: new Uint8Array([9]),
-    }, 43),
+    decoded(
+      "SuperAdminTransferStarted",
+      {
+        recipient: "0x79",
+        execute_after_ms: 101n,
+      },
+      39,
+    ),
+    decoded(
+      "SuperAdminTransferred",
+      {
+        previous_super_admin_cap_id: "0x7a",
+        new_super_admin_cap_id: "0x7b",
+        recipient: "0x79",
+      },
+      40,
+    ),
+    decoded(
+      "UpgradePolicyRestricted",
+      {
+        previous_policy: 0,
+        new_policy: 1,
+      },
+      41,
+    ),
+    decoded(
+      "UpgradeCommitted",
+      {
+        new_package_id: "0x78",
+        previous_version: 1n,
+        new_version: 2n,
+      },
+      42,
+    ),
+    decoded(
+      "XClaimSignerRevoked",
+      {
+        previous_public_key: new Uint8Array([9]),
+      },
+      43,
+    ),
   ].reduce(reduceLaunchpadEvent, beforeRevocation);
 
   assert.deepEqual(
@@ -223,7 +297,9 @@ test("replays launchpad capability, signer, and package administration facts", (
     },
   );
   assert.deepEqual(
-    projection.administration.creatorCapClaims[normalizedType("0xa::meme::MEME")],
+    projection.administration.creatorCapClaims[
+      normalizedType("0xa::meme::MEME")
+    ],
     {
       memeType: normalizedType("0xa::meme::MEME"),
       creator: normalizeSuiObjectId("0x72"),
@@ -261,11 +337,7 @@ test("requires native event position and current/original package identities", (
     /checkpoint metadata/,
   );
   assert.throws(
-    () =>
-      decodeLaunchpadEvent(
-        { ...valid, packageId: "0x999" },
-        packages,
-      ),
+    () => decodeLaunchpadEvent({ ...valid, packageId: "0x999" }, packages),
     /unexpected emitter package/,
   );
   assert.throws(
@@ -296,7 +368,10 @@ test("uses transaction digest and event index as the stable replay identity", ()
     first,
   );
 
-  assert.equal(reduceLaunchpadEvent(projection, correctedCheckpoint), projection);
+  assert.equal(
+    reduceLaunchpadEvent(projection, correctedCheckpoint),
+    projection,
+  );
 });
 
 function decoded(
@@ -304,10 +379,7 @@ function decoded(
   overrides: Record<string, unknown>,
   eventIndex: number,
 ) {
-  return decodeLaunchpadEvent(
-    suiEvent(kind, overrides, eventIndex),
-    packages,
-  );
+  return decodeLaunchpadEvent(suiEvent(kind, overrides, eventIndex), packages);
 }
 
 function readFrozenLaunchpadEventSpecs(): Record<
@@ -344,13 +416,19 @@ function readFrozenLaunchpadEventSpecs(): Record<
 }
 
 function abiDescriptor(type: unknown): string {
-  if (type === "u64" || type === "u8" || type === "bool" || type === "address") {
+  if (
+    type === "u64" ||
+    type === "u8" ||
+    type === "bool" ||
+    type === "address"
+  ) {
     return type;
   }
   if (!isRecord(type)) throw new TypeError("unsupported ABI event field");
   if (type.vector === "u8") return "bytes";
   const datatype = type.Datatype;
-  if (!isRecord(datatype)) throw new TypeError("unsupported ABI datatype field");
+  if (!isRecord(datatype))
+    throw new TypeError("unsupported ABI datatype field");
   if (datatype.name === "ID") return "id";
   if (datatype.name === "TypeName") return "typeName";
   if (datatype.name !== "Option" || !Array.isArray(datatype.type_arguments)) {
@@ -443,14 +521,12 @@ function orderedForReplay(kinds: LaunchpadEventKind[]): LaunchpadEventKind[] {
     "ProtocolFeesClaimed",
     "Migrated",
   ];
-  return [
-    ...lifecycle,
-    ...kinds.filter((kind) => !lifecycle.includes(kind)),
-  ];
+  return [...lifecycle, ...kinds.filter((kind) => !lifecycle.includes(kind))];
 }
 
 function normalizedType(type: string): string {
-  return type.replace(/^0x([0-9a-f]+)::/, (_match, address: string) =>
-    `0x${address.padStart(64, "0")}::`,
+  return type.replace(
+    /^0x([0-9a-f]+)::/,
+    (_match, address: string) => `0x${address.padStart(64, "0")}::`,
   );
 }

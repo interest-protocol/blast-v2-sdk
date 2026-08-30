@@ -5,21 +5,20 @@ import test from "node:test";
 import type { BcsType } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { normalizeSuiObjectId } from "@mysten/sui/utils";
-
+import type { LaunchpadEventKind } from "../src/launchpad/events.ts";
 import {
   decodeLaunchpadEvent,
   launchpadEventBcs,
   launchpadEventSpecs,
 } from "../src/launchpad/events.ts";
-import type { LaunchpadEventKind } from "../src/launchpad/events.ts";
+import type {
+  MigratorEventKind,
+  MigratorEventPackageIdentity,
+} from "../src/migrators/events.ts";
 import {
   decodeMigratorEvent,
   migratorEventBcs,
   migratorEventSpecs,
-} from "../src/migrators/events.ts";
-import type {
-  MigratorEventKind,
-  MigratorEventPackageIdentity,
 } from "../src/migrators/events.ts";
 import {
   createLaunchpadProductProjection,
@@ -53,64 +52,88 @@ test("decodes and idempotently reduces every frozen migrator event", () => {
 
 test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
   const inputs = [
-    launchpadDecoded("LaunchCreated", {
-      launch_id: "0xc",
-      meme_reserve: 800n,
-      real_quote_reserve: 0n,
-      pending_burn: 10n,
-      protocol_meme_trade_fees: 0n,
-      creator_meme_trade_fees: 0n,
-      protocol_quote_trade_fees: 0n,
-      creator_quote_trade_fees: 0n,
-    }, 0),
-    launchpadDecoded("Migrated", {
-      launch_id: "0xc",
-      migration_meme: 200n,
-      migration_quote: 190n,
-      disposed_meme: 610n,
-      protocol_meme_fee_total: 5n,
-      protocol_quote_fee_total: 6n,
-    }, 1),
-    migratorDecoded("VaultCreated", {
-      vault_id: "0xd",
-      pool_id: "0xe",
-      position_id: "0xf",
-      venue: "0x320::cetus::Venue",
-    }, 2),
-    migratorDecoded("MigrationCompleted", {
-      launch_id: "0xc",
-      vault_id: "0xd",
-      pool_id: "0xe",
-      venue: "0x320::cetus::Venue",
-      source_meme_amount: 200n,
-      source_quote_amount: 190n,
-      used_meme_amount: 199n,
-      used_quote_amount: 189n,
-      residual_meme_amount: 1n,
-      residual_quote_amount: 1n,
-      sqrt_price_x64: 100n,
-      tick_spacing: 260,
-      fee_rate: 40_000n,
-    }, 3),
-    migratorDecoded("LpFeesCollected", {
-      vault_id: "0xd",
-      pool_id: "0xe",
-      position_id: "0xf",
-      venue: "0x320::cetus::Venue",
-      protocol_meme_fee_total: 11n,
-      creator_meme_fee_total: 12n,
-      protocol_quote_fee_total: 13n,
-      creator_quote_fee_total: 14n,
-      principal_liquidity_before: 1_000n,
-      principal_liquidity_after: 1_000n,
-    }, 4),
-    migratorDecoded("CreatorFeesClaimed", {
-      vault_id: "0xd",
-      protocol_meme_fee_total: 11n,
-      creator_meme_fee_total: 0n,
-      protocol_quote_fee_total: 13n,
-      creator_quote_fee_total: 0n,
-    }, 5),
+    launchpadDecoded(
+      "LaunchCreated",
+      {
+        launch_id: "0xc",
+        meme_reserve: 800n,
+        real_quote_reserve: 0n,
+        pending_burn: 10n,
+        protocol_meme_trade_fees: 0n,
+        creator_meme_trade_fees: 0n,
+        protocol_quote_trade_fees: 0n,
+        creator_quote_trade_fees: 0n,
+      },
+      0,
+    ),
+    launchpadDecoded(
+      "Migrated",
+      {
+        launch_id: "0xc",
+        migration_meme: 200n,
+        migration_quote: 190n,
+        disposed_meme: 610n,
+        protocol_meme_fee_total: 5n,
+        protocol_quote_fee_total: 6n,
+      },
+      1,
+    ),
+    migratorDecoded(
+      "VaultCreated",
+      {
+        vault_id: "0xd",
+        pool_id: "0xe",
+        position_id: "0xf",
+        venue: "0x320::cetus::Venue",
+      },
+      2,
+    ),
+    migratorDecoded(
+      "MigrationCompleted",
+      {
+        launch_id: "0xc",
+        vault_id: "0xd",
+        pool_id: "0xe",
+        venue: "0x320::cetus::Venue",
+        source_meme_amount: 200n,
+        source_quote_amount: 190n,
+        used_meme_amount: 199n,
+        used_quote_amount: 189n,
+        residual_meme_amount: 1n,
+        residual_quote_amount: 1n,
+        sqrt_price_x64: 100n,
+        tick_spacing: 260,
+        fee_rate: 40_000n,
+      },
+      3,
+    ),
+    migratorDecoded(
+      "LpFeesCollected",
+      {
+        vault_id: "0xd",
+        pool_id: "0xe",
+        position_id: "0xf",
+        venue: "0x320::cetus::Venue",
+        protocol_meme_fee_total: 11n,
+        creator_meme_fee_total: 12n,
+        protocol_quote_fee_total: 13n,
+        creator_quote_fee_total: 14n,
+        principal_liquidity_before: 1_000n,
+        principal_liquidity_after: 1_000n,
+      },
+      4,
+    ),
+    migratorDecoded(
+      "CreatorFeesClaimed",
+      {
+        vault_id: "0xd",
+        protocol_meme_fee_total: 11n,
+        creator_meme_fee_total: 0n,
+        protocol_quote_fee_total: 13n,
+        creator_quote_fee_total: 0n,
+      },
+      5,
+    ),
   ];
 
   const projection = inputs.reduce(
@@ -142,10 +165,7 @@ test("requires migrator event positions and current/original identities", () => 
   );
   assert.throws(
     () =>
-      decodeMigratorEvent(
-        { ...valid, packageId: "0x999" },
-        migratorPackages,
-      ),
+      decodeMigratorEvent({ ...valid, packageId: "0x999" }, migratorPackages),
     /unexpected emitter package/,
   );
   assert.throws(
@@ -315,35 +335,60 @@ function encode(
 
 function sampleValue(descriptor: string): unknown {
   switch (descriptor) {
-    case "id": return "0xc";
-    case "typeName": return "0xa::meme::MEME";
-    case "address": return "0xb";
+    case "id":
+      return "0xc";
+    case "typeName":
+      return "0xa::meme::MEME";
+    case "address":
+      return "0xb";
     case "u64":
-    case "u128": return 1n;
+    case "u128":
+      return 1n;
     case "u8":
-    case "u32": return 1;
-    case "bool": return false;
-    case "bytes": return new Uint8Array([1]);
+    case "u32":
+      return 1;
+    case "bool":
+      return false;
+    case "bytes":
+      return new Uint8Array([1]);
     case "optionAddress":
     case "optionBytes":
-    case "optionU64": return null;
-    default: throw new TypeError(`unknown descriptor: ${descriptor}`);
+    case "optionU64":
+      return null;
+    default:
+      throw new TypeError(`unknown descriptor: ${descriptor}`);
   }
 }
 
-function readFrozenMigratorEventSpecs(): Record<string, Record<string, string>> {
+function readFrozenMigratorEventSpecs(): Record<
+  string,
+  Record<string, string>
+> {
   const artifact = JSON.parse(
-    readFileSync(new URL("../abi/production-launchpad-v1.json", import.meta.url), "utf8"),
+    readFileSync(
+      new URL("../abi/production-launchpad-v1.json", import.meta.url),
+      "utf8",
+    ),
   ) as {
-    packages: { migrators: { modules: { events: { events: Array<{
-      name: string;
-      fields: Array<{ name: string; type: unknown }>;
-    }> } } } };
+    packages: {
+      migrators: {
+        modules: {
+          events: {
+            events: Array<{
+              name: string;
+              fields: Array<{ name: string; type: unknown }>;
+            }>;
+          };
+        };
+      };
+    };
   };
   return Object.fromEntries(
     artifact.packages.migrators.modules.events.events.map((event) => [
       event.name,
-      Object.fromEntries(event.fields.map((field) => [field.name, abiDescriptor(field.type)])),
+      Object.fromEntries(
+        event.fields.map((field) => [field.name, abiDescriptor(field.type)]),
+      ),
     ]),
   );
 }

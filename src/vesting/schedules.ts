@@ -1,8 +1,4 @@
-import {
-  requirePositiveU64,
-  requireU64,
-  U64_MAX,
-} from "../lib/integers.ts";
+import { requirePositiveU64, requireU64, U64_MAX } from "../lib/integers.ts";
 
 export const MAX_CHECKPOINTS = 256;
 export const MAX_CHECKPOINT_PAGE_SIZE = 32;
@@ -34,10 +30,7 @@ export function validateLinearSchedule(
   minimumLeadTimeMs: bigint = DEFAULT_START_LEAD_TIME_MS,
 ): void {
   validateLinearShape(schedule);
-  const minimumStartMs = minimumStart(
-    currentTimestampMs,
-    minimumLeadTimeMs,
-  );
+  const minimumStartMs = minimumStart(currentTimestampMs, minimumLeadTimeMs);
   if (schedule.startMs < minimumStartMs) {
     throw new RangeError(
       "startMs must include minimumLeadTimeMs after currentTimestampMs",
@@ -70,8 +63,7 @@ export function linearVestedAt(
     return 0n;
   }
   if (timestampMs >= endMs) return totalAmount;
-  const elapsedPeriods =
-    (timestampMs - schedule.startMs) / schedule.periodMs;
+  const elapsedPeriods = (timestampMs - schedule.startMs) / schedule.periodMs;
   return (totalAmount * elapsedPeriods) / schedule.periods;
 }
 
@@ -200,7 +192,9 @@ function minimumStart(
   requireU64("currentTimestampMs", currentTimestampMs);
   requireU64("minimumLeadTimeMs", minimumLeadTimeMs);
   if (minimumLeadTimeMs > U64_MAX - currentTimestampMs) {
-    throw new RangeError("currentTimestampMs plus minimumLeadTimeMs must be a u64");
+    throw new RangeError(
+      "currentTimestampMs plus minimumLeadTimeMs must be a u64",
+    );
   }
   return currentTimestampMs + minimumLeadTimeMs;
 }

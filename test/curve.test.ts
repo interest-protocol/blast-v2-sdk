@@ -83,8 +83,5 @@ test("matches the contract progress-burn sell vector", () => {
 });
 
 test("rejects a trade whose net input rounds to zero", () => {
-  assert.throws(
-    () => previewBuy(baseState, 1n),
-    /quoteInNet rounds to zero/,
-  );
+  assert.throws(() => previewBuy(baseState, 1n), /quoteInNet rounds to zero/);
 });

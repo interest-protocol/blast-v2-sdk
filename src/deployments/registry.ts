@@ -86,10 +86,7 @@ export function launchpadDeployment(
     packageVersion: sharedObjectReference(objects.packageVersion, false),
     launchConfig: sharedObjectReference(objects.launchConfig, false),
     runtimeConfig: sharedObjectReference(objects.runtimeConfig, false),
-    protocolAuthority: sharedObjectReference(
-      objects.protocolAuthority,
-      false,
-    ),
+    protocolAuthority: sharedObjectReference(objects.protocolAuthority, false),
   };
 }
 
