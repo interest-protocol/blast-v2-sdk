@@ -44,6 +44,15 @@ test("replays a linear vesting lifecycle and ignores duplicate native event ids"
     released_total: 400n,
     remaining_balance: 600n,
   });
+  const finalClaim = event("linear.VestingClaimed", {
+    vesting_id: linearId,
+    coin_type: normalizeStructTag("0x2::sui::SUI"),
+    caller: normalizeSuiAddress("0x6"),
+    beneficiary: normalizeSuiAddress("0x5"),
+    amount: 600n,
+    released_total: 1_000n,
+    remaining_balance: 0n,
+  });
   const closed = event("linear.VestingClosed", {
     vesting_id: linearId,
     coin_type: normalizeStructTag("0x2::sui::SUI"),
@@ -52,7 +61,7 @@ test("replays a linear vesting lifecycle and ignores duplicate native event ids"
   });
 
   let projection = createVestingProjection();
-  for (const lifecycleEvent of [created, claimed, closed]) {
+  for (const lifecycleEvent of [created, claimed, finalClaim, closed]) {
     projection = reduceVestingInput(projection, lifecycleEvent);
     assert.strictEqual(
       reduceVestingInput(projection, lifecycleEvent),
@@ -278,6 +287,230 @@ test("rejects invalid native fact metadata and schedules without event context",
     /unknown checkpoint vesting/,
   );
 });
+
+test("rejects claims that violate release conservation", () => {
+  const created = linearCreated("0x20", "0x21", 1_000n);
+  const projection = reduceVestingInput(createVestingProjection(), created);
+
+  assert.throws(
+    () =>
+      reduceVestingInput(
+        projection,
+        linearClaimed("0x20", "0x21", 300n, 400n, 600n),
+      ),
+    /claim amount.*released total delta/,
+  );
+
+  const claimed = reduceVestingInput(
+    projection,
+    linearClaimed("0x20", "0x21", 400n, 400n, 600n),
+  );
+  assert.throws(
+    () =>
+      reduceVestingInput(
+        claimed,
+        linearClaimed("0x20", "0x21", 0n, 300n, 700n),
+      ),
+    /released total must not decrease/,
+  );
+});
+
+test("rejects lifecycle updates after cancellation or closure", () => {
+  const checkpointCreated = event("checkpoints.VestingCreated", {
+    vesting_id: "0x30",
+    coin_type: "0x2::sui::SUI",
+    funder: "0x31",
+    beneficiary: "0x32",
+    refund_recipient: "0x33",
+    cancel_cap_id: "0x34",
+    total_amount: 900n,
+    checkpoint_count: 3n,
+  });
+  let canceled = reduceVestingInput(
+    createVestingProjection(),
+    checkpointCreated,
+  );
+  canceled = reduceVestingInput(
+    canceled,
+    event("checkpoints.VestingCanceled", {
+      vesting_id: "0x30",
+      coin_type: "0x2::sui::SUI",
+      caller: "0x35",
+      beneficiary: "0x32",
+      refund_recipient: "0x33",
+      beneficiary_amount: 500n,
+      refund_amount: 400n,
+      released_total: 500n,
+    }),
+  );
+  assert.throws(
+    () =>
+      reduceVestingInput(
+        canceled,
+        event("checkpoints.VestingClaimed", {
+          vesting_id: "0x30",
+          coin_type: "0x2::sui::SUI",
+          caller: "0x35",
+          beneficiary: "0x32",
+          amount: 1n,
+          released_total: 501n,
+          remaining_balance: 399n,
+        }),
+      ),
+    /vesting position is not active/,
+  );
+
+  let closed = reduceVestingInput(
+    createVestingProjection(),
+    linearCreated("0x40", "0x41", 1_000n),
+  );
+  closed = reduceVestingInput(
+    closed,
+    linearClaimed("0x40", "0x41", 1_000n, 1_000n, 0n),
+  );
+  closed = reduceVestingInput(
+    closed,
+    event("linear.VestingClosed", {
+      vesting_id: "0x40",
+      coin_type: "0x2::sui::SUI",
+      caller: "0x42",
+      released_total: 1_000n,
+    }),
+  );
+  assert.throws(
+    () =>
+      reduceVestingInput(closed, linearClaimed("0x40", "0x41", 1n, 1_001n, 0n)),
+    /vesting position is not active/,
+  );
+});
+
+test("rejects cancellation settlement and party mismatches", () => {
+  const created = event("checkpoints.VestingCreated", {
+    vesting_id: "0x50",
+    coin_type: "0x2::sui::SUI",
+    funder: "0x51",
+    beneficiary: "0x52",
+    refund_recipient: "0x53",
+    cancel_cap_id: "0x54",
+    total_amount: 900n,
+    checkpoint_count: 3n,
+  });
+  let projection = reduceVestingInput(createVestingProjection(), created);
+  projection = reduceVestingInput(
+    projection,
+    event("checkpoints.VestingClaimed", {
+      vesting_id: "0x50",
+      coin_type: "0x2::sui::SUI",
+      caller: "0x55",
+      beneficiary: "0x52",
+      amount: 300n,
+      released_total: 300n,
+      remaining_balance: 600n,
+    }),
+  );
+  const cancellation = {
+    vesting_id: "0x50",
+    coin_type: "0x2::sui::SUI",
+    caller: "0x55",
+    beneficiary: "0x52",
+    refund_recipient: "0x53",
+    beneficiary_amount: 200n,
+    refund_amount: 400n,
+    released_total: 500n,
+  } as const;
+
+  assert.throws(
+    () =>
+      reduceVestingInput(
+        projection,
+        event("checkpoints.VestingCanceled", {
+          ...cancellation,
+          beneficiary_amount: 100n,
+        }),
+      ),
+    /beneficiary amount.*released total delta/,
+  );
+  assert.throws(
+    () =>
+      reduceVestingInput(
+        projection,
+        event("checkpoints.VestingCanceled", {
+          ...cancellation,
+          beneficiary: "0x99",
+        }),
+      ),
+    /beneficiary does not match/,
+  );
+  assert.throws(
+    () =>
+      reduceVestingInput(
+        projection,
+        event("checkpoints.VestingCanceled", {
+          ...cancellation,
+          refund_recipient: "0x99",
+        }),
+      ),
+    /refund recipient does not match/,
+  );
+});
+
+test("rejects close events that invent an unreplayed release", () => {
+  const projection = reduceVestingInput(
+    createVestingProjection(),
+    linearCreated("0x60", "0x61", 1_000n),
+  );
+  assert.throws(
+    () =>
+      reduceVestingInput(
+        projection,
+        event("linear.VestingClosed", {
+          vesting_id: "0x60",
+          coin_type: "0x2::sui::SUI",
+          caller: "0x62",
+          released_total: 1_000n,
+        }),
+      ),
+    /close must not change released total|remaining balance must be zero/,
+  );
+});
+
+function linearCreated(
+  vestingId: string,
+  beneficiary: string,
+  totalAmount: bigint,
+) {
+  return event("linear.VestingCreated", {
+    vesting_id: vestingId,
+    coin_type: "0x2::sui::SUI",
+    funder: "0x70",
+    beneficiary,
+    refund_recipient: null,
+    cancel_cap_id: null,
+    total_amount: totalAmount,
+    start_ms: 100n,
+    cliff_ms: 20n,
+    period_ms: 10n,
+    periods: 10n,
+  });
+}
+
+function linearClaimed(
+  vestingId: string,
+  beneficiary: string,
+  amount: bigint,
+  releasedTotal: bigint,
+  remainingBalance: bigint,
+) {
+  return event("linear.VestingClaimed", {
+    vesting_id: vestingId,
+    coin_type: "0x2::sui::SUI",
+    caller: "0x71",
+    beneficiary,
+    amount,
+    released_total: releasedTotal,
+    remaining_balance: remainingBalance,
+  });
+}
 
 function event<Kind extends VestingEventKind>(
   kind: Kind,

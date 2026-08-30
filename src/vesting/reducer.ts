@@ -162,6 +162,9 @@ function updatePosition(
   position: VestingPositionProjection,
   event: Exclude<DecodedVestingEvent, { name: "VestingCreated" }>,
 ): VestingPositionProjection {
+  if (position.status !== "active") {
+    throw new TypeError("vesting position is not active");
+  }
   if (event.module !== position.kind) {
     throw new TypeError("vesting event module does not match its position");
   }
@@ -169,57 +172,120 @@ function updatePosition(
     throw new TypeError("vesting event coin type does not match its position");
   }
   if (event.name === "VestingClaimed") {
-    const releasedTotal = requireU64(
-      "released total",
-      event.payload.released_total,
-    );
-    const remainingBalance = requireU64(
-      "remaining balance",
-      event.payload.remaining_balance,
-    );
-    if (releasedTotal + remainingBalance !== position.totalAmount) {
-      throw new RangeError(
-        "released total plus remaining balance must equal total amount",
-      );
-    }
-    return { ...position, releasedTotal, remainingBalance };
+    return updateClaimedPosition(position, event);
   }
   if (event.name === "VestingCanceled") {
-    const releasedTotal = requireU64(
-      "released total",
-      event.payload.released_total,
-    );
-    const refundAmount = requireU64(
-      "refund amount",
-      event.payload.refund_amount,
-    );
-    if (releasedTotal + refundAmount !== position.totalAmount) {
-      throw new RangeError(
-        "released total plus refund amount must equal total amount",
-      );
-    }
-    return {
-      ...position,
-      beneficiary: normalizeSuiAddress(event.payload.beneficiary),
-      refundRecipient: normalizeSuiAddress(event.payload.refund_recipient),
-      releasedTotal,
-      remainingBalance: 0n,
-      status: "canceled",
-    };
+    return updateCanceledPosition(position, event);
   }
+  return updateClosedPosition(position, event);
+}
 
-  const releasedTotal = requireU64(
-    "released total",
+function updateClaimedPosition(
+  position: VestingPositionProjection,
+  event: Extract<DecodedVestingEvent, { name: "VestingClaimed" }>,
+): VestingPositionProjection {
+  assertBeneficiary(position, event.payload.beneficiary);
+  const { releasedTotal, delta } = releaseDelta(
+    position,
     event.payload.released_total,
   );
-  if (releasedTotal !== position.totalAmount) {
-    throw new RangeError("closed vesting must release its total amount");
+  const amount = requireU64("claim amount", event.payload.amount);
+  if (amount !== delta) {
+    throw new RangeError("claim amount must equal the released total delta");
+  }
+  const remainingBalance = requireU64(
+    "remaining balance",
+    event.payload.remaining_balance,
+  );
+  if (releasedTotal + remainingBalance !== position.totalAmount) {
+    throw new RangeError(
+      "released total plus remaining balance must equal total amount",
+    );
+  }
+  return { ...position, releasedTotal, remainingBalance };
+}
+
+function updateCanceledPosition(
+  position: VestingPositionProjection,
+  event: Extract<DecodedVestingEvent, { name: "VestingCanceled" }>,
+): VestingPositionProjection {
+  assertBeneficiary(position, event.payload.beneficiary);
+  if (
+    normalizeSuiAddress(event.payload.refund_recipient) !==
+    position.refundRecipient
+  ) {
+    throw new TypeError("cancellation refund recipient does not match");
+  }
+  const { releasedTotal, delta } = releaseDelta(
+    position,
+    event.payload.released_total,
+  );
+  const beneficiaryAmount = requireU64(
+    "beneficiary amount",
+    event.payload.beneficiary_amount,
+  );
+  if (beneficiaryAmount !== delta) {
+    throw new RangeError(
+      "beneficiary amount must equal the released total delta",
+    );
+  }
+  const refundAmount = requireU64("refund amount", event.payload.refund_amount);
+  if (releasedTotal + refundAmount !== position.totalAmount) {
+    throw new RangeError(
+      "released total plus refund amount must equal total amount",
+    );
   }
   return {
     ...position,
     releasedTotal,
     remainingBalance: 0n,
+    status: "canceled",
+  };
+}
+
+function updateClosedPosition(
+  position: VestingPositionProjection,
+  event: Extract<DecodedVestingEvent, { name: "VestingClosed" }>,
+): VestingPositionProjection {
+  const releasedTotal = requireU64(
+    "released total",
+    event.payload.released_total,
+  );
+  if (releasedTotal !== position.releasedTotal) {
+    throw new RangeError("close must not change released total");
+  }
+  if (
+    position.releasedTotal !== position.totalAmount ||
+    position.remainingBalance !== 0n
+  ) {
+    throw new RangeError("closed vesting remaining balance must be zero");
+  }
+  return {
+    ...position,
     status: "closed",
+  };
+}
+
+function assertBeneficiary(
+  position: VestingPositionProjection,
+  beneficiary: string,
+): void {
+  if (normalizeSuiAddress(beneficiary) !== position.beneficiary) {
+    throw new TypeError("vesting event beneficiary does not match");
+  }
+}
+
+function releaseDelta(
+  position: VestingPositionProjection,
+  nextReleasedTotal: bigint,
+): { releasedTotal: bigint; delta: bigint } {
+  const releasedTotal = requireU64("released total", nextReleasedTotal);
+  if (releasedTotal < position.releasedTotal) {
+    throw new RangeError("released total must not decrease");
+  }
+  return {
+    releasedTotal,
+    delta: releasedTotal - position.releasedTotal,
   };
 }
 
