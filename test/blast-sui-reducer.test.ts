@@ -97,6 +97,7 @@ test("replays the ordered vault lifecycle from event-derived facts", () => {
   }
 
   assert.deepEqual(projection.vault?.custody, custody(11));
+  assert.strictEqual(projection.latestCustody, projection.vault?.custody);
   assert.equal(projection.vault?.custody.fun_supply, 11_041n);
   assert.equal(projection.vault?.custody.blast_supply, 11_042n);
   assert.equal(projection.vault?.redeemFeeBps, 40n);
@@ -203,6 +204,19 @@ test("replays all administration events and ignores duplicate events", () => {
     projection.administration.packageAdmin?.packageAdminId,
     normalizeSuiObjectId("0x15"),
   );
+  assert.equal(
+    projection.administration.packageAdmin?.packageId,
+    normalizeSuiObjectId("0x19"),
+  );
+  assert.equal(projection.administration.packageAdmin?.packageVersion, 3n);
+  assert.equal(
+    projection.administration.packageAdmin?.upgradeCapId,
+    normalizeSuiObjectId("0x17"),
+  );
+  assert.equal(
+    projection.administration.packageAdmin?.publisherId,
+    normalizeSuiObjectId("0x16"),
+  );
   assert.equal(projection.administration.packageAdmin?.policy, 1);
   assert.equal(projection.administration.pendingUpgrade, null);
   assert.deepEqual(projection.administration.lastUpgradeAuthorization, {
@@ -223,6 +237,19 @@ test("replays all administration events and ignores duplicate events", () => {
   for (const adminEvent of adminEvents) {
     assert.equal(projection.eventCounts[adminEvent.kind], 1);
   }
+});
+
+test("retains the latest canonical custody when replay starts mid-history", () => {
+  const latestCustody = custody(20);
+  const projection = reduceBlastSuiInput(
+    createBlastSuiProjection(),
+    event("FunSuiMinted", { sui_in: 9n, custody: latestCustody }),
+  );
+
+  assert.equal(projection.vault, null);
+  assert.strictEqual(projection.latestCustody, latestCustody);
+  assert.equal(projection.latestCustody.fun_supply, 20_041n);
+  assert.equal(projection.latestCustody.blast_supply, 20_042n);
 });
 
 test("stores normalized ownership and transaction-effect facts only under native state", () => {

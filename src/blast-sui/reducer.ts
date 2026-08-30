@@ -134,6 +134,7 @@ export type BlastSuiProjection = {
   appliedEventIds: Readonly<Record<string, true>>;
   eventCounts: Readonly<Record<BlastSuiEventKind, number>>;
   vault: BlastSuiVaultProjection | null;
+  latestCustody: VaultCustodyEvent | null;
   receipts: Readonly<Record<string, BlastSuiReceiptProjection>>;
   totals: BlastSuiTotalsProjection;
   administration: BlastSuiAdministrationProjection;
@@ -149,6 +150,7 @@ export function createBlastSuiProjection(): BlastSuiProjection {
       Object.keys(blastSuiEventSpecs).map((kind) => [kind, 0]),
     ) as Record<BlastSuiEventKind, number>,
     vault: null,
+    latestCustody: null,
     receipts: {},
     totals: {
       funMintedSui: 0n,
@@ -210,6 +212,7 @@ function reduceBlastSuiEvent(
       custody !== null && state.vault !== null
         ? { ...state.vault, custody }
         : state.vault,
+    latestCustody: custody ?? state.latestCustody,
   };
 
   switch (event.kind) {
@@ -386,6 +389,14 @@ function reduceBlastSuiEvent(
       return updateAdministration(next, {
         ...state.administration,
         packageVersion: event.payload.new_version,
+        packageAdmin:
+          state.administration.packageAdmin === null
+            ? null
+            : {
+                ...state.administration.packageAdmin,
+                packageId: event.payload.new_package_id,
+                packageVersion: event.payload.new_version,
+              },
         pendingUpgrade: null,
         lastUpgradeCommit: {
           packageId: event.payload.new_package_id,
