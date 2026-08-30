@@ -252,6 +252,165 @@ test("retains the latest canonical custody when replay starts mid-history", () =
   assert.equal(projection.latestCustody.blast_supply, 20_042n);
 });
 
+test("rejects duplicate, unknown, and terminal receipt transitions before accounting", () => {
+  const requested = event("BlastSuiDepositRequested", {
+    receipt_id: firstReceiptId,
+    vault_id: vaultId,
+    pool_id: normalizeSuiObjectId("0x5"),
+    principal_sui: 70n,
+    activation_epoch: 9n,
+    custody: custody(30),
+  });
+  const initial = reduceBlastSuiInput(createBlastSuiProjection(), requested);
+
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(
+        initial,
+        event("BlastSuiDepositRequested", requested.payload),
+      ),
+    /receipt.*already requested/,
+  );
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(
+        createBlastSuiProjection(),
+        event("BlastSuiDepositClaimed", {
+          receipt_id: firstReceiptId,
+          vault_id: vaultId,
+          principal_sui: 70n,
+          contributed_sui: 65n,
+          pool_tokens: 60n,
+          blast_out: 55n,
+          custody: custody(31),
+        }),
+      ),
+    /unknown deposit receipt/,
+  );
+
+  const claimed = reduceBlastSuiInput(
+    initial,
+    event("BlastSuiDepositClaimed", {
+      receipt_id: firstReceiptId,
+      vault_id: vaultId,
+      principal_sui: 70n,
+      contributed_sui: 65n,
+      pool_tokens: 60n,
+      blast_out: 55n,
+      custody: custody(32),
+    }),
+  );
+  const appliedCount = Object.keys(claimed.appliedEventIds).length;
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(
+        claimed,
+        event("BlastSuiDepositCancelled", {
+          receipt_id: firstReceiptId,
+          vault_id: vaultId,
+          principal_sui: 70n,
+          returned_sui: 69n,
+        }),
+      ),
+    /deposit receipt must be requested/,
+  );
+  assert.equal(Object.keys(claimed.appliedEventIds).length, appliedCount);
+  assert.equal(claimed.totals.depositCancelledReturnedSui, 0n);
+});
+
+test("binds receipt events to their discovered vault and principal", () => {
+  const created = event("VaultCreated", {
+    vault_id: vaultId,
+    validator: normalizeSuiAddress("0x4"),
+    pool_id: normalizeSuiObjectId("0x5"),
+    fun_reserve_sui: 1_000n,
+    bootstrap_sui: 200n,
+    locked_blast_sui: 300n,
+    redeem_fee_bps: requireBasisPoints("redeem fee", 25n),
+    custody: custody(40),
+  });
+  const discovered = reduceBlastSuiInput(createBlastSuiProjection(), created);
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(
+        discovered,
+        event("BlastSuiDepositRequested", {
+          receipt_id: firstReceiptId,
+          vault_id: normalizeSuiObjectId("0x99"),
+          pool_id: normalizeSuiObjectId("0x5"),
+          principal_sui: 70n,
+          activation_epoch: 9n,
+          custody: custody(41),
+        }),
+      ),
+    /vault.*does not match/,
+  );
+
+  const requested = reduceBlastSuiInput(
+    discovered,
+    event("BlastSuiDepositRequested", {
+      receipt_id: firstReceiptId,
+      vault_id: vaultId,
+      pool_id: normalizeSuiObjectId("0x5"),
+      principal_sui: 70n,
+      activation_epoch: 9n,
+      custody: custody(42),
+    }),
+  );
+  for (const mismatch of [
+    { vault_id: normalizeSuiObjectId("0x99"), principal_sui: 70n },
+    { vault_id: vaultId, principal_sui: 71n },
+  ]) {
+    assert.throws(
+      () =>
+        reduceBlastSuiInput(
+          requested,
+          event("BlastSuiDepositClaimed", {
+            receipt_id: firstReceiptId,
+            ...mismatch,
+            contributed_sui: 65n,
+            pool_tokens: 60n,
+            blast_out: 55n,
+            custody: custody(43),
+          }),
+        ),
+      /vault.*does not match|principal.*does not match/,
+    );
+  }
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(
+        requested,
+        event("BlastSuiDepositCancelled", {
+          receipt_id: firstReceiptId,
+          vault_id: vaultId,
+          principal_sui: 71n,
+          returned_sui: 69n,
+        }),
+      ),
+    /principal.*does not match/,
+  );
+  assert.equal(requested.totals.depositContributedSui, 0n);
+});
+
+test("rejects a redemption whose gross amount is not fee plus net", () => {
+  const invalid = event("BlastSuiRedeemed", {
+    blast_in: 13n,
+    gross_sui: 12n,
+    fee_sui: 3n,
+    net_sui: 10n,
+    custody: custody(50),
+  });
+  const projection = createBlastSuiProjection();
+
+  assert.throws(
+    () => reduceBlastSuiInput(projection, invalid),
+    /gross SUI must equal fee SUI plus net SUI/,
+  );
+  assert.equal(Object.keys(projection.appliedEventIds).length, 0);
+  assert.equal(projection.totals.redemptionGrossSui, 0n);
+});
+
 test("stores normalized ownership and transaction-effect facts only under native state", () => {
   const ownership: BlastSuiNativeFact = {
     source: "objectOwnership",
@@ -298,6 +457,127 @@ test("stores normalized ownership and transaction-effect facts only under native
       recipient: "0x99",
     }),
     projection,
+  );
+});
+
+test("merges receipt ownership monotonically and rejects checkpoint conflicts", () => {
+  const first: BlastSuiNativeFact = {
+    source: "objectOwnership",
+    kind: "depositReceiptOwnership",
+    checkpoint: 20n,
+    receiptId: "0x2",
+    owner: "0x21",
+  };
+  const latest: BlastSuiNativeFact = {
+    ...first,
+    checkpoint: 22n,
+    owner: "0x22",
+  };
+  let projection = reduceBlastSuiInput(createBlastSuiProjection(), first);
+  projection = reduceBlastSuiInput(projection, latest);
+
+  assert.strictEqual(
+    reduceBlastSuiInput(projection, { ...first, checkpoint: 21n }),
+    projection,
+  );
+  assert.equal(
+    projection.native.depositReceiptOwners[firstReceiptId]?.owner,
+    normalizeSuiAddress("0x22"),
+  );
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(projection, {
+        ...latest,
+        owner: "0x23",
+      }),
+    /ownership conflict at checkpoint 22/,
+  );
+  assert.strictEqual(reduceBlastSuiInput(projection, latest), projection);
+});
+
+test("clears receipt ownership only from a native deletion fact", () => {
+  const request = event("BlastSuiDepositRequested", {
+    receipt_id: firstReceiptId,
+    vault_id: vaultId,
+    pool_id: normalizeSuiObjectId("0x5"),
+    principal_sui: 70n,
+    activation_epoch: 9n,
+    custody: custody(60),
+  });
+  let projection = reduceBlastSuiInput(createBlastSuiProjection(), request);
+  projection = reduceBlastSuiInput(projection, {
+    source: "objectOwnership",
+    kind: "depositReceiptOwnership",
+    checkpoint: 30n,
+    receiptId: firstReceiptId,
+    owner: "0x21",
+  });
+  projection = reduceBlastSuiInput(
+    projection,
+    event("BlastSuiDepositClaimed", {
+      receipt_id: firstReceiptId,
+      vault_id: vaultId,
+      principal_sui: 70n,
+      contributed_sui: 65n,
+      pool_tokens: 60n,
+      blast_out: 55n,
+      custody: custody(61),
+    }),
+  );
+  assert.equal(
+    projection.native.depositReceiptOwners[firstReceiptId]?.owner,
+    normalizeSuiAddress("0x21"),
+  );
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(projection, {
+        source: "transactionEffects",
+        kind: "depositReceiptDeleted",
+        position: {
+          checkpoint: 30n,
+          transactionDigest: "same-checkpoint-deletion",
+        },
+        receiptId: firstReceiptId,
+      }),
+    /deletion conflicts at checkpoint 30/,
+  );
+
+  const deletion: BlastSuiNativeFact = {
+    source: "transactionEffects",
+    kind: "depositReceiptDeleted",
+    position: { checkpoint: 31n, transactionDigest: "receipt-deleted" },
+    receiptId: firstReceiptId,
+  };
+  projection = reduceBlastSuiInput(projection, deletion);
+  assert.equal(
+    projection.native.depositReceiptOwners[firstReceiptId],
+    undefined,
+  );
+  assert.deepEqual(projection.native.depositReceiptDeletions[firstReceiptId], {
+    ...deletion,
+    receiptId: firstReceiptId,
+  });
+  assert.strictEqual(reduceBlastSuiInput(projection, deletion), projection);
+  assert.strictEqual(
+    reduceBlastSuiInput(projection, {
+      source: "objectOwnership",
+      kind: "depositReceiptOwnership",
+      checkpoint: 29n,
+      receiptId: firstReceiptId,
+      owner: "0x22",
+    }),
+    projection,
+  );
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(projection, {
+        source: "objectOwnership",
+        kind: "depositReceiptOwnership",
+        checkpoint: 32n,
+        receiptId: firstReceiptId,
+        owner: "0x22",
+      }),
+    /deleted deposit receipt cannot have an owner/,
   );
 });
 

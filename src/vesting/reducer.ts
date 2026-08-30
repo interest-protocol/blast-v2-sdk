@@ -4,6 +4,8 @@ import {
   normalizeSuiObjectId,
 } from "@mysten/sui/utils";
 
+import type { NativeTransactionPosition } from "../lib/events.ts";
+import { normalizeNativeTransactionPosition } from "../lib/events.ts";
 import { requirePositiveU64, requireU64 } from "../lib/integers.ts";
 import type { DecodedVestingEvent, VestingEventPayloads } from "./events.ts";
 import { vestingEventId } from "./events.ts";
@@ -55,7 +57,18 @@ export type VestingNativeFact =
       checkpoint: bigint;
       vestingId: string;
       checkpoints: readonly VestingCheckpoint[];
+    }
+  | {
+      source: "transactionEffects";
+      kind: "cancelCapDeleted";
+      position: NativeTransactionPosition;
+      cancelCapId: string;
     };
+
+type CancelCapDeletionFact = Extract<
+  VestingNativeFact,
+  { kind: "cancelCapDeleted" }
+>;
 
 export type VestingNativeProjection = {
   appliedFactIds: Record<string, true>;
@@ -63,6 +76,7 @@ export type VestingNativeProjection = {
     string,
     Extract<VestingNativeFact, { kind: "cancelCapOwnership" }>
   >;
+  cancelCapDeletions: Record<string, CancelCapDeletionFact>;
   checkpointSchedules: Record<
     string,
     Extract<VestingNativeFact, { kind: "checkpointSchedule" }>
@@ -84,6 +98,7 @@ export function createVestingProjection(): VestingProjection {
     native: {
       appliedFactIds: {},
       cancelCapOwners: {},
+      cancelCapDeletions: {},
       checkpointSchedules: {},
     },
   };
@@ -299,29 +314,20 @@ function reduceNativeFact(
   const normalized = normalizeNativeFact(state, fact);
   const factId = nativeFactId(normalized);
   if (state.native.appliedFactIds[factId]) return state;
-
-  const appliedFactIds = {
-    ...state.native.appliedFactIds,
-    [factId]: true as const,
-  };
   if (normalized.kind === "cancelCapOwnership") {
-    return {
-      ...state,
-      native: {
-        ...state.native,
-        appliedFactIds,
-        cancelCapOwners: {
-          ...state.native.cancelCapOwners,
-          [normalized.cancelCapId]: normalized,
-        },
-      },
-    };
+    return reduceCancelCapOwnership(state, normalized, factId);
+  }
+  if (normalized.kind === "cancelCapDeleted") {
+    return reduceCancelCapDeletion(state, normalized, factId);
   }
   return {
     ...state,
     native: {
       ...state.native,
-      appliedFactIds,
+      appliedFactIds: {
+        ...state.native.appliedFactIds,
+        [factId]: true,
+      },
       checkpointSchedules: {
         ...state.native.checkpointSchedules,
         [normalized.vestingId]: normalized,
@@ -334,15 +340,26 @@ function normalizeNativeFact(
   state: VestingProjection,
   fact: VestingNativeFact,
 ): VestingNativeFact {
-  requireU64("native fact checkpoint", fact.checkpoint);
   if (fact.kind === "cancelCapOwnership") {
+    requireU64("native fact checkpoint", fact.checkpoint);
     return {
       ...fact,
       cancelCapId: normalizeSuiObjectId(fact.cancelCapId),
       owner: normalizeSuiAddress(fact.owner),
     };
   }
+  if (fact.kind === "cancelCapDeleted") {
+    return {
+      ...fact,
+      position: normalizeNativeTransactionPosition(
+        fact.position,
+        "cancel-cap deletion fact",
+      ),
+      cancelCapId: normalizeSuiObjectId(fact.cancelCapId),
+    };
+  }
 
+  requireU64("native fact checkpoint", fact.checkpoint);
   const vestingId = normalizeSuiObjectId(fact.vestingId);
   const position = state.positions[vestingId];
   if (position?.kind !== "checkpoints") {
@@ -360,9 +377,80 @@ function normalizeNativeFact(
 }
 
 function nativeFactId(fact: VestingNativeFact): string {
-  return fact.kind === "cancelCapOwnership"
-    ? `${fact.source}:${fact.kind}:${fact.checkpoint}:${fact.cancelCapId}`
-    : `${fact.source}:${fact.kind}:${fact.checkpoint}:${fact.vestingId}`;
+  if (fact.kind === "cancelCapOwnership") {
+    return `${fact.source}:${fact.kind}:${fact.checkpoint}:${fact.cancelCapId}:${fact.owner}`;
+  }
+  if (fact.kind === "cancelCapDeleted") {
+    return `${fact.position.transactionDigest}:${fact.kind}:${fact.cancelCapId}`;
+  }
+  return `${fact.source}:${fact.kind}:${fact.checkpoint}:${fact.vestingId}`;
+}
+
+function reduceCancelCapOwnership(
+  state: VestingProjection,
+  fact: Extract<VestingNativeFact, { kind: "cancelCapOwnership" }>,
+  factId: string,
+): VestingProjection {
+  const deletion = state.native.cancelCapDeletions[fact.cancelCapId];
+  if (deletion !== undefined) {
+    if (fact.checkpoint < deletion.position.checkpoint) return state;
+    throw new TypeError("deleted cancellation cap cannot have an owner");
+  }
+  const current = state.native.cancelCapOwners[fact.cancelCapId];
+  if (current !== undefined) {
+    if (fact.checkpoint < current.checkpoint) return state;
+    if (fact.checkpoint === current.checkpoint) {
+      throw new TypeError(
+        `cancellation-cap ownership conflict at checkpoint ${fact.checkpoint}`,
+      );
+    }
+  }
+  return {
+    ...state,
+    native: {
+      ...state.native,
+      appliedFactIds: { ...state.native.appliedFactIds, [factId]: true },
+      cancelCapOwners: {
+        ...state.native.cancelCapOwners,
+        [fact.cancelCapId]: fact,
+      },
+    },
+  };
+}
+
+function reduceCancelCapDeletion(
+  state: VestingProjection,
+  fact: CancelCapDeletionFact,
+  factId: string,
+): VestingProjection {
+  const existing = state.native.cancelCapDeletions[fact.cancelCapId];
+  if (existing !== undefined) {
+    if (fact.position.checkpoint < existing.position.checkpoint) return state;
+    throw new TypeError("cancellation-cap deletion provenance conflicts");
+  }
+  const owner = state.native.cancelCapOwners[fact.cancelCapId];
+  if (owner !== undefined) {
+    if (fact.position.checkpoint < owner.checkpoint) return state;
+    if (fact.position.checkpoint === owner.checkpoint) {
+      throw new TypeError(
+        `cancellation-cap deletion conflicts at checkpoint ${owner.checkpoint}`,
+      );
+    }
+  }
+  const cancelCapOwners = { ...state.native.cancelCapOwners };
+  delete cancelCapOwners[fact.cancelCapId];
+  return {
+    ...state,
+    native: {
+      ...state.native,
+      appliedFactIds: { ...state.native.appliedFactIds, [factId]: true },
+      cancelCapOwners,
+      cancelCapDeletions: {
+        ...state.native.cancelCapDeletions,
+        [fact.cancelCapId]: fact,
+      },
+    },
+  };
 }
 
 function requirePosition(

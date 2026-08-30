@@ -31,6 +31,12 @@ export type BlastSuiNativeFact =
         | "redeemBlastSui";
       coinId: string;
       recipient: string;
+    }
+  | {
+      source: "transactionEffects";
+      kind: "depositReceiptDeleted";
+      position: NativeTransactionPosition;
+      receiptId: string;
     };
 
 export type BlastSuiVaultProjection = {
@@ -123,10 +129,15 @@ type ReturnedCoinRecipientFact = Extract<
   BlastSuiNativeFact,
   { kind: "returnedCoinRecipient" }
 >;
+type DepositReceiptDeletionFact = Extract<
+  BlastSuiNativeFact,
+  { kind: "depositReceiptDeleted" }
+>;
 
 export type BlastSuiNativeProjection = {
   appliedFactIds: Readonly<Record<string, true>>;
   depositReceiptOwners: Readonly<Record<string, DepositReceiptOwner>>;
+  depositReceiptDeletions: Readonly<Record<string, DepositReceiptDeletionFact>>;
   returnedCoinRecipients: Readonly<Record<string, ReturnedCoinRecipientFact>>;
 };
 
@@ -180,6 +191,7 @@ export function createBlastSuiProjection(): BlastSuiProjection {
     native: {
       appliedFactIds: {},
       depositReceiptOwners: {},
+      depositReceiptDeletions: {},
       returnedCoinRecipients: {},
     },
   };
@@ -199,6 +211,7 @@ function reduceBlastSuiEvent(
 ): BlastSuiProjection {
   const eventId = blastSuiEventId(event);
   if (state.appliedEventIds[eventId]) return state;
+  validateBlastSuiEvent(state, event);
 
   const custody = "custody" in event.payload ? event.payload.custody : null;
   const next: BlastSuiProjection = {
@@ -414,31 +427,17 @@ function reduceNativeFact(
   const normalized = normalizeNativeFact(fact);
   const factId = nativeFactId(normalized);
   if (state.native.appliedFactIds[factId]) return state;
-
-  const native: BlastSuiNativeProjection = {
-    ...state.native,
-    appliedFactIds: { ...state.native.appliedFactIds, [factId]: true },
-  };
   if (normalized.kind === "depositReceiptOwnership") {
-    return {
-      ...state,
-      native: {
-        ...native,
-        depositReceiptOwners: {
-          ...state.native.depositReceiptOwners,
-          [normalized.receiptId]: {
-            source: "objectOwnership",
-            checkpoint: normalized.checkpoint,
-            owner: normalized.owner,
-          },
-        },
-      },
-    };
+    return reduceDepositReceiptOwnership(state, normalized, factId);
+  }
+  if (normalized.kind === "depositReceiptDeleted") {
+    return reduceDepositReceiptDeletion(state, normalized, factId);
   }
   return {
     ...state,
     native: {
-      ...native,
+      ...state.native,
+      appliedFactIds: { ...state.native.appliedFactIds, [factId]: true },
       returnedCoinRecipients: {
         ...state.native.returnedCoinRecipients,
         [factId]: normalized,
@@ -465,7 +464,9 @@ function updateReceipt(
   update: (receipt: BlastSuiReceiptProjection) => BlastSuiReceiptProjection,
 ): BlastSuiProjection {
   const receipt = state.receipts[receiptId];
-  if (receipt === undefined) return state;
+  if (receipt === undefined) {
+    throw new TypeError(`unknown deposit receipt ${receiptId}`);
+  }
   return {
     ...state,
     receipts: { ...state.receipts, [receiptId]: update(receipt) },
@@ -496,6 +497,16 @@ function normalizeNativeFact(fact: BlastSuiNativeFact): BlastSuiNativeFact {
       owner: normalizeSuiAddress(fact.owner),
     };
   }
+  if (fact.kind === "depositReceiptDeleted") {
+    return {
+      ...fact,
+      position: normalizeNativeTransactionPosition(
+        fact.position,
+        "deposit-receipt deletion fact",
+      ),
+      receiptId: normalizeSuiObjectId(fact.receiptId),
+    };
+  }
   return {
     ...fact,
     position: normalizeNativeTransactionPosition(
@@ -511,5 +522,148 @@ function nativeFactId(fact: BlastSuiNativeFact): string {
   if (fact.kind === "depositReceiptOwnership") {
     return `${fact.checkpoint}:${fact.kind}:${fact.receiptId}:${fact.owner}`;
   }
+  if (fact.kind === "depositReceiptDeleted") {
+    return `${fact.position.transactionDigest}:${fact.kind}:${fact.receiptId}`;
+  }
   return `${fact.position.transactionDigest}:${fact.kind}:${fact.coinId}`;
+}
+
+function validateBlastSuiEvent(
+  state: BlastSuiProjection,
+  event: DecodedBlastSuiEvent,
+): void {
+  switch (event.kind) {
+    case "BlastSuiDepositRequested":
+      validateDepositRequest(state, event.payload);
+      return;
+    case "BlastSuiDepositClaimed":
+    case "BlastSuiDepositCancelled":
+      validateDepositTransition(state, event.payload);
+      return;
+    case "BlastSuiRedeemed":
+      if (
+        event.payload.gross_sui !==
+        event.payload.fee_sui + event.payload.net_sui
+      ) {
+        throw new RangeError("gross SUI must equal fee SUI plus net SUI");
+      }
+  }
+}
+
+function validateDepositRequest(
+  state: BlastSuiProjection,
+  payload: { receipt_id: string; vault_id: string },
+): void {
+  validateDiscoveredVault(state, payload.vault_id);
+  if (state.receipts[payload.receipt_id] !== undefined) {
+    throw new TypeError(
+      `deposit receipt ${payload.receipt_id} already requested`,
+    );
+  }
+}
+
+function validateDepositTransition(
+  state: BlastSuiProjection,
+  payload: {
+    receipt_id: string;
+    vault_id: string;
+    principal_sui: bigint;
+  },
+): void {
+  validateDiscoveredVault(state, payload.vault_id);
+  const receipt = state.receipts[payload.receipt_id];
+  if (receipt === undefined) {
+    throw new TypeError(`unknown deposit receipt ${payload.receipt_id}`);
+  }
+  if (receipt.status !== "requested") {
+    throw new TypeError("deposit receipt must be requested");
+  }
+  if (receipt.vaultId !== payload.vault_id) {
+    throw new TypeError("deposit receipt vault does not match");
+  }
+  if (receipt.principalSui !== payload.principal_sui) {
+    throw new RangeError("deposit receipt principal does not match");
+  }
+}
+
+function validateDiscoveredVault(
+  state: BlastSuiProjection,
+  vaultId: string,
+): void {
+  if (state.vault !== null && state.vault.vaultId !== vaultId) {
+    throw new TypeError(
+      "deposit receipt vault does not match discovered vault",
+    );
+  }
+}
+
+function reduceDepositReceiptOwnership(
+  state: BlastSuiProjection,
+  fact: Extract<BlastSuiNativeFact, { kind: "depositReceiptOwnership" }>,
+  factId: string,
+): BlastSuiProjection {
+  const deletion = state.native.depositReceiptDeletions[fact.receiptId];
+  if (deletion !== undefined) {
+    if (fact.checkpoint < deletion.position.checkpoint) return state;
+    throw new TypeError("deleted deposit receipt cannot have an owner");
+  }
+  const current = state.native.depositReceiptOwners[fact.receiptId];
+  if (current !== undefined) {
+    if (fact.checkpoint < current.checkpoint) return state;
+    if (fact.checkpoint === current.checkpoint) {
+      throw new TypeError(
+        `deposit receipt ownership conflict at checkpoint ${fact.checkpoint}`,
+      );
+    }
+  }
+  return {
+    ...state,
+    native: {
+      ...state.native,
+      appliedFactIds: { ...state.native.appliedFactIds, [factId]: true },
+      depositReceiptOwners: {
+        ...state.native.depositReceiptOwners,
+        [fact.receiptId]: {
+          source: "objectOwnership",
+          checkpoint: fact.checkpoint,
+          owner: fact.owner,
+        },
+      },
+    },
+  };
+}
+
+function reduceDepositReceiptDeletion(
+  state: BlastSuiProjection,
+  fact: DepositReceiptDeletionFact,
+  factId: string,
+): BlastSuiProjection {
+  const existing = state.native.depositReceiptDeletions[fact.receiptId];
+  if (existing !== undefined) {
+    if (fact.position.checkpoint < existing.position.checkpoint) return state;
+    throw new TypeError("deposit receipt deletion provenance conflicts");
+  }
+  const owner = state.native.depositReceiptOwners[fact.receiptId];
+  if (owner !== undefined) {
+    if (fact.position.checkpoint < owner.checkpoint) return state;
+    if (fact.position.checkpoint === owner.checkpoint) {
+      throw new TypeError(
+        `deposit receipt deletion conflicts at checkpoint ${owner.checkpoint}`,
+      );
+    }
+  }
+  const depositReceiptOwners = { ...state.native.depositReceiptOwners };
+  delete depositReceiptOwners[fact.receiptId];
+  return {
+    ...state,
+    native: {
+      ...state.native,
+      appliedFactIds: { ...state.native.appliedFactIds, [factId]: true },
+      depositReceiptOwners,
+      depositReceiptDeletions: {
+        ...state.native.depositReceiptDeletions,
+        [fact.receiptId]: fact,
+      },
+    },
+  };
 }

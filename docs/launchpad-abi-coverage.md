@@ -10,8 +10,10 @@ The frozen production ABI uses contracts commit
 - `abi/production-vesting-v1.json` for `vesting`; and
 - `abi/production-blast-sui-v1.json` for `blast_sui`.
 
-All three artifacts record Sui CLI `1.77.2-51d177ad7d65`. The contracts working
-tree differed from the ABI commit when the artifacts were frozen. The only
+All three artifacts record Sui CLI `1.77.2-51d177ad7d65`. The checker verifies
+the installed `sui --version` against those artifact values before it runs a
+Move summary. The contracts working tree differed from the ABI commit when the
+artifacts were frozen. The only
 differences were `sui/meme_template/Move.lock` and
 `docs/research/sui-deepbook-indexer-architecture-2026.md`. They do not change a
 production function, object layout, or event schema. Contracts commit
@@ -79,6 +81,9 @@ original package ID. The deployment model stores both IDs.
 Every Blast SUI call targets the current package, uses the mutable framework
 `SuiSystemState`, mutable `Vault`, and immutable `PackageVersion` required by
 its Move signature, and adds no type argument that the ABI does not define.
+Transaction tests inspect the exact argument order and shared mutability for
+all nine calls. They also pin the exact `Result` or `NestedResult`, normalized
+recipient, and request-result-to-`keep` routing for every returned object.
 
 ## Object, type, read, and deployment coverage
 
@@ -95,8 +100,8 @@ its Move signature, and adds no type argument that the ABI does not define.
 | `linear::Vesting<Coin>` and `checkpoints::Vesting<Coin>` shared mutable objects | `linearVestingBcs`, `checkpointVestingBcs`, `decodeVestingObject`, `getVesting` | `test/vesting-state.test.ts`, `test/vesting-client.test.ts` |
 | Checkpoint schedule contents and native `Clock` | `getCheckpointPage`, `getAllCheckpoints`, `getCurrentTimestampMs` | `test/vesting-state.test.ts`, `test/vesting-client.test.ts` |
 | Vesting package identity | `vestingDeployment`; current package targets and original object/event identity | `test/deployments.test.ts`, vesting transaction/state/event tests |
-| Blast SUI `vault::Vault` shared mutable object | `blastSuiVaultBcs`, `decodeBlastSuiVaultObject`, `getBlastSuiVault`, `BlastSuiClient.getVault` | `test/blast-sui-state.test.ts`, `test/blast-sui-client.test.ts` |
-| `deposit_receipt::BlastSuiDepositReceipt` address-owned object | `blastSuiDepositReceiptBcs`, `decodeBlastSuiDepositReceiptObject`, `getBlastSuiDepositReceipt`, `BlastSuiClient.getDepositReceipt` | `test/blast-sui-state.test.ts`, `test/blast-sui-client.test.ts` |
+| Blast SUI `vault::Vault` shared mutable object | `blastSuiVaultBcs`, `decodeBlastSuiVaultObject`, `getBlastSuiVault`, `BlastSuiClient.getVault` | `test/blast-sui-state.test.ts` pins independent literal BCS bytes to the contracts baseline and Sui revision; `test/blast-sui-client.test.ts` reuses that golden. |
+| `deposit_receipt::BlastSuiDepositReceipt` address-owned object | `blastSuiDepositReceiptBcs`, `decodeBlastSuiDepositReceiptObject`, `getBlastSuiDepositReceipt`, `BlastSuiClient.getDepositReceipt` | `test/blast-sui-state.test.ts` pins independent literal BCS bytes to the contracts baseline and Sui revision; `test/blast-sui-client.test.ts` reuses that golden. |
 | `fun_sui::FUN_SUI` original-package type | `funSuiType` and transaction coin selection | `test/blast-sui-math.test.ts`, `test/blast-sui-transactions.test.ts` |
 | `blast_sui::BLAST_SUI` original-package type | `blastSuiType` and transaction coin selection | `test/blast-sui-math.test.ts`, `test/blast-sui-transactions.test.ts` |
 | Deposit-receipt original-package type | `blastSuiDepositReceiptType` and state/event validation | `test/blast-sui-math.test.ts`, `test/blast-sui-state.test.ts` |
@@ -164,7 +169,9 @@ position, and their named reducer path.
 `createBlastSuiProjection` and `reduceBlastSuiInput` replay all 20 kinds,
 replace final custody snapshots, accumulate independent audit totals, and
 deduplicate by transaction digest plus event index. Duplicate replay returns the
-same projection instance.
+same projection instance. Receipt replay rejects duplicate requests, unknown or
+terminal transitions, vault or principal mismatches, and redemption totals that
+do not satisfy `gross = fee + net` before it applies an event.
 
 ### Vesting direct events
 
@@ -181,7 +188,8 @@ same projection instance.
 
 `createVestingProjection` and `reduceVestingInput` enforce monotonic release,
 conservation, active-only transitions, and idempotence by transaction digest
-plus event index for both vesting kinds.
+plus event index for both vesting kinds. Reducer tests execute a valid path for
+each of the eight event kinds.
 
 ### Native facts that events do not prove
 
@@ -192,8 +200,10 @@ plus event index for both vesting kinds.
 | Current `CreatorCap` owner | launchpad `CreatorCapOwnershipFact`, `source: "objectOwnership"` | Events record issuance, not current ownership. | `test/launchpad-events.test.ts` |
 | Returned launchpad/migrator claim-coin recipients | `ReturnedCoinRecipientsFact`, `source: "transactionEffects"` | Events record amounts, not created coin IDs or recipients. | launchpad/migrator replay tests |
 | Current Blast SUI deposit-receipt owner | `BlastSuiNativeFact` kind `depositReceiptOwnership`, `source: "objectOwnership"` | A request event and `deposit_receipt::keep` do not prove current ownership. | `test/blast-sui-reducer.test.ts` |
+| Deleted Blast SUI deposit receipt | `BlastSuiNativeFact` kind `depositReceiptDeleted`, `source: "transactionEffects"` | Claim and cancellation events do not prove native object deletion or its transaction provenance. | `test/blast-sui-reducer.test.ts` |
 | Blast SUI returned coin IDs and recipients | `BlastSuiNativeFact` kind `returnedCoinRecipient`, `source: "transactionEffects"` | Product events do not identify returned coin objects or recipients. | `test/blast-sui-reducer.test.ts` |
 | Current vesting cancellation-cap owner | `VestingNativeFact` kind `cancelCapOwnership`, `source: "objectOwnership"` | Creation records the cap ID, not subsequent ownership. | `test/vesting-reducer.test.ts` |
+| Deleted vesting cancellation cap | `VestingNativeFact` kind `cancelCapDeleted`, `source: "transactionEffects"` | A vesting terminal event does not prove native cap deletion or its transaction provenance. | `test/vesting-reducer.test.ts` |
 | Checkpoint vesting schedule contents | `VestingNativeFact` kind `checkpointSchedule`, `source: "objectRead"` | `checkpoints::VestingCreated` contains only `checkpoint_count`. | `test/vesting-reducer.test.ts` |
 
 Native facts are stored separately from decoded Blast events and are independently

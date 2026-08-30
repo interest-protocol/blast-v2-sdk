@@ -5,7 +5,7 @@ import type {
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiAddress, SUI_TYPE_ARG } from "@mysten/sui/utils";
 
-import { requirePositiveU64, requireU64 } from "../lib/integers.ts";
+import { requireU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import type { BlastSuiDeployment } from "./types.ts";
 import {
@@ -164,7 +164,7 @@ export class BlastSuiTransactions {
   }
 
   mintFunSui(options: { amount: bigint; recipient: string }): Transaction {
-    requirePositiveU64("amount", options.amount);
+    requireU64("amount", options.amount);
     const tx = new Transaction();
     const suiCoin = tx.coin({ type: SUI_TYPE_ARG, balance: options.amount });
     const funSuiCoin = tx.add(this.call.mintFunSui({ suiCoin }));
@@ -173,7 +173,7 @@ export class BlastSuiTransactions {
   }
 
   redeemFunSui(options: { amount: bigint; recipient: string }): Transaction {
-    requirePositiveU64("amount", options.amount);
+    requireU64("amount", options.amount);
     const tx = new Transaction();
     const funSuiCoin = tx.coin({
       type: funSuiType(this.call.deployment.originalPackageId),
@@ -185,7 +185,7 @@ export class BlastSuiTransactions {
   }
 
   requestBlastSui(options: { amount: bigint }): Transaction {
-    requirePositiveU64("amount", options.amount);
+    requireU64("amount", options.amount);
     const tx = new Transaction();
     const suiCoin = tx.coin({ type: SUI_TYPE_ARG, balance: options.amount });
     const receipt = tx.add(this.call.requestBlastSui({ suiCoin }));
@@ -222,7 +222,7 @@ export class BlastSuiTransactions {
   }
 
   donateSui(options: { amount: bigint }): Transaction {
-    requirePositiveU64("amount", options.amount);
+    requireU64("amount", options.amount);
     const tx = new Transaction();
     const suiCoin = tx.coin({ type: SUI_TYPE_ARG, balance: options.amount });
     tx.add(this.call.donateSui({ suiCoin }));
@@ -234,7 +234,7 @@ export class BlastSuiTransactions {
     minSuiOut: bigint;
     recipient: string;
   }): Transaction {
-    requirePositiveU64("amount", options.amount);
+    requireU64("amount", options.amount);
     const tx = new Transaction();
     const blastSuiCoin = tx.coin({
       type: blastSuiType(this.call.deployment.originalPackageId),

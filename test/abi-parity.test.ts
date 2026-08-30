@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 const siblingContractsManifestUrl = new URL(
@@ -57,6 +66,32 @@ test("matches the frozen production Move ABI", {
   );
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test("rejects a Sui CLI version that differs from the frozen artifacts", () => {
+  const fakeBin = mkdtempSync(join(tmpdir(), "blast-wrong-sui-cli-"));
+  try {
+    const fakeSui = join(fakeBin, "sui");
+    writeFileSync(fakeSui, "#!/bin/sh\nprintf '%s\\n' 'sui 9.9.9-test'\n");
+    chmodSync(fakeSui, 0o755);
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/check-contract-abi.mjs", "../contracts"],
+      {
+        cwd: new URL("..", import.meta.url),
+        encoding: "utf8",
+        env: { ...process.env, PATH: fakeBin },
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /Sui CLI 9\.9\.9-test does not match .*1\.77\.2-51d177ad7d65/,
+    );
+  } finally {
+    rmSync(fakeBin, { recursive: true, force: true });
+  }
 });
 
 test("freezes every production package and event", () => {

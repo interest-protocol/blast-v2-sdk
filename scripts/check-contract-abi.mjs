@@ -41,6 +41,7 @@ const temporaryRoot = mkdtempSync(join(tmpdir(), "blast-production-abi-"));
 
 function main() {
   try {
+    verifySuiCliVersion();
     for (const declaration of artifactDeclarations) {
       checkArtifact(declaration);
     }
@@ -87,7 +88,32 @@ function checkArtifact(declaration) {
     process.exitCode = 1;
     return;
   }
-  console.log(`production Move ABI matches ${BASELINE_COMMIT}`);
+  console.log(
+    `current production Move ABI matches artifact frozen at ${BASELINE_COMMIT}`,
+  );
+}
+
+function verifySuiCliVersion() {
+  const result = spawnSync("sui", ["--version"], { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(
+      result.stderr || result.stdout || "failed to read Sui CLI version",
+    );
+  }
+  const actual = result.stdout.trim().replace(/^sui\s+/, "");
+  for (const declaration of artifactDeclarations) {
+    const artifactPath = join(sdkRoot, "abi", declaration.path);
+    const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
+    const expected = artifact.baseline?.suiCli;
+    if (typeof expected !== "string") {
+      throw new TypeError(`abi/${declaration.path} has no Sui CLI version`);
+    }
+    if (actual !== expected) {
+      throw new Error(
+        `Sui CLI ${actual} does not match abi/${declaration.path} value ${expected}`,
+      );
+    }
+  }
 }
 
 function summarizePackage(packagePath, packageName) {

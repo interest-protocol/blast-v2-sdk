@@ -146,6 +146,83 @@ test("replays checkpoint creation, claim, and cancellation without inventing nat
   assert.equal(projection.native.cancelCapOwners[cancelCapId], undefined);
 });
 
+test("replays a valid linear cancellation path", () => {
+  const vestingId = normalizeSuiObjectId("0x10");
+  let projection = reduceVestingInput(
+    createVestingProjection(),
+    event("linear.VestingCreated", {
+      vesting_id: vestingId,
+      coin_type: "0x2::sui::SUI",
+      funder: "0x11",
+      beneficiary: "0x12",
+      refund_recipient: "0x13",
+      cancel_cap_id: "0x14",
+      total_amount: 1_000n,
+      start_ms: 100n,
+      cliff_ms: 20n,
+      period_ms: 10n,
+      periods: 10n,
+    }),
+  );
+  projection = reduceVestingInput(
+    projection,
+    event("linear.VestingCanceled", {
+      vesting_id: vestingId,
+      coin_type: "0x2::sui::SUI",
+      caller: "0x15",
+      beneficiary: "0x12",
+      refund_recipient: "0x13",
+      beneficiary_amount: 400n,
+      refund_amount: 600n,
+      released_total: 400n,
+    }),
+  );
+
+  assert.equal(projection.positions[vestingId]?.status, "canceled");
+  assert.equal(projection.positions[vestingId]?.releasedTotal, 400n);
+});
+
+test("replays a valid irrevocable checkpoint close path", () => {
+  const vestingId = normalizeSuiObjectId("0x20");
+  let projection = reduceVestingInput(
+    createVestingProjection(),
+    event("checkpoints.VestingCreated", {
+      vesting_id: vestingId,
+      coin_type: "0x2::sui::SUI",
+      funder: "0x21",
+      beneficiary: "0x22",
+      refund_recipient: null,
+      cancel_cap_id: null,
+      total_amount: 900n,
+      checkpoint_count: 3n,
+    }),
+  );
+  projection = reduceVestingInput(
+    projection,
+    event("checkpoints.VestingClaimed", {
+      vesting_id: vestingId,
+      coin_type: "0x2::sui::SUI",
+      caller: "0x23",
+      beneficiary: "0x22",
+      amount: 900n,
+      released_total: 900n,
+      remaining_balance: 0n,
+    }),
+  );
+  projection = reduceVestingInput(
+    projection,
+    event("checkpoints.VestingClosed", {
+      vesting_id: vestingId,
+      coin_type: "0x2::sui::SUI",
+      caller: "0x23",
+      released_total: 900n,
+    }),
+  );
+
+  assert.equal(projection.positions[vestingId]?.status, "closed");
+  assert.equal(projection.positions[vestingId]?.remainingBalance, 0n);
+});
+
 test("stores validated checkpoint schedules only as normalized object-read facts", () => {
   let projection = reduceVestingInput(
     createVestingProjection(),
@@ -217,7 +294,7 @@ test("stores cancel-cap ownership only as a normalized ownership fact", () => {
     cancelCapId: "0x3",
     owner: "0xc",
   };
-  let projection = reduceVestingInput(createVestingProjection(), ownership);
+  const projection = reduceVestingInput(createVestingProjection(), ownership);
 
   assert.deepEqual(projection.native.cancelCapOwners[cancelCapId], {
     source: "objectOwnership",
@@ -228,13 +305,134 @@ test("stores cancel-cap ownership only as a normalized ownership fact", () => {
   });
   assert.deepEqual(projection.positions, {});
   assert.strictEqual(reduceVestingInput(projection, ownership), projection);
-  projection = reduceVestingInput(projection, {
-    ...ownership,
+  assert.throws(
+    () =>
+      reduceVestingInput(projection, {
+        ...ownership,
+        owner: "0xd",
+      }),
+    /ownership conflict at checkpoint 60/,
+  );
+});
+
+test("merges cancel-cap ownership monotonically", () => {
+  const first: VestingNativeFact = {
+    source: "objectOwnership",
+    kind: "cancelCapOwnership",
+    checkpoint: 60n,
+    cancelCapId: "0x3",
+    owner: "0xc",
+  };
+  const latest: VestingNativeFact = {
+    ...first,
+    checkpoint: 62n,
     owner: "0xd",
-  });
+  };
+  let projection = reduceVestingInput(createVestingProjection(), first);
+  projection = reduceVestingInput(projection, latest);
+
+  assert.strictEqual(
+    reduceVestingInput(projection, { ...first, checkpoint: 61n }),
+    projection,
+  );
   assert.equal(
     projection.native.cancelCapOwners[cancelCapId]?.owner,
-    normalizeSuiAddress("0xc"),
+    normalizeSuiAddress("0xd"),
+  );
+  assert.throws(
+    () => reduceVestingInput(projection, { ...latest, owner: "0xe" }),
+    /ownership conflict at checkpoint 62/,
+  );
+  assert.strictEqual(reduceVestingInput(projection, latest), projection);
+});
+
+test("clears cancel-cap ownership only from a native deletion fact", () => {
+  const vestingId = normalizeSuiObjectId("0x30");
+  const capId = normalizeSuiObjectId("0x31");
+  let projection = reduceVestingInput(
+    createVestingProjection(),
+    event("linear.VestingCreated", {
+      vesting_id: vestingId,
+      coin_type: "0x2::sui::SUI",
+      funder: "0x32",
+      beneficiary: "0x33",
+      refund_recipient: "0x34",
+      cancel_cap_id: capId,
+      total_amount: 1_000n,
+      start_ms: 100n,
+      cliff_ms: 20n,
+      period_ms: 10n,
+      periods: 10n,
+    }),
+  );
+  projection = reduceVestingInput(projection, {
+    source: "objectOwnership",
+    kind: "cancelCapOwnership",
+    checkpoint: 70n,
+    cancelCapId: capId,
+    owner: "0x35",
+  });
+  projection = reduceVestingInput(
+    projection,
+    event("linear.VestingCanceled", {
+      vesting_id: vestingId,
+      coin_type: "0x2::sui::SUI",
+      caller: "0x35",
+      beneficiary: "0x33",
+      refund_recipient: "0x34",
+      beneficiary_amount: 400n,
+      refund_amount: 600n,
+      released_total: 400n,
+    }),
+  );
+  assert.equal(
+    projection.native.cancelCapOwners[capId]?.owner,
+    normalizeSuiAddress("0x35"),
+  );
+  assert.throws(
+    () =>
+      reduceVestingInput(projection, {
+        source: "transactionEffects",
+        kind: "cancelCapDeleted",
+        position: {
+          checkpoint: 70n,
+          transactionDigest: "same-checkpoint-deletion",
+        },
+        cancelCapId: capId,
+      }),
+    /deletion conflicts at checkpoint 70/,
+  );
+
+  const deletion: VestingNativeFact = {
+    source: "transactionEffects",
+    kind: "cancelCapDeleted",
+    position: { checkpoint: 71n, transactionDigest: "cancel-cap-deleted" },
+    cancelCapId: capId,
+  };
+  projection = reduceVestingInput(projection, deletion);
+  assert.equal(projection.native.cancelCapOwners[capId], undefined);
+  assert.deepEqual(projection.native.cancelCapDeletions[capId], deletion);
+  assert.strictEqual(reduceVestingInput(projection, deletion), projection);
+  assert.strictEqual(
+    reduceVestingInput(projection, {
+      source: "objectOwnership",
+      kind: "cancelCapOwnership",
+      checkpoint: 69n,
+      cancelCapId: capId,
+      owner: "0x36",
+    }),
+    projection,
+  );
+  assert.throws(
+    () =>
+      reduceVestingInput(projection, {
+        source: "objectOwnership",
+        kind: "cancelCapOwnership",
+        checkpoint: 72n,
+        cancelCapId: capId,
+        owner: "0x36",
+      }),
+    /deleted cancellation cap cannot have an owner/,
   );
 });
 

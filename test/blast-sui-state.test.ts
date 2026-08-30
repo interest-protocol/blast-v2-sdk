@@ -10,6 +10,10 @@ import {
   getBlastSuiDepositReceipt,
   getBlastSuiVault,
 } from "../src/blast-sui/state.ts";
+import {
+  BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
+  BLAST_SUI_VAULT_GOLDEN_BYTES,
+} from "./blast-sui-golden.ts";
 
 const originalPackageId = "0x123";
 const vaultId = "0x44";
@@ -38,7 +42,7 @@ const custody = {
   active_sui: 19n,
 };
 
-function serializeVault(objectId = vaultId): Uint8Array {
+function serializeVaultWithUid(objectId: string): Uint8Array {
   return blastSuiVaultBcs
     .serialize({
       id: uid(objectId),
@@ -62,7 +66,7 @@ function serializeVault(objectId = vaultId): Uint8Array {
     .toBytes();
 }
 
-function serializeReceipt(objectId = receiptId): Uint8Array {
+function serializeReceiptWithUid(objectId: string): Uint8Array {
   return blastSuiDepositReceiptBcs
     .serialize({
       id: uid(objectId),
@@ -91,7 +95,7 @@ function vaultObject(
     initialSharedVersion: "7",
     mutable: true,
     type: `${originalPackageId}::vault::Vault`,
-    content: serializeVault(),
+    content: BLAST_SUI_VAULT_GOLDEN_BYTES,
     ...overrides,
   };
 }
@@ -152,7 +156,7 @@ test("rejects invalid vault identity, type, package, and mutability", () => {
   assert.throws(
     () =>
       decodeBlastSuiVaultObject(
-        vaultObject({ content: serializeVault("0x99") }),
+        vaultObject({ content: serializeVaultWithUid("0x99") }),
         originalPackageId,
       ),
     /mismatched UID/,
@@ -170,7 +174,7 @@ test("rejects invalid vault identity, type, package, and mutability", () => {
 test("rejects a custody asset total that exceeds u64", () => {
   const content = blastSuiVaultBcs
     .serialize({
-      ...blastSuiVaultBcs.parse(serializeVault()),
+      ...blastSuiVaultBcs.parse(BLAST_SUI_VAULT_GOLDEN_BYTES),
       fun_custody: {
         ...custody,
         liquid_sui: balance((1n << 64n) - 1n),
@@ -191,7 +195,7 @@ test("decodes an address-owned blast Sui deposit receipt", () => {
       objectId: receiptId,
       owner: addressOwner(),
       type: `${originalPackageId}::deposit_receipt::BlastSuiDepositReceipt`,
-      content: serializeReceipt(),
+      content: BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
     },
     originalPackageId,
   );
@@ -213,7 +217,7 @@ test("rejects invalid receipt type, package, ownership, and identity", () => {
           objectId: receiptId,
           owner: addressOwner(),
           type: `${originalPackageId}::wrong::BlastSuiDepositReceipt`,
-          content: serializeReceipt(),
+          content: BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
         },
         originalPackageId,
       ),
@@ -226,7 +230,7 @@ test("rejects invalid receipt type, package, ownership, and identity", () => {
           objectId: receiptId,
           owner: addressOwner(),
           type: `${originalPackageId}::deposit_receipt::BlastSuiDepositReceipt`,
-          content: serializeReceipt(),
+          content: BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
         },
         "0x999",
       ),
@@ -242,7 +246,7 @@ test("rejects invalid receipt type, package, ownership, and identity", () => {
             Shared: { initialSharedVersion: "1" },
           },
           type: `${originalPackageId}::deposit_receipt::BlastSuiDepositReceipt`,
-          content: serializeReceipt(),
+          content: BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
         },
         originalPackageId,
       ),
@@ -255,12 +259,51 @@ test("rejects invalid receipt type, package, ownership, and identity", () => {
           objectId: receiptId,
           owner: addressOwner(),
           type: `${originalPackageId}::deposit_receipt::BlastSuiDepositReceipt`,
-          content: serializeReceipt("0x88"),
+          content: serializeReceiptWithUid("0x88"),
         },
         originalPackageId,
       ),
     /mismatched UID/,
   );
+});
+
+test("requires original package identity at every exported object boundary", async () => {
+  const receiptObject = {
+    objectId: receiptId,
+    owner: addressOwner(),
+    type: `${originalPackageId}::deposit_receipt::BlastSuiDepositReceipt`,
+    content: BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
+  };
+  // @ts-expect-error Original package identity is a required trust input.
+  assert.throws(() => decodeBlastSuiVaultObject(vaultObject()), TypeError);
+  assert.throws(
+    // @ts-expect-error Original package identity is a required trust input.
+    () => decodeBlastSuiDepositReceiptObject(receiptObject),
+    TypeError,
+  );
+
+  const client = {
+    core: {
+      getObject: async ({ objectId }: { objectId: string }) => ({
+        object:
+          objectId === vaultId
+            ? {
+                objectId: vaultId,
+                owner: {
+                  $kind: "Shared" as const,
+                  Shared: { initialSharedVersion: "7" },
+                },
+                type: `${originalPackageId}::vault::Vault`,
+                content: BLAST_SUI_VAULT_GOLDEN_BYTES,
+              }
+            : receiptObject,
+      }),
+    },
+  } as unknown as ClientWithCoreApi;
+  // @ts-expect-error Original package identity is a required trust input.
+  await assert.rejects(getBlastSuiVault(client, vaultId), TypeError);
+  // @ts-expect-error Original package identity is a required trust input.
+  await assert.rejects(getBlastSuiDepositReceipt(client, receiptId), TypeError);
 });
 
 test("reads vault and receipt state through the transport-neutral Core API", async () => {
@@ -278,7 +321,7 @@ test("reads vault and receipt state through the transport-neutral Core API", asy
                 Shared: { initialSharedVersion: "7" },
               },
               type: `${originalPackageId}::vault::Vault`,
-              content: serializeVault(),
+              content: BLAST_SUI_VAULT_GOLDEN_BYTES,
             },
           };
         }
@@ -287,7 +330,7 @@ test("reads vault and receipt state through the transport-neutral Core API", asy
             objectId: receiptId,
             owner: addressOwner(),
             type: `${originalPackageId}::deposit_receipt::BlastSuiDepositReceipt`,
-            content: serializeReceipt(),
+            content: BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
           },
         };
       },
@@ -317,7 +360,7 @@ test("rejects a non-shared vault read", async () => {
           objectId: vaultId,
           owner: addressOwner(),
           type: `${originalPackageId}::vault::Vault`,
-          content: serializeVault(),
+          content: BLAST_SUI_VAULT_GOLDEN_BYTES,
         },
       }),
     },

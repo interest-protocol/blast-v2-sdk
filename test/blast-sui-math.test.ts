@@ -1,12 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import {
-  blastSuiDepositReceiptType,
-  blastSuiType,
-  funSuiType,
-  normalizeBlastSuiDeployment,
-} from "../src/blast-sui/types.ts";
 import {
   blastGrossSuiOutDown,
   blastRedeemFeeUp,
@@ -17,6 +10,13 @@ import {
   poolTokensForSuiUp,
   suiAtRateDown,
 } from "../src/blast-sui/math.ts";
+import {
+  blastSuiDepositReceiptType,
+  blastSuiType,
+  funSuiType,
+  normalizeBlastSuiDeployment,
+} from "../src/blast-sui/types.ts";
+import type { BasisPoints } from "../src/lib/integers.ts";
 import { requireBasisPoints, U64_MAX } from "../src/lib/integers.ts";
 
 test("uses original package IDs for blast Sui type identities", () => {
@@ -96,5 +96,19 @@ test("aborts before capping an overflowing pool-token quote", () => {
   assert.throws(
     () => poolTokensForSuiUp(U64_MAX, U64_MAX, 1n),
     /poolTokens must be a u64/,
+  );
+});
+
+test("validates a forged fee rate again at runtime", () => {
+  assert.throws(
+    () => blastRedeemFeeUp(99n, 10_001n as BasisPoints),
+    /basis points/,
+  );
+});
+
+test("rejects a forged quote rate before returning an invalid net u64", () => {
+  assert.throws(
+    () => blastRedemptionQuote(1n, 100n, 1n, 20_000n as BasisPoints),
+    /redeemFeeBps must be between 0 and 10,000 basis points/,
   );
 });

@@ -122,7 +122,7 @@ export type BlastSuiDepositReceiptObject = {
 /** Decodes one canonical shared blast Sui vault object. */
 export function decodeBlastSuiVaultObject(
   object: BlastSuiVaultObject,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): BlastSuiVaultState {
   const typePackageId = validateType(
     object.objectId,
@@ -172,7 +172,7 @@ export function decodeBlastSuiVaultObject(
 /** Decodes one canonical address-owned blast Sui deposit receipt. */
 export function decodeBlastSuiDepositReceiptObject(
   object: BlastSuiDepositReceiptObject,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): BlastSuiDepositReceiptState {
   const typePackageId = validateType(
     object.objectId,
@@ -210,7 +210,7 @@ export function decodeBlastSuiDepositReceiptObject(
 export async function getBlastSuiVault(
   client: ClientWithCoreApi,
   objectId: string,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): Promise<BlastSuiVaultState> {
   const { object } = await client.core.getObject({
     objectId,
@@ -237,7 +237,7 @@ export async function getBlastSuiVault(
 export async function getBlastSuiDepositReceipt(
   client: ClientWithCoreApi,
   objectId: string,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): Promise<BlastSuiDepositReceiptState> {
   const { object } = await client.core.getObject({
     objectId,
@@ -304,7 +304,7 @@ function validateType(
   module: string,
   name: string,
   label: string,
-  originalPackageId: string | undefined,
+  originalPackageId: string,
 ): string {
   const tag = parseStructTag(type);
   if (
@@ -315,10 +315,7 @@ function validateType(
     throw new TypeError(`object ${objectId} is not a ${label}`);
   }
   const typePackageId = normalizeSuiAddress(tag.address);
-  if (
-    originalPackageId !== undefined &&
-    typePackageId !== normalizeSuiAddress(originalPackageId)
-  ) {
+  if (typePackageId !== normalizeSuiAddress(originalPackageId)) {
     throw new TypeError(`${label} ${objectId} has an unexpected package`);
   }
   return typePackageId;

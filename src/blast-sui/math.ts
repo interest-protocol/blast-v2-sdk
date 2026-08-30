@@ -1,15 +1,18 @@
+import type { BasisPoints } from "../lib/integers.ts";
 import {
   BASIS_POINTS_DENOMINATOR,
   mulDivDown,
   mulDivUp,
+  requireBasisPoints,
   requirePositiveU64,
   requireU64,
 } from "../lib/integers.ts";
-import type { BasisPoints } from "../lib/integers.ts";
 
 /**
- * Quotes blastSUI shares from atomic-MIST `deposit`, `blastAssets`, and share
- * `blastSupply`. Rounds down; the remainder stays with existing holders.
+ * Inputs `deposit` and `blastAssets` are MIST; `blastSupply` is atomic
+ * blastSUI shares. The output is atomic blastSUI shares. It rounds down with
+ * a bigint intermediate. No value is transferred; the unminted fractional
+ * share remains value for existing holders.
  */
 export function blastSharesOutDown(
   deposit: bigint,
@@ -27,8 +30,10 @@ export function blastSharesOutDown(
 }
 
 /**
- * Quotes the gross atomic-MIST claim for `shares`. Rounds down; the remainder
- * stays in blast custody.
+ * Inputs `shares` and `blastSupply` are atomic blastSUI shares;
+ * `blastAssets` is MIST. The output is MIST. It rounds down with a bigint
+ * intermediate. No value is transferred; fractional MIST stays in blast
+ * custody.
  */
 export function blastGrossSuiOutDown(
   shares: bigint,
@@ -49,15 +54,17 @@ export function blastGrossSuiOutDown(
 }
 
 /**
- * Quotes the atomic-MIST redemption fee at a validated basis-point rate.
- * Rounds up; the remainder is retained in blast custody.
+ * Input `grossSui` and the output fee are MIST; `redeemFeeBps` is basis
+ * points. It rounds the fee up with a bigint intermediate. This helper does
+ * not transfer value; during redemption, the fee and ceiling remainder stay
+ * in blast custody for remaining holders.
  */
 export function blastRedeemFeeUp(
   grossSui: bigint,
   redeemFeeBps: BasisPoints,
 ): bigint {
   requirePositiveU64("grossSui", grossSui);
-  requireU64("redeemFeeBps", redeemFeeBps);
+  requireBasisPoints("redeemFeeBps", redeemFeeBps);
   return requireU64(
     "feeSui",
     mulDivUp(grossSui, redeemFeeBps, BASIS_POINTS_DENOMINATOR),
@@ -65,8 +72,11 @@ export function blastRedeemFeeUp(
 }
 
 /**
- * Quotes a blastSUI redemption in atomic MIST. The gross claim rounds down
- * and the fee rounds up, so both remainders remain in blast custody.
+ * Inputs `shares` and `blastSupply` are atomic blastSUI shares;
+ * `blastAssets` is MIST and `redeemFeeBps` is basis points. All three outputs
+ * are MIST. Gross rounds down, fee rounds up, and net is their checked exact
+ * difference. The caller transfers only net MIST; fee and rounding remainders
+ * stay in blast custody. This pure helper transfers nothing.
  */
 export function blastRedemptionQuote(
   shares: bigint,
@@ -76,12 +86,15 @@ export function blastRedemptionQuote(
 ): { grossSui: bigint; feeSui: bigint; netSui: bigint } {
   const grossSui = blastGrossSuiOutDown(shares, blastAssets, blastSupply);
   const feeSui = blastRedeemFeeUp(grossSui, redeemFeeBps);
-  return { grossSui, feeSui, netSui: grossSui - feeSui };
+  const netSui = requireU64("netSui", grossSui - feeSui);
+  return { grossSui, feeSui, netSui };
 }
 
 /**
- * Values native pool tokens in atomic MIST at a stored rate. Rounds down; the
- * fractional remainder is unclaimed. An empty rate is one MIST per token.
+ * Input `poolTokens` and `ratePoolTokens` are native pool-token units;
+ * `rateSui` and the output are MIST. It rounds down with a bigint intermediate;
+ * an empty rate is one MIST per token. This valuation transfers nothing, and
+ * the fractional MIST is omitted as conservative value rather than assigned.
  */
 export function suiAtRateDown(
   poolTokens: bigint,
@@ -99,8 +112,10 @@ export function suiAtRateDown(
 }
 
 /**
- * Values atomic MIST in native pool tokens at a stored rate. Rounds down, so
- * the quoted tokens are worth at most the input. An empty rate is one-to-one.
+ * Inputs `suiAmount` and `rateSui` are MIST; `ratePoolTokens` and the output
+ * are native pool-token units. It rounds down with a bigint intermediate; an
+ * empty rate is one-to-one. This quote transfers nothing, and the fractional
+ * pool token is omitted so the result is worth at most the input.
  */
 export function poolTokensAtRateDown(
   suiAmount: bigint,
@@ -118,8 +133,10 @@ export function poolTokensAtRateDown(
 }
 
 /**
- * Bounds atomic MIST lost by a native floor conversion. Rounds up to keep the
- * bound conservative; an empty rate has no conversion remainder.
+ * Input `rateSui` is MIST and `ratePoolTokens` is native pool-token units; the
+ * output is a MIST loss bound. It rounds up to stay conservative; an empty
+ * rate returns zero. No value is transferred or assigned: the ceiling is only
+ * safety headroom for a possible floor-conversion remainder.
  */
 export function funConversionLossBoundUp(
   rateSui: bigint,
@@ -132,9 +149,10 @@ export function funConversionLossBoundUp(
 }
 
 /**
- * Quotes active pool tokens needed for atomic MIST. Rounds up so the tokens
- * cover the requested value, then caps the result at `held`; an empty active
- * valuation requests all held tokens.
+ * Inputs `suiAmount` and `activeSui` are MIST; `held` and the output are native
+ * pool-token units. It rounds up with a bigint intermediate, then caps at
+ * `held`; an empty valuation returns all held tokens. The ceiling surplus is
+ * requested from the same active position. This quote transfers nothing.
  */
 export function poolTokensForSuiUp(
   suiAmount: bigint,
