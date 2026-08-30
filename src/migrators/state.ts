@@ -102,7 +102,7 @@ export function decodeLpVaultObject(
 
   const parsed = lpVaultBcs.parse(object.content);
   const objectId = normalizeSuiObjectId(object.objectId);
-  if (normalizeSuiObjectId(parsed.id.id) !== objectId) {
+  if (normalizeSuiObjectId(parsed.id.id.bytes) !== objectId) {
     throw new TypeError(`LP vault ${object.objectId} has a mismatched UID`);
   }
 
@@ -115,7 +115,7 @@ export function decodeLpVaultObject(
     mutable: true,
     memeType: normalizeTypeParameter(tag.typeParams[0]!),
     quoteType: normalizeTypeParameter(tag.typeParams[1]!),
-    poolId: normalizeSuiObjectId(parsed.pool_id),
+    poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
     protocolMemeFees: BigInt(parsed.fee_ledger.protocol_meme.value),
     creatorMemeFees: BigInt(parsed.fee_ledger.creator_meme.value),
     protocolQuoteFees: BigInt(parsed.fee_ledger.protocol_quote.value),

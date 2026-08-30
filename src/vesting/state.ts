@@ -121,7 +121,7 @@ export function decodeVestingObject(
 
   if (tag.module === "linear") {
     const parsed = linearVestingBcs.parse(object.content);
-    assertUid(objectId, parsed.id.id);
+    assertUid(objectId, parsed.id.id.bytes);
     const balance = BigInt(parsed.balance.value);
     const released = BigInt(parsed.released);
     requireU64("totalAmount", balance + released);
@@ -149,7 +149,7 @@ export function decodeVestingObject(
   }
 
   const parsed = checkpointVestingBcs.parse(object.content);
-  assertUid(objectId, parsed.id.id);
+  assertUid(objectId, parsed.id.id.bytes);
   const balance = BigInt(parsed.balance.value);
   const released = BigInt(parsed.released);
   requireU64("totalAmount", balance + released);
@@ -228,7 +228,7 @@ export async function getCurrentTimestampMs(
   }
   const parsed = clockBcs.parse(object.content);
   if (
-    normalizeSuiObjectId(parsed.id.id) !==
+    normalizeSuiObjectId(parsed.id.id.bytes) !==
     normalizeSuiObjectId(SUI_CLOCK_OBJECT_ID)
   ) {
     throw new TypeError("Sui Clock has a mismatched UID");

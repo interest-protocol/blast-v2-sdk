@@ -12,12 +12,18 @@ export type NativeTransactionPosition = Pick<
 >;
 
 export function normalizeSuiEventPosition(input: {
-  checkpoint: number | string | null;
+  checkpoint: bigint | number | string | null;
   transactionDigest: string;
   eventIndex: number;
 }): SuiEventPosition {
   if (input.checkpoint === null) {
     throw new TypeError("event requires checkpoint metadata");
+  }
+  if (
+    typeof input.checkpoint === "number" &&
+    !Number.isSafeInteger(input.checkpoint)
+  ) {
+    throw new TypeError("event checkpoint must be a u64");
   }
   let checkpoint: bigint;
   try {

@@ -1,18 +1,14 @@
 import { bcs } from "@mysten/sui/bcs";
 import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 
-export const suiIdBcs = bcs.struct("ID", { bytes: bcs.Address }).transform({
+export const suiIdBcs = bcs.struct("ID", { bytes: bcs.Address });
+export const suiUidBcs = bcs.struct("UID", { id: suiIdBcs });
+export const suiBalanceBcs = bcs.struct("Balance", { value: bcs.u64() });
+
+export const suiObjectIdBcs = suiIdBcs.transform({
   input: (value: string) => ({ bytes: normalizeSuiObjectId(value) }),
   output: (value) => normalizeSuiObjectId(value.bytes),
 });
-
-export const suiUidBcs = bcs.struct("UID", { id: suiIdBcs });
-export const suiBalanceBcs = bcs
-  .struct("Balance", { value: bcs.u64() })
-  .transform({
-    input: (value: { value: bigint }) => value,
-    output: (value) => ({ value: BigInt(value.value) }),
-  });
 
 const asciiStringBcs = bcs.struct("AsciiString", {
   bytes: bcs.vector(bcs.u8()),

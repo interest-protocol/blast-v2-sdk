@@ -6,7 +6,7 @@ import {
   normalizeSuiObjectId,
   parseStructTag,
 } from "@mysten/sui/utils";
-import { moveTypeNameBcs, suiIdBcs } from "../lib/bcs.ts";
+import { moveTypeNameBcs, suiObjectIdBcs } from "../lib/bcs.ts";
 import type { SuiEventPosition } from "../lib/events.ts";
 import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
 import { requireU64, requireU128 } from "../lib/integers.ts";
@@ -142,7 +142,7 @@ const MIGRATOR_EVENT_FIELD_BCS: Record<
   MigratorEventFieldDescriptor,
   BcsType<unknown, unknown>
 > = {
-  id: suiIdBcs as BcsType<unknown, unknown>,
+  id: suiObjectIdBcs as BcsType<unknown, unknown>,
   typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
   address: AddressBcs as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,

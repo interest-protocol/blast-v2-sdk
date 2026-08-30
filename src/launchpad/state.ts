@@ -7,12 +7,16 @@ import {
   parseStructTag,
 } from "@mysten/sui/utils";
 
-import { moveTypeNameBcs, suiBalanceBcs, suiUidBcs } from "../lib/bcs.ts";
+import { suiBalanceBcs, suiUidBcs } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
 import type { CurveState } from "./curve.ts";
 import type { SharedObjectReference } from "./transactions.ts";
 
 const BpsBcs = bcs.struct("Bps", { value: bcs.u64() });
+const AsciiStringBcs = bcs.struct("AsciiString", {
+  bytes: bcs.vector(bcs.u8()),
+});
+const TypeNameBcs = bcs.struct("TypeName", { name: AsciiStringBcs });
 const LifecycleBcs = bcs.enum("Lifecycle", {
   Live: null,
   MigrationReady: null,
@@ -45,7 +49,7 @@ export const launchBcs = bcs.struct("Launch", {
   quote_migration_fee_bps: BpsBcs,
   protocol_meme_graduation_fee_bps: BpsBcs,
   meme_liquidity_provision_bps: BpsBcs,
-  migration_witness: moveTypeNameBcs,
+  migration_witness: TypeNameBcs,
   meme_reserve: suiBalanceBcs,
   real_quote_reserve: suiBalanceBcs,
   pending_burn: suiBalanceBcs,
@@ -119,14 +123,14 @@ export function decodeLaunchObject(
   if (object.mutable !== true) {
     throw new TypeError(`launch ${object.objectId} must be mutable`);
   }
-  if (normalizeSuiObjectId(parsed.id.id) !== objectId) {
+  if (normalizeSuiObjectId(parsed.id.id.bytes) !== objectId) {
     throw new TypeError(`launch ${object.objectId} has a mismatched UID`);
   }
 
   const memeType = normalizeTypeParameter(tag.typeParams[0]);
   const quoteType = normalizeTypeParameter(tag.typeParams[1]);
   const metadataCapId = parsed.metadata_cap
-    ? normalizeSuiObjectId(parsed.metadata_cap.id.id)
+    ? normalizeSuiObjectId(parsed.metadata_cap.id.id.bytes)
     : null;
 
   return {
@@ -148,7 +152,9 @@ export function decodeLaunchObject(
     memeLiquidityProvisionBps: toBigInt(
       parsed.meme_liquidity_provision_bps.value,
     ),
-    migrationWitnessType: parsed.migration_witness,
+    migrationWitnessType: normalizeStructTag(
+      decodeTypeName(parsed.migration_witness.name.bytes),
+    ),
     memeReserve: toBigInt(parsed.meme_reserve.value),
     realQuoteReserve: toBigInt(parsed.real_quote_reserve.value),
     pendingBurn: toBigInt(parsed.pending_burn.value),
@@ -215,6 +221,11 @@ function normalizeTypeParameter(
   return typeof type === "string" ? type : normalizeStructTag(type);
 }
 
-function toBigInt(value: string | bigint): bigint {
+function toBigInt(value: string): bigint {
   return BigInt(value);
+}
+function decodeTypeName(bytes: readonly number[]): string {
+  return new TextDecoder("ascii", { fatal: true }).decode(
+    Uint8Array.from(bytes),
+  );
 }

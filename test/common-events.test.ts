@@ -19,6 +19,18 @@ test("normalizes one native Sui event position", () => {
     eventIndex: 3,
   });
   assert.equal(suiEventId(position), "digest:3");
+  assert.deepEqual(
+    normalizeSuiEventPosition({
+      checkpoint: 43n,
+      transactionDigest: "bigint-digest",
+      eventIndex: 4,
+    }),
+    {
+      checkpoint: 43n,
+      transactionDigest: "bigint-digest",
+      eventIndex: 4,
+    },
+  );
 });
 
 test("rejects missing or unsafe native metadata", () => {
@@ -39,6 +51,15 @@ test("rejects missing or unsafe native metadata", () => {
         eventIndex: 0,
       }),
     /transaction digest/,
+  );
+  assert.throws(
+    () =>
+      normalizeSuiEventPosition({
+        checkpoint: Number.MAX_SAFE_INTEGER + 1,
+        transactionDigest: "digest",
+        eventIndex: 0,
+      }),
+    /event checkpoint must be a u64/,
   );
 });
 

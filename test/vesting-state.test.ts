@@ -19,7 +19,7 @@ const beneficiary = "0xb0b";
 const refundRecipient = "0xcafe";
 const coinType = "0x2::sui::SUI";
 
-const uid = (id: string) => ({ id });
+const uid = (id: string) => ({ id: { bytes: id } });
 const balance = (value: bigint) => ({ value });
 
 test("decodes linear custody and derives its original total", () => {

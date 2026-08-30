@@ -74,3 +74,54 @@ The brief's TypeName test expects `0x2::sui::SUI`, but the specified
 `normalizeStructTag` function in the installed `@mysten/sui` version returns
 the canonical 64-hex-digit Sui address. The test locks that actual normalized
 result, preserving the prior decoder behavior.
+
+## Fix round: serializer compatibility and safe checkpoints
+
+### RED evidence
+
+Command:
+
+```bash
+node --test test/common-bcs.test.ts test/common-events.test.ts \
+  test/state.test.ts test/migrators-state.test.ts test/vesting-state.test.ts
+```
+
+Result: 5 passed, 11 failed. The new raw-ID regression could not import the
+missing normalized event-ID helper. Restored state serializer fixtures failed
+with `TypeError: value.toLowerCase is not a function`, proving that transformed
+IDs rejected canonical `{ bytes }` inputs. The unsafe-number checkpoint test
+also failed because no exception was thrown.
+
+### GREEN evidence
+
+Focused command:
+
+```bash
+node --test test/common-bcs.test.ts test/common-events.test.ts \
+  test/state.test.ts test/migrators-state.test.ts test/vesting-state.test.ts \
+  test/launchpad-events.test.ts test/migrator-events.test.ts
+```
+
+Result: 26 passed, 0 failed.
+
+Checks:
+
+```bash
+npm run typecheck
+npm run lint
+npm run format:check
+npm test
+```
+
+Result: all passed; the full suite had 96 passed and 0 failed. Biome reported
+the same pre-existing configuration and non-null assertion warnings.
+
+### Fix self-review
+
+- `suiIdBcs`, `suiUidBcs`, and `suiBalanceBcs` now retain canonical raw BCS
+  input and output shapes for exported state serializers.
+- `suiObjectIdBcs` is the separate normalized string helper used only by event
+  payloads, so launchpad and migrator event behavior remains unchanged.
+- State serializer fixtures again use raw nested `ID` and `UID` values.
+- Unsafe numeric checkpoints now fail before `BigInt` can preserve a rounded
+  value; safe strings and bigint values remain accepted.
