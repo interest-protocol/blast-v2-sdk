@@ -84,6 +84,30 @@ test("freezes every production package and event", () => {
   }
 });
 
+test("rejects unknown blast_sui function classifications", () => {
+  for (const moduleName of ["math", "acl", "package_admin"]) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/check-contract-abi.mjs",
+        "--classify-function",
+        "blast_sui",
+        moduleName,
+        "future_operation",
+      ],
+      { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      new RegExp(
+        `unclassified function blast_sui::${moduleName}::future_operation`,
+      ),
+    );
+  }
+});
+
 function assertEveryOperationIsClassified(artifact: Artifact) {
   for (const packageArtifact of Object.values(artifact.packages)) {
     for (const moduleArtifact of Object.values(packageArtifact.modules)) {

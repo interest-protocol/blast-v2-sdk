@@ -321,15 +321,27 @@ const blastSuiBuilders = new Set([
   "vault::redeem_blast_sui",
   "vault::sync",
 ]);
+const blastSuiAdminExclusions = new Set([
+  "acl::accept_super_admin_transfer",
+  "acl::begin_super_admin_transfer",
+  "acl::cancel_super_admin_transfer",
+  "acl::destroy_retired_super_admin_cap",
+  "acl::keep",
+  "package_admin::activate_package_version",
+  "package_admin::authorize_upgrade",
+  "package_admin::commit_upgrade",
+  "package_admin::restrict_to_additive",
+  "package_admin::wrap",
+  "vault::set_redeem_fee",
+]);
 
 function classifyBlastSuiFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
   if (blastSuiBuilders.has(key)) return "builder";
-  if (moduleName === "math") return "sdk-arithmetic";
   if (isBlastSuiDeploymentExclusion(key)) {
     return "intentional-deployment-exclusion";
   }
-  if (isBlastSuiAdminExclusion(moduleName, key)) {
+  if (blastSuiAdminExclusions.has(key)) {
     return "intentional-admin-exclusion";
   }
   throw new Error(`unclassified function blast_sui::${key}`);
@@ -337,14 +349,6 @@ function classifyBlastSuiFunction(moduleName, functionName) {
 
 function isBlastSuiDeploymentExclusion(key) {
   return key === "vault::create" || key === "deposit_receipt::create_display";
-}
-
-function isBlastSuiAdminExclusion(moduleName, key) {
-  return (
-    moduleName === "acl" ||
-    moduleName === "package_admin" ||
-    key === "vault::set_redeem_fee"
-  );
 }
 
 const directEventNames = new Set([
@@ -386,4 +390,23 @@ function isEventStruct(packageName, moduleName, structName) {
   );
 }
 
-main();
+function runClassificationProbe(argumentIndex) {
+  try {
+    const [packageName, moduleName, functionName] = process.argv.slice(
+      argumentIndex + 1,
+      argumentIndex + 4,
+    );
+    if (!packageName || !moduleName || !functionName) {
+      throw new Error(
+        "--classify-function requires package, module, and function",
+      );
+    }
+    console.log(classifyFunction(packageName, moduleName, functionName));
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+const classificationArgumentIndex = process.argv.indexOf("--classify-function");
+if (classificationArgumentIndex === -1) main();
+else runClassificationProbe(classificationArgumentIndex);

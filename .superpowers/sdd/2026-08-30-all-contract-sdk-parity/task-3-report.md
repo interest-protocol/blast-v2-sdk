@@ -113,3 +113,71 @@ Result: both passed.
 No Task 3 defect is known. The repository-wide lint command still reports its
 pre-existing Biome configuration deprecation and non-null assertion warnings;
 it exits successfully.
+
+## Fix round: fail-closed `blast_sui` classification
+
+Review found that broad `math`, `acl`, and `package_admin` module matches could
+classify a future unreviewed public function instead of rejecting it.
+
+### RED evidence
+
+Command:
+
+```bash
+node --test test/abi-parity.test.ts
+```
+
+Result: 2 passed and 1 failed. The new regression could not find
+`unclassified function blast_sui::math::future_operation`; the checker entered
+normal artifact generation because no focused classification probe existed.
+
+### GREEN evidence
+
+Focused command:
+
+```bash
+node --test test/abi-parity.test.ts
+```
+
+Result: 3 passed and 0 failed. Unknown keys in `math`, `acl`, and
+`package_admin` now reach the unclassified error.
+
+Final gates and full suite:
+
+```bash
+npm run format:check
+npm run check:abi
+npm run lint
+npm run typecheck
+npm test
+```
+
+Result: all passed; the full suite had 97 passed and 0 failed. Biome reported
+only the same pre-existing configuration and non-null assertion warnings.
+
+Artifact verification:
+
+```bash
+sha256sum abi/production-launchpad-v1.json \
+  abi/production-vesting-v1.json \
+  abi/production-blast-sui-v1.json
+git diff --exit-code -- abi/production-launchpad-v1.json \
+  abi/production-vesting-v1.json \
+  abi/production-blast-sui-v1.json
+```
+
+Result: all three artifacts are unchanged. Their SHA-256 hashes are
+`9cd4b622c17a6a49014ef5af62fcb66e994c5ddf482615d10168b5525fd41ad9`,
+`f1136c11d2dfd3ce3eeb1f234d0f771221922e32635534063e544bc6d804e5f2`,
+and `8dfb84fc7c5634cbfb0155ef5c18a785014e6487314c551a576bf949f876add2`.
+
+### Fix self-review
+
+- The 11 current admin exclusions are exact fully qualified keys.
+- The unused module-wide math classification was removed because the frozen
+  production artifact has no public math functions.
+- The classification probe invokes the same production classifier and does
+  not run Move summaries or change artifacts.
+- Builder and deployment-exclusion sets remain exact and fail closed.
+- `git diff --check` passed. The sibling contracts tree still contains only
+  the two stated pre-existing user changes.
