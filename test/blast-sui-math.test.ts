@@ -17,7 +17,7 @@ import {
   poolTokensForSuiUp,
   suiAtRateDown,
 } from "../src/blast-sui/math.ts";
-import { requireBasisPoints } from "../src/lib/integers.ts";
+import { requireBasisPoints, U64_MAX } from "../src/lib/integers.ts";
 
 test("uses original package IDs for blast Sui type identities", () => {
   const originalPackageId = "0x422";
@@ -90,4 +90,11 @@ test("mirrors native empty-rate and ceiling behavior", () => {
   assert.equal(funConversionLossBoundUp(3n, 2n), 2n);
   assert.equal(poolTokensForSuiUp(7n, 10n, 9n), 8n);
   assert.equal(poolTokensForSuiUp(20n, 10n, 9n), 10n);
+});
+
+test("aborts before capping an overflowing pool-token quote", () => {
+  assert.throws(
+    () => poolTokensForSuiUp(U64_MAX, U64_MAX, 1n),
+    /poolTokens must be a u64/,
+  );
 });

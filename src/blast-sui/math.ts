@@ -145,6 +145,9 @@ export function poolTokensForSuiUp(
   requireU64("held", held);
   requireU64("activeSui", activeSui);
   if (activeSui === 0n) return held;
-  const requested = mulDivUp(suiAmount, held, activeSui);
-  return requireU64("poolTokens", requested < held ? requested : held);
+  const requested = requireU64(
+    "poolTokens",
+    mulDivUp(suiAmount, held, activeSui),
+  );
+  return requested < held ? requested : held;
 }
