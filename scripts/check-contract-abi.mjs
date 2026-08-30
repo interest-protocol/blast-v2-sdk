@@ -13,7 +13,24 @@ import { fileURLToPath } from "node:url";
 
 const BASELINE_COMMIT = "a5ed34ad49c6c001af2db5b9cbcb206075704412";
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const artifactPath = join(sdkRoot, "abi", "production-launchpad-v1.json");
+const artifactDeclarations = [
+  {
+    path: "production-launchpad-v1.json",
+    packages: [
+      ["launchpad", "launchpad", "blast_fun"],
+      ["memeTemplate", "meme_template", "meme_template"],
+      ["migrators", "migrators", "blast_fun_migrators"],
+    ],
+  },
+  {
+    path: "production-vesting-v1.json",
+    packages: [["vesting", "vesting", "blast_fun_vesting"]],
+  },
+  {
+    path: "production-blast-sui-v1.json",
+    packages: [["blastSui", "blast_sui", "blast_sui"]],
+  },
+];
 const contractsRoot = resolve(
   sdkRoot,
   process.argv.slice(2).find((argument) => !argument.startsWith("--")) ??
@@ -22,21 +39,24 @@ const contractsRoot = resolve(
 const write = process.argv.includes("--write");
 const temporaryRoot = mkdtempSync(join(tmpdir(), "blast-production-abi-"));
 
-try {
-  const packages = {
-    launchpad: summarizePackage(
-      join(contractsRoot, "sui", "launchpad"),
-      "blast_fun",
-    ),
-    memeTemplate: summarizePackage(
-      join(contractsRoot, "sui", "meme_template"),
-      "meme_template",
-    ),
-    migrators: summarizePackage(
-      join(contractsRoot, "sui", "migrators"),
-      "blast_fun_migrators",
-    ),
-  };
+function main() {
+  try {
+    for (const declaration of artifactDeclarations) {
+      checkArtifact(declaration);
+    }
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+function checkArtifact(declaration) {
+  const artifactPath = join(sdkRoot, "abi", declaration.path);
+  const packages = Object.fromEntries(
+    declaration.packages.map(([name, directory, packageName]) => [
+      name,
+      summarizePackage(join(contractsRoot, "sui", directory), packageName),
+    ]),
+  );
   const artifact = {
     schemaVersion: 1,
     baseline: {
@@ -56,19 +76,18 @@ try {
     mkdirSync(dirname(artifactPath), { recursive: true });
     writeFileSync(artifactPath, serialized);
     console.log(`wrote ${artifactPath}`);
-  } else {
-    const expected = readFileSync(artifactPath, "utf8");
-    if (expected !== serialized) {
-      console.error(
-        "production Move ABI differs from abi/production-launchpad-v1.json; run npm run check:abi:write only for an approved ABI migration",
-      );
-      process.exitCode = 1;
-    } else {
-      console.log(`production Move ABI matches ${BASELINE_COMMIT}`);
-    }
+    return;
   }
-} finally {
-  rmSync(temporaryRoot, { recursive: true, force: true });
+
+  const expected = readFileSync(artifactPath, "utf8");
+  if (expected !== serialized) {
+    console.error(
+      `production Move ABI differs from abi/${declaration.path}; run npm run check:abi:write only for an approved ABI migration`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`production Move ABI matches ${BASELINE_COMMIT}`);
 }
 
 function summarizePackage(packagePath, packageName) {
@@ -115,7 +134,6 @@ function summarizePackage(packagePath, packageName) {
 }
 
 function normalizeModule(packageName, moduleName, summary) {
-  const isEventModule = moduleName === "events";
   const functions = Object.entries(summary.functions)
     .filter(([, definition]) => definition.visibility === "Public")
     .sort(([left], [right]) => left.localeCompare(right))
@@ -129,13 +147,13 @@ function normalizeModule(packageName, moduleName, summary) {
       ),
       returns: definition.return_.map(normalizeType),
     }));
-  const events = isEventModule
-    ? normalizeStructs(summary.structs).map((event) => ({
-        ...event,
-        sdk: "decoder-reducer",
-      }))
-    : [];
-  const structs = isEventModule ? [] : normalizeStructs(summary.structs);
+  const normalizedStructs = normalizeStructs(summary.structs);
+  const events = normalizedStructs
+    .filter(({ name }) => isEventStruct(packageName, moduleName, name))
+    .map((event) => ({ ...event, sdk: "decoder-reducer" }));
+  const structs = normalizedStructs.filter(
+    ({ name }) => !isEventStruct(packageName, moduleName, name),
+  );
   const enums = Object.entries(summary.enums)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, definition]) => ({
@@ -190,16 +208,24 @@ function normalizeType(type) {
 }
 
 function classifyFunction(packageName, moduleName, functionName) {
-  if (packageName === "meme_template") {
-    throw new Error(
-      `unexpected public function ${packageName}::${moduleName}::${functionName}`,
-    );
-  }
-  if (packageName === "blast_fun_migrators") {
-    return classifyMigratorFunction(moduleName, functionName);
-  }
+  const classifier = functionClassifiers[packageName];
+  if (!classifier) throw new Error(`unknown package ${packageName}`);
+  return classifier(moduleName, functionName);
+}
 
-  return classifyLaunchpadFunction(packageName, moduleName, functionName);
+const functionClassifiers = {
+  blast_fun: (moduleName, functionName) =>
+    classifyLaunchpadFunction("blast_fun", moduleName, functionName),
+  meme_template: classifyMemeTemplateFunction,
+  blast_fun_migrators: classifyMigratorFunction,
+  blast_fun_vesting: classifyVestingFunction,
+  blast_sui: classifyBlastSuiFunction,
+};
+
+function classifyMemeTemplateFunction(moduleName, functionName) {
+  throw new Error(
+    `unexpected public function meme_template::${moduleName}::${functionName}`,
+  );
 }
 
 function classifyMigratorFunction(moduleName, functionName) {
@@ -260,3 +286,104 @@ function isIntentionalAdminExclusion(moduleName, functionName, key) {
     key === "runtime_config::revoke_x_claim_signer"
   );
 }
+
+const vestingBuilders = new Set([
+  "checkpoints::new_schedule",
+  "checkpoints::add",
+  "checkpoints::new_irrevocable",
+  "checkpoints::new_cancelable",
+  "checkpoints::share",
+  "checkpoints::claim",
+  "checkpoints::cancel",
+  "checkpoints::close_irrevocable",
+  "linear::new_irrevocable",
+  "linear::new_cancelable",
+  "linear::share",
+  "linear::claim",
+  "linear::cancel",
+  "linear::close_irrevocable",
+]);
+
+function classifyVestingFunction(moduleName, functionName) {
+  const key = `${moduleName}::${functionName}`;
+  if (vestingBuilders.has(key)) return "builder";
+  throw new Error(`unclassified function blast_fun_vesting::${key}`);
+}
+
+const blastSuiBuilders = new Set([
+  "vault::mint_fun_sui",
+  "vault::redeem_fun_sui",
+  "vault::request_blast_sui",
+  "deposit_receipt::keep",
+  "vault::claim_blast_sui",
+  "deposit_receipt::cancel",
+  "vault::donate_sui",
+  "vault::redeem_blast_sui",
+  "vault::sync",
+]);
+
+function classifyBlastSuiFunction(moduleName, functionName) {
+  const key = `${moduleName}::${functionName}`;
+  if (blastSuiBuilders.has(key)) return "builder";
+  if (moduleName === "math") return "sdk-arithmetic";
+  if (isBlastSuiDeploymentExclusion(key)) {
+    return "intentional-deployment-exclusion";
+  }
+  if (isBlastSuiAdminExclusion(moduleName, key)) {
+    return "intentional-admin-exclusion";
+  }
+  throw new Error(`unclassified function blast_sui::${key}`);
+}
+
+function isBlastSuiDeploymentExclusion(key) {
+  return key === "vault::create" || key === "deposit_receipt::create_display";
+}
+
+function isBlastSuiAdminExclusion(moduleName, key) {
+  return (
+    moduleName === "acl" ||
+    moduleName === "package_admin" ||
+    key === "vault::set_redeem_fee"
+  );
+}
+
+const directEventNames = new Set([
+  "VestingCreated",
+  "VestingClaimed",
+  "VestingCanceled",
+  "VestingClosed",
+]);
+const blastSuiEventNames = new Set([
+  "SuperAdminTransferStarted",
+  "SuperAdminTransferCancelled",
+  "SuperAdminTransferred",
+  "PackageVersionAdvanced",
+  "PackageAdminCreated",
+  "UpgradeAuthorized",
+  "UpgradeCommitted",
+  "UpgradePolicyRestricted",
+  "VaultCreated",
+  "FunSuiMinted",
+  "FunSuiRedeemed",
+  "BlastSuiDepositRequested",
+  "BlastSuiDepositClaimed",
+  "BlastSuiDepositCancelled",
+  "BlastSuiDonated",
+  "BlastSuiRedeemed",
+  "FunYieldSwept",
+  "RedeemFeeChanged",
+  "VaultSynced",
+  "NativeStakeUnwound",
+]);
+
+function isEventStruct(packageName, moduleName, structName) {
+  if (packageName === "blast_sui" && moduleName === "events") {
+    return blastSuiEventNames.has(structName);
+  }
+  if (moduleName === "events") return true;
+  return (
+    packageName === "blast_fun_vesting" && directEventNames.has(structName)
+  );
+}
+
+main();
