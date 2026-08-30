@@ -1,101 +1,242 @@
-# Production launchpad ABI coverage
+# Production Sui ABI coverage
 
 ## Baseline
 
 The frozen production ABI uses contracts commit
-`a5ed34ad49c6c001af2db5b9cbcb206075704412`. The ABI artifact is
-`abi/production-launchpad-v1.json`. The artifact records Sui CLI
-`1.77.2-51d177ad7d65`.
+`a5ed34ad49c6c001af2db5b9cbcb206075704412`. The three parity artifacts are:
 
-The contracts working tree differed from the ABI commit when the ABI was
-frozen. The differences were `sui/meme_template/Move.lock` and
-`docs/research/sui-deepbook-indexer-architecture-2026.md`. These differences do
-not change a production function, object layout, or event schema. Contracts
-commit `02cd182463629bc6977a097a2ab235ed765c9f01` adds ADR 0059 and the glossary
-record for this freeze. It does not change the frozen ABI.
+- `abi/production-launchpad-v1.json` for `launchpad`, `meme_template`, and the
+  five production migrators;
+- `abi/production-vesting-v1.json` for `vesting`; and
+- `abi/production-blast-sui-v1.json` for `blast_sui`.
+
+All three artifacts record Sui CLI `1.77.2-51d177ad7d65`. The contracts working
+tree differed from the ABI commit when the artifacts were frozen. The only
+differences were `sui/meme_template/Move.lock` and
+`docs/research/sui-deepbook-indexer-architecture-2026.md`. They do not change a
+production function, object layout, or event schema. Contracts commit
+`02cd182463629bc6977a097a2ab235ed765c9f01` adds ABI documentation only and does
+not change the frozen production code.
 
 Move calls use the current package ID. Type names, event types, object schemas,
 migration witnesses, venue markers, and venue-tier dynamic-field keys use the
-original package ID. The deployment registry stores both IDs.
+original package ID. The deployment model stores both IDs.
 
 ## Function coverage
 
+### Launchpad, Meme template, and migrators
+
 | Frozen contract surface | SDK implementation | Verification | Status or reason |
 | --- | --- | --- | --- |
-| `launch::new`, `launch::share` | `LaunchpadCalls.createLaunch`, `shareLaunch`; `LaunchpadTransactions.createLaunch` | `test/transactions.test.ts` | Complete atomic create and share transaction. |
+| `launch::new`, `launch::share` | `LaunchpadCalls.createLaunch`, `shareLaunch`; `LaunchpadTransactions.createLaunch` | `test/transactions.test.ts` | Complete atomic create-and-share transaction. |
 | `launch::buy` | `LaunchpadCalls.buy`; `LaunchpadTransactions.buy`; `previewBuy` | `test/transactions.test.ts`, `test/curve.test.ts` | Complete builder and arithmetic preview. |
 | `launch::sell` | `LaunchpadCalls.sell`; `LaunchpadTransactions.sell`; `previewSell` | `test/transactions.test.ts`, `test/curve.test.ts` | Complete builder and arithmetic preview. |
-| `launch::claim_creator_cap` | `LaunchpadCalls.claimCreatorCap`; `LaunchpadTransactions.claimCreatorCap` | `test/transactions.test.ts` | Routes `CreatorCap` and `MetadataCap`. Current ownership is a native object fact. |
+| `launch::claim_creator_cap` | `LaunchpadCalls.claimCreatorCap`; `LaunchpadTransactions.claimCreatorCap` | `test/transactions.test.ts` | Routes `CreatorCap` and `MetadataCap`; current ownership is a native object fact. |
 | `launch::claim_creator_fees` | `LaunchpadCalls.claimCreatorFees`; `LaunchpadTransactions.claimCreatorFees` | `test/transactions.test.ts` | Routes both returned coins. |
 | `launch::claim_protocol_fees` | `LaunchpadCalls.claimProtocolFees`; `LaunchpadTransactions.claimProtocolFees` | `test/transactions.test.ts` | Composes sign-in and routes both returned coins. |
-| `acl::sign_in` | `LaunchpadCalls.signIn`; `MigratorCalls.signIn` | launchpad and migrator transaction tests | Intentionally compositional because the witness must be consumed in one PTB. |
-| `launch::migrate`, `launch::redeem_migration` | `LaunchpadCalls.migrate`, `redeemMigration` | `test/transactions.test.ts` | Intentionally compositional. Production adapter builders consume the payload and balances in one PTB. |
-| `launch_ticket::new` | Compiled Meme template and `LaunchpadTransactions.publishMeme` | `test/template.test.ts`, `test/transactions.test.ts` | Template initializer owns construction. Publication effects identify the returned ticket. |
-| `creator_authority::new_address`, `new_x` | Compiled Meme template | `test/template.test.ts` | Template-internal constructors. There is no standalone client call. |
-| `migration_math::sqrt_price_x64`, `assert_price_within_bps`, `minimum_utilized_amount`, `assert_residual_within_bps` | `sqrtPriceX64`, `assertPriceWithinBps`, `minimumUtilizedAmount`, `assertResidualWithinBps` | `test/migration-math.test.ts` | Exact SDK arithmetic mirror. Contract execution remains authoritative. |
-| `fees::new`, `accrue_from_runtime`, `totals`, `claim_creator_fees`, `claim_protocol_fees` | Launch and vault builders, object decoders, and event reducers | state, transaction, and replay tests | Move-composition surface over `Balance` and witnesses. It is not a standalone client operation. |
-| `runtime_config::protocol_fee_share_bps`, `protocol_treasury` | Launch and migrator event projections | launchpad and migrator event tests | Move-composition getters. Client reconstruction uses object state or events. |
-| All `acl` administration except `sign_in` | None | ABI parity check | Intentional routine-administration exclusion. |
-| All `launch_config` administration | None | ABI parity check | Intentional routine-administration exclusion. |
-| All `package_admin` functions | None | ABI parity check | Intentional package-upgrade exclusion. |
-| `runtime_config` setters and signer revocation | None | ABI parity check | Intentional routine-administration exclusion. |
+| `acl::sign_in` | `LaunchpadCalls.signIn`; `MigratorCalls.signIn` | `test/transactions.test.ts`, `test/migrators-transactions.test.ts` | Intentionally compositional because its witness must be consumed in the same PTB. |
+| `launch::migrate`, `launch::redeem_migration` | `LaunchpadCalls.migrate`, `redeemMigration` | `test/transactions.test.ts`, `test/migrators-transactions.test.ts` | Intentionally compositional because an adapter consumes the typed payload and balances in the same PTB. |
+| `launch_ticket::new` | Compiled Meme template and `LaunchpadTransactions.publishMeme` | `test/template.test.ts`, `test/transactions.test.ts` | The template initializer constructs the ticket; publication effects identify the transferred ticket. |
+| `creator_authority::new_address`, `creator_authority::new_x` | Compiled Meme template | `test/template.test.ts` | Template-internal constructors, not standalone product calls. |
+| `migration_math::sqrt_price_x64`, `assert_price_within_bps`, `minimum_utilized_amount`, `assert_residual_within_bps` | `sqrtPriceX64`, `assertPriceWithinBps`, `minimumUtilizedAmount`, `assertResidualWithinBps` | `test/migration-math.test.ts` | Exact SDK arithmetic mirrors; contract execution remains authoritative. |
+| `fees::new`, `accrue_from_runtime`, `totals`, `claim_creator_fees`, `claim_protocol_fees` | Launch/vault builders, object decoders, and reducers | state, transaction, and replay tests | Move-composition surface over `Balance` values and witnesses, not standalone client operations. |
+| `runtime_config::protocol_fee_share_bps`, `runtime_config::protocol_treasury` | Launchpad and migrator projections | launchpad and migrator event tests | Move-composition getters; clients reconstruct the values from canonical object state or events. |
 | Bluefin `migrate`, `collect_fees` | `migrateBluefin`, `collectBluefinFees` | `test/migrators-transactions.test.ts` | Both production routes complete. |
 | MMT `migrate_meme_x`, `migrate_meme_y`, `collect_fees_meme_x`, `collect_fees_meme_y` | `migrateMmt`, `collectMmtFees` with `memeSide` | `test/migrators-transactions.test.ts` | All four routes complete. |
-| Cetus four `migrate_{new,existing}_meme_{a,b}` functions and two collection functions | `migrateCetus`, `collectCetusFees` with a discriminated pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. |
-| Turbos four `migrate_{new,existing}_meme_{a,b}` functions and two collection functions | `migrateTurbos`, `collectTurbosFees` with pool route, `memeSide`, `feeType`, and deadline | `test/migrators-transactions.test.ts` | All six routes and the third type argument complete. |
-| Full Sail four `migrate_{new,existing}_meme_{a,b}` functions and two collection functions | `migrateFullSail`, `collectFullSailFees` with a discriminated pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. Migration includes rewarder custody. Collection does not add unused inputs. |
-| `vault::claim_creator_fees`, `claim_protocol_fees` | `MigratorCalls` and `MigratorTransactions` claim methods | `test/migrators-transactions.test.ts` | Both claims route both returned coins. |
-| Bluefin, Cetus, MMT, Turbos, and Full Sail `set_tier` | None | ABI parity check | Intentional routine-administration exclusion. Frontend reads are supported. |
+| Cetus four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateCetus`, `collectCetusFees` with pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. |
+| Turbos four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateTurbos`, `collectTurbosFees` with pool route, `memeSide`, `feeType`, and deadline | `test/migrators-transactions.test.ts` | All six routes and the adapter-specific third type argument complete. |
+| Full Sail four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateFullSail`, `collectFullSailFees` with pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. Migration includes rewarder custody; collection does not add unused inputs. |
+| `vault::claim_creator_fees`, `vault::claim_protocol_fees` | `MigratorCalls` and `MigratorTransactions` claim methods | `test/migrators-transactions.test.ts` | Both claims route both returned coins. |
 
-## Object and type coverage
+### Vesting
+
+| Frozen contract surface | SDK implementation | Verification | Status or reason |
+| --- | --- | --- | --- |
+| `linear::new_irrevocable`, `linear::share` | `VestingCalls.newLinearIrrevocable`, `share`; `VestingTransactions.createLinearIrrevocable` | `test/vesting-transactions.test.ts` | Funds, constructs, and shares one linear position atomically. |
+| `linear::new_cancelable`, `linear::share` | `VestingCalls.newLinearCancelable`, `share`; `VestingTransactions.createLinearCancelable` | `test/vesting-transactions.test.ts` | Shares the position and transfers the returned cancellation cap to the explicit recipient. |
+| `linear::claim` | `VestingCalls.claim`; `VestingTransactions.claim` | `test/vesting-transactions.test.ts` | Complete permissionless product builder using an immutable native `Clock`. |
+| `linear::cancel` | `VestingCalls.cancel`; `VestingTransactions.cancel` | `test/vesting-transactions.test.ts` | Complete cancellation-cap builder. |
+| `linear::close_irrevocable` | `VestingCalls.closeIrrevocable`; `VestingTransactions.closeIrrevocable` | `test/vesting-transactions.test.ts` | Complete terminal irrevocable-close builder. |
+| `checkpoints::new_schedule`, `checkpoints::add` | `VestingCalls.newCheckpointSchedule`, `addCheckpoint` | `test/vesting-transactions.test.ts`, `test/vesting-schedules.test.ts` | Intentionally composed inside checkpoint creation so the checkpoint schedule value cannot escape incomplete. |
+| `checkpoints::new_irrevocable`, `checkpoints::share` | `VestingCalls.newCheckpointIrrevocable`, `share`; `VestingTransactions.createCheckpointIrrevocable` | `test/vesting-transactions.test.ts` | Builds the complete bounded schedule, funds, constructs, and shares one position atomically. |
+| `checkpoints::new_cancelable`, `checkpoints::share` | `VestingCalls.newCheckpointCancelable`, `share`; `VestingTransactions.createCheckpointCancelable` | `test/vesting-transactions.test.ts` | Shares the position and transfers the returned cancellation cap to the explicit recipient. |
+| `checkpoints::claim`, `checkpoints::cancel`, `checkpoints::close_irrevocable` | `VestingCalls` and `VestingTransactions` lifecycle methods | `test/vesting-transactions.test.ts` | Complete product builders using decoded shared-object metadata. |
+
+### Blast SUI product operations
+
+| Frozen contract surface | SDK implementation | Returned-object routing | Verification |
+| --- | --- | --- | --- |
+| `vault::mint_fun_sui` | `BlastSuiCalls.mintFunSui`; `BlastSuiTransactions.mintFunSui` | The composable call returns the `funSUI` coin; the transaction transfers it to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
+| `vault::redeem_fun_sui` | `BlastSuiCalls.redeemFunSui`; `BlastSuiTransactions.redeemFunSui` | The composable call returns SUI; the transaction transfers it to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
+| `vault::request_blast_sui` | `BlastSuiCalls.requestBlastSui`; `BlastSuiTransactions.requestBlastSui` | The returned receipt is passed to `deposit_receipt::keep` in the same PTB and becomes sender-owned; no generic transfer is invented. | `test/blast-sui-transactions.test.ts` |
+| `deposit_receipt::keep` | `BlastSuiCalls.keepDepositReceipt` | Intentionally compositional because it consumes the key-only receipt returned by `request_blast_sui` in the same PTB. | `test/blast-sui-transactions.test.ts` |
+| `vault::claim_blast_sui` | `BlastSuiCalls.claimBlastSui`; `BlastSuiTransactions.claimBlastSui` | Consumes the owned receipt and transfers the returned `blastSUI` coin to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
+| `deposit_receipt::cancel` | `BlastSuiCalls.cancelDepositReceipt`; `BlastSuiTransactions.cancelDepositReceipt` | Consumes the owned receipt and transfers returned SUI to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
+| `vault::donate_sui` | `BlastSuiCalls.donateSui`; `BlastSuiTransactions.donateSui` | No returned object and no synthetic transfer. | `test/blast-sui-transactions.test.ts` |
+| `vault::redeem_blast_sui` | `BlastSuiCalls.redeemBlastSui`; `BlastSuiTransactions.redeemBlastSui` | Returns SUI and transfers it to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
+| `vault::sync` | `BlastSuiCalls.syncVault`; `BlastSuiTransactions.syncVault` | No returned object and no synthetic transfer. | `test/blast-sui-transactions.test.ts` |
+
+Every Blast SUI call targets the current package, uses the mutable framework
+`SuiSystemState`, mutable `Vault`, and immutable `PackageVersion` required by
+its Move signature, and adds no type argument that the ABI does not define.
+
+## Object, type, read, and deployment coverage
 
 | Frozen object or type boundary | SDK implementation | Verification |
 | --- | --- | --- |
 | `Launch<Meme, Quote>` shared mutable object | `launchBcs`, `decodeLaunchObject`, `getLaunch` | `test/state.test.ts` |
-| `LaunchTicket<Meme>` owned object | Meme publication and launch creation builders | template and transaction tests; ticket ID comes from publication effects |
-| `MigrationPayload<Meme, Quote, Witness>` returned linear value | `LaunchpadCalls.migrate` and `redeemMigration`; complete adapter transactions | launchpad and every venue transaction test |
-| `CreatorCap<Meme>` owned object | creator-cap and fee-claim builders | transaction tests; current owner stays in native facts |
-| `LpVault<Meme, Quote>` shared mutable object | `lpVaultBcs`, `decodeLpVaultObject`, `getLpVault` | `test/migrators-state.test.ts` |
-| `VenueConfig` and `TierKey<Venue>` | migrator deployment helper and `getVenueTier` | deployment and migrator state tests |
-| Launchpad shared singletons | `launchpadDeployment` | `test/deployments.test.ts` |
-| Migrator package and shared singleton | `migratorsDeployment` | `test/deployments.test.ts` |
-| Venue `Witness`, `Venue`, and Turbos `FeeType` | original-package witness helper and route-specific type arguments | all venue transaction tests |
-| Returned coins and capabilities | high-level transactions transfer every result | launchpad and migrator transaction tests |
+| `LaunchTicket<Meme>` owned object | Meme publication and launch creation builders | `test/template.test.ts`, `test/transactions.test.ts`; ticket identity comes from publication effects |
+| `MigrationPayload<Meme, Quote, Witness>` returned linear value | `LaunchpadCalls.migrate`, `redeemMigration`; every adapter transaction | `test/transactions.test.ts`, `test/migrators-transactions.test.ts` |
+| `CreatorCap<Meme>` owned object | creator-cap and fee-claim builders | `test/transactions.test.ts`; current owner is a native ownership fact |
+| `LpVault<Meme, Quote>` shared mutable object | `lpVaultBcs`, `decodeLpVaultObject`, `getLpVault` | `test/migrators-state.test.ts`, `test/migrators-client.test.ts` |
+| `VenueConfig` and `TierKey<Venue>` | `migratorsDeployment`, `getVenueTier` | `test/deployments.test.ts`, `test/migrators-state.test.ts`, `test/migrators-client.test.ts` |
+| Launchpad and migrator package/shared-object identities | `launchpadDeployment`, `migratorsDeployment` | `test/deployments.test.ts` |
+| Venue `Witness`, `Venue`, and Turbos `FeeType` | original-package witness/type helpers and route-specific type arguments | `test/migrators-transactions.test.ts` |
+| `linear::Vesting<Coin>` and `checkpoints::Vesting<Coin>` shared mutable objects | `linearVestingBcs`, `checkpointVestingBcs`, `decodeVestingObject`, `getVesting` | `test/vesting-state.test.ts`, `test/vesting-client.test.ts` |
+| Checkpoint schedule contents and native `Clock` | `getCheckpointPage`, `getAllCheckpoints`, `getCurrentTimestampMs` | `test/vesting-state.test.ts`, `test/vesting-client.test.ts` |
+| Vesting package identity | `vestingDeployment`; current package targets and original object/event identity | `test/deployments.test.ts`, vesting transaction/state/event tests |
+| Blast SUI `vault::Vault` shared mutable object | `blastSuiVaultBcs`, `decodeBlastSuiVaultObject`, `getBlastSuiVault`, `BlastSuiClient.getVault` | `test/blast-sui-state.test.ts`, `test/blast-sui-client.test.ts` |
+| `deposit_receipt::BlastSuiDepositReceipt` address-owned object | `blastSuiDepositReceiptBcs`, `decodeBlastSuiDepositReceiptObject`, `getBlastSuiDepositReceipt`, `BlastSuiClient.getDepositReceipt` | `test/blast-sui-state.test.ts`, `test/blast-sui-client.test.ts` |
+| `fun_sui::FUN_SUI` original-package type | `funSuiType` and transaction coin selection | `test/blast-sui-math.test.ts`, `test/blast-sui-transactions.test.ts` |
+| `blast_sui::BLAST_SUI` original-package type | `blastSuiType` and transaction coin selection | `test/blast-sui-math.test.ts`, `test/blast-sui-transactions.test.ts` |
+| Deposit-receipt original-package type | `blastSuiDepositReceiptType` and state/event validation | `test/blast-sui-math.test.ts`, `test/blast-sui-state.test.ts` |
+| Blast SUI package, `PackageVersion`, `ProtocolAuthority`, `PackageAdmin`, and `Vault` identity slots | optional `BlastPackages.blastSui` and distinctly named optional shared identities; `blastSuiDeployment` returns the call-ready immutable version and mutable vault | `test/deployments.test.ts`, `test/blast-sui-math.test.ts` |
+| Framework `SuiSystemState` | native system-object helper with initial shared version 1 and mutable input | `test/blast-sui-transactions.test.ts` |
+
+`BLAST_DEPLOYMENTS` remains empty. Deployment helpers validate caller-supplied
+identities only and perform no publish, deploy, upgrade, or configuration call.
+
+## Blast SUI arithmetic coverage
+
+| Frozen formula | SDK implementation | Verification |
+| --- | --- | --- |
+| Blast shares out, round down | `blastSharesOutDown` | `test/blast-sui-math.test.ts` |
+| Gross SUI out, round down | `blastGrossSuiOutDown` | `test/blast-sui-math.test.ts` |
+| Redemption fee, round up | `blastRedeemFeeUp` with branded `BasisPoints` | `test/blast-sui-math.test.ts`, `test/integers.test.ts` |
+| Complete redemption quote | `blastRedemptionQuote` | `test/blast-sui-math.test.ts` |
+| SUI at native pool rate, round down | `suiAtRateDown` | `test/blast-sui-math.test.ts` |
+| Pool tokens at native pool rate, round down | `poolTokensAtRateDown` | `test/blast-sui-math.test.ts` |
+| Fun conversion-loss bound, round up | `funConversionLossBoundUp` | `test/blast-sui-math.test.ts` |
+| Pool tokens required for SUI, round up and cap by holdings after checked conversion | `poolTokensForSuiUp` | `test/blast-sui-math.test.ts` |
+
+All atomic protocol inputs and outputs use `bigint`. Contract execution remains
+authoritative, and these helpers do not duplicate mutable admission policy.
 
 ## Event and replay coverage
 
+### Existing launchpad and migrator events
+
 | Frozen event surface | SDK implementation | Verification |
 | --- | --- | --- |
-| 30 wrapped launchpad payloads: `AdminDestroyed`, `AdminGranted`, `AdminRevoked`, `Bought`, `CreatorCapClaimed`, `CreatorFeesClaimed`, `GraduationDefaultsChanged`, `LaunchCreated`, `LaunchTicketCreated`, `LaunchTradeFeesChanged`, `Migrated`, `MigrationWitnessAllowed`, `MigrationWitnessDisallowed`, `PackageAdminCreated`, `PackageVersionAdvanced`, `ProtocolFeesClaimed`, `ProtocolFeeShareChanged`, `ProtocolTreasuryChanged`, `QuoteAllowed`, `QuoteDisallowed`, `QuoteParametersChanged`, `Sold`, `SuperAdminTransferCancelled`, `SuperAdminTransferred`, `SuperAdminTransferStarted`, `UpgradeAuthorized`, `UpgradeCommitted`, `UpgradePolicyRestricted`, `XClaimSignerRevoked`, `XClaimSignerSet` | `launchpadEventSpecs`, `launchpadEventBcs`, `decodeLaunchpadEvent`, `reduceLaunchpadEvent`, including capability, signer, and package-administration projections | `test/launchpad-events.test.ts` compares all names, fields, and types with the ABI artifact and runs every reducer path. |
-| Six direct migrator payloads: `CreatorFeesClaimed`, `LpFeesCollected`, `MigrationCompleted`, `ProtocolFeesClaimed`, `VaultCreated`, `VenueTierUpdated` | `migratorEventSpecs`, `migratorEventBcs`, `decodeMigratorEvent`, `reduceMigratorEvent` | `test/migrator-events.test.ts` compares all names, fields, and types with the ABI artifact and runs every reducer path. |
-| Native event position | checkpoint as `bigint`, transaction digest, and event index in every decoded event | launchpad and migrator identity tests |
-| Ordered product replay | `reduceLaunchpadProductInput` | combined replay reconstructs lifecycle, zero post-migration reserves, launch fees, vault, pool, position, migration, principal, and LP fees |
-| Duplicate replay | event identity maps keyed by transaction digest plus event index; checkpoint is retained as ordering metadata | duplicate and corrected-checkpoint tests require the same projection object |
-| Package publication and created singleton objects | `PackagePublicationFact` with `source: "transactionEffects"` | native-fact test |
-| Current `CreatorCap` owner | `CreatorCapOwnershipFact` with `source: "objectOwnership"` | native-fact test |
-| Returned claim-coin recipients | `ReturnedCoinRecipientsFact` with `source: "transactionEffects"`, keyed per returned coin pair | same-transaction multi-claim native-fact test |
+| 30 wrapped launchpad payloads: `AdminDestroyed`, `AdminGranted`, `AdminRevoked`, `Bought`, `CreatorCapClaimed`, `CreatorFeesClaimed`, `GraduationDefaultsChanged`, `LaunchCreated`, `LaunchTicketCreated`, `LaunchTradeFeesChanged`, `Migrated`, `MigrationWitnessAllowed`, `MigrationWitnessDisallowed`, `PackageAdminCreated`, `PackageVersionAdvanced`, `ProtocolFeesClaimed`, `ProtocolFeeShareChanged`, `ProtocolTreasuryChanged`, `QuoteAllowed`, `QuoteDisallowed`, `QuoteParametersChanged`, `Sold`, `SuperAdminTransferCancelled`, `SuperAdminTransferred`, `SuperAdminTransferStarted`, `UpgradeAuthorized`, `UpgradeCommitted`, `UpgradePolicyRestricted`, `XClaimSignerRevoked`, `XClaimSignerSet` | `launchpadEventSpecs`, `launchpadEventBcs`, `decodeLaunchpadEvent`, `reduceLaunchpadEvent` | `test/launchpad-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
+| Six direct migrator payloads: `CreatorFeesClaimed`, `LpFeesCollected`, `MigrationCompleted`, `ProtocolFeesClaimed`, `VaultCreated`, `VenueTierUpdated` | `migratorEventSpecs`, `migratorEventBcs`, `decodeMigratorEvent`, `reduceMigratorEvent` | `test/migrator-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
+| Ordered launch-to-vault replay | `reduceLaunchpadProductInput` | launchpad and migrator replay tests reconstruct launch lifecycle, reserves, launch fees, migration, vault/pool/position identity, principal, and LP-fee totals. |
+
+### Blast SUI wrapped events
+
+All rows validate the generic `events_wrapper::Event<T>` envelope, current
+emitter package, original payload package, ordered fields/types, native event
+position, and their named reducer path.
+
+| Frozen payload | Typed decoder and projection effect | Verification |
+| --- | --- | --- |
+| `SuperAdminTransferStarted` | `decodeBlastSuiEvent`; pending-transfer projection | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `SuperAdminTransferCancelled` | `decodeBlastSuiEvent`; clears pending transfer | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `SuperAdminTransferred` | `decodeBlastSuiEvent`; active cap identity | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `PackageVersionAdvanced` | `decodeBlastSuiEvent`; package-version projection | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `PackageAdminCreated` | `decodeBlastSuiEvent`; package/publisher/upgrade-cap identity and policy | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `UpgradeAuthorized` | `decodeBlastSuiEvent`; authorization digest/policy fact | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `UpgradeCommitted` | `decodeBlastSuiEvent`; committed-version fact | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `UpgradePolicyRestricted` | `decodeBlastSuiEvent`; previous/new policy fact | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `VaultCreated` | `decodeBlastSuiEvent`; vault/validator/pool/bootstrap/fee/custody discovery | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `FunSuiMinted` | `decodeBlastSuiEvent`; final custody and cumulative mint input | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `FunSuiRedeemed` | `decodeBlastSuiEvent`; final custody and cumulative fun redemption | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `BlastSuiDepositRequested` | `decodeBlastSuiEvent`; receipt lifecycle and principal total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `BlastSuiDepositClaimed` | `decodeBlastSuiEvent`; receipt claim, pool-token, contribution, and shares totals | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `BlastSuiDepositCancelled` | `decodeBlastSuiEvent`; receipt cancellation and returned-SUI total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `BlastSuiDonated` | `decodeBlastSuiEvent`; final custody and donation total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `BlastSuiRedeemed` | `decodeBlastSuiEvent`; final custody and blast/gross/fee/net totals | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `FunYieldSwept` | `decodeBlastSuiEvent`; final custody and swept-yield total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `RedeemFeeChanged` | `decodeBlastSuiEvent`; branded live redeem fee | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `VaultSynced` | `decodeBlastSuiEvent`; final custody and sync count | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `NativeStakeUnwound` | `decodeBlastSuiEvent`; final custody and unwind-only state | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+
+`createBlastSuiProjection` and `reduceBlastSuiInput` replay all 20 kinds,
+replace final custody snapshots, accumulate independent audit totals, and
+deduplicate by transaction digest plus event index. Duplicate replay returns the
+same projection instance.
+
+### Vesting direct events
+
+| Frozen event | Typed decoder and projection effect | Verification |
+| --- | --- | --- |
+| `linear::VestingCreated` | `decodeVestingEvent`; complete linear schedule and active position | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
+| `linear::VestingClaimed` | `decodeVestingEvent`; released total and remaining balance | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
+| `linear::VestingCanceled` | `decodeVestingEvent`; beneficiary/refund conservation and canceled state | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
+| `linear::VestingClosed` | `decodeVestingEvent`; irrevocable terminal state | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
+| `checkpoints::VestingCreated` | `decodeVestingEvent`; checkpoint count and active position, without inventing schedule contents | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
+| `checkpoints::VestingClaimed` | `decodeVestingEvent`; released total and remaining balance | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
+| `checkpoints::VestingCanceled` | `decodeVestingEvent`; beneficiary/refund conservation and canceled state | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
+| `checkpoints::VestingClosed` | `decodeVestingEvent`; irrevocable terminal state | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
+
+`createVestingProjection` and `reduceVestingInput` enforce monotonic release,
+conservation, active-only transitions, and idempotence by transaction digest
+plus event index for both vesting kinds.
+
+### Native facts that events do not prove
+
+| Required fact | Explicit SDK input | Why it is not event-derived | Verification |
+| --- | --- | --- | --- |
+| Native event ordering metadata | `SuiEventPosition` with `checkpoint: bigint`, transaction digest, and event index | Sui provides ordering and replay identity; Blast adds no application sequence. | `test/common-events.test.ts` and every event test |
+| Package publication and created singleton objects | launchpad `PackagePublicationFact`, `source: "transactionEffects"` | Publication/object creation is in transaction effects. | `test/launchpad-events.test.ts` |
+| Current `CreatorCap` owner | launchpad `CreatorCapOwnershipFact`, `source: "objectOwnership"` | Events record issuance, not current ownership. | `test/launchpad-events.test.ts` |
+| Returned launchpad/migrator claim-coin recipients | `ReturnedCoinRecipientsFact`, `source: "transactionEffects"` | Events record amounts, not created coin IDs or recipients. | launchpad/migrator replay tests |
+| Current Blast SUI deposit-receipt owner | `BlastSuiNativeFact` kind `depositReceiptOwnership`, `source: "objectOwnership"` | A request event and `deposit_receipt::keep` do not prove current ownership. | `test/blast-sui-reducer.test.ts` |
+| Blast SUI returned coin IDs and recipients | `BlastSuiNativeFact` kind `returnedCoinRecipient`, `source: "transactionEffects"` | Product events do not identify returned coin objects or recipients. | `test/blast-sui-reducer.test.ts` |
+| Current vesting cancellation-cap owner | `VestingNativeFact` kind `cancelCapOwnership`, `source: "objectOwnership"` | Creation records the cap ID, not subsequent ownership. | `test/vesting-reducer.test.ts` |
+| Checkpoint vesting schedule contents | `VestingNativeFact` kind `checkpointSchedule`, `source: "objectRead"` | `checkpoints::VestingCreated` contains only `checkpoint_count`. | `test/vesting-reducer.test.ts` |
+
+Native facts are stored separately from decoded Blast events and are independently
+deduplicated. Reducers do not infer ownership, returned-object routing,
+publication effects, deletion, or sharing from an event that does not contain
+that fact.
 
 ## Intentional exclusions
 
-- `blast_sui` SDK support is outside this freeze.
-- New vesting event indexing is outside this freeze.
-- Routine administration and package-upgrade builders are outside this freeze.
-- The indexer process, database, API, backend, and frontend wiring are outside
-  this freeze.
-- The SDK registry contains no placeholder deployment IDs.
-- This slice does not change contract logic for SDK convenience.
+| Frozen surface or proposed layer | Status and reason |
+| --- | --- |
+| Launchpad `acl` administration except `sign_in`; all `launch_config` administration; `runtime_config` setters/revocation | Intentional routine-administration exclusion. Product transactions do not need these calls. Their event schemas remain frozen and decoded. |
+| All launchpad `package_admin` functions | Intentional package-upgrade exclusion. Their event schemas remain frozen and decoded. |
+| Bluefin, Cetus, MMT, Turbos, and Full Sail `set_tier` | Intentional routine-administration exclusion. Frontend tier reads are complete. |
+| Blast SUI `acl::{accept_super_admin_transfer,begin_super_admin_transfer,cancel_super_admin_transfer,destroy_retired_super_admin_cap,keep}` | Intentional routine-administration exclusion. Their events remain decoded. |
+| Blast SUI `package_admin::{wrap,authorize_upgrade,commit_upgrade,restrict_to_additive,activate_package_version}` | Intentional package-bootstrap/upgrade exclusion. Their objects and events remain typed. |
+| Blast SUI `vault::set_redeem_fee` | Intentional routine-administration exclusion. The live fee is available in vault state and events. |
+| Blast SUI `vault::create` and `deposit_receipt::create_display` | Intentional deployment-bootstrap exclusions. No deployment transaction is built or executed. |
+| Vesting production functions | No excluded product function: all 14 public functions have composable or high-level builders. |
+| Contract changes for SDK convenience | Excluded. This slice changes no Move logic. |
+| Deployment/publish/upgrade/configuration actions and placeholder IDs | Excluded. The registry has no deployment record or placeholder identity. |
+| Indexer process, database, API, backend, frontend wiring, and duplicated API formulas | Excluded. Protocol arithmetic remains in this SDK. |
 
-## Gates before the indexer and API
+## Remaining work before the indexer and API
 
-1. Publish or upgrade the launchpad and migrator packages. Record real current
-   and original package IDs and every shared-object identity from transaction
-   effects.
-2. Complete the mainnet dev-inspect matrix in
-   `contracts/sui/migrators/DEPENDENCIES.md`. It covers all 15 migrations, all
-   nine fee collections, and both vault claims against published venue code.
-3. Add the approved deployment to `BLAST_DEPLOYMENTS`. Do not add a placeholder
-   entry.
-4. Start the indexer with the typed event inputs and native-fact inputs in this
-   SDK. Persist event identity for idempotence.
-5. Keep protocol arithmetic in this SDK. The API can expose SDK results but
+No Blast V2 contract is deployed for this release, and the SDK has no canonical
+network deployment entry. Before an indexer or API begins:
+
+1. Publish the required packages and generated Meme package through an approved
+   release process. Capture real current/original package IDs and shared-object
+   identities from successful publication effects.
+2. Verify returned, transferred, shared, and deleted object identities from
+   transaction effects, including tickets, capabilities, receipts, vaults, and
+   package-administration objects.
+3. Run live transaction simulation or dev-inspect coverage against the published
+   package generation. Complete the migrator mainnet matrix for all 15 migration
+   routes, all nine fee-collection routes, and both LP-vault claims.
+4. Write normalized deployment records with chain ID, package lineage,
+   transaction digests, shared-object initial versions, custodians, toolchain,
+   source commit, and post-deploy verification. Only then add real entries to
+   `BLAST_DEPLOYMENTS`.
+5. Configure the later indexer to consume the typed event decoders plus explicit
+   native ownership, transaction-effect, and object-read facts. Persist native
+   event identity for idempotence.
+6. Keep protocol arithmetic in this SDK. A later API may expose SDK results but
    must not copy the formulas.
