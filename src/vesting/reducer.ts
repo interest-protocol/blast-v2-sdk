@@ -189,7 +189,7 @@ function updateClaimedPosition(
     position,
     event.payload.released_total,
   );
-  const amount = requireU64("claim amount", event.payload.amount);
+  const amount = requirePositiveU64("claim amount", event.payload.amount);
   if (amount !== delta) {
     throw new RangeError("claim amount must equal the released total delta");
   }
@@ -247,6 +247,9 @@ function updateClosedPosition(
   position: VestingPositionProjection,
   event: Extract<DecodedVestingEvent, { name: "VestingClosed" }>,
 ): VestingPositionProjection {
+  if (position.refundRecipient !== null || position.cancelCapId !== null) {
+    throw new TypeError("only irrevocable vesting can close");
+  }
   const releasedTotal = requireU64(
     "released total",
     event.payload.released_total,

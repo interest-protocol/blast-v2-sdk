@@ -454,6 +454,39 @@ test("rejects cancellation settlement and party mismatches", () => {
   );
 });
 
+test("allows cancellation before any beneficiary release", () => {
+  let projection = reduceVestingInput(
+    createVestingProjection(),
+    event("checkpoints.VestingCreated", {
+      vesting_id: "0x58",
+      coin_type: "0x2::sui::SUI",
+      funder: "0x51",
+      beneficiary: "0x52",
+      refund_recipient: "0x53",
+      cancel_cap_id: "0x54",
+      total_amount: 900n,
+      checkpoint_count: 3n,
+    }),
+  );
+  projection = reduceVestingInput(
+    projection,
+    event("checkpoints.VestingCanceled", {
+      vesting_id: "0x58",
+      coin_type: "0x2::sui::SUI",
+      caller: "0x55",
+      beneficiary: "0x52",
+      refund_recipient: "0x53",
+      beneficiary_amount: 0n,
+      refund_amount: 900n,
+      released_total: 0n,
+    }),
+  );
+  assert.equal(
+    projection.positions[normalizeSuiObjectId("0x58")]?.status,
+    "canceled",
+  );
+});
+
 test("rejects close events that invent an unreplayed release", () => {
   const projection = reduceVestingInput(
     createVestingProjection(),
@@ -471,6 +504,98 @@ test("rejects close events that invent an unreplayed release", () => {
         }),
       ),
     /close must not change released total|remaining balance must be zero/,
+  );
+});
+
+test("rejects a zero-amount claim with no release delta", () => {
+  const projection = reduceVestingInput(
+    createVestingProjection(),
+    linearCreated("0x80", "0x81", 1_000n),
+  );
+  assert.throws(
+    () =>
+      reduceVestingInput(
+        projection,
+        linearClaimed("0x80", "0x81", 0n, 0n, 1_000n),
+      ),
+    /claim amount must be a positive u64/,
+  );
+});
+
+test("rejects close for fully drained cancelable linear vesting", () => {
+  let projection = reduceVestingInput(
+    createVestingProjection(),
+    event("linear.VestingCreated", {
+      vesting_id: "0x90",
+      coin_type: "0x2::sui::SUI",
+      funder: "0x91",
+      beneficiary: "0x92",
+      refund_recipient: "0x93",
+      cancel_cap_id: "0x94",
+      total_amount: 1_000n,
+      start_ms: 100n,
+      cliff_ms: 20n,
+      period_ms: 10n,
+      periods: 10n,
+    }),
+  );
+  projection = reduceVestingInput(
+    projection,
+    linearClaimed("0x90", "0x92", 1_000n, 1_000n, 0n),
+  );
+  assert.throws(
+    () =>
+      reduceVestingInput(
+        projection,
+        event("linear.VestingClosed", {
+          vesting_id: "0x90",
+          coin_type: "0x2::sui::SUI",
+          caller: "0x95",
+          released_total: 1_000n,
+        }),
+      ),
+    /only irrevocable vesting can close/,
+  );
+});
+
+test("rejects close for fully drained cancelable checkpoint vesting", () => {
+  let projection = reduceVestingInput(
+    createVestingProjection(),
+    event("checkpoints.VestingCreated", {
+      vesting_id: "0xa0",
+      coin_type: "0x2::sui::SUI",
+      funder: "0xa1",
+      beneficiary: "0xa2",
+      refund_recipient: "0xa3",
+      cancel_cap_id: "0xa4",
+      total_amount: 900n,
+      checkpoint_count: 3n,
+    }),
+  );
+  projection = reduceVestingInput(
+    projection,
+    event("checkpoints.VestingClaimed", {
+      vesting_id: "0xa0",
+      coin_type: "0x2::sui::SUI",
+      caller: "0xa5",
+      beneficiary: "0xa2",
+      amount: 900n,
+      released_total: 900n,
+      remaining_balance: 0n,
+    }),
+  );
+  assert.throws(
+    () =>
+      reduceVestingInput(
+        projection,
+        event("checkpoints.VestingClosed", {
+          vesting_id: "0xa0",
+          coin_type: "0x2::sui::SUI",
+          caller: "0xa5",
+          released_total: 900n,
+        }),
+      ),
+    /only irrevocable vesting can close/,
   );
 });
 
