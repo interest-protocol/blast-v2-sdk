@@ -8,6 +8,7 @@ import {
   SUI_CLOCK_OBJECT_ID,
 } from "@mysten/sui/utils";
 
+import { suiBalanceBcs, suiUidBcs } from "../lib/bcs.ts";
 import { normalizePositiveU64, requireU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import type { LinearSchedule, VestingCheckpoint } from "./schedules.ts";
@@ -17,12 +18,9 @@ import {
   MAX_CHECKPOINTS,
 } from "./schedules.ts";
 
-const IdBcs = bcs.struct("ID", { bytes: bcs.Address });
-const UidBcs = bcs.struct("UID", { id: IdBcs });
-const BalanceBcs = bcs.struct("Balance", { value: bcs.u64() });
 /** BCS layout of the canonical Sui `Clock`. */
 export const clockBcs = bcs.struct("Clock", {
-  id: UidBcs,
+  id: suiUidBcs,
   timestamp_ms: bcs.u64(),
 });
 
@@ -34,8 +32,8 @@ export const checkpointBcs = bcs.struct("Checkpoint", {
 
 /** BCS layout of `blast_fun_vesting::linear::Vesting<CoinType>`. */
 export const linearVestingBcs = bcs.struct("LinearVesting", {
-  id: UidBcs,
-  balance: BalanceBcs,
+  id: suiUidBcs,
+  balance: suiBalanceBcs,
   beneficiary: bcs.Address,
   cancel_refund_recipient: bcs.option(bcs.Address),
   start_ms: bcs.u64(),
@@ -47,8 +45,8 @@ export const linearVestingBcs = bcs.struct("LinearVesting", {
 
 /** BCS layout of `blast_fun_vesting::checkpoints::Vesting<CoinType>`. */
 export const checkpointVestingBcs = bcs.struct("CheckpointVesting", {
-  id: UidBcs,
-  balance: BalanceBcs,
+  id: suiUidBcs,
+  balance: suiBalanceBcs,
   beneficiary: bcs.Address,
   cancel_refund_recipient: bcs.option(bcs.Address),
   checkpoints: bcs.vector(checkpointBcs),
@@ -123,7 +121,7 @@ export function decodeVestingObject(
 
   if (tag.module === "linear") {
     const parsed = linearVestingBcs.parse(object.content);
-    assertUid(objectId, parsed.id.id.bytes);
+    assertUid(objectId, parsed.id.id);
     const balance = BigInt(parsed.balance.value);
     const released = BigInt(parsed.released);
     requireU64("totalAmount", balance + released);
@@ -151,7 +149,7 @@ export function decodeVestingObject(
   }
 
   const parsed = checkpointVestingBcs.parse(object.content);
-  assertUid(objectId, parsed.id.id.bytes);
+  assertUid(objectId, parsed.id.id);
   const balance = BigInt(parsed.balance.value);
   const released = BigInt(parsed.released);
   requireU64("totalAmount", balance + released);
@@ -230,7 +228,7 @@ export async function getCurrentTimestampMs(
   }
   const parsed = clockBcs.parse(object.content);
   if (
-    normalizeSuiObjectId(parsed.id.id.bytes) !==
+    normalizeSuiObjectId(parsed.id.id) !==
     normalizeSuiObjectId(SUI_CLOCK_OBJECT_ID)
   ) {
     throw new TypeError("Sui Clock has a mismatched UID");

@@ -14,14 +14,14 @@ import {
 const objectId = "0xc";
 const poolId = "0xd";
 const originalPackageId = "0x321";
-const uid = (id: string) => ({ id: { bytes: id } });
+const uid = (id: string) => ({ id });
 const balance = (value: bigint) => ({ value });
 
 function serializeVault(id = objectId): Uint8Array {
   return lpVaultBcs
     .serialize({
       id: uid(id),
-      pool_id: { bytes: poolId },
+      pool_id: poolId,
       fee_ledger: {
         protocol_meme: balance(1n),
         creator_meme: balance(2n),

@@ -2,12 +2,13 @@ import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import {
-  normalizeStructTag,
   normalizeSuiAddress,
   normalizeSuiObjectId,
   parseStructTag,
 } from "@mysten/sui/utils";
-import type { LaunchpadEventPosition } from "../launchpad/events.ts";
+import { moveTypeNameBcs, suiIdBcs } from "../lib/bcs.ts";
+import type { SuiEventPosition } from "../lib/events.ts";
+import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
 import { requireU64, requireU128 } from "../lib/integers.ts";
 
 type MigratorEventFieldDescriptor =
@@ -137,30 +138,12 @@ const AddressBcs = bcs.Address.transform({
   input: (value: string) => normalizeSuiAddress(value),
   output: (value) => normalizeSuiAddress(value),
 });
-const IdBcs = bcs.struct("ID", { bytes: bcs.Address }).transform({
-  input: (value: string) => ({ bytes: normalizeSuiObjectId(value) }),
-  output: (value) => normalizeSuiObjectId(value.bytes),
-});
-const TypeNameBcs = bcs
-  .struct("TypeName", {
-    name: bcs.struct("AsciiString", { bytes: bcs.vector(bcs.u8()) }),
-  })
-  .transform({
-    input: (value: string) => ({
-      name: { bytes: Array.from(new TextEncoder().encode(value)) },
-    }),
-    output: (value) =>
-      normalizeStructTag(
-        new TextDecoder().decode(Uint8Array.from(value.name.bytes)),
-      ),
-  });
-
 const MIGRATOR_EVENT_FIELD_BCS: Record<
   MigratorEventFieldDescriptor,
   BcsType<unknown, unknown>
 > = {
-  id: IdBcs as BcsType<unknown, unknown>,
-  typeName: TypeNameBcs as BcsType<unknown, unknown>,
+  id: suiIdBcs as BcsType<unknown, unknown>,
+  typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
   address: AddressBcs as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,
   u128: U128Bcs as BcsType<unknown, unknown>,
@@ -198,7 +181,7 @@ type DecodedMigratorEventBase = {
   source: "migrators";
   emitterPackageId: string;
   sender: string;
-  position: LaunchpadEventPosition;
+  position: SuiEventPosition;
 };
 
 export type DecodedMigratorEvent = {
@@ -230,23 +213,6 @@ export function decodeMigratorEvent(
   ) {
     throw new TypeError("migrator event has an unexpected event package");
   }
-  if (event.checkpoint === null) {
-    throw new TypeError("migrator event requires checkpoint metadata");
-  }
-  let checkpoint: bigint;
-  try {
-    checkpoint = BigInt(event.checkpoint);
-  } catch {
-    throw new TypeError("migrator event checkpoint must be a u64");
-  }
-  requireU64("migrator event checkpoint", checkpoint);
-  if (!Number.isSafeInteger(event.eventIndex) || event.eventIndex < 0) {
-    throw new RangeError("migrator event index must be a non-negative integer");
-  }
-  if (!event.transactionDigest) {
-    throw new TypeError("migrator event transaction digest is required");
-  }
-
   const kind = tag.name as MigratorEventKind;
   return {
     source: "migrators",
@@ -254,15 +220,10 @@ export function decodeMigratorEvent(
     payload: migratorEventBcs[kind].parse(event.bcs),
     emitterPackageId: currentPackageId,
     sender: normalizeSuiAddress(event.sender),
-    position: {
-      checkpoint,
-      transactionDigest: event.transactionDigest,
-      eventIndex: event.eventIndex,
-    },
+    position: normalizeSuiEventPosition(event),
   } as DecodedMigratorEvent;
 }
 
 export function migratorEventId(event: DecodedMigratorEvent): string {
-  const { transactionDigest, eventIndex } = event.position;
-  return `${transactionDigest}:${eventIndex}`;
+  return suiEventId(event.position);
 }

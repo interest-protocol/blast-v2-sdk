@@ -7,18 +7,12 @@ import {
   parseStructTag,
 } from "@mysten/sui/utils";
 
+import { moveTypeNameBcs, suiBalanceBcs, suiUidBcs } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
 import type { CurveState } from "./curve.ts";
 import type { SharedObjectReference } from "./transactions.ts";
 
-const IdBcs = bcs.struct("ID", { bytes: bcs.Address });
-const UidBcs = bcs.struct("UID", { id: IdBcs });
 const BpsBcs = bcs.struct("Bps", { value: bcs.u64() });
-const BalanceBcs = bcs.struct("Balance", { value: bcs.u64() });
-const AsciiStringBcs = bcs.struct("AsciiString", {
-  bytes: bcs.vector(bcs.u8()),
-});
-const TypeNameBcs = bcs.struct("TypeName", { name: AsciiStringBcs });
 const LifecycleBcs = bcs.enum("Lifecycle", {
   Live: null,
   MigrationReady: null,
@@ -31,17 +25,17 @@ const CreatorIdentityBcs = bcs.enum("CreatorIdentity", {
 const CreatorAuthorityBcs = bcs.struct("CreatorAuthority", {
   identity: CreatorIdentityBcs,
 });
-const MetadataCapBcs = bcs.struct("MetadataCap", { id: UidBcs });
+const MetadataCapBcs = bcs.struct("MetadataCap", { id: suiUidBcs });
 const FeeLedgerBcs = bcs.struct("FeeLedger", {
-  protocol_meme: BalanceBcs,
-  creator_meme: BalanceBcs,
-  protocol_quote: BalanceBcs,
-  creator_quote: BalanceBcs,
+  protocol_meme: suiBalanceBcs,
+  creator_meme: suiBalanceBcs,
+  protocol_quote: suiBalanceBcs,
+  creator_quote: suiBalanceBcs,
 });
 
 /** BCS layout of `blast_fun::launch::Launch<Meme, Quote>`. */
 export const launchBcs = bcs.struct("Launch", {
-  id: UidBcs,
+  id: suiUidBcs,
   lifecycle: LifecycleBcs,
   sell_burn_bps: BpsBcs,
   virtual_quote: bcs.u64(),
@@ -51,12 +45,12 @@ export const launchBcs = bcs.struct("Launch", {
   quote_migration_fee_bps: BpsBcs,
   protocol_meme_graduation_fee_bps: BpsBcs,
   meme_liquidity_provision_bps: BpsBcs,
-  migration_witness: TypeNameBcs,
-  meme_reserve: BalanceBcs,
-  real_quote_reserve: BalanceBcs,
-  pending_burn: BalanceBcs,
-  protocol_meme_graduation_fee: BalanceBcs,
-  meme_liquidity_provision: BalanceBcs,
+  migration_witness: moveTypeNameBcs,
+  meme_reserve: suiBalanceBcs,
+  real_quote_reserve: suiBalanceBcs,
+  pending_burn: suiBalanceBcs,
+  protocol_meme_graduation_fee: suiBalanceBcs,
+  meme_liquidity_provision: suiBalanceBcs,
   fee_ledger: FeeLedgerBcs,
   metadata_cap: bcs.option(MetadataCapBcs),
   creator_authority: bcs.option(CreatorAuthorityBcs),
@@ -125,14 +119,14 @@ export function decodeLaunchObject(
   if (object.mutable !== true) {
     throw new TypeError(`launch ${object.objectId} must be mutable`);
   }
-  if (normalizeSuiObjectId(parsed.id.id.bytes) !== objectId) {
+  if (normalizeSuiObjectId(parsed.id.id) !== objectId) {
     throw new TypeError(`launch ${object.objectId} has a mismatched UID`);
   }
 
   const memeType = normalizeTypeParameter(tag.typeParams[0]);
   const quoteType = normalizeTypeParameter(tag.typeParams[1]);
   const metadataCapId = parsed.metadata_cap
-    ? normalizeSuiObjectId(parsed.metadata_cap.id.id.bytes)
+    ? normalizeSuiObjectId(parsed.metadata_cap.id.id)
     : null;
 
   return {
@@ -154,9 +148,7 @@ export function decodeLaunchObject(
     memeLiquidityProvisionBps: toBigInt(
       parsed.meme_liquidity_provision_bps.value,
     ),
-    migrationWitnessType: normalizeStructTag(
-      decodeTypeName(parsed.migration_witness.name.bytes),
-    ),
+    migrationWitnessType: parsed.migration_witness,
     memeReserve: toBigInt(parsed.meme_reserve.value),
     realQuoteReserve: toBigInt(parsed.real_quote_reserve.value),
     pendingBurn: toBigInt(parsed.pending_burn.value),
@@ -216,12 +208,6 @@ function decodeCreatorIdentity(
   };
 }
 
-function decodeTypeName(bytes: readonly number[]): string {
-  return new TextDecoder("ascii", { fatal: true }).decode(
-    Uint8Array.from(bytes),
-  );
-}
-
 function normalizeTypeParameter(
   type: ReturnType<typeof parseStructTag>["typeParams"][number] | undefined,
 ): string {
@@ -229,6 +215,6 @@ function normalizeTypeParameter(
   return typeof type === "string" ? type : normalizeStructTag(type);
 }
 
-function toBigInt(value: string): bigint {
+function toBigInt(value: string | bigint): bigint {
   return BigInt(value);
 }

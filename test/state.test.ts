@@ -14,15 +14,9 @@ const metadataCapId = "0xd";
 const creator = "0xe";
 const migrationWitness = `${"0".repeat(63)}b::adapter::WITNESS`;
 
-const uid = (id: string) => ({ id: { bytes: id } });
+const uid = (id: string) => ({ id });
 const balance = (value: bigint) => ({ value });
 const bps = (value: bigint) => ({ value });
-
-function typeName(value: string) {
-  return {
-    name: { bytes: Array.from(new TextEncoder().encode(value)) },
-  };
-}
 
 function serializeLaunch(id = objectId): Uint8Array {
   return launchBcs
@@ -37,7 +31,7 @@ function serializeLaunch(id = objectId): Uint8Array {
       quote_migration_fee_bps: bps(75n),
       protocol_meme_graduation_fee_bps: bps(50n),
       meme_liquidity_provision_bps: bps(2_000n),
-      migration_witness: typeName(migrationWitness),
+      migration_witness: migrationWitness,
       meme_reserve: balance(800_000n),
       real_quote_reserve: balance(500n),
       pending_burn: balance(11n),

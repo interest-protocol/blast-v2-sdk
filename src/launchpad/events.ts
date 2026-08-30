@@ -2,12 +2,14 @@ import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import {
-  normalizeStructTag,
   normalizeSuiAddress,
   normalizeSuiObjectId,
   parseStructTag,
 } from "@mysten/sui/utils";
 
+import { moveTypeNameBcs, suiIdBcs } from "../lib/bcs.ts";
+import type { SuiEventPosition } from "../lib/events.ts";
+import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
 import { requireU64 } from "../lib/integers.ts";
 
 type EventFieldDescriptor =
@@ -276,22 +278,6 @@ const AddressBcs = bcs.Address.transform({
   input: (value: string) => normalizeSuiAddress(value),
   output: (value) => normalizeSuiAddress(value),
 });
-const IdBcs = bcs.struct("ID", { bytes: bcs.Address }).transform({
-  input: (value: string) => ({ bytes: normalizeSuiObjectId(value) }),
-  output: (value) => normalizeSuiObjectId(value.bytes),
-});
-const AsciiStringBcs = bcs.struct("AsciiString", {
-  bytes: bcs.vector(bcs.u8()),
-});
-const TypeNameBcs = bcs.struct("TypeName", { name: AsciiStringBcs }).transform({
-  input: (value: string) => ({
-    name: { bytes: Array.from(new TextEncoder().encode(value)) },
-  }),
-  output: (value) =>
-    normalizeStructTag(
-      new TextDecoder().decode(Uint8Array.from(value.name.bytes)),
-    ),
-});
 const BytesBcs = bcs.vector(bcs.u8()).transform({
   input: (value: Uint8Array) => Array.from(value),
   output: (value) => Uint8Array.from(value),
@@ -301,8 +287,8 @@ const EVENT_FIELD_BCS: Record<
   EventFieldDescriptor,
   BcsType<unknown, unknown>
 > = {
-  id: IdBcs as BcsType<unknown, unknown>,
-  typeName: TypeNameBcs as BcsType<unknown, unknown>,
+  id: suiIdBcs as BcsType<unknown, unknown>,
+  typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
   address: AddressBcs as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,
   u8: bcs.u8() as BcsType<unknown, unknown>,
@@ -340,11 +326,7 @@ export type LaunchpadEventPackageIdentity = {
   originalPackageId: string;
 };
 
-export type LaunchpadEventPosition = {
-  checkpoint: bigint;
-  transactionDigest: string;
-  eventIndex: number;
-};
+export type LaunchpadEventPosition = SuiEventPosition;
 
 type DecodedLaunchpadEventBase = {
   source: "launchpad";
@@ -393,25 +375,6 @@ export function decodeLaunchpadEvent(
     throw new TypeError("launchpad event has an unexpected payload type");
   }
 
-  if (event.checkpoint === null) {
-    throw new TypeError("launchpad event requires checkpoint metadata");
-  }
-  let checkpoint: bigint;
-  try {
-    checkpoint = BigInt(event.checkpoint);
-  } catch {
-    throw new TypeError("launchpad event checkpoint must be a u64");
-  }
-  requireU64("launchpad event checkpoint", checkpoint);
-  if (!Number.isSafeInteger(event.eventIndex) || event.eventIndex < 0) {
-    throw new RangeError(
-      "launchpad event index must be a non-negative integer",
-    );
-  }
-  if (!event.transactionDigest) {
-    throw new TypeError("launchpad event transaction digest is required");
-  }
-
   const kind = payloadTag.name as LaunchpadEventKind;
   const payload = launchpadEventBcs[kind].parse(event.bcs);
   return {
@@ -420,15 +383,10 @@ export function decodeLaunchpadEvent(
     payload,
     emitterPackageId: currentPackageId,
     sender: normalizeSuiAddress(event.sender),
-    position: {
-      checkpoint,
-      transactionDigest: event.transactionDigest,
-      eventIndex: event.eventIndex,
-    },
+    position: normalizeSuiEventPosition(event),
   } as DecodedLaunchpadEvent;
 }
 
 export function launchpadEventId(event: DecodedLaunchpadEvent): string {
-  const { transactionDigest, eventIndex } = event.position;
-  return `${transactionDigest}:${eventIndex}`;
+  return suiEventId(event.position);
 }

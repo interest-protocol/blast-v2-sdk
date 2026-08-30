@@ -5,6 +5,8 @@ import {
   createLaunchpadEventProjection,
   reduceLaunchpadEvent,
 } from "../launchpad/reducer.ts";
+import type { NativeTransactionPosition } from "../lib/events.ts";
+import { normalizeNativeTransactionPosition } from "../lib/events.ts";
 import { requireU64 } from "../lib/integers.ts";
 import type { DecodedMigratorEvent, MigratorEventKind } from "./events.ts";
 import { migratorEventId, migratorEventSpecs } from "./events.ts";
@@ -49,10 +51,7 @@ export type MigratorEventProjection = {
   >;
 };
 
-export type NativeTransactionPosition = {
-  checkpoint: bigint;
-  transactionDigest: string;
-};
+export type { NativeTransactionPosition } from "../lib/events.ts";
 
 export type PackagePublicationFact = {
   source: "transactionEffects";
@@ -322,10 +321,14 @@ function normalizeNativeFact(
       owner: normalizeSuiAddress(fact.owner),
     };
   }
-  requireNativePosition(fact.position);
+  const position = normalizeNativeTransactionPosition(
+    fact.position,
+    "native fact",
+  );
   if (fact.kind === "packagePublication") {
     return {
       ...fact,
+      position,
       packageId: normalizeSuiObjectId(fact.packageId),
       createdObjectIds: fact.createdObjectIds.map((id) =>
         normalizeSuiObjectId(id),
@@ -334,6 +337,7 @@ function normalizeNativeFact(
   }
   return {
     ...fact,
+    position,
     memeCoin: {
       objectId: normalizeSuiObjectId(fact.memeCoin.objectId),
       recipient: normalizeSuiAddress(fact.memeCoin.recipient),
@@ -343,13 +347,6 @@ function normalizeNativeFact(
       recipient: normalizeSuiAddress(fact.quoteCoin.recipient),
     },
   };
-}
-
-function requireNativePosition(position: NativeTransactionPosition): void {
-  requireU64("native fact checkpoint", position.checkpoint);
-  if (!position.transactionDigest) {
-    throw new TypeError("native fact transaction digest is required");
-  }
 }
 
 function nativeFactId(fact: NativeReconstructionFact): string {

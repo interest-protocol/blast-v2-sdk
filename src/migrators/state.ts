@@ -8,24 +8,22 @@ import {
   parseStructTag,
 } from "@mysten/sui/utils";
 
+import { suiBalanceBcs, suiIdBcs, suiUidBcs } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 
-const IdBcs = bcs.struct("ID", { bytes: bcs.Address });
-const UidBcs = bcs.struct("UID", { id: IdBcs });
-const BalanceBcs = bcs.struct("Balance", { value: bcs.u64() });
 const FeeLedgerBcs = bcs.struct("FeeLedger", {
-  protocol_meme: BalanceBcs,
-  creator_meme: BalanceBcs,
-  protocol_quote: BalanceBcs,
-  creator_quote: BalanceBcs,
+  protocol_meme: suiBalanceBcs,
+  creator_meme: suiBalanceBcs,
+  protocol_quote: suiBalanceBcs,
+  creator_quote: suiBalanceBcs,
 });
 const TierKeyBcs = bcs.struct("TierKey", {});
 
 /** BCS layout of `blast_fun_migrators::vault::LpVault<Meme, Quote>`. */
 export const lpVaultBcs = bcs.struct("LpVault", {
-  id: UidBcs,
-  pool_id: IdBcs,
+  id: suiUidBcs,
+  pool_id: suiIdBcs,
   fee_ledger: FeeLedgerBcs,
 });
 
@@ -104,7 +102,7 @@ export function decodeLpVaultObject(
 
   const parsed = lpVaultBcs.parse(object.content);
   const objectId = normalizeSuiObjectId(object.objectId);
-  if (normalizeSuiObjectId(parsed.id.id.bytes) !== objectId) {
+  if (normalizeSuiObjectId(parsed.id.id) !== objectId) {
     throw new TypeError(`LP vault ${object.objectId} has a mismatched UID`);
   }
 
@@ -117,7 +115,7 @@ export function decodeLpVaultObject(
     mutable: true,
     memeType: normalizeTypeParameter(tag.typeParams[0]!),
     quoteType: normalizeTypeParameter(tag.typeParams[1]!),
-    poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
+    poolId: normalizeSuiObjectId(parsed.pool_id),
     protocolMemeFees: BigInt(parsed.fee_ledger.protocol_meme.value),
     creatorMemeFees: BigInt(parsed.fee_ledger.creator_meme.value),
     protocolQuoteFees: BigInt(parsed.fee_ledger.protocol_quote.value),
