@@ -10,6 +10,7 @@ import {
 import { suiObjectIdBcs } from "../lib/bcs.ts";
 import type { SuiEventPosition } from "../lib/events.ts";
 import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
+import type { BasisPoints } from "../lib/integers.ts";
 import { requireBasisPoints, requireU64 } from "../lib/integers.ts";
 
 type BlastSuiEventFieldDescriptor =
@@ -158,19 +159,35 @@ export type VaultCustodyEvent = {
 };
 
 type DescriptorOutput<Descriptor extends BlastSuiEventFieldDescriptor> =
-  Descriptor extends "u64" | "basisPoints"
+  Descriptor extends "u64"
     ? bigint
-    : Descriptor extends "u8"
-      ? number
-      : Descriptor extends "bytes"
-        ? Uint8Array
-        : Descriptor extends "vaultCustody"
-          ? VaultCustodyEvent
-          : string;
+    : Descriptor extends "basisPoints"
+      ? BasisPoints
+      : Descriptor extends "u8"
+        ? number
+        : Descriptor extends "bytes"
+          ? Uint8Array
+          : Descriptor extends "vaultCustody"
+            ? VaultCustodyEvent
+            : string;
+
+type DescriptorInput<Descriptor extends BlastSuiEventFieldDescriptor> =
+  Descriptor extends "basisPoints" ? bigint : DescriptorOutput<Descriptor>;
 
 export type BlastSuiEventPayloads = {
   [Kind in BlastSuiEventKind]: {
     [Field in keyof (typeof blastSuiEventSpecs)[Kind]]: DescriptorOutput<
+      Extract<
+        (typeof blastSuiEventSpecs)[Kind][Field],
+        BlastSuiEventFieldDescriptor
+      >
+    >;
+  };
+};
+
+type BlastSuiEventPayloadInputs = {
+  [Kind in BlastSuiEventKind]: {
+    [Field in keyof (typeof blastSuiEventSpecs)[Kind]]: DescriptorInput<
       Extract<
         (typeof blastSuiEventSpecs)[Kind][Field],
         BlastSuiEventFieldDescriptor
@@ -185,8 +202,7 @@ const U64Bcs = bcs.u64().transform({
 });
 const BasisPointsBcs = bcs.u64().transform({
   input: (value: bigint) => requireBasisPoints("event basis points", value),
-  output: (value) =>
-    requireBasisPoints("event basis points", BigInt(value)) as bigint,
+  output: (value) => requireBasisPoints("event basis points", BigInt(value)),
 });
 const AddressBcs = bcs.Address.transform({
   input: (value: string) => normalizeSuiAddress(value),
@@ -234,7 +250,7 @@ const BLAST_SUI_EVENT_FIELD_BCS: Record<
 type BlastSuiEventBcsMap = {
   [Kind in BlastSuiEventKind]: BcsType<
     BlastSuiEventPayloads[Kind],
-    BlastSuiEventPayloads[Kind]
+    BlastSuiEventPayloadInputs[Kind]
   >;
 };
 

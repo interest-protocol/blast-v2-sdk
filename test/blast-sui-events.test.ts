@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
@@ -15,7 +16,11 @@ import {
   blastSuiEventId,
   blastSuiEventSpecs,
   decodeBlastSuiEvent,
+  exchangeRateEventBcs,
+  poolCustodyEventBcs,
+  vaultCustodyEventBcs,
 } from "../src/blast-sui/index.ts";
+import type { BasisPoints } from "../src/lib/integers.ts";
 
 const packages: BlastSuiEventPackageIdentity = {
   packageId: "0x123",
@@ -43,6 +48,10 @@ const custody = {
   fun_supply: 41n,
   blast_supply: 42n,
 };
+
+type BlastSuiEventPayloadInput<Kind extends BlastSuiEventKind> = Parameters<
+  (typeof blastSuiEventBcs)[Kind]["serialize"]
+>[0];
 
 const fixtures = [
   {
@@ -174,7 +183,7 @@ const fixtures = [
   {
     [Kind in BlastSuiEventKind]: {
       kind: Kind;
-      payload: BlastSuiEventPayloads[Kind];
+      payload: BlastSuiEventPayloadInput<Kind>;
     };
   }[BlastSuiEventKind]
 >;
@@ -205,7 +214,56 @@ test("matches the complete frozen blast_sui event inventory", () => {
 
   assert.deepEqual(Object.keys(blastSuiEventSpecs), expectedNames);
   assert.equal(fixtures.length, 20);
-  assert.deepEqual(normalizedSpecTypes(), frozenEventTypes());
+  assert.deepEqual(normalizedSpecFields(), frozenEventFields());
+});
+
+test("matches ordered nested custody fields and BCS layout", () => {
+  assert.deepEqual(frozenNestedFields(), {
+    PoolCustody: [
+      ["liquid_sui", "u64"],
+      ["pending_sui", "u64"],
+      ["active_pool_tokens", "u64"],
+      ["active_sui", "u64"],
+    ],
+    ExchangeRate: [
+      ["epoch", "u64"],
+      ["sui_amount", "u64"],
+      ["pool_token_amount", "u64"],
+    ],
+    VaultCustody: [
+      ["fun_custody", "poolCustody"],
+      ["blast_custody", "poolCustody"],
+      ["exchange_rate", "exchangeRate"],
+      ["fun_supply", "u64"],
+      ["blast_supply", "u64"],
+    ],
+  });
+  assert.deepEqual(
+    poolCustodyEventBcs.serialize(custody.fun_custody).toBytes(),
+    serializedU64s([11n, 12n, 13n, 14n]),
+  );
+  assert.deepEqual(
+    exchangeRateEventBcs.serialize(custody.exchange_rate).toBytes(),
+    serializedU64s([31n, 32n, 33n]),
+  );
+  assert.deepEqual(
+    vaultCustodyEventBcs.serialize(custody).toBytes(),
+    serializedU64s([
+      11n,
+      12n,
+      13n,
+      14n,
+      21n,
+      22n,
+      23n,
+      24n,
+      31n,
+      32n,
+      33n,
+      41n,
+      42n,
+    ]),
+  );
 });
 
 test("decodes every wrapped blast_sui event payload", () => {
@@ -326,6 +384,31 @@ test("rejects malformed BCS and invalid native event metadata", () => {
 });
 
 test("validates all redeem-fee basis-point fields", () => {
+  const boundaryEvent = decodeBlastSuiEvent(
+    suiEvent(
+      "RedeemFeeChanged",
+      { old_redeem_fee_bps: 0n, new_redeem_fee_bps: 10_000n },
+      0,
+    ),
+    packages,
+  );
+  if (boundaryEvent.kind !== "RedeemFeeChanged") {
+    throw new TypeError("expected RedeemFeeChanged");
+  }
+  acceptsBasisPoints(boundaryEvent.payload.old_redeem_fee_bps);
+  acceptsBasisPoints(boundaryEvent.payload.new_redeem_fee_bps);
+  assert.equal(boundaryEvent.payload.old_redeem_fee_bps, 0n);
+  assert.equal(boundaryEvent.payload.new_redeem_fee_bps, 10_000n);
+
+  const vaultCreatedEvent = decodeBlastSuiEvent(
+    suiEvent("VaultCreated", fixtures[18].payload, 0),
+    packages,
+  );
+  if (vaultCreatedEvent.kind !== "VaultCreated") {
+    throw new TypeError("expected VaultCreated");
+  }
+  acceptsBasisPoints(vaultCreatedEvent.payload.redeem_fee_bps);
+
   assert.throws(() =>
     blastSuiEventBcs.RedeemFeeChanged.serialize({
       old_redeem_fee_bps: 10_001n,
@@ -371,9 +454,13 @@ test("validates all redeem-fee basis-point fields", () => {
 
 function suiEvent<Kind extends BlastSuiEventKind>(
   kind: Kind,
-  payload: BlastSuiEventPayloads[Kind],
+  payload: BlastSuiEventPayloadInput<Kind>,
   eventIndex: number,
 ): SuiClientTypes.EventEntry {
+  const schema = blastSuiEventBcs[kind] as unknown as BcsType<
+    unknown,
+    BlastSuiEventPayloadInput<Kind>
+  >;
   return {
     packageId: packages.packageId,
     module: "events_wrapper",
@@ -383,7 +470,7 @@ function suiEvent<Kind extends BlastSuiEventKind>(
       packages.originalPackageId,
       packages.originalPackageId,
     ),
-    bcs: blastSuiEventBcs[kind].serialize(payload).toBytes(),
+    bcs: schema.serialize(payload).toBytes(),
     json: null,
     checkpoint: "9",
     transactionDigest: `transaction-${eventIndex}`,
@@ -401,7 +488,7 @@ function wrappedType(
 
 function normalizePayload<Kind extends BlastSuiEventKind>(
   kind: Kind,
-  payload: BlastSuiEventPayloads[Kind],
+  payload: BlastSuiEventPayloadInput<Kind>,
 ): BlastSuiEventPayloads[Kind] {
   const spec = blastSuiEventSpecs[kind];
   return Object.fromEntries(
@@ -416,21 +503,58 @@ function normalizePayload<Kind extends BlastSuiEventKind>(
   ) as BlastSuiEventPayloads[Kind];
 }
 
-function normalizedSpecTypes(): Record<string, Record<string, string>> {
+function normalizedSpecFields(): Record<string, Array<[string, string]>> {
   return Object.fromEntries(
     Object.entries(blastSuiEventSpecs).map(([name, spec]) => [
       name,
-      Object.fromEntries(
-        Object.entries(spec).map(([field, descriptor]) => [
-          field,
-          descriptor === "basisPoints" ? "u64" : descriptor,
-        ]),
+      Object.entries(spec).map(
+        ([field, descriptor]) =>
+          [field, descriptor === "basisPoints" ? "u64" : descriptor] as [
+            string,
+            string,
+          ],
       ),
     ]),
   );
 }
 
-function frozenEventTypes(): Record<string, Record<string, string>> {
+function frozenEventFields(): Record<string, Array<[string, string]>> {
+  return Object.fromEntries(
+    readFrozenEventsModule().events.map((event) => [
+      event.name,
+      event.fields.map(
+        (field) =>
+          [field.name, normalizedAbiType(field.type)] as [string, string],
+      ),
+    ]),
+  );
+}
+
+function frozenNestedFields(): Record<string, Array<[string, string]>> {
+  const nestedNames = new Set(["PoolCustody", "ExchangeRate", "VaultCustody"]);
+  return Object.fromEntries(
+    readFrozenEventsModule()
+      .structs.filter((struct) => nestedNames.has(struct.name))
+      .map((struct) => [
+        struct.name,
+        struct.fields.map(
+          (field) =>
+            [field.name, normalizedAbiType(field.type)] as [string, string],
+        ),
+      ]),
+  );
+}
+
+function readFrozenEventsModule(): {
+  events: Array<{
+    name: string;
+    fields: Array<{ name: string; type: unknown }>;
+  }>;
+  structs: Array<{
+    name: string;
+    fields: Array<{ name: string; type: unknown }>;
+  }>;
+} {
   const artifact = JSON.parse(
     readFileSync(
       new URL("../abi/production-blast-sui-v1.json", import.meta.url),
@@ -445,22 +569,16 @@ function frozenEventTypes(): Record<string, Record<string, string>> {
               name: string;
               fields: Array<{ name: string; type: unknown }>;
             }>;
+            structs: Array<{
+              name: string;
+              fields: Array<{ name: string; type: unknown }>;
+            }>;
           };
         };
       };
     };
   };
-  return Object.fromEntries(
-    artifact.packages.blastSui.modules.events.events.map((event) => [
-      event.name,
-      Object.fromEntries(
-        event.fields.map((field) => [
-          field.name,
-          normalizedAbiType(field.type),
-        ]),
-      ),
-    ]),
-  );
+  return artifact.packages.blastSui.modules.events;
 }
 
 function normalizedAbiType(type: unknown): string {
@@ -472,6 +590,8 @@ function normalizedAbiType(type: unknown): string {
     throw new TypeError("unsupported ABI datatype field");
   if (datatype.name === "ID") return "id";
   if (datatype.name === "VaultCustody") return "vaultCustody";
+  if (datatype.name === "PoolCustody") return "poolCustody";
+  if (datatype.name === "ExchangeRate") return "exchangeRate";
   throw new TypeError(
     `unsupported ABI event datatype: ${String(datatype.name)}`,
   );
@@ -480,3 +600,11 @@ function normalizedAbiType(type: unknown): string {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
+
+function serializedU64s(values: readonly bigint[]): Uint8Array {
+  return Uint8Array.from(
+    values.flatMap((value) => Array.from(bcs.u64().serialize(value).toBytes())),
+  );
+}
+
+function acceptsBasisPoints(_value: BasisPoints): void {}
