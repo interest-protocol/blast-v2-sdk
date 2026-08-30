@@ -345,6 +345,36 @@ test("binds receipt events to their discovered vault and principal", () => {
       ),
     /vault.*does not match/,
   );
+  const appliedEventIdsBeforeWrongPool = discovered.appliedEventIds;
+  const totalsBeforeWrongPool = discovered.totals;
+  const receiptsBeforeWrongPool = discovered.receipts;
+  const custodyBeforeWrongPool = discovered.latestCustody;
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(
+        discovered,
+        event("BlastSuiDepositRequested", {
+          receipt_id: firstReceiptId,
+          vault_id: vaultId,
+          pool_id: normalizeSuiObjectId("0x99"),
+          principal_sui: 70n,
+          activation_epoch: 9n,
+          custody: custody(42),
+        }),
+      ),
+    /pool.*does not match/,
+  );
+  assert.strictEqual(
+    discovered.appliedEventIds,
+    appliedEventIdsBeforeWrongPool,
+  );
+  assert.strictEqual(discovered.totals, totalsBeforeWrongPool);
+  assert.strictEqual(discovered.receipts, receiptsBeforeWrongPool);
+  assert.strictEqual(discovered.latestCustody, custodyBeforeWrongPool);
+  assert.equal(Object.keys(discovered.appliedEventIds).length, 1);
+  assert.equal(discovered.eventCounts.BlastSuiDepositRequested, 0);
+  assert.equal(discovered.totals.depositPrincipalSui, 0n);
+  assert.equal(discovered.receipts[firstReceiptId], undefined);
 
   const requested = reduceBlastSuiInput(
     discovered,
@@ -354,7 +384,7 @@ test("binds receipt events to their discovered vault and principal", () => {
       pool_id: normalizeSuiObjectId("0x5"),
       principal_sui: 70n,
       activation_epoch: 9n,
-      custody: custody(42),
+      custody: custody(43),
     }),
   );
   for (const mismatch of [
@@ -371,7 +401,7 @@ test("binds receipt events to their discovered vault and principal", () => {
             contributed_sui: 65n,
             pool_tokens: 60n,
             blast_out: 55n,
-            custody: custody(43),
+            custody: custody(44),
           }),
         ),
       /vault.*does not match|principal.*does not match/,

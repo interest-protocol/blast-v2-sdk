@@ -552,9 +552,12 @@ function validateBlastSuiEvent(
 
 function validateDepositRequest(
   state: BlastSuiProjection,
-  payload: { receipt_id: string; vault_id: string },
+  payload: { receipt_id: string; vault_id: string; pool_id: string },
 ): void {
   validateDiscoveredVault(state, payload.vault_id);
+  if (state.vault !== null && state.vault.poolId !== payload.pool_id) {
+    throw new TypeError("deposit receipt pool does not match discovered vault");
+  }
   if (state.receipts[payload.receipt_id] !== undefined) {
     throw new TypeError(
       `deposit receipt ${payload.receipt_id} already requested`,
