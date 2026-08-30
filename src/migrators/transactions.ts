@@ -10,6 +10,7 @@ import {
   normalizeSuiObjectId,
 } from "@mysten/sui/utils";
 
+import { requireU64 } from "../lib/integers.ts";
 import type { LaunchpadDeployment, LaunchTypes } from "../launchpad/transactions.ts";
 import { LaunchpadCalls } from "../launchpad/transactions.ts";
 import { normalizeSharedObjectReference } from "../lib/sui.ts";
@@ -25,6 +26,14 @@ export type MigratorsDeployment = {
 
 export type CetusMigrationPool =
   | { kind: "new"; pools: SharedObjectReference<true> }
+  | { kind: "existing"; pool: SharedObjectReference<true> };
+
+export type TurbosMigrationPool =
+  | {
+      kind: "new";
+      poolConfig: SharedObjectReference<true>;
+      fee: SharedObjectReference<false>;
+    }
   | { kind: "existing"; pool: SharedObjectReference<true> };
 
 type NormalizedDeployment = Required<Omit<MigratorsDeployment, "launchpad">> & {
@@ -296,6 +305,99 @@ export class MigratorCalls {
         ],
       });
   }
+
+  migrateTurbos(
+    options: LaunchTypes & {
+      feeType: string;
+      memeSide: "a" | "b";
+      pool: TurbosMigrationPool;
+      launch: SharedObjectReference<true>;
+      memeCurrency: SharedObjectReference<true>;
+      positions: SharedObjectReference<true>;
+      deadline: bigint;
+      versioned: SharedObjectReference<false>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const feeType = normalizeStructTag(options.feeType);
+    const memeSide = normalizeMemeSideAb(options.memeSide);
+    const poolKind = normalizePoolKind(options.pool.kind);
+    requireU64("deadline", options.deadline);
+    return (tx: Transaction): TransactionResult => {
+      const baseArguments = [
+        sharedObject(tx, "launch", options.launch, true),
+        sharedObject(
+          tx,
+          "packageVersion",
+          this.deployment.launchpad.packageVersion,
+          false,
+        ),
+        sharedObject(
+          tx,
+          "runtimeConfig",
+          this.deployment.launchpad.runtimeConfig,
+          false,
+        ),
+        sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
+        sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+      ];
+      const poolArguments =
+        options.pool.kind === "new"
+          ? [
+              sharedObject(tx, "poolConfig", options.pool.poolConfig, true),
+              sharedObject(tx, "fee", options.pool.fee, false),
+            ]
+          : [sharedObject(tx, "pool", options.pool.pool, true)];
+      return tx.moveCall({
+        target: `${this.deployment.packageId}::turbos::migrate_${poolKind}_meme_${memeSide}`,
+        typeArguments: [types.memeType, types.quoteType, feeType],
+        arguments: [
+          ...baseArguments,
+          ...poolArguments,
+          sharedObject(tx, "positions", options.positions, true),
+          tx.pure.u64(options.deadline),
+          tx.object.clock(),
+          sharedObject(tx, "versioned", options.versioned, false),
+        ],
+      });
+    };
+  }
+
+  collectTurbosFees(
+    options: LaunchTypes & {
+      feeType: string;
+      memeSide: "a" | "b";
+      vault: SharedObjectReference<true>;
+      pool: SharedObjectReference<true>;
+      positions: SharedObjectReference<true>;
+      deadline: bigint;
+      versioned: SharedObjectReference<false>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const feeType = normalizeStructTag(options.feeType);
+    const memeSide = normalizeMemeSideAb(options.memeSide);
+    requireU64("deadline", options.deadline);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::turbos::collect_fees_meme_${memeSide}`,
+        typeArguments: [types.memeType, types.quoteType, feeType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.launchpad.runtimeConfig,
+            false,
+          ),
+          sharedObject(tx, "pool", options.pool, true),
+          sharedObject(tx, "positions", options.positions, true),
+          tx.pure.u64(options.deadline),
+          tx.object.clock(),
+          sharedObject(tx, "versioned", options.versioned, false),
+        ],
+      });
+  }
 }
 
 export class MigratorTransactions {
@@ -395,6 +497,22 @@ export class MigratorTransactions {
   ): Transaction {
     const tx = new Transaction();
     tx.add(this.call.collectCetusFees(options));
+    return tx;
+  }
+
+  migrateTurbos(
+    options: Parameters<MigratorCalls["migrateTurbos"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.migrateTurbos(options));
+    return tx;
+  }
+
+  collectTurbosFees(
+    options: Parameters<MigratorCalls["collectTurbosFees"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.collectTurbosFees(options));
     return tx;
   }
 }

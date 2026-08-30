@@ -249,6 +249,93 @@ test("routes both Cetus LP-fee collection orientations", () => {
   }
 });
 
+test("routes all four Turbos migrations with a third fee type", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const feeType = "0x30::fee::FEE_40000";
+
+  for (const memeSide of ["a", "b"] as const) {
+    for (const poolKind of ["new", "existing"] as const) {
+      const pool =
+        poolKind === "new"
+          ? {
+              kind: "new" as const,
+              poolConfig: shared("0x14", "34", true),
+              fee: shared("0x15", "35", false),
+            }
+          : {
+              kind: "existing" as const,
+              pool: shared("0x14", "34", true),
+            };
+      const tx = sdk.migrateTurbos({
+        ...types,
+        feeType,
+        memeSide,
+        pool,
+        launch: shared("0x10", "30", true),
+        memeCurrency: shared("0x11", "31", true),
+        positions: shared("0x16", "36", true),
+        deadline: 1_000n,
+        versioned: shared("0x17", "37", false),
+      });
+
+      assert.deepEqual(moveFunctions(tx), [
+        `turbos::migrate_${poolKind}_meme_${memeSide}`,
+      ]);
+      assert.deepEqual(moveTypeArguments(tx), [
+        [
+          normalizedType(types.memeType),
+          normalizedType(types.quoteType),
+          normalizedType(feeType),
+        ],
+      ]);
+      assert.deepEqual(
+        sharedMutability(tx),
+        poolKind === "new"
+          ? [true, false, false, false, true, true, false, true, false, false]
+          : [true, false, false, false, true, true, true, false, false],
+      );
+      assert.equal(pureInputCount(tx), 1);
+      assert.equal(tx.getData().commands.length, 1);
+    }
+  }
+});
+
+test("routes both Turbos collection orientations and validates deadline", () => {
+  const sdk = new MigratorTransactions(deployment);
+
+  for (const memeSide of ["a", "b"] as const) {
+    const options = {
+      ...types,
+      feeType: "0x30::fee::FEE_40000",
+      memeSide,
+      vault: shared("0x20", "40", true),
+      pool: shared("0x21", "41", true),
+      positions: shared("0x22", "42", true),
+      deadline: 1_000n,
+      versioned: shared("0x23", "43", false),
+    };
+    const tx = sdk.collectTurbosFees(options);
+
+    assert.deepEqual(moveFunctions(tx), [
+      `turbos::collect_fees_meme_${memeSide}`,
+    ]);
+    assert.deepEqual(sharedMutability(tx), [
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+    ]);
+    assert.equal(pureInputCount(tx), 1);
+    assert.equal(tx.getData().commands.length, 1);
+    assert.throws(
+      () => sdk.collectTurbosFees({ ...options, deadline: 1n << 64n }),
+      /deadline must be a u64/,
+    );
+  }
+});
+
 function moveFunctions(tx: Transaction): string[] {
   return tx.getData().commands.flatMap((command) =>
     command.$kind === "MoveCall"
@@ -276,6 +363,10 @@ function sharedMutability(tx: Transaction): boolean[] {
       ? [input.Object.SharedObject.mutable]
       : [],
   );
+}
+
+function pureInputCount(tx: Transaction): number {
+  return tx.getData().inputs.filter((input) => input.$kind === "Pure").length;
 }
 
 function normalizedType(type: string): string {
