@@ -23,6 +23,10 @@ export type MigratorsDeployment = {
   venueConfig: SharedObjectReference<false>;
 };
 
+export type CetusMigrationPool =
+  | { kind: "new"; pools: SharedObjectReference<true> }
+  | { kind: "existing"; pool: SharedObjectReference<true> };
+
 type NormalizedDeployment = Required<Omit<MigratorsDeployment, "launchpad">> & {
   launchpad: LaunchpadDeployment;
 };
@@ -223,6 +227,75 @@ export class MigratorCalls {
         ],
       });
   }
+
+  migrateCetus(
+    options: LaunchTypes & {
+      memeSide: "a" | "b";
+      pool: CetusMigrationPool;
+      launch: SharedObjectReference<true>;
+      memeCurrency: SharedObjectReference<true>;
+      cetusConfig: SharedObjectReference<false>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const memeSide = normalizeMemeSideAb(options.memeSide);
+    const poolKind = normalizePoolKind(options.pool.kind);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::cetus::migrate_${poolKind}_meme_${memeSide}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.launchpad.packageVersion,
+            false,
+          ),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.launchpad.runtimeConfig,
+            false,
+          ),
+          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
+          options.pool.kind === "new"
+            ? sharedObject(tx, "pools", options.pool.pools, true)
+            : sharedObject(tx, "pool", options.pool.pool, true),
+          tx.object.clock(),
+        ],
+      });
+  }
+
+  collectCetusFees(
+    options: LaunchTypes & {
+      memeSide: "a" | "b";
+      vault: SharedObjectReference<true>;
+      cetusConfig: SharedObjectReference<false>;
+      pool: SharedObjectReference<true>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const memeSide = normalizeMemeSideAb(options.memeSide);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::cetus::collect_fees_meme_${memeSide}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.launchpad.runtimeConfig,
+            false,
+          ),
+          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
+          sharedObject(tx, "pool", options.pool, true),
+        ],
+      });
+  }
 }
 
 export class MigratorTransactions {
@@ -308,6 +381,22 @@ export class MigratorTransactions {
     tx.add(this.call.collectMmtFees(options));
     return tx;
   }
+
+  migrateCetus(
+    options: Parameters<MigratorCalls["migrateCetus"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.migrateCetus(options));
+    return tx;
+  }
+
+  collectCetusFees(
+    options: Parameters<MigratorCalls["collectCetusFees"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.collectCetusFees(options));
+    return tx;
+  }
 }
 
 function sharedObject<const Mutable extends boolean>(
@@ -331,6 +420,20 @@ function normalizeLaunchTypes(types: LaunchTypes): LaunchTypes {
 function normalizeMemeSide(value: "x" | "y"): "x" | "y" {
   if (value !== "x" && value !== "y") {
     throw new RangeError("memeSide must be x or y");
+  }
+  return value;
+}
+
+function normalizeMemeSideAb(value: "a" | "b"): "a" | "b" {
+  if (value !== "a" && value !== "b") {
+    throw new RangeError("memeSide must be a or b");
+  }
+  return value;
+}
+
+function normalizePoolKind(value: "new" | "existing"): "new" | "existing" {
+  if (value !== "new" && value !== "existing") {
+    throw new RangeError("pool.kind must be new or existing");
   }
   return value;
 }

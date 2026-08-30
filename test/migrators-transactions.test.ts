@@ -190,6 +190,65 @@ test("routes both MMT collection orientations without unhandled results", () => 
   }
 });
 
+test("routes all four Cetus migration combinations", () => {
+  const sdk = new MigratorTransactions(deployment);
+
+  for (const memeSide of ["a", "b"] as const) {
+    for (const poolKind of ["new", "existing"] as const) {
+      const pool =
+        poolKind === "new"
+          ? { kind: "new" as const, pools: shared("0x14", "34", true) }
+          : { kind: "existing" as const, pool: shared("0x14", "34", true) };
+      const tx = sdk.migrateCetus({
+        ...types,
+        memeSide,
+        pool,
+        launch: shared("0x10", "30", true),
+        memeCurrency: shared("0x11", "31", true),
+        cetusConfig: shared("0x12", "32", false),
+      });
+
+      assert.deepEqual(moveFunctions(tx), [
+        `cetus::migrate_${poolKind}_meme_${memeSide}`,
+      ]);
+      assert.deepEqual(moveTypeArguments(tx), [
+        [normalizedType(types.memeType), normalizedType(types.quoteType)],
+      ]);
+      assert.deepEqual(sharedMutability(tx), [
+        true,
+        false,
+        false,
+        false,
+        true,
+        false,
+        true,
+        false,
+      ]);
+      assert.equal(tx.getData().commands.length, 1);
+    }
+  }
+});
+
+test("routes both Cetus LP-fee collection orientations", () => {
+  const sdk = new MigratorTransactions(deployment);
+
+  for (const memeSide of ["a", "b"] as const) {
+    const tx = sdk.collectCetusFees({
+      ...types,
+      memeSide,
+      vault: shared("0x20", "40", true),
+      cetusConfig: shared("0x21", "41", false),
+      pool: shared("0x22", "42", true),
+    });
+
+    assert.deepEqual(moveFunctions(tx), [
+      `cetus::collect_fees_meme_${memeSide}`,
+    ]);
+    assert.deepEqual(sharedMutability(tx), [true, false, false, true]);
+    assert.equal(tx.getData().commands.length, 1);
+  }
+});
+
 function moveFunctions(tx: Transaction): string[] {
   return tx.getData().commands.flatMap((command) =>
     command.$kind === "MoveCall"
