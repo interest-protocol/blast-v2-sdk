@@ -234,6 +234,15 @@ stays with the reserve named by the contract formula. Contract objects and
 completed events remain authoritative if transaction history changes after a
 preview.
 
+## Integer helpers
+
+The root package exports branded `U64` and `U128` bigint types. The
+`requireU64`, `requirePositiveU64`, and `requireU128` validators return these
+brands after runtime range checks. Shared helpers provide checked `u64`
+addition, basis-point validation, and non-negative multiply-divide with an
+explicit rounding direction. Arithmetic remains native `bigint`; computed
+results must pass validation again before they regain a Move integer brand.
+
 ## Checks
 
 Use Node 22.18 or newer:

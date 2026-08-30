@@ -13,6 +13,8 @@ import {
   SUI_FRAMEWORK_ADDRESS,
 } from "@mysten/sui/utils";
 
+import { requireBasisPoints } from "../lib/integers.ts";
+
 const ZERO_ADDRESS = normalizeSuiObjectId("0x0");
 const SYSTEM_ADDRESSES = new Set([
   ZERO_ADDRESS,
@@ -222,9 +224,7 @@ function validateOptions(options: MemeTemplateOptions) {
   if (typeof options.sellBurnBps !== "bigint") {
     throw new TypeError("sellBurnBps must be a bigint");
   }
-  if (options.sellBurnBps < 0n || options.sellBurnBps > 10_000n) {
-    throw new RangeError("sellBurnBps must be between 0 and 10,000");
-  }
+  requireBasisPoints("sellBurnBps", options.sellBurnBps);
 
   return {
     symbol: requireNonEmptyString("symbol", options.symbol),

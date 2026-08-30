@@ -8,7 +8,7 @@ import {
   parseStructTag,
 } from "@mysten/sui/utils";
 
-import { requireU64 } from "../lib/integers.ts";
+import { requireU128, requireU64 } from "../lib/integers.ts";
 import type { LaunchpadEventPosition } from "../launchpad/events.ts";
 
 type MigratorEventFieldDescriptor =
@@ -127,19 +127,11 @@ export type MigratorEventPayloads = {
 };
 
 const U64Bcs = bcs.u64().transform({
-  input: (value: bigint) => {
-    requireU64("event u64", value);
-    return value;
-  },
+  input: (value: bigint) => requireU64("event u64", value),
   output: (value) => BigInt(value),
 });
 const U128Bcs = bcs.u128().transform({
-  input: (value: bigint) => {
-    if (value < 0n || value >= 1n << 128n) {
-      throw new RangeError("event u128 must be a u128");
-    }
-    return value;
-  },
+  input: (value: bigint) => requireU128("event u128", value),
   output: (value) => BigInt(value),
 });
 const AddressBcs = bcs.Address.transform({

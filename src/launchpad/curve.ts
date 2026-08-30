@@ -1,9 +1,12 @@
 import {
+  BASIS_POINTS_DENOMINATOR,
+  checkedAddU64,
+  mulDivDown,
+  mulDivUp,
+  requireBasisPoints,
   requirePositiveU64,
   requireU64,
 } from "../lib/integers.ts";
-
-const BASIS_POINTS_DENOMINATOR = 10_000n;
 
 export type CurveState = {
   memeReserve: bigint;
@@ -129,7 +132,7 @@ export function previewSell(
 ): SellPreview {
   validateCurveState(state);
   requirePositiveU64("memeInGross", memeInGross);
-  requireBps("maxBurnBps", maxBurnBps);
+  requireBasisPoints("maxBurnBps", maxBurnBps);
 
   const memeFee = applyBpsUp(memeInGross, state.memeFeeBps);
   const memeInAfterFee = memeInGross - memeFee;
@@ -191,45 +194,12 @@ function validateCurveState(state: CurveState): void {
   requireU64("realQuoteReserve", state.realQuoteReserve);
   requirePositiveU64("virtualQuote", state.virtualQuote);
   requirePositiveU64("migrationQuoteTarget", state.migrationQuoteTarget);
-  requireBps("quoteFeeBps", state.quoteFeeBps);
-  requireBps("memeFeeBps", state.memeFeeBps);
+  requireBasisPoints("quoteFeeBps", state.quoteFeeBps);
+  requireBasisPoints("memeFeeBps", state.memeFeeBps);
 }
 
 function applyBpsUp(amount: bigint, bps: bigint): bigint {
   return mulDivUp(amount, bps, BASIS_POINTS_DENOMINATOR);
-}
-
-function mulDivDown(
-  multiplicand: bigint,
-  multiplier: bigint,
-  denominator: bigint,
-): bigint {
-  return (multiplicand * multiplier) / denominator;
-}
-
-function mulDivUp(
-  multiplicand: bigint,
-  multiplier: bigint,
-  denominator: bigint,
-): bigint {
-  if (multiplicand === 0n || multiplier === 0n) return 0n;
-  return (multiplicand * multiplier + denominator - 1n) / denominator;
-}
-
-function checkedAddU64(
-  name: string,
-  left: bigint,
-  right: bigint,
-): bigint {
-  const value = left + right;
-  requireU64(name, value);
-  return value;
-}
-
-function requireBps(name: string, value: bigint): void {
-  if (value < 0n || value > BASIS_POINTS_DENOMINATOR) {
-    throw new RangeError(`${name} must be between 0 and 10,000`);
-  }
 }
 
 function requirePositiveOutput(name: string, value: bigint): void {

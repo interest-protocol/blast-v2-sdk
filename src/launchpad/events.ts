@@ -272,10 +272,7 @@ export type LaunchpadEventPayloads = {
 };
 
 const U64Bcs = bcs.u64().transform({
-  input: (value: bigint) => {
-    requireU64("event u64", value);
-    return value;
-  },
+  input: (value: bigint) => requireU64("event u64", value),
   output: (value) => BigInt(value),
 });
 const AddressBcs = bcs.Address.transform({

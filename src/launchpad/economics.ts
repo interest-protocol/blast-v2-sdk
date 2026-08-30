@@ -1,6 +1,9 @@
-import { requirePositiveU64 } from "../lib/integers.ts";
-
-const BASIS_POINTS_DENOMINATOR = 10_000n;
+import {
+  BASIS_POINTS_DENOMINATOR,
+  mulDivUp,
+  requireBasisPoints,
+  requirePositiveU64,
+} from "../lib/integers.ts";
 
 export type LaunchEconomicsInput = {
   initialMemeSupply: bigint;
@@ -50,21 +53,18 @@ export function deriveLaunchEconomics(
       "curveMemeInventory + poolMemeProvision cannot exceed initialMemeSupply",
     );
   }
-  if (
-    quoteMigrationFeeBps < 0n ||
-    quoteMigrationFeeBps > BASIS_POINTS_DENOMINATOR
-  ) {
-    throw new RangeError("quoteMigrationFeeBps must be between 0 and 10,000");
-  }
+  requireBasisPoints("quoteMigrationFeeBps", quoteMigrationFeeBps);
 
   const effectiveTerminalQuote = virtualQuote + migrationQuoteTarget;
-  const terminalCurveMeme = ceilDiv(
-    curveMemeInventory * virtualQuote,
+  const terminalCurveMeme = mulDivUp(
+    curveMemeInventory,
+    virtualQuote,
     effectiveTerminalQuote,
   );
   const curveMemeReleased = curveMemeInventory - terminalCurveMeme;
-  const quoteMigrationFee = ceilDiv(
-    migrationQuoteTarget * quoteMigrationFeeBps,
+  const quoteMigrationFee = mulDivUp(
+    migrationQuoteTarget,
+    quoteMigrationFeeBps,
     BASIS_POINTS_DENOMINATOR,
   );
   const netQuote = migrationQuoteTarget - quoteMigrationFee;
@@ -81,8 +81,4 @@ export function deriveLaunchEconomics(
     dexOpeningValuation:
       (initialMemeSupply * netQuote) / poolMemeProvision,
   };
-}
-
-function ceilDiv(numerator: bigint, denominator: bigint): bigint {
-  return (numerator + denominator - 1n) / denominator;
 }

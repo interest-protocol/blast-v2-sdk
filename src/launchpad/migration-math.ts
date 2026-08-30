@@ -1,10 +1,11 @@
 import {
+  BASIS_POINTS_DENOMINATOR,
+  mulDivUp,
+  requireBasisPoints,
   requirePositiveU64,
+  requireU128,
   requireU64,
 } from "../lib/integers.ts";
-
-const BASIS_POINTS_DENOMINATOR = 10_000n;
-const U128_LIMIT = 1n << 128n;
 
 /** Mirrors `migration_math::sqrt_price_x64` over atomic Meme/Quote units. */
 export function sqrtPriceX64(
@@ -23,7 +24,7 @@ export function assertPriceWithinBps(
   actualSqrtPriceX64: bigint,
   maxDeviationBps: bigint,
 ): void {
-  requireBps("maxDeviationBps", maxDeviationBps);
+  requireBasisPoints("maxDeviationBps", maxDeviationBps);
   requireU128("actualSqrtPriceX64", actualSqrtPriceX64);
 
   const expectedRatioQ128 = ratioQ128(
@@ -96,23 +97,10 @@ function integerSqrt(value: bigint): bigint {
 }
 
 function maximumResidualAmount(amount: bigint, maxResidualBps: bigint): bigint {
-  requireBps("maxResidualBps", maxResidualBps);
-  const numerator = amount * maxResidualBps;
-  return (
-    (numerator + BASIS_POINTS_DENOMINATOR - 1n) /
-    BASIS_POINTS_DENOMINATOR
+  requireBasisPoints("maxResidualBps", maxResidualBps);
+  return mulDivUp(
+    amount,
+    maxResidualBps,
+    BASIS_POINTS_DENOMINATOR,
   );
-}
-
-function requireBps(name: string, value: bigint): void {
-  requireU64(name, value);
-  if (value > BASIS_POINTS_DENOMINATOR) {
-    throw new RangeError(`${name} must be between 0 and 10,000 basis points`);
-  }
-}
-
-function requireU128(name: string, value: bigint): void {
-  if (value < 0n || value >= U128_LIMIT) {
-    throw new RangeError(`${name} must be a u128`);
-  }
 }
