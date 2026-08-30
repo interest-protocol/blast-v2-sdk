@@ -138,6 +138,58 @@ test("builds Bluefin LP-fee collection without unhandled results", () => {
   assert.equal(tx.getData().commands.length, 1);
 });
 
+test("routes both MMT migration orientations with frozen shared inputs", () => {
+  const sdk = new MigratorTransactions(deployment);
+  assert.equal(
+    sdk.call.migrationWitnessType("mmt").endsWith("::mmt::Witness"),
+    true,
+  );
+
+  for (const memeSide of ["x", "y"] as const) {
+    const tx = sdk.migrateMmt({
+      ...types,
+      memeSide,
+      launch: shared("0x10", "30", true),
+      memeCurrency: shared("0x11", "31", true),
+      mmtGlobalConfig: shared("0x12", "32", true),
+      mmtVersion: shared("0x13", "33", false),
+    });
+
+    assert.deepEqual(moveFunctions(tx), [`mmt::migrate_meme_${memeSide}`]);
+    assert.deepEqual(moveTypeArguments(tx), [
+      [normalizedType(types.memeType), normalizedType(types.quoteType)],
+    ]);
+    assert.deepEqual(sharedMutability(tx), [
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+    ]);
+  }
+});
+
+test("routes both MMT collection orientations without unhandled results", () => {
+  const sdk = new MigratorTransactions(deployment);
+
+  for (const memeSide of ["x", "y"] as const) {
+    const tx = sdk.collectMmtFees({
+      ...types,
+      memeSide,
+      vault: shared("0x20", "40", true),
+      pool: shared("0x21", "41", true),
+      mmtVersion: shared("0x22", "42", false),
+    });
+
+    assert.deepEqual(moveFunctions(tx), [`mmt::collect_fees_meme_${memeSide}`]);
+    assert.deepEqual(sharedMutability(tx), [true, false, true, false, false]);
+    assert.equal(tx.getData().commands.length, 1);
+  }
+});
+
 function moveFunctions(tx: Transaction): string[] {
   return tx.getData().commands.flatMap((command) =>
     command.$kind === "MoveCall"

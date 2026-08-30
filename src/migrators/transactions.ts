@@ -156,6 +156,73 @@ export class MigratorCalls {
         ],
       });
   }
+
+  migrateMmt(
+    options: LaunchTypes & {
+      memeSide: "x" | "y";
+      launch: SharedObjectReference<true>;
+      memeCurrency: SharedObjectReference<true>;
+      mmtGlobalConfig: SharedObjectReference<true>;
+      mmtVersion: SharedObjectReference<false>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const memeSide = normalizeMemeSide(options.memeSide);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::mmt::migrate_meme_${memeSide}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.launchpad.packageVersion,
+            false,
+          ),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.launchpad.runtimeConfig,
+            false,
+          ),
+          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          sharedObject(tx, "mmtGlobalConfig", options.mmtGlobalConfig, true),
+          sharedObject(tx, "mmtVersion", options.mmtVersion, false),
+          tx.object.clock(),
+        ],
+      });
+  }
+
+  collectMmtFees(
+    options: LaunchTypes & {
+      memeSide: "x" | "y";
+      vault: SharedObjectReference<true>;
+      pool: SharedObjectReference<true>;
+      mmtVersion: SharedObjectReference<false>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const memeSide = normalizeMemeSide(options.memeSide);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::mmt::collect_fees_meme_${memeSide}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.launchpad.runtimeConfig,
+            false,
+          ),
+          sharedObject(tx, "pool", options.pool, true),
+          sharedObject(tx, "mmtVersion", options.mmtVersion, false),
+          tx.object.clock(),
+        ],
+      });
+  }
 }
 
 export class MigratorTransactions {
@@ -225,6 +292,22 @@ export class MigratorTransactions {
     tx.add(this.call.collectBluefinFees(options));
     return tx;
   }
+
+  migrateMmt(
+    options: Parameters<MigratorCalls["migrateMmt"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.migrateMmt(options));
+    return tx;
+  }
+
+  collectMmtFees(
+    options: Parameters<MigratorCalls["collectMmtFees"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.collectMmtFees(options));
+    return tx;
+  }
 }
 
 function sharedObject<const Mutable extends boolean>(
@@ -243,4 +326,11 @@ function normalizeLaunchTypes(types: LaunchTypes): LaunchTypes {
     memeType: normalizeStructTag(types.memeType),
     quoteType: normalizeStructTag(types.quoteType),
   };
+}
+
+function normalizeMemeSide(value: "x" | "y"): "x" | "y" {
+  if (value !== "x" && value !== "y") {
+    throw new RangeError("memeSide must be x or y");
+  }
+  return value;
 }
