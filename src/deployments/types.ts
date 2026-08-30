@@ -1,4 +1,5 @@
 import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
+import type { BlastSuiDeployment } from "../blast-sui/types.ts";
 import type { SharedObjectIdentity, SuiPackageReference } from "../lib/sui.ts";
 import type { MigratorsDeployment } from "../migrators/transactions.ts";
 import type { VestingDeployment } from "../vesting/transactions.ts";
@@ -15,6 +16,7 @@ export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
 export type BlastPackages = Readonly<
   Record<string, SuiPackageReference> & {
     launchpad: SuiPackageReference;
+    blastSui?: SuiPackageReference;
     migrators?: SuiPackageReference;
     vesting?: SuiPackageReference;
   }
@@ -32,6 +34,10 @@ export type BlastSharedObjects = Readonly<
     launchConfig: SharedObjectIdentity;
     runtimeConfig: SharedObjectIdentity;
     protocolAuthority: SharedObjectIdentity;
+    blastSuiPackageVersion?: SharedObjectIdentity;
+    blastSuiProtocolAuthority?: SharedObjectIdentity;
+    blastSuiPackageAdmin?: SharedObjectIdentity;
+    blastSuiVault?: SharedObjectIdentity;
     venueConfig?: SharedObjectIdentity;
     packageAdmin?: SharedObjectIdentity;
   }
@@ -49,5 +55,6 @@ export type BlastDeploymentRegistry = Readonly<
 >;
 
 export type LaunchpadDeploymentConstants = LaunchpadDeployment;
+export type BlastSuiDeploymentConstants = BlastSuiDeployment;
 export type MigratorsDeploymentConstants = MigratorsDeployment;
 export type VestingDeploymentConstants = VestingDeployment;

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   BLAST_DEPLOYMENTS,
+  blastSuiDeployment,
   defineBlastDeployment,
   getBlastDeployment,
   launchpadDeployment,
@@ -18,6 +19,10 @@ const deployment = defineBlastDeployment({
       packageId: "0x123",
       originalPackageId: "0x122",
     },
+    blastSui: {
+      packageId: "0x423",
+      originalPackageId: "0x422",
+    },
     migrators: {
       packageId: "0x323",
       originalPackageId: "0x322",
@@ -32,6 +37,8 @@ const deployment = defineBlastDeployment({
     launchConfig: { objectId: "0x3", initialSharedVersion: "11" },
     runtimeConfig: { objectId: "0x4", initialSharedVersion: "12" },
     protocolAuthority: { objectId: "0x5", initialSharedVersion: "13" },
+    blastSuiPackageVersion: { objectId: "0x8", initialSharedVersion: "16" },
+    blastSuiVault: { objectId: "0x9", initialSharedVersion: "17" },
     packageAdmin: { objectId: "0x6", initialSharedVersion: "14" },
     venueConfig: { objectId: "0x7", initialSharedVersion: "15" },
   },
@@ -90,6 +97,76 @@ test("derives the independent vesting package reference", () => {
     originalPackageId:
       "0x0000000000000000000000000000000000000000000000000000000000000222",
   });
+});
+
+test("derives current-package blast Sui call references", () => {
+  assert.deepEqual(blastSuiDeployment(deployment), {
+    packageId:
+      "0x0000000000000000000000000000000000000000000000000000000000000423",
+    originalPackageId:
+      "0x0000000000000000000000000000000000000000000000000000000000000422",
+    packageVersion: {
+      objectId:
+        "0x0000000000000000000000000000000000000000000000000000000000000008",
+      initialSharedVersion: "16",
+      mutable: false,
+    },
+    vault: {
+      objectId:
+        "0x0000000000000000000000000000000000000000000000000000000000000009",
+      initialSharedVersion: "17",
+      mutable: true,
+    },
+  });
+});
+
+test("requires blast Sui deployment constants only when requested", () => {
+  const {
+    blastSuiPackageVersion: _blastSuiPackageVersion,
+    ...withoutBlastSuiPackageVersion
+  } = deployment.sharedObjects;
+  const { blastSuiVault: _blastSuiVault, ...withoutBlastSuiVault } =
+    deployment.sharedObjects;
+  assert.doesNotThrow(() =>
+    defineBlastDeployment({
+      ...deployment,
+      packages: { launchpad: deployment.packages.launchpad },
+      sharedObjects: {
+        packageVersion: deployment.sharedObjects.packageVersion,
+        launchConfig: deployment.sharedObjects.launchConfig,
+        runtimeConfig: deployment.sharedObjects.runtimeConfig,
+        protocolAuthority: deployment.sharedObjects.protocolAuthority,
+      },
+    }),
+  );
+  assert.throws(
+    () =>
+      blastSuiDeployment({
+        ...deployment,
+        packages: { launchpad: deployment.packages.launchpad },
+      }),
+    /packages\.blastSui is required/,
+  );
+  assert.throws(
+    () =>
+      blastSuiDeployment({
+        ...deployment,
+        sharedObjects: {
+          ...withoutBlastSuiPackageVersion,
+        },
+      }),
+    /sharedObjects\.blastSuiPackageVersion is required/,
+  );
+  assert.throws(
+    () =>
+      blastSuiDeployment({
+        ...deployment,
+        sharedObjects: {
+          ...withoutBlastSuiVault,
+        },
+      }),
+    /sharedObjects\.blastSuiVault is required/,
+  );
 });
 
 test("derives migrator package and shared-object references", () => {

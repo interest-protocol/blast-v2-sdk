@@ -4,6 +4,7 @@ import {
   sharedObjectReference,
 } from "../lib/sui.ts";
 import type {
+  BlastSuiDeploymentConstants,
   BlastDeployment,
   BlastDeploymentRegistry,
   BlastNetwork,
@@ -87,6 +88,30 @@ export function launchpadDeployment(
     launchConfig: sharedObjectReference(objects.launchConfig, false),
     runtimeConfig: sharedObjectReference(objects.runtimeConfig, false),
     protocolAuthority: sharedObjectReference(objects.protocolAuthority, false),
+  };
+}
+
+/** Returns the call-ready blast Sui identities from a canonical deployment. */
+export function blastSuiDeployment(
+  deployment: BlastDeployment,
+): BlastSuiDeploymentConstants {
+  const packageReference = deployment.packages.blastSui;
+  if (!packageReference) {
+    throw new TypeError("packages.blastSui is required");
+  }
+  const packageVersion = deployment.sharedObjects.blastSuiPackageVersion;
+  if (!packageVersion) {
+    throw new TypeError("sharedObjects.blastSuiPackageVersion is required");
+  }
+  const vault = deployment.sharedObjects.blastSuiVault;
+  if (!vault) {
+    throw new TypeError("sharedObjects.blastSuiVault is required");
+  }
+  return {
+    packageId: packageReference.packageId,
+    originalPackageId: packageReference.originalPackageId,
+    packageVersion: sharedObjectReference(packageVersion, false),
+    vault: sharedObjectReference(vault, true),
   };
 }
 
