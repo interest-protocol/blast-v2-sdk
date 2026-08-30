@@ -104,8 +104,8 @@ does not ship placeholder addresses.
 
 `@blast-fun/sdk/vesting` supports the independent `linear` and `checkpoints`
 modules. It validates creation inputs, builds atomic create-and-share
-transactions, decodes live shared objects, reads `TableVec` checkpoints by
-dynamic-field index, and mirrors vesting math with `bigint`.
+transactions, decodes live shared objects and their bounded inline checkpoint
+vectors, and mirrors vesting math with `bigint`.
 
 ```ts
 import { blastVesting } from "@blast-fun/sdk/vesting";

@@ -54,14 +54,14 @@ export class VestingClient {
     limit?: number,
   ): Promise<VestingCheckpoint[]> {
     return limit === undefined
-      ? getCheckpointPage(this.#client, vesting, start)
-      : getCheckpointPage(this.#client, vesting, start, limit);
+      ? getCheckpointPage(vesting, start)
+      : getCheckpointPage(vesting, start, limit);
   }
 
   async getAllCheckpoints(
     vesting: CheckpointVestingState,
   ): Promise<VestingCheckpoint[]> {
-    return getAllCheckpoints(this.#client, vesting);
+    return getAllCheckpoints(vesting);
   }
 
   async preview(
@@ -72,7 +72,7 @@ export class VestingClient {
     const vested =
       state.kind === "linear"
         ? linearVestedAt(state.totalAmount, state.schedule, timestampMs)
-        : await getCheckpointVestedAt(this.#client, state, timestampMs);
+        : getCheckpointVestedAt(state, timestampMs);
     return vestingPreview(state.totalAmount, vested, state.released);
   }
 }

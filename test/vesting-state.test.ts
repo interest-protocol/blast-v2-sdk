@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
 
 import {
-  checkpointBcs,
   checkpointVestingBcs,
   clockBcs,
   decodeVestingObject,
@@ -17,11 +15,9 @@ import {
 } from "../src/vesting/state.ts";
 
 const objectId = "0xc";
-const tableId = "0xd";
 const beneficiary = "0xb0b";
 const refundRecipient = "0xcafe";
 const coinType = "0x2::sui::SUI";
-const checkpointType = "0x1::checkpoints::Checkpoint";
 
 const uid = (id: string) => ({ id: { bytes: id } });
 const balance = (value: bigint) => ({ value });
@@ -63,7 +59,12 @@ test("decodes linear custody and derives its original total", () => {
   }
 });
 
-test("decodes checkpoint table identity and reads every indexed field", async () => {
+test("decodes the inline checkpoint vector", () => {
+  const values = [
+    { timestampMs: 100n, cumulativeAmount: 200n },
+    { timestampMs: 250n, cumulativeAmount: 456n },
+    { timestampMs: 700n, cumulativeAmount: 1_000n },
+  ];
   const state = decodeVestingObject({
     objectId,
     initialSharedVersion: "8",
@@ -75,56 +76,21 @@ test("decodes checkpoint table identity and reads every indexed field", async ()
         balance: balance(800n),
         beneficiary,
         cancel_refund_recipient: null,
-        checkpoints: {
-          contents: { id: uid(tableId), size: 3n },
-        },
+        checkpoints: values.map((checkpoint) => ({
+          timestamp_ms: checkpoint.timestampMs,
+          cumulative_amount: checkpoint.cumulativeAmount,
+        })),
         released: 200n,
       })
       .toBytes(),
   });
   assert.equal(state.kind, "checkpoints");
   if (state.kind !== "checkpoints") return;
-  assert.equal(state.checkpointTableId.endsWith("0d"), true);
   assert.equal(state.checkpointCount, 3n);
   assert.equal(state.totalAmount, 1_000n);
-
-  const values = [
-    { timestampMs: 100n, cumulativeAmount: 200n },
-    { timestampMs: 250n, cumulativeAmount: 456n },
-    { timestampMs: 700n, cumulativeAmount: 1_000n },
-  ];
-  let reads = 0;
-  const client = {
-    core: {
-      getDynamicField: async (options: {
-        parentId: string;
-        name: { bcs: Uint8Array };
-      }) => {
-        reads += 1;
-        assert.equal(options.parentId.endsWith("0d"), true);
-        const index = Number(BigInt(bcs.u64().parse(options.name.bcs)));
-        const value = values[index]!;
-        return {
-          dynamicField: {
-            value: {
-              type: checkpointType,
-              bcs: checkpointBcs
-                .serialize({
-                  timestamp_ms: value.timestampMs,
-                  cumulative_amount: value.cumulativeAmount,
-                })
-                .toBytes(),
-            },
-          },
-        };
-      },
-    },
-  } as unknown as ClientWithCoreApi;
-
-  assert.deepEqual(await getAllCheckpoints(client, state), values);
-  reads = 0;
-  assert.equal(await getCheckpointVestedAt(client, state, 250n), 456n);
-  assert.equal(reads, 3);
+  assert.deepEqual(state.checkpoints, values);
+  assert.deepEqual(getAllCheckpoints(state), values);
+  assert.equal(getCheckpointVestedAt(state, 250n), 456n);
 });
 
 test("reads the authoritative Sui Clock", async () => {

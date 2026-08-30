@@ -16,6 +16,7 @@ import type { SharedObjectReference } from "../lib/sui.ts";
 import {
   MAX_CHECKPOINT_PAGE_SIZE,
   MAX_CHECKPOINTS,
+  checkpointVestedAt,
 } from "./schedules.ts";
 import type {
   LinearSchedule,
@@ -25,12 +26,6 @@ import type {
 const IdBcs = bcs.struct("ID", { bytes: bcs.Address });
 const UidBcs = bcs.struct("UID", { id: IdBcs });
 const BalanceBcs = bcs.struct("Balance", { value: bcs.u64() });
-const TableBcs = bcs.struct("Table", {
-  id: UidBcs,
-  size: bcs.u64(),
-});
-const TableVecBcs = bcs.struct("TableVec", { contents: TableBcs });
-
 /** BCS layout of the canonical Sui `Clock`. */
 export const clockBcs = bcs.struct("Clock", {
   id: UidBcs,
@@ -62,7 +57,7 @@ export const checkpointVestingBcs = bcs.struct("CheckpointVesting", {
   balance: BalanceBcs,
   beneficiary: bcs.Address,
   cancel_refund_recipient: bcs.option(bcs.Address),
-  checkpoints: TableVecBcs,
+  checkpoints: bcs.vector(checkpointBcs),
   released: bcs.u64(),
 });
 
@@ -84,7 +79,7 @@ export type LinearVestingState = BaseVestingState & {
 
 export type CheckpointVestingState = BaseVestingState & {
   kind: "checkpoints";
-  checkpointTableId: string;
+  checkpoints: VestingCheckpoint[];
   checkpointCount: bigint;
 };
 
@@ -168,7 +163,11 @@ export function decodeVestingObject(
   const balance = BigInt(parsed.balance.value);
   const released = BigInt(parsed.released);
   requireU64("totalAmount", balance + released);
-  const checkpointCount = BigInt(parsed.checkpoints.contents.size);
+  const checkpoints = parsed.checkpoints.map((checkpoint) => ({
+    timestampMs: BigInt(checkpoint.timestamp_ms),
+    cumulativeAmount: BigInt(checkpoint.cumulative_amount),
+  }));
+  const checkpointCount = BigInt(checkpoints.length);
   if (checkpointCount === 0n || checkpointCount > BigInt(MAX_CHECKPOINTS)) {
     throw new RangeError(
       `checkpointCount must be from 1 to ${MAX_CHECKPOINTS}`,
@@ -186,9 +185,7 @@ export function decodeVestingObject(
     refundRecipient: normalizeOptionalAddress(parsed.cancel_refund_recipient),
     released,
     totalAmount: balance + released,
-    checkpointTableId: normalizeSuiObjectId(
-      parsed.checkpoints.contents.id.id.bytes,
-    ),
+    checkpoints,
     checkpointCount,
   };
 }
@@ -249,43 +246,24 @@ export async function getCurrentTimestampMs(
   return BigInt(parsed.timestamp_ms);
 }
 
-/** Reads one checkpoint directly from its indexed `TableVec` dynamic field. */
-export async function getCheckpoint(
-  client: ClientWithCoreApi,
+/** Returns one checkpoint from the canonical inline schedule. */
+export function getCheckpoint(
   vesting: CheckpointVestingState,
   index: bigint,
-): Promise<VestingCheckpoint> {
+): VestingCheckpoint {
   requireU64("index", index);
   if (index >= vesting.checkpointCount) {
     throw new RangeError("checkpoint index is out of bounds");
   }
-  const { dynamicField } = await client.core.getDynamicField({
-    parentId: vesting.checkpointTableId,
-    name: {
-      type: "u64",
-      bcs: bcs.u64().serialize(index).toBytes(),
-    },
-  });
-  const expectedType = normalizeStructTag(
-    `${vesting.originalPackageId}::checkpoints::Checkpoint`,
-  );
-  if (normalizeStructTag(dynamicField.value.type) !== expectedType) {
-    throw new TypeError(`checkpoint ${index} has an unexpected type`);
-  }
-  const parsed = checkpointBcs.parse(dynamicField.value.bcs);
-  return {
-    timestampMs: BigInt(parsed.timestamp_ms),
-    cumulativeAmount: BigInt(parsed.cumulative_amount),
-  };
+  return vesting.checkpoints[Number(index)]!;
 }
 
-/** Reads at most 32 indexed checkpoints without materializing the complete schedule. */
-export async function getCheckpointPage(
-  client: ClientWithCoreApi,
+/** Returns at most 32 checkpoints from the decoded inline schedule. */
+export function getCheckpointPage(
   vesting: CheckpointVestingState,
   start: bigint,
   limit: number = MAX_CHECKPOINT_PAGE_SIZE,
-): Promise<VestingCheckpoint[]> {
+): VestingCheckpoint[] {
   requireU64("start", start);
   if (
     !Number.isInteger(limit) ||
@@ -297,52 +275,24 @@ export async function getCheckpointPage(
     );
   }
   if (start >= vesting.checkpointCount || limit === 0) return [];
-  const count = Number(
-    minBigInt(BigInt(limit), vesting.checkpointCount - start),
-  );
-  return Promise.all(
-    Array.from({ length: count }, (_, offset) =>
-      getCheckpoint(client, vesting, start + BigInt(offset)),
-    ),
-  );
+  const startIndex = Number(start);
+  return vesting.checkpoints.slice(startIndex, startIndex + limit);
 }
 
-/** Mirrors the on-chain binary search with indexed dynamic-field reads. */
-export async function getCheckpointVestedAt(
-  client: ClientWithCoreApi,
+/** Mirrors the on-chain binary search over the decoded inline schedule. */
+export function getCheckpointVestedAt(
   vesting: CheckpointVestingState,
   timestampMs: bigint,
-): Promise<bigint> {
+): bigint {
   requireU64("timestampMs", timestampMs);
-  let low = 0n;
-  let high = vesting.checkpointCount;
-  while (low < high) {
-    const middle = low + (high - low) / 2n;
-    const checkpoint = await getCheckpoint(client, vesting, middle);
-    if (checkpoint.timestampMs <= timestampMs) {
-      low = middle + 1n;
-    } else {
-      high = middle;
-    }
-  }
-  return low === 0n
-    ? 0n
-    : (await getCheckpoint(client, vesting, low - 1n)).cumulativeAmount;
+  return checkpointVestedAt(vesting.checkpoints, timestampMs);
 }
 
-/** Iterates bounded pages and returns the complete schedule, capped on-chain at 256 entries. */
-export async function getAllCheckpoints(
-  client: ClientWithCoreApi,
+/** Returns the complete decoded schedule, capped on-chain at 256 entries. */
+export function getAllCheckpoints(
   vesting: CheckpointVestingState,
-): Promise<VestingCheckpoint[]> {
-  const checkpoints: VestingCheckpoint[] = [];
-  let start = 0n;
-  while (start < vesting.checkpointCount) {
-    const page = await getCheckpointPage(client, vesting, start);
-    checkpoints.push(...page);
-    start += BigInt(page.length);
-  }
-  return checkpoints;
+): VestingCheckpoint[] {
+  return [...vesting.checkpoints];
 }
 
 function assertUid(objectId: string, embeddedId: string): void {
@@ -360,8 +310,4 @@ function normalizeTypeParameter(
 ): string {
   if (type === undefined) throw new TypeError("missing vesting type argument");
   return typeof type === "string" ? type : normalizeStructTag(type);
-}
-
-function minBigInt(left: bigint, right: bigint): bigint {
-  return left < right ? left : right;
 }
