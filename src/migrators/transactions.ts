@@ -36,6 +36,8 @@ export type TurbosMigrationPool =
     }
   | { kind: "existing"; pool: SharedObjectReference<true> };
 
+export type FullSailMigrationPool = CetusMigrationPool;
+
 type NormalizedDeployment = Required<Omit<MigratorsDeployment, "launchpad">> & {
   launchpad: LaunchpadDeployment;
 };
@@ -398,6 +400,82 @@ export class MigratorCalls {
         ],
       });
   }
+
+  migrateFullSail(
+    options: LaunchTypes & {
+      memeSide: "a" | "b";
+      pool: FullSailMigrationPool;
+      launch: SharedObjectReference<true>;
+      memeCurrency: SharedObjectReference<true>;
+      fullSailConfig: SharedObjectReference<false>;
+      rewarderGlobalVault: SharedObjectReference<true>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const memeSide = normalizeMemeSideAb(options.memeSide);
+    const poolKind = normalizePoolKind(options.pool.kind);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::fullsail::migrate_${poolKind}_meme_${memeSide}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.launchpad.packageVersion,
+            false,
+          ),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.launchpad.runtimeConfig,
+            false,
+          ),
+          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          sharedObject(tx, "fullSailConfig", options.fullSailConfig, false),
+          sharedObject(
+            tx,
+            "rewarderGlobalVault",
+            options.rewarderGlobalVault,
+            true,
+          ),
+          options.pool.kind === "new"
+            ? sharedObject(tx, "pools", options.pool.pools, true)
+            : sharedObject(tx, "pool", options.pool.pool, true),
+          tx.object.clock(),
+        ],
+      });
+  }
+
+  collectFullSailFees(
+    options: LaunchTypes & {
+      memeSide: "a" | "b";
+      vault: SharedObjectReference<true>;
+      fullSailConfig: SharedObjectReference<false>;
+      pool: SharedObjectReference<true>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const memeSide = normalizeMemeSideAb(options.memeSide);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::fullsail::collect_fees_meme_${memeSide}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.launchpad.runtimeConfig,
+            false,
+          ),
+          sharedObject(tx, "fullSailConfig", options.fullSailConfig, false),
+          sharedObject(tx, "pool", options.pool, true),
+        ],
+      });
+  }
 }
 
 export class MigratorTransactions {
@@ -513,6 +591,22 @@ export class MigratorTransactions {
   ): Transaction {
     const tx = new Transaction();
     tx.add(this.call.collectTurbosFees(options));
+    return tx;
+  }
+
+  migrateFullSail(
+    options: Parameters<MigratorCalls["migrateFullSail"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.migrateFullSail(options));
+    return tx;
+  }
+
+  collectFullSailFees(
+    options: Parameters<MigratorCalls["collectFullSailFees"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.collectFullSailFees(options));
     return tx;
   }
 }

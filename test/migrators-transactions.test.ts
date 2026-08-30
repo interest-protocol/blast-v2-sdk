@@ -336,6 +336,67 @@ test("routes both Turbos collection orientations and validates deadline", () => 
   }
 });
 
+test("routes all four Full Sail migrations including rewarder custody", () => {
+  const sdk = new MigratorTransactions(deployment);
+
+  for (const memeSide of ["a", "b"] as const) {
+    for (const poolKind of ["new", "existing"] as const) {
+      const pool =
+        poolKind === "new"
+          ? { kind: "new" as const, pools: shared("0x14", "34", true) }
+          : { kind: "existing" as const, pool: shared("0x14", "34", true) };
+      const tx = sdk.migrateFullSail({
+        ...types,
+        memeSide,
+        pool,
+        launch: shared("0x10", "30", true),
+        memeCurrency: shared("0x11", "31", true),
+        fullSailConfig: shared("0x12", "32", false),
+        rewarderGlobalVault: shared("0x13", "33", true),
+      });
+
+      assert.deepEqual(moveFunctions(tx), [
+        `fullsail::migrate_${poolKind}_meme_${memeSide}`,
+      ]);
+      assert.deepEqual(moveTypeArguments(tx), [
+        [normalizedType(types.memeType), normalizedType(types.quoteType)],
+      ]);
+      assert.deepEqual(sharedMutability(tx), [
+        true,
+        false,
+        false,
+        false,
+        true,
+        false,
+        true,
+        true,
+        false,
+      ]);
+      assert.equal(tx.getData().commands.length, 1);
+    }
+  }
+});
+
+test("routes both Full Sail collection orientations without rewarder inputs", () => {
+  const sdk = new MigratorTransactions(deployment);
+
+  for (const memeSide of ["a", "b"] as const) {
+    const tx = sdk.collectFullSailFees({
+      ...types,
+      memeSide,
+      vault: shared("0x20", "40", true),
+      fullSailConfig: shared("0x21", "41", false),
+      pool: shared("0x22", "42", true),
+    });
+
+    assert.deepEqual(moveFunctions(tx), [
+      `fullsail::collect_fees_meme_${memeSide}`,
+    ]);
+    assert.deepEqual(sharedMutability(tx), [true, false, false, true]);
+    assert.equal(tx.getData().commands.length, 1);
+  }
+});
+
 function moveFunctions(tx: Transaction): string[] {
   return tx.getData().commands.flatMap((command) =>
     command.$kind === "MoveCall"
