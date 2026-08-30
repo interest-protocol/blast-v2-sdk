@@ -29,7 +29,7 @@ const deployment: MigratorsDeployment = {
     runtimeConfig: shared("0x4", "12", false),
     protocolAuthority: shared("0x5", "13", false),
   },
-  venueConfig: shared("0x6", "14", false),
+  venueConfig: shared("0x60", "14", false),
 };
 const types = {
   memeType: "0xa::meme::MEME",
@@ -93,6 +93,51 @@ test("signs in and routes both protocol LP-fee coins", () => {
   assert.equal(transferObjectCount(tx), 2);
 });
 
+test("builds the complete Bluefin migration with frozen mutability", () => {
+  const sdk = new MigratorTransactions(deployment);
+  assert.equal(
+    sdk.call.migrationWitnessType("bluefin"),
+    "0x0000000000000000000000000000000000000000000000000000000000000320::bluefin::Witness",
+  );
+
+  const tx = sdk.migrateBluefin({
+    ...types,
+    launch: shared("0x10", "30", true),
+    memeCurrency: shared("0x11", "31", true),
+    quoteCurrency: shared("0x12", "32", false),
+    bluefinConfig: shared("0x13", "33", true),
+  });
+
+  assert.deepEqual(moveFunctions(tx), ["bluefin::migrate"]);
+  assert.deepEqual(moveTypeArguments(tx), [
+    [normalizedType(types.memeType), normalizedType(types.quoteType)],
+  ]);
+  assert.deepEqual(sharedMutability(tx), [
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    true,
+    false,
+  ]);
+});
+
+test("builds Bluefin LP-fee collection without unhandled results", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const tx = sdk.collectBluefinFees({
+    ...types,
+    vault: shared("0x20", "40", true),
+    bluefinConfig: shared("0x21", "41", false),
+    pool: shared("0x22", "42", true),
+  });
+
+  assert.deepEqual(moveFunctions(tx), ["bluefin::collect_fees"]);
+  assert.deepEqual(sharedMutability(tx), [true, false, false, true, false]);
+  assert.equal(tx.getData().commands.length, 1);
+});
+
 function moveFunctions(tx: Transaction): string[] {
   return tx.getData().commands.flatMap((command) =>
     command.$kind === "MoveCall"
@@ -106,4 +151,24 @@ function transferObjectCount(tx: Transaction): number {
   return transfer?.$kind === "TransferObjects"
     ? transfer.TransferObjects.objects.length
     : 0;
+}
+
+function moveTypeArguments(tx: Transaction): string[][] {
+  return tx.getData().commands.flatMap((command) =>
+    command.$kind === "MoveCall" ? [command.MoveCall.typeArguments] : [],
+  );
+}
+
+function sharedMutability(tx: Transaction): boolean[] {
+  return tx.getData().inputs.flatMap((input) =>
+    input.$kind === "Object" && input.Object.$kind === "SharedObject"
+      ? [input.Object.SharedObject.mutable]
+      : [],
+  );
+}
+
+function normalizedType(type: string): string {
+  return type.replace(/^0x([0-9a-f]+)::/, (_match, address: string) =>
+    `0x${address.padStart(64, "0")}::`,
+  );
 }

@@ -14,6 +14,7 @@ import type { LaunchpadDeployment, LaunchTypes } from "../launchpad/transactions
 import { LaunchpadCalls } from "../launchpad/transactions.ts";
 import { normalizeSharedObjectReference } from "../lib/sui.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
+import type { MigratorVenue } from "./state.ts";
 
 export type MigratorsDeployment = {
   packageId: string;
@@ -32,19 +33,25 @@ export class MigratorCalls {
 
   constructor(deployment: MigratorsDeployment) {
     const packageId = normalizeSuiObjectId(deployment.packageId);
+    this.#launchpad = new LaunchpadCalls(deployment.launchpad);
     this.deployment = {
       packageId,
       originalPackageId: normalizeSuiObjectId(
         deployment.originalPackageId ?? packageId,
       ),
-      launchpad: deployment.launchpad,
+      launchpad: this.#launchpad.deployment,
       venueConfig: normalizeSharedObjectReference(
         "venueConfig",
         deployment.venueConfig,
         false,
       ),
     };
-    this.#launchpad = new LaunchpadCalls(deployment.launchpad);
+  }
+
+  migrationWitnessType(venue: MigratorVenue): string {
+    return normalizeStructTag(
+      `${this.deployment.originalPackageId}::${venue}::Witness`,
+    );
   }
 
   signIn(options: { adminCap: TransactionObjectInput }) {
@@ -83,6 +90,69 @@ export class MigratorCalls {
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           tx.object(options.adminWitness),
+        ],
+      });
+  }
+
+  migrateBluefin(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      memeCurrency: SharedObjectReference<true>;
+      quoteCurrency: SharedObjectReference<false>;
+      bluefinConfig: SharedObjectReference<true>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::bluefin::migrate`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.launchpad.packageVersion,
+            false,
+          ),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.launchpad.runtimeConfig,
+            false,
+          ),
+          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          sharedObject(tx, "quoteCurrency", options.quoteCurrency, false),
+          sharedObject(tx, "bluefinConfig", options.bluefinConfig, true),
+          tx.object.clock(),
+        ],
+      });
+  }
+
+  collectBluefinFees(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      bluefinConfig: SharedObjectReference<false>;
+      pool: SharedObjectReference<true>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::bluefin::collect_fees`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.launchpad.runtimeConfig,
+            false,
+          ),
+          sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
+          sharedObject(tx, "pool", options.pool, true),
+          tx.object.clock(),
         ],
       });
   }
@@ -137,6 +207,22 @@ export class MigratorTransactions {
       [result[0]!, result[1]!],
       normalizeSuiAddress(options.recipient),
     );
+    return tx;
+  }
+
+  migrateBluefin(
+    options: Parameters<MigratorCalls["migrateBluefin"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.migrateBluefin(options));
+    return tx;
+  }
+
+  collectBluefinFees(
+    options: Parameters<MigratorCalls["collectBluefinFees"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.collectBluefinFees(options));
     return tx;
   }
 }
