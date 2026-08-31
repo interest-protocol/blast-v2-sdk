@@ -7,7 +7,7 @@ import {
   requireU128,
 } from "../lib/integers.ts";
 
-/** Mirrors `migration_math::sqrt_price_x64` over atomic Meme/Quote units. */
+/** Mirrors `blast_fun_migrators::migration_math::sqrt_price_x64` over atomic Meme/Quote units. */
 export function sqrtPriceX64(
   memeAmount: bigint,
   quoteAmount: bigint,
@@ -16,7 +16,7 @@ export function sqrtPriceX64(
   return integerSqrt(ratioQ128(memeAmount, quoteAmount, memeIsCoinA));
 }
 
-/** Mirrors the adopted-pool price guard in `migration_math`. */
+/** Mirrors the adopted-pool price guard in `blast_fun_migrators::migration_math`. */
 export function assertPriceWithinBps(
   memeAmount: bigint,
   quoteAmount: bigint,
@@ -53,7 +53,7 @@ export function minimumUtilizedAmount(
   return amount - maximumResidualAmount(amount, maxResidualBps);
 }
 
-/** Mirrors the venue residual guard in `migration_math`. */
+/** Mirrors the venue residual guard in `blast_fun_migrators::migration_math`. */
 export function assertResidualWithinBps(
   sourceAmount: bigint,
   residualAmount: bigint,

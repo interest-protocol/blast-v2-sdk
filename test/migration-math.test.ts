@@ -6,7 +6,7 @@ import {
   assertResidualWithinBps,
   minimumUtilizedAmount,
   sqrtPriceX64,
-} from "../src/launchpad/migration-math.ts";
+} from "../src/migrators/index.ts";
 
 test("matches the contract Q64.64 migration-price vectors", () => {
   const oneX64 = 18_446_744_073_709_551_616n;

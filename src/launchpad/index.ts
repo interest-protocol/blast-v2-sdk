@@ -2,7 +2,6 @@ export * from "./client.ts";
 export * from "./curve.ts";
 export * from "./economics.ts";
 export * from "./events.ts";
-export * from "./migration-math.ts";
 export * from "./reducer.ts";
 export * from "./state.ts";
 export * from "./template.ts";
