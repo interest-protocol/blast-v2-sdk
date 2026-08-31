@@ -18,7 +18,6 @@ export type VaultMigrationProjection = {
   usedQuoteAmount: bigint;
   residualMemeAmount: bigint;
   residualQuoteAmount: bigint;
-  residualTreasury: string;
   sqrtPriceX64: bigint;
   lowerTickBits: number;
   upperTickBits: number;
@@ -38,6 +37,8 @@ export type LpVaultEventProjection = {
   creatorMemeFees: bigint;
   protocolQuoteFees: bigint;
   creatorQuoteFees: bigint;
+  protocolMemeResidual: bigint;
+  protocolQuoteResidual: bigint;
   principalLiquidity: bigint | null;
   migration: VaultMigrationProjection | null;
 };
@@ -168,6 +169,8 @@ export function reduceMigratorEvent(
             creatorMemeFees: 0n,
             protocolQuoteFees: 0n,
             creatorQuoteFees: 0n,
+            protocolMemeResidual: 0n,
+            protocolQuoteResidual: 0n,
             principalLiquidity: null,
             migration: null,
           },
@@ -183,6 +186,8 @@ export function reduceMigratorEvent(
         venueType: payload.venue,
         memeType: payload.meme,
         quoteType: payload.quote,
+        protocolMemeResidual: payload.residual_meme_amount,
+        protocolQuoteResidual: payload.residual_quote_amount,
         migration: {
           sourceMemeAmount: payload.source_meme_amount,
           sourceQuoteAmount: payload.source_quote_amount,
@@ -190,7 +195,6 @@ export function reduceMigratorEvent(
           usedQuoteAmount: payload.used_quote_amount,
           residualMemeAmount: payload.residual_meme_amount,
           residualQuoteAmount: payload.residual_quote_amount,
-          residualTreasury: payload.residual_treasury,
           sqrtPriceX64: payload.sqrt_price_x64,
           lowerTickBits: payload.lower_tick_bits,
           upperTickBits: payload.upper_tick_bits,
@@ -215,7 +219,16 @@ export function reduceMigratorEvent(
         principalLiquidity: payload.principal_liquidity_after,
       }));
     }
-    case "CreatorFeesClaimed":
+    case "CreatorFeesClaimed": {
+      const payload = event.payload;
+      return updateVault(next, payload.vault_id, (vault) => ({
+        ...vault,
+        protocolMemeFees: payload.protocol_meme_fee_total,
+        creatorMemeFees: payload.creator_meme_fee_total,
+        protocolQuoteFees: payload.protocol_quote_fee_total,
+        creatorQuoteFees: payload.creator_quote_fee_total,
+      }));
+    }
     case "ProtocolFeesClaimed": {
       const payload = event.payload;
       return updateVault(next, payload.vault_id, (vault) => ({
@@ -224,6 +237,8 @@ export function reduceMigratorEvent(
         creatorMemeFees: payload.creator_meme_fee_total,
         protocolQuoteFees: payload.protocol_quote_fee_total,
         creatorQuoteFees: payload.creator_quote_fee_total,
+        protocolMemeResidual: 0n,
+        protocolQuoteResidual: 0n,
       }));
     }
     case "VenueTierUpdated":

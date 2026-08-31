@@ -115,7 +115,6 @@ test("builds the complete Bluefin migration with frozen mutability", () => {
     true,
     false,
     false,
-    false,
     true,
     false,
     true,
@@ -124,7 +123,6 @@ test("builds the complete Bluefin migration with frozen mutability", () => {
   assertSharedArgumentIds(tx, [
     "0x10",
     "0x2",
-    "0x4",
     "0x60",
     "0x11",
     "0x12",
@@ -173,7 +171,6 @@ test("routes both MMT migration orientations with frozen shared inputs", () => {
       true,
       false,
       false,
-      false,
       true,
       true,
       false,
@@ -182,7 +179,6 @@ test("routes both MMT migration orientations with frozen shared inputs", () => {
     assertSharedArgumentIds(tx, [
       "0x10",
       "0x2",
-      "0x4",
       "0x60",
       "0x11",
       "0x12",
@@ -239,7 +235,6 @@ test("routes all four Cetus migration combinations", () => {
         true,
         false,
         false,
-        false,
         true,
         false,
         true,
@@ -248,7 +243,6 @@ test("routes all four Cetus migration combinations", () => {
       assertSharedArgumentIds(tx, [
         "0x10",
         "0x2",
-        "0x4",
         "0x60",
         "0x11",
         "0x12",
@@ -323,8 +317,8 @@ test("routes all four Turbos migrations with a third fee type", () => {
       assert.deepEqual(
         sharedMutability(tx),
         poolKind === "new"
-          ? [true, false, false, false, true, true, false, true, false, false]
-          : [true, false, false, false, true, true, true, false, false],
+          ? [true, false, false, true, true, false, true, false, false]
+          : [true, false, false, true, true, true, false, false],
       );
       assertSharedArgumentIds(
         tx,
@@ -332,7 +326,6 @@ test("routes all four Turbos migrations with a third fee type", () => {
           ? [
               "0x10",
               "0x2",
-              "0x4",
               "0x60",
               "0x11",
               "0x14",
@@ -341,17 +334,7 @@ test("routes all four Turbos migrations with a third fee type", () => {
               "0x6",
               "0x17",
             ]
-          : [
-              "0x10",
-              "0x2",
-              "0x4",
-              "0x60",
-              "0x11",
-              "0x14",
-              "0x16",
-              "0x6",
-              "0x17",
-            ],
+          : ["0x10", "0x2", "0x60", "0x11", "0x14", "0x16", "0x6", "0x17"],
       );
       assert.equal(pureInputCount(tx), 1);
       assert.equal(tx.getData().commands.length, 1);
@@ -425,7 +408,6 @@ test("routes all four Full Sail migrations including rewarder custody", () => {
         true,
         false,
         false,
-        false,
         true,
         false,
         true,
@@ -435,7 +417,6 @@ test("routes all four Full Sail migrations including rewarder custody", () => {
       assertSharedArgumentIds(tx, [
         "0x10",
         "0x2",
-        "0x4",
         "0x60",
         "0x11",
         "0x12",

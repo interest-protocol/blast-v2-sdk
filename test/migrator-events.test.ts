@@ -134,11 +134,30 @@ test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
       },
       5,
     ),
+    migratorDecoded(
+      "ProtocolFeesClaimed",
+      {
+        vault_id: "0xd",
+        protocol_meme_fee_total: 0n,
+        creator_meme_fee_total: 0n,
+        protocol_quote_fee_total: 0n,
+        creator_quote_fee_total: 0n,
+      },
+      6,
+    ),
   ];
 
-  const projection = inputs.reduce(
-    reduceLaunchpadProductInput,
-    createLaunchpadProductProjection(),
+  const beforeProtocolClaim = inputs
+    .slice(0, -1)
+    .reduce(reduceLaunchpadProductInput, createLaunchpadProductProjection());
+  const beforeClaimVault =
+    beforeProtocolClaim.migrators.vaults[normalizeSuiObjectId("0xd")];
+  assert.equal(beforeClaimVault?.protocolMemeResidual, 1n);
+  assert.equal(beforeClaimVault?.protocolQuoteResidual, 1n);
+
+  const projection = reduceLaunchpadProductInput(
+    beforeProtocolClaim,
+    inputs.at(-1)!,
   );
   const launch = projection.launchpad.launches[normalizeSuiObjectId("0xc")];
   const vault = projection.migrators.vaults[normalizeSuiObjectId("0xd")];
@@ -150,10 +169,14 @@ test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
   assert.equal(vault.launchId, normalizeSuiObjectId("0xc"));
   assert.equal(vault.poolId, normalizeSuiObjectId("0xe"));
   assert.equal(vault.positionId, normalizeSuiObjectId("0xf"));
-  assert.equal(vault.protocolMemeFees, 11n);
+  assert.equal(vault.protocolMemeFees, 0n);
   assert.equal(vault.creatorMemeFees, 0n);
-  assert.equal(vault.protocolQuoteFees, 13n);
+  assert.equal(vault.protocolQuoteFees, 0n);
   assert.equal(vault.creatorQuoteFees, 0n);
+  assert.equal(vault.protocolMemeResidual, 0n);
+  assert.equal(vault.protocolQuoteResidual, 0n);
+  assert.equal(vault.migration?.residualMemeAmount, 1n);
+  assert.equal(vault.migration?.residualQuoteAmount, 1n);
   assert.equal(vault.principalLiquidity, 1_000n);
 });
 

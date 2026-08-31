@@ -42,7 +42,7 @@ original package ID. The deployment model stores both IDs.
 | `creator_authority::new_address`, `creator_authority::new_x` | Compiled Meme template | `test/template.test.ts` | Template-internal constructors, not standalone product calls. |
 | `migration_math::sqrt_price_x64`, `assert_price_within_bps`, `minimum_utilized_amount`, `assert_residual_within_bps` | `sqrtPriceX64`, `assertPriceWithinBps`, `minimumUtilizedAmount`, `assertResidualWithinBps` | `test/migration-math.test.ts` | Exact SDK arithmetic mirrors; contract execution remains authoritative. |
 | `fees::new`, `accrue_from_runtime`, `totals`, `claim_creator_fees`, `claim_protocol_fees` | Launch/vault builders, object decoders, and reducers | state, transaction, and replay tests | Move-composition surface over `Balance` values and witnesses, not standalone client operations. |
-| `runtime_config::protocol_fee_share_bps`, `runtime_config::protocol_treasury` | Launchpad and migrator projections | launchpad and migrator event tests | Move-composition getters; clients reconstruct the values from canonical object state or events. |
+| `runtime_config::protocol_fee_share_bps` | Launchpad and migrator projections | launchpad and migrator event tests | Move-composition getter; clients reconstruct the value from canonical object state or events. |
 | Bluefin `migrate`, `collect_fees` | `migrateBluefin`, `collectBluefinFees` | `test/migrators-transactions.test.ts` | Both production routes complete. |
 | MMT `migrate_meme_x`, `migrate_meme_y`, `collect_fees_meme_x`, `collect_fees_meme_y` | `migrateMmt`, `collectMmtFees` with `memeSide` | `test/migrators-transactions.test.ts` | All four routes complete. |
 | Cetus four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateCetus`, `collectCetusFees` with pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. |
@@ -133,9 +133,13 @@ authoritative, and these helpers do not duplicate mutable admission policy.
 
 | Frozen event surface | SDK implementation | Verification |
 | --- | --- | --- |
-| 30 wrapped launchpad payloads: `AdminDestroyed`, `AdminGranted`, `AdminRevoked`, `Bought`, `CreatorCapClaimed`, `CreatorFeesClaimed`, `GraduationDefaultsChanged`, `LaunchCreated`, `LaunchTicketCreated`, `LaunchTradeFeesChanged`, `Migrated`, `MigrationWitnessAllowed`, `MigrationWitnessDisallowed`, `PackageAdminCreated`, `PackageVersionAdvanced`, `ProtocolFeesClaimed`, `ProtocolFeeShareChanged`, `ProtocolTreasuryChanged`, `QuoteAllowed`, `QuoteDisallowed`, `QuoteParametersChanged`, `Sold`, `SuperAdminTransferCancelled`, `SuperAdminTransferred`, `SuperAdminTransferStarted`, `UpgradeAuthorized`, `UpgradeCommitted`, `UpgradePolicyRestricted`, `XClaimSignerRevoked`, `XClaimSignerSet` | `launchpadEventSpecs`, `launchpadEventBcs`, `decodeLaunchpadEvent`, `reduceLaunchpadEvent` | `test/launchpad-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
+| 29 wrapped launchpad payloads: `AdminDestroyed`, `AdminGranted`, `AdminRevoked`, `Bought`, `CreatorCapClaimed`, `CreatorFeesClaimed`, `GraduationDefaultsChanged`, `LaunchCreated`, `LaunchTicketCreated`, `LaunchTradeFeesChanged`, `Migrated`, `MigrationWitnessAllowed`, `MigrationWitnessDisallowed`, `PackageAdminCreated`, `PackageVersionAdvanced`, `ProtocolFeesClaimed`, `ProtocolFeeShareChanged`, `QuoteAllowed`, `QuoteDisallowed`, `QuoteParametersChanged`, `Sold`, `SuperAdminTransferCancelled`, `SuperAdminTransferred`, `SuperAdminTransferStarted`, `UpgradeAuthorized`, `UpgradeCommitted`, `UpgradePolicyRestricted`, `XClaimSignerRevoked`, `XClaimSignerSet` | `launchpadEventSpecs`, `launchpadEventBcs`, `decodeLaunchpadEvent`, `reduceLaunchpadEvent` | `test/launchpad-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
 | Six direct migrator payloads: `CreatorFeesClaimed`, `LpFeesCollected`, `MigrationCompleted`, `ProtocolFeesClaimed`, `VaultCreated`, `VenueTierUpdated` | `migratorEventSpecs`, `migratorEventBcs`, `decodeMigratorEvent`, `reduceMigratorEvent` | `test/migrator-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
-| Ordered launch-to-vault replay | `reduceLaunchpadProductInput` | launchpad and migrator replay tests reconstruct launch lifecycle, reserves, launch fees, migration, vault/pool/position identity, principal, and LP-fee totals. |
+| Ordered launch-to-vault replay | `reduceLaunchpadProductInput` | launchpad and migrator replay tests reconstruct launch lifecycle, reserves, launch fees, migration, vault/pool/position identity, principal, and LP-fee totals. Actor identities omitted from payloads are reconstructed from native event senders. |
+
+Vesting creation projections derive the funder from the native event sender;
+claim, cancel, and close callers are likewise available as event senders and are
+not duplicated in payload fields.
 
 ### Blast SUI wrapped events
 

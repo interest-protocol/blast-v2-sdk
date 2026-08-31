@@ -302,10 +302,7 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
   if (isIntentionalAdminExclusion(moduleName, functionName, key)) {
     return "intentional-admin-exclusion";
   }
-  if (
-    key === "runtime_config::protocol_fee_share_bps" ||
-    key === "runtime_config::protocol_treasury"
-  ) {
+  if (key === "runtime_config::protocol_fee_share_bps") {
     return "move-composition";
   }
   throw new Error(`unclassified function ${packageName}::${key}`);

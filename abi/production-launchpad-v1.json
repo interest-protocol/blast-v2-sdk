@@ -1060,10 +1060,6 @@
                   }
                 },
                 {
-                  "name": "buyer",
-                  "type": "address"
-                },
-                {
                   "name": "quote_supplied",
                   "type": "u64"
                 },
@@ -1189,10 +1185,6 @@
                   }
                 },
                 {
-                  "name": "creator",
-                  "type": "address"
-                },
-                {
                   "name": "x_claim_expiry_ms",
                   "type": {
                     "Datatype": {
@@ -1260,10 +1252,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "claimant",
-                  "type": "address"
                 },
                 {
                   "name": "meme_amount",
@@ -1385,10 +1373,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "launcher",
-                  "type": "address"
                 },
                 {
                   "name": "metadata_cap_id",
@@ -1531,10 +1515,6 @@
                   }
                 },
                 {
-                  "name": "launcher",
-                  "type": "address"
-                },
-                {
                   "name": "creator",
                   "type": {
                     "Datatype": {
@@ -1671,10 +1651,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "migrator",
-                  "type": "address"
                 },
                 {
                   "name": "migration_meme",
@@ -1906,10 +1882,6 @@
                   }
                 },
                 {
-                  "name": "claimant",
-                  "type": "address"
-                },
-                {
                   "name": "meme_amount",
                   "type": "u64"
                 },
@@ -1936,26 +1908,6 @@
                 {
                   "name": "new_protocol_fee_share_bps",
                   "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "ProtocolTreasuryChanged",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "old_protocol_treasury",
-                  "type": "address"
-                },
-                {
-                  "name": "new_protocol_treasury",
-                  "type": "address"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -2114,10 +2066,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "seller",
-                  "type": "address"
                 },
                 {
                   "name": "meme_in_gross",
@@ -2297,27 +2245,6 @@
               "typeParameters": [],
               "positional": false,
               "fields": [
-                {
-                  "name": "package_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "package_version",
-                  "type": "u64"
-                },
-                {
-                  "name": "policy",
-                  "type": "u8"
-                },
                 {
                   "name": "digest",
                   "type": {
@@ -5774,32 +5701,6 @@
               ]
             },
             {
-              "name": "protocol_treasury",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "address"
-              ]
-            },
-            {
               "name": "revoke_x_claim_signer",
               "sdk": "intentional-admin-exclusion",
               "entry": false,
@@ -5909,61 +5810,6 @@
               "returns": []
             },
             {
-              "name": "set_protocol_treasury",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                "address"
-              ],
-              "returns": []
-            },
-            {
               "name": "set_x_claim_signer",
               "sdk": "intentional-admin-exclusion",
               "entry": false,
@@ -6048,10 +5894,6 @@
                   "type": {
                     "vector": "u8"
                   }
-                },
-                {
-                  "name": "protocol_treasury",
-                  "type": "address"
                 },
                 {
                   "name": "protocol_fee_share_bps",
@@ -6296,21 +6138,6 @@
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
                         "type_arguments": []
                       }
                     }
@@ -6808,21 +6635,6 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
                           "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
@@ -6985,21 +6797,6 @@
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
                         "type_arguments": []
                       }
                     }
@@ -7184,21 +6981,6 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
                           "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
@@ -7348,21 +7130,6 @@
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
                         "type_arguments": []
                       }
                     }
@@ -7597,10 +7364,6 @@
                   }
                 },
                 {
-                  "name": "claimant",
-                  "type": "address"
-                },
-                {
                   "name": "meme_amount",
                   "type": "u64"
                 },
@@ -7713,10 +7476,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "collector",
-                  "type": "address"
                 },
                 {
                   "name": "gross_meme_fee",
@@ -7885,10 +7644,6 @@
                   "type": "u64"
                 },
                 {
-                  "name": "residual_treasury",
-                  "type": "address"
-                },
-                {
                   "name": "sqrt_price_x64",
                   "type": "u128"
                 },
@@ -7958,10 +7713,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "claimant",
-                  "type": "address"
                 },
                 {
                   "name": "meme_amount",
@@ -8433,21 +8184,6 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
                           "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
@@ -8625,21 +8361,6 @@
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
                         "type_arguments": []
                       }
                     }
@@ -8839,21 +8560,6 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
                           "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
@@ -9018,21 +8724,6 @@
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
                         "type_arguments": []
                       }
                     }
@@ -9568,21 +9259,6 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
                           "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
@@ -9732,21 +9408,6 @@
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
                         "type_arguments": []
                       }
                     }
@@ -10326,21 +9987,6 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
                           "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
@@ -10530,21 +10176,6 @@
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
                         "type_arguments": []
                       }
                     }
@@ -10756,21 +10387,6 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
                           "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
@@ -10963,21 +10579,6 @@
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
                         "type_arguments": []
                       }
                     }
@@ -11475,6 +11076,46 @@
                       },
                       "name": "ID",
                       "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "protocol_meme_residual",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Meme"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "protocol_quote_residual",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Quote"
+                          },
+                          "phantom": true
+                        }
+                      ]
                     }
                   }
                 },

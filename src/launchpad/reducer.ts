@@ -54,7 +54,6 @@ export type LaunchTicketEventProjection = {
 export type LaunchpadConfigProjection = {
   packageVersion: bigint | null;
   protocolFeeShareBps: bigint | null;
-  protocolTreasury: string | null;
   tradeFeeDefaults: {
     quoteFeeBps: bigint;
     memeFeeBps: bigint;
@@ -145,7 +144,6 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
     config: {
       packageVersion: null,
       protocolFeeShareBps: null,
-      protocolTreasury: null,
       tradeFeeDefaults: null,
       graduationDefaults: null,
       quotes: {},
@@ -192,7 +190,7 @@ export function reduceLaunchpadEvent(
             memeType: payload.meme,
             initialSupply: payload.initial_supply,
             metadataCapId: payload.metadata_cap_id,
-            launcher: payload.launcher,
+            launcher: event.sender,
             creator: payload.creator,
             xIdentityHash: payload.x_identity_hash,
             burnable: payload.burnable,
@@ -213,7 +211,7 @@ export function reduceLaunchpadEvent(
             memeType: payload.meme,
             quoteType: payload.quote,
             migrationWitnessType: payload.migration_witness,
-            launcher: payload.launcher,
+            launcher: event.sender,
             metadataCapId: payload.metadata_cap_id,
             lifecycle: "Live",
             sellBurnBps: payload.sell_burn_bps,
@@ -310,11 +308,6 @@ export function reduceLaunchpadEvent(
       return updateConfig(next, {
         ...state.config,
         protocolFeeShareBps: event.payload.new_protocol_fee_share_bps,
-      });
-    case "ProtocolTreasuryChanged":
-      return updateConfig(next, {
-        ...state.config,
-        protocolTreasury: event.payload.new_protocol_treasury,
       });
     case "LaunchTradeFeesChanged":
       return updateConfig(next, {
@@ -437,7 +430,7 @@ export function reduceLaunchpadEvent(
           ...state.administration.creatorCapClaims,
           [payload.meme]: {
             memeType: payload.meme,
-            creator: payload.creator,
+            creator: event.sender,
             xIdentityHash: payload.x_identity_hash,
             xClaimExpiryMs: payload.x_claim_expiry_ms,
           },
@@ -481,16 +474,20 @@ export function reduceLaunchpadEvent(
           recipient: event.payload.recipient,
         },
       });
-    case "UpgradeAuthorized":
+    case "UpgradeAuthorized": {
+      const packageAdmin = state.administration.packageAdmin;
       return updateAdministration(next, {
         ...state.administration,
-        pendingUpgrade: {
-          packageId: event.payload.package_id,
-          packageVersion: event.payload.package_version,
-          policy: event.payload.policy,
-          digest: event.payload.digest,
-        },
+        pendingUpgrade: packageAdmin
+          ? {
+              packageId: packageAdmin.packageId,
+              packageVersion: packageAdmin.packageVersion,
+              policy: packageAdmin.policy,
+              digest: event.payload.digest,
+            }
+          : null,
       });
+    }
     case "UpgradeCommitted": {
       const payload = event.payload;
       const packageAdmin = state.administration.packageAdmin;

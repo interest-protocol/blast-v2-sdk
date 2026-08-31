@@ -38,7 +38,6 @@ const commonPayloads = {
   VestingCanceled: {
     vesting_id: "0x1",
     coin_type: "0x2::sui::SUI",
-    caller: "0x3",
     beneficiary: "0x4",
     refund_recipient: "0x5",
     beneficiary_amount: 6n,
@@ -48,7 +47,6 @@ const commonPayloads = {
   VestingClaimed: {
     vesting_id: "0x1",
     coin_type: "0x2::sui::SUI",
-    caller: "0x3",
     beneficiary: "0x4",
     amount: 5n,
     released_total: 6n,
@@ -57,7 +55,6 @@ const commonPayloads = {
   VestingClosed: {
     vesting_id: "0x1",
     coin_type: "0x2::sui::SUI",
-    caller: "0x3",
     released_total: 4n,
   },
 } as const;
@@ -84,7 +81,6 @@ const fixtures = [
     payload: {
       vesting_id: "0x1",
       coin_type: "0x2::sui::SUI",
-      funder: "0x3",
       beneficiary: "0x4",
       refund_recipient: "0x5",
       cancel_cap_id: "0x6",
@@ -113,7 +109,6 @@ const fixtures = [
     payload: {
       vesting_id: "0x1",
       coin_type: "0x2::sui::SUI",
-      funder: "0x3",
       beneficiary: "0x4",
       refund_recipient: null,
       cancel_cap_id: null,
@@ -248,14 +243,12 @@ test("rejects a malformed coin TypeName", () => {
     coin_type: bcs.struct("TypeName", {
       name: bcs.struct("AsciiString", { bytes: bcs.vector(bcs.u8()) }),
     }),
-    caller: bcs.Address,
     released_total: bcs.u64(),
   });
   const malformed = rawClosed
     .serialize({
       vesting_id: { bytes: "0x1" },
       coin_type: { name: { bytes: [255] } },
-      caller: "0x3",
       released_total: 4n,
     })
     .toBytes();

@@ -12,12 +12,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-const siblingContractsManifestUrl = new URL(
-  "../../contracts/sui/launchpad/Move.toml",
-  import.meta.url,
-);
+const contractsDirectory = process.env.BLAST_CONTRACTS_DIR ?? "../contracts";
+const contractsManifest = join(contractsDirectory, "sui/launchpad/Move.toml");
 const expectedEvents = {
-  launchpad: 30,
+  launchpad: 29,
   migrators: 6,
   vesting: 8,
   blastSui: 24,
@@ -55,13 +53,13 @@ function countEvents(artifact: Artifact, packageName: string): number {
 }
 
 test("matches the frozen production Move ABI", {
-  skip: existsSync(siblingContractsManifestUrl)
+  skip: existsSync(contractsManifest)
     ? false
     : "requires the sibling blast-v2 contracts checkout",
 }, () => {
   const result = spawnSync(
     process.execPath,
-    ["scripts/check-contract-abi.mjs", "../contracts"],
+    ["scripts/check-contract-abi.mjs", contractsDirectory],
     { cwd: new URL("..", import.meta.url), encoding: "utf8" },
   );
 
@@ -76,7 +74,7 @@ test("rejects a Sui CLI version that differs from the frozen artifacts", () => {
     chmodSync(fakeSui, 0o755);
     const result = spawnSync(
       process.execPath,
-      ["scripts/check-contract-abi.mjs", "../contracts"],
+      ["scripts/check-contract-abi.mjs", contractsDirectory],
       {
         cwd: new URL("..", import.meta.url),
         encoding: "utf8",

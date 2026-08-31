@@ -23,7 +23,6 @@ type VestingEventFieldDescriptor =
 const claimedFields = {
   vesting_id: "id",
   coin_type: "typeName",
-  caller: "address",
   beneficiary: "address",
   amount: "u64",
   released_total: "u64",
@@ -33,7 +32,6 @@ const claimedFields = {
 const canceledFields = {
   vesting_id: "id",
   coin_type: "typeName",
-  caller: "address",
   beneficiary: "address",
   refund_recipient: "address",
   beneficiary_amount: "u64",
@@ -44,7 +42,6 @@ const canceledFields = {
 const closedFields = {
   vesting_id: "id",
   coin_type: "typeName",
-  caller: "address",
   released_total: "u64",
 } as const;
 
@@ -56,7 +53,6 @@ export const vestingEventSpecs = {
     VestingCreated: {
       vesting_id: "id",
       coin_type: "typeName",
-      funder: "address",
       beneficiary: "address",
       refund_recipient: "optionAddress",
       cancel_cap_id: "optionId",
@@ -71,7 +67,6 @@ export const vestingEventSpecs = {
     VestingCreated: {
       vesting_id: "id",
       coin_type: "typeName",
-      funder: "address",
       beneficiary: "address",
       refund_recipient: "optionAddress",
       cancel_cap_id: "optionId",

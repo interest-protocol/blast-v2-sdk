@@ -139,7 +139,7 @@ function createPosition(
   const common: VestingPositionBase = {
     vestingId: normalizeSuiObjectId(payload.vesting_id),
     coinType: normalizeStructTag(payload.coin_type),
-    funder: normalizeSuiAddress(payload.funder),
+    funder: normalizeSuiAddress(event.sender),
     beneficiary: normalizeSuiAddress(payload.beneficiary),
     refundRecipient: normalizeOptionalAddress(payload.refund_recipient),
     cancelCapId: normalizeOptionalId(payload.cancel_cap_id),

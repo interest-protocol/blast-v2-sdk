@@ -28,7 +28,7 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
   const frozenSpecs = readFrozenLaunchpadEventSpecs();
   assert.deepEqual(launchpadEventSpecs, frozenSpecs);
   const kinds = Object.keys(frozenSpecs) as LaunchpadEventKind[];
-  assert.equal(kinds.length, 30);
+  assert.equal(kinds.length, 29);
 
   let projection = createLaunchpadEventProjection();
   for (const [eventIndex, kind] of orderedForReplay(kinds).entries()) {
@@ -169,7 +169,6 @@ test("replays launchpad capability, signer, and package administration facts", (
       "CreatorCapClaimed",
       {
         meme: "0xa::meme::MEME",
-        creator: "0x72",
         x_identity_hash: new Uint8Array([7, 2]),
         x_claim_expiry_ms: 99n,
       },
@@ -198,9 +197,6 @@ test("replays launchpad capability, signer, and package administration facts", (
     decoded(
       "UpgradeAuthorized",
       {
-        package_id: "0x78",
-        package_version: 2n,
-        policy: 1,
         digest: new Uint8Array([8]),
       },
       34,
@@ -229,7 +225,7 @@ test("replays launchpad capability, signer, and package administration facts", (
   );
   assert.equal(
     beforeRevocation.administration.pendingUpgrade?.packageVersion,
-    2n,
+    1n,
   );
 
   const projection = [
@@ -302,7 +298,7 @@ test("replays launchpad capability, signer, and package administration facts", (
     ],
     {
       memeType: normalizedType("0xa::meme::MEME"),
-      creator: normalizeSuiObjectId("0x72"),
+      creator: normalizeSuiObjectId("0xd"),
       xIdentityHash: new Uint8Array([7, 2]),
       xClaimExpiryMs: 99n,
     },

@@ -25,7 +25,6 @@ test("replays a linear vesting lifecycle and ignores duplicate native event ids"
   const created = event("linear.VestingCreated", {
     vesting_id: linearId,
     coin_type: normalizeStructTag("0x2::sui::SUI"),
-    funder: normalizeSuiAddress("0x4"),
     beneficiary: normalizeSuiAddress("0x5"),
     refund_recipient: null,
     cancel_cap_id: null,
@@ -38,7 +37,6 @@ test("replays a linear vesting lifecycle and ignores duplicate native event ids"
   const claimed = event("linear.VestingClaimed", {
     vesting_id: linearId,
     coin_type: normalizeStructTag("0x2::sui::SUI"),
-    caller: normalizeSuiAddress("0x6"),
     beneficiary: normalizeSuiAddress("0x5"),
     amount: 400n,
     released_total: 400n,
@@ -47,7 +45,6 @@ test("replays a linear vesting lifecycle and ignores duplicate native event ids"
   const finalClaim = event("linear.VestingClaimed", {
     vesting_id: linearId,
     coin_type: normalizeStructTag("0x2::sui::SUI"),
-    caller: normalizeSuiAddress("0x6"),
     beneficiary: normalizeSuiAddress("0x5"),
     amount: 600n,
     released_total: 1_000n,
@@ -56,7 +53,6 @@ test("replays a linear vesting lifecycle and ignores duplicate native event ids"
   const closed = event("linear.VestingClosed", {
     vesting_id: linearId,
     coin_type: normalizeStructTag("0x2::sui::SUI"),
-    caller: normalizeSuiAddress("0x6"),
     released_total: 1_000n,
   });
 
@@ -73,7 +69,7 @@ test("replays a linear vesting lifecycle and ignores duplicate native event ids"
     kind: "linear",
     vestingId: linearId,
     coinType: normalizeStructTag("0x2::sui::SUI"),
-    funder: normalizeSuiAddress("0x4"),
+    funder: normalizeSuiAddress("0x101"),
     beneficiary: normalizeSuiAddress("0x5"),
     refundRecipient: null,
     cancelCapId: null,
@@ -96,7 +92,6 @@ test("replays checkpoint creation, claim, and cancellation without inventing nat
   const created = event("checkpoints.VestingCreated", {
     vesting_id: checkpointId,
     coin_type: normalizeStructTag("0x2::sui::SUI"),
-    funder: normalizeSuiAddress("0x7"),
     beneficiary: normalizeSuiAddress("0x8"),
     refund_recipient: normalizeSuiAddress("0x9"),
     cancel_cap_id: cancelCapId,
@@ -106,7 +101,6 @@ test("replays checkpoint creation, claim, and cancellation without inventing nat
   const claimed = event("checkpoints.VestingClaimed", {
     vesting_id: checkpointId,
     coin_type: normalizeStructTag("0x2::sui::SUI"),
-    caller: normalizeSuiAddress("0xa"),
     beneficiary: normalizeSuiAddress("0x8"),
     amount: 300n,
     released_total: 300n,
@@ -115,7 +109,6 @@ test("replays checkpoint creation, claim, and cancellation without inventing nat
   const canceled = event("checkpoints.VestingCanceled", {
     vesting_id: checkpointId,
     coin_type: normalizeStructTag("0x2::sui::SUI"),
-    caller: normalizeSuiAddress("0xb"),
     beneficiary: normalizeSuiAddress("0x8"),
     refund_recipient: normalizeSuiAddress("0x9"),
     beneficiary_amount: 200n,
@@ -132,7 +125,7 @@ test("replays checkpoint creation, claim, and cancellation without inventing nat
     kind: "checkpoints",
     vestingId: checkpointId,
     coinType: normalizeStructTag("0x2::sui::SUI"),
-    funder: normalizeSuiAddress("0x7"),
+    funder: normalizeSuiAddress("0x101"),
     beneficiary: normalizeSuiAddress("0x8"),
     refundRecipient: normalizeSuiAddress("0x9"),
     cancelCapId,
@@ -153,7 +146,6 @@ test("replays a valid linear cancellation path", () => {
     event("linear.VestingCreated", {
       vesting_id: vestingId,
       coin_type: "0x2::sui::SUI",
-      funder: "0x11",
       beneficiary: "0x12",
       refund_recipient: "0x13",
       cancel_cap_id: "0x14",
@@ -169,7 +161,6 @@ test("replays a valid linear cancellation path", () => {
     event("linear.VestingCanceled", {
       vesting_id: vestingId,
       coin_type: "0x2::sui::SUI",
-      caller: "0x15",
       beneficiary: "0x12",
       refund_recipient: "0x13",
       beneficiary_amount: 400n,
@@ -189,7 +180,6 @@ test("replays a valid irrevocable checkpoint close path", () => {
     event("checkpoints.VestingCreated", {
       vesting_id: vestingId,
       coin_type: "0x2::sui::SUI",
-      funder: "0x21",
       beneficiary: "0x22",
       refund_recipient: null,
       cancel_cap_id: null,
@@ -202,7 +192,6 @@ test("replays a valid irrevocable checkpoint close path", () => {
     event("checkpoints.VestingClaimed", {
       vesting_id: vestingId,
       coin_type: "0x2::sui::SUI",
-      caller: "0x23",
       beneficiary: "0x22",
       amount: 900n,
       released_total: 900n,
@@ -214,7 +203,6 @@ test("replays a valid irrevocable checkpoint close path", () => {
     event("checkpoints.VestingClosed", {
       vesting_id: vestingId,
       coin_type: "0x2::sui::SUI",
-      caller: "0x23",
       released_total: 900n,
     }),
   );
@@ -229,7 +217,6 @@ test("stores validated checkpoint schedules only as normalized object-read facts
     event("checkpoints.VestingCreated", {
       vesting_id: "0x2",
       coin_type: "0x2::sui::SUI",
-      funder: "0x7",
       beneficiary: "0x8",
       refund_recipient: "0x9",
       cancel_cap_id: "0x3",
@@ -354,7 +341,6 @@ test("clears cancel-cap ownership only from a native deletion fact", () => {
     event("linear.VestingCreated", {
       vesting_id: vestingId,
       coin_type: "0x2::sui::SUI",
-      funder: "0x32",
       beneficiary: "0x33",
       refund_recipient: "0x34",
       cancel_cap_id: capId,
@@ -377,7 +363,6 @@ test("clears cancel-cap ownership only from a native deletion fact", () => {
     event("linear.VestingCanceled", {
       vesting_id: vestingId,
       coin_type: "0x2::sui::SUI",
-      caller: "0x35",
       beneficiary: "0x33",
       refund_recipient: "0x34",
       beneficiary_amount: 400n,
@@ -440,7 +425,6 @@ test("deduplicates events by transaction digest and event index, not checkpoint"
   const created = event("linear.VestingCreated", {
     vesting_id: "0x1",
     coin_type: "0x2::sui::SUI",
-    funder: "0x4",
     beneficiary: "0x5",
     refund_recipient: null,
     cancel_cap_id: null,
@@ -517,7 +501,6 @@ test("rejects lifecycle updates after cancellation or closure", () => {
   const checkpointCreated = event("checkpoints.VestingCreated", {
     vesting_id: "0x30",
     coin_type: "0x2::sui::SUI",
-    funder: "0x31",
     beneficiary: "0x32",
     refund_recipient: "0x33",
     cancel_cap_id: "0x34",
@@ -533,7 +516,6 @@ test("rejects lifecycle updates after cancellation or closure", () => {
     event("checkpoints.VestingCanceled", {
       vesting_id: "0x30",
       coin_type: "0x2::sui::SUI",
-      caller: "0x35",
       beneficiary: "0x32",
       refund_recipient: "0x33",
       beneficiary_amount: 500n,
@@ -548,7 +530,6 @@ test("rejects lifecycle updates after cancellation or closure", () => {
         event("checkpoints.VestingClaimed", {
           vesting_id: "0x30",
           coin_type: "0x2::sui::SUI",
-          caller: "0x35",
           beneficiary: "0x32",
           amount: 1n,
           released_total: 501n,
@@ -571,7 +552,6 @@ test("rejects lifecycle updates after cancellation or closure", () => {
     event("linear.VestingClosed", {
       vesting_id: "0x40",
       coin_type: "0x2::sui::SUI",
-      caller: "0x42",
       released_total: 1_000n,
     }),
   );
@@ -586,7 +566,6 @@ test("rejects cancellation settlement and party mismatches", () => {
   const created = event("checkpoints.VestingCreated", {
     vesting_id: "0x50",
     coin_type: "0x2::sui::SUI",
-    funder: "0x51",
     beneficiary: "0x52",
     refund_recipient: "0x53",
     cancel_cap_id: "0x54",
@@ -599,7 +578,6 @@ test("rejects cancellation settlement and party mismatches", () => {
     event("checkpoints.VestingClaimed", {
       vesting_id: "0x50",
       coin_type: "0x2::sui::SUI",
-      caller: "0x55",
       beneficiary: "0x52",
       amount: 300n,
       released_total: 300n,
@@ -609,7 +587,6 @@ test("rejects cancellation settlement and party mismatches", () => {
   const cancellation = {
     vesting_id: "0x50",
     coin_type: "0x2::sui::SUI",
-    caller: "0x55",
     beneficiary: "0x52",
     refund_recipient: "0x53",
     beneficiary_amount: 200n,
@@ -658,7 +635,6 @@ test("allows cancellation before any beneficiary release", () => {
     event("checkpoints.VestingCreated", {
       vesting_id: "0x58",
       coin_type: "0x2::sui::SUI",
-      funder: "0x51",
       beneficiary: "0x52",
       refund_recipient: "0x53",
       cancel_cap_id: "0x54",
@@ -671,7 +647,6 @@ test("allows cancellation before any beneficiary release", () => {
     event("checkpoints.VestingCanceled", {
       vesting_id: "0x58",
       coin_type: "0x2::sui::SUI",
-      caller: "0x55",
       beneficiary: "0x52",
       refund_recipient: "0x53",
       beneficiary_amount: 0n,
@@ -697,7 +672,6 @@ test("rejects close events that invent an unreplayed release", () => {
         event("linear.VestingClosed", {
           vesting_id: "0x60",
           coin_type: "0x2::sui::SUI",
-          caller: "0x62",
           released_total: 1_000n,
         }),
       ),
@@ -726,7 +700,6 @@ test("rejects close for fully drained cancelable linear vesting", () => {
     event("linear.VestingCreated", {
       vesting_id: "0x90",
       coin_type: "0x2::sui::SUI",
-      funder: "0x91",
       beneficiary: "0x92",
       refund_recipient: "0x93",
       cancel_cap_id: "0x94",
@@ -748,7 +721,6 @@ test("rejects close for fully drained cancelable linear vesting", () => {
         event("linear.VestingClosed", {
           vesting_id: "0x90",
           coin_type: "0x2::sui::SUI",
-          caller: "0x95",
           released_total: 1_000n,
         }),
       ),
@@ -762,7 +734,6 @@ test("rejects close for fully drained cancelable checkpoint vesting", () => {
     event("checkpoints.VestingCreated", {
       vesting_id: "0xa0",
       coin_type: "0x2::sui::SUI",
-      funder: "0xa1",
       beneficiary: "0xa2",
       refund_recipient: "0xa3",
       cancel_cap_id: "0xa4",
@@ -775,7 +746,6 @@ test("rejects close for fully drained cancelable checkpoint vesting", () => {
     event("checkpoints.VestingClaimed", {
       vesting_id: "0xa0",
       coin_type: "0x2::sui::SUI",
-      caller: "0xa5",
       beneficiary: "0xa2",
       amount: 900n,
       released_total: 900n,
@@ -789,7 +759,6 @@ test("rejects close for fully drained cancelable checkpoint vesting", () => {
         event("checkpoints.VestingClosed", {
           vesting_id: "0xa0",
           coin_type: "0x2::sui::SUI",
-          caller: "0xa5",
           released_total: 900n,
         }),
       ),
@@ -805,7 +774,6 @@ function linearCreated(
   return event("linear.VestingCreated", {
     vesting_id: vestingId,
     coin_type: "0x2::sui::SUI",
-    funder: "0x70",
     beneficiary,
     refund_recipient: null,
     cancel_cap_id: null,
@@ -827,7 +795,6 @@ function linearClaimed(
   return event("linear.VestingClaimed", {
     vesting_id: vestingId,
     coin_type: "0x2::sui::SUI",
-    caller: "0x71",
     beneficiary,
     amount,
     released_total: releasedTotal,
