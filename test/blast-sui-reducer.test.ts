@@ -157,6 +157,39 @@ test("replays all administration events and ignores duplicate events", () => {
       previous_version: 1n,
       new_version: 2n,
     }),
+    event("AdminGranted", {
+      admin_cap_id: normalizeSuiObjectId("0x1a"),
+      recipient: normalizeSuiAddress("0x21"),
+    }),
+    event("AdminGranted", {
+      admin_cap_id: normalizeSuiObjectId("0x1b"),
+      recipient: normalizeSuiAddress("0x22"),
+    }),
+    event("AdminRevoked", {
+      admin_cap_id: normalizeSuiObjectId("0x1b"),
+    }),
+    event("AdminDestroyed", {
+      admin_cap_id: normalizeSuiObjectId("0x1c"),
+      was_active: false,
+    }),
+    event("PackageCapabilityAdded", {
+      package_admin_id: normalizeSuiObjectId("0x15"),
+      capability_id: normalizeSuiObjectId("0x1d"),
+      capability_type:
+        "0x2::coin_registry::MetadataCap<0x122::fun_sui::FUN_SUI>",
+    }),
+    event("PackageCapabilityAdded", {
+      package_admin_id: normalizeSuiObjectId("0x15"),
+      capability_id: normalizeSuiObjectId("0x1e"),
+      capability_type:
+        "0x2::coin_registry::MetadataCap<0x122::blast_sui::BLAST_SUI>",
+    }),
+    event("PackageCapabilityAdded", {
+      package_admin_id: normalizeSuiObjectId("0x15"),
+      capability_id: normalizeSuiObjectId("0x1f"),
+      capability_type:
+        "0x2::display_registry::DisplayCap<0x122::deposit_receipt::BlastSuiDepositReceipt>",
+    }),
     event("PackageAdminCreated", {
       package_admin_id: normalizeSuiObjectId("0x15"),
       publisher_id: normalizeSuiObjectId("0x16"),
@@ -166,9 +199,6 @@ test("replays all administration events and ignores duplicate events", () => {
       policy: 0,
     }),
     event("UpgradeAuthorized", {
-      package_id: normalizeSuiObjectId("0x18"),
-      package_version: 2n,
-      policy: 1,
       digest: new Uint8Array([1, 2, 3]),
     }),
     event("UpgradePolicyRestricted", {
@@ -213,6 +243,24 @@ test("replays all administration events and ignores duplicate events", () => {
     projection.administration.packageAdmin?.upgradeCapId,
     normalizeSuiObjectId("0x17"),
   );
+  assert.deepEqual(projection.administration.activeAdminCapIds, {
+    [normalizeSuiObjectId("0x1a")]: true,
+  });
+  assert.deepEqual(projection.administration.packageCapabilities, {
+    "0x2::coin_registry::MetadataCap<0x122::fun_sui::FUN_SUI>": {
+      packageAdminId: normalizeSuiObjectId("0x15"),
+      capabilityId: normalizeSuiObjectId("0x1d"),
+    },
+    "0x2::coin_registry::MetadataCap<0x122::blast_sui::BLAST_SUI>": {
+      packageAdminId: normalizeSuiObjectId("0x15"),
+      capabilityId: normalizeSuiObjectId("0x1e"),
+    },
+    "0x2::display_registry::DisplayCap<0x122::deposit_receipt::BlastSuiDepositReceipt>":
+      {
+        packageAdminId: normalizeSuiObjectId("0x15"),
+        capabilityId: normalizeSuiObjectId("0x1f"),
+      },
+  });
   assert.equal(
     projection.administration.packageAdmin?.publisherId,
     normalizeSuiObjectId("0x16"),
@@ -222,7 +270,7 @@ test("replays all administration events and ignores duplicate events", () => {
   assert.deepEqual(projection.administration.lastUpgradeAuthorization, {
     packageId: normalizeSuiObjectId("0x18"),
     packageVersion: 2n,
-    policy: 1,
+    policy: 0,
     digest: new Uint8Array([1, 2, 3]),
   });
   assert.deepEqual(projection.administration.lastUpgradePolicyRestriction, {
@@ -234,8 +282,11 @@ test("replays all administration events and ignores duplicate events", () => {
     previousVersion: 2n,
     newVersion: 3n,
   });
-  for (const adminEvent of adminEvents) {
-    assert.equal(projection.eventCounts[adminEvent.kind], 1);
+  for (const kind of Object.keys(blastSuiEventSpecs)) {
+    assert.equal(
+      projection.eventCounts[kind as keyof typeof blastSuiEventSpecs],
+      adminEvents.filter((adminEvent) => adminEvent.kind === kind).length,
+    );
   }
 });
 

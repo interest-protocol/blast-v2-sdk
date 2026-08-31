@@ -145,12 +145,16 @@ position, and their named reducer path.
 
 | Frozen payload | Typed decoder and projection effect | Verification |
 | --- | --- | --- |
+| `AdminGranted` | `decodeBlastSuiEvent`; active routine-admin membership | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `AdminRevoked` | `decodeBlastSuiEvent`; removes active routine-admin membership | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `AdminDestroyed` | `decodeBlastSuiEvent`; active-or-revoked cap cleanup fact | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
 | `SuperAdminTransferStarted` | `decodeBlastSuiEvent`; pending-transfer projection | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
 | `SuperAdminTransferCancelled` | `decodeBlastSuiEvent`; clears pending transfer | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
 | `SuperAdminTransferred` | `decodeBlastSuiEvent`; active cap identity | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
 | `PackageVersionAdvanced` | `decodeBlastSuiEvent`; package-version projection | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `PackageAdminCreated` | `decodeBlastSuiEvent`; package/publisher/upgrade-cap identity and policy | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `UpgradeAuthorized` | `decodeBlastSuiEvent`; authorization digest/policy fact | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `PackageCapabilityAdded` | `decodeBlastSuiEvent`; exact typed dynamic child identity | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `PackageAdminCreated` | `decodeBlastSuiEvent`; fixed package, publisher, upgrade-cap, and policy identity | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `UpgradeAuthorized` | `decodeBlastSuiEvent`; digest joined with the latest package-admin state | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
 | `UpgradeCommitted` | `decodeBlastSuiEvent`; committed-version fact | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
 | `UpgradePolicyRestricted` | `decodeBlastSuiEvent`; previous/new policy fact | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
 | `VaultCreated` | `decodeBlastSuiEvent`; vault/validator/pool/bootstrap/fee/custody discovery | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
@@ -166,7 +170,7 @@ position, and their named reducer path.
 | `VaultSynced` | `decodeBlastSuiEvent`; final custody and sync count | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
 | `NativeStakeUnwound` | `decodeBlastSuiEvent`; final custody and unwind-only state | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
 
-`createBlastSuiProjection` and `reduceBlastSuiInput` replay all 20 kinds,
+`createBlastSuiProjection` and `reduceBlastSuiInput` replay all 24 kinds,
 replace final custody snapshots, accumulate independent audit totals, and
 deduplicate by transaction digest plus event index. Duplicate replay returns the
 same projection instance. Receipt replay rejects duplicate requests, unknown or
@@ -218,8 +222,8 @@ that fact.
 | Launchpad `acl` administration except `sign_in`; all `launch_config` administration; `runtime_config` setters/revocation | Intentional routine-administration exclusion. Product transactions do not need these calls. Their event schemas remain frozen and decoded. |
 | All launchpad `package_admin` functions | Intentional package-upgrade exclusion. Their event schemas remain frozen and decoded. |
 | Bluefin, Cetus, MMT, Turbos, and Full Sail `set_tier` | Intentional routine-administration exclusion. Frontend tier reads are complete. |
-| Blast SUI `acl::{accept_super_admin_transfer,begin_super_admin_transfer,cancel_super_admin_transfer,destroy_retired_super_admin_cap,keep}` | Intentional routine-administration exclusion. Their events remain decoded. |
-| Blast SUI `package_admin::{wrap,authorize_upgrade,commit_upgrade,restrict_to_additive,activate_package_version}` | Intentional package-bootstrap/upgrade exclusion. Their objects and events remain typed. |
+| Blast SUI `acl::{accept_super_admin_transfer,begin_super_admin_transfer,cancel_super_admin_transfer,destroy_admin_cap,destroy_retired_super_admin_cap,grant_admin,keep,revoke_admin,sign_in}` | Intentional administration exclusion. Their events remain decoded. |
+| Blast SUI `package_admin::{new,add_capability,share,authorize_upgrade,commit_upgrade,restrict_to_additive,activate_package_version}` | Intentional package-bootstrap/upgrade exclusion. Their objects and events remain typed. |
 | Blast SUI `vault::set_redeem_fee` | Intentional routine-administration exclusion. The live fee is available in vault state and events. |
 | Blast SUI `vault::create` and `deposit_receipt::create_display` | Intentional deployment-bootstrap exclusions. No deployment transaction is built or executed. |
 | Vesting production functions | No excluded product function: all 14 public functions have composable or high-level builders. |

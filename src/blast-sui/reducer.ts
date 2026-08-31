@@ -87,7 +87,17 @@ export type BlastSuiAdministrationProjection = {
     executeAfterMs: bigint;
   } | null;
   activeSuperAdminCapId: string | null;
+  activeAdminCapIds: Readonly<Record<string, true>>;
   packageVersion: bigint | null;
+  packageCapabilities: Readonly<
+    Record<
+      string,
+      {
+        packageAdminId: string;
+        capabilityId: string;
+      }
+    >
+  >;
   packageAdmin: {
     packageAdminId: string;
     publisherId: string;
@@ -181,7 +191,9 @@ export function createBlastSuiProjection(): BlastSuiProjection {
     administration: {
       pendingSuperAdminTransfer: null,
       activeSuperAdminCapId: null,
+      activeAdminCapIds: {},
       packageVersion: null,
+      packageCapabilities: {},
       packageAdmin: null,
       pendingUpgrade: null,
       lastUpgradeAuthorization: null,
@@ -355,6 +367,41 @@ function reduceBlastSuiEvent(
         ...state.administration,
         packageVersion: event.payload.new_version,
       });
+    case "AdminGranted":
+      return updateAdministration(next, {
+        ...state.administration,
+        activeAdminCapIds: {
+          ...state.administration.activeAdminCapIds,
+          [event.payload.admin_cap_id]: true,
+        },
+      });
+    case "AdminRevoked": {
+      const activeAdminCapIds = { ...state.administration.activeAdminCapIds };
+      delete activeAdminCapIds[event.payload.admin_cap_id];
+      return updateAdministration(next, {
+        ...state.administration,
+        activeAdminCapIds,
+      });
+    }
+    case "AdminDestroyed": {
+      const activeAdminCapIds = { ...state.administration.activeAdminCapIds };
+      delete activeAdminCapIds[event.payload.admin_cap_id];
+      return updateAdministration(next, {
+        ...state.administration,
+        activeAdminCapIds,
+      });
+    }
+    case "PackageCapabilityAdded":
+      return updateAdministration(next, {
+        ...state.administration,
+        packageCapabilities: {
+          ...state.administration.packageCapabilities,
+          [event.payload.capability_type]: {
+            packageAdminId: event.payload.package_admin_id,
+            capabilityId: event.payload.capability_id,
+          },
+        },
+      });
     case "PackageAdminCreated": {
       const payload = event.payload;
       return updateAdministration(next, {
@@ -371,10 +418,16 @@ function reduceBlastSuiEvent(
       });
     }
     case "UpgradeAuthorized": {
+      const packageAdmin = state.administration.packageAdmin;
+      if (packageAdmin === null) {
+        throw new RangeError(
+          "upgrade authorization requires discovered package administration",
+        );
+      }
       const authorization = {
-        packageId: event.payload.package_id,
-        packageVersion: event.payload.package_version,
-        policy: event.payload.policy,
+        packageId: packageAdmin.packageId,
+        packageVersion: packageAdmin.packageVersion,
+        policy: packageAdmin.policy,
         digest: event.payload.digest,
       };
       return updateAdministration(next, {

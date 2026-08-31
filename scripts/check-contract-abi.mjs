@@ -29,6 +29,11 @@ const artifactDeclarations = [
   {
     path: "production-blast-sui-v1.json",
     packages: [["blastSui", "blast_sui", "blast_sui"]],
+    approvedAbiAmendments: [
+      "contracts ADR 0059: remove sender and unchanged state from event payloads",
+      "contracts ADR 0060: retain both currency metadata caps and the receipt-display cap in PackageAdmin custody",
+      "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody",
+    ],
   },
 ];
 const contractsRoot = resolve(
@@ -67,6 +72,9 @@ function checkArtifact(declaration) {
         "sui/meme_template/Move.lock",
         "docs/research/sui-deepbook-indexer-architecture-2026.md",
       ],
+      ...(declaration.approvedAbiAmendments === undefined
+        ? {}
+        : { approvedAbiAmendments: declaration.approvedAbiAmendments }),
       suiCli: "1.77.2-51d177ad7d65",
     },
     packages,
@@ -351,13 +359,17 @@ const blastSuiAdminExclusions = new Set([
   "acl::accept_super_admin_transfer",
   "acl::begin_super_admin_transfer",
   "acl::cancel_super_admin_transfer",
+  "acl::destroy_admin_cap",
   "acl::destroy_retired_super_admin_cap",
+  "acl::grant_admin",
   "acl::keep",
+  "acl::revoke_admin",
+  "acl::sign_in",
+  "package_admin::add_capability",
   "package_admin::activate_package_version",
   "package_admin::authorize_upgrade",
   "package_admin::commit_upgrade",
   "package_admin::restrict_to_additive",
-  "package_admin::wrap",
   "vault::set_redeem_fee",
 ]);
 
@@ -374,7 +386,12 @@ function classifyBlastSuiFunction(moduleName, functionName) {
 }
 
 function isBlastSuiDeploymentExclusion(key) {
-  return key === "vault::create" || key === "deposit_receipt::create_display";
+  return (
+    key === "vault::create" ||
+    key === "deposit_receipt::create_display" ||
+    key === "package_admin::new" ||
+    key === "package_admin::share"
+  );
 }
 
 const directEventNames = new Set([
@@ -384,10 +401,14 @@ const directEventNames = new Set([
   "VestingClosed",
 ]);
 const blastSuiEventNames = new Set([
+  "AdminDestroyed",
+  "AdminGranted",
+  "AdminRevoked",
   "SuperAdminTransferStarted",
   "SuperAdminTransferCancelled",
   "SuperAdminTransferred",
   "PackageVersionAdvanced",
+  "PackageCapabilityAdded",
   "PackageAdminCreated",
   "UpgradeAuthorized",
   "UpgradeCommitted",

@@ -7,7 +7,7 @@ import {
   parseStructTag,
 } from "@mysten/sui/utils";
 
-import { suiObjectIdBcs } from "../lib/bcs.ts";
+import { moveTypeNameBcs, suiObjectIdBcs } from "../lib/bcs.ts";
 import type { SuiEventPosition } from "../lib/events.ts";
 import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
 import type { BasisPoints } from "../lib/integers.ts";
@@ -16,13 +16,26 @@ import { requireBasisPoints, requireU64 } from "../lib/integers.ts";
 type BlastSuiEventFieldDescriptor =
   | "id"
   | "address"
+  | "bool"
   | "u64"
   | "u8"
   | "bytes"
   | "basisPoints"
+  | "typeName"
   | "vaultCustody";
 
 export const blastSuiEventSpecs = {
+  AdminDestroyed: {
+    admin_cap_id: "id",
+    was_active: "bool",
+  },
+  AdminGranted: {
+    admin_cap_id: "id",
+    recipient: "address",
+  },
+  AdminRevoked: {
+    admin_cap_id: "id",
+  },
   BlastSuiDepositCancelled: {
     receipt_id: "id",
     vault_id: "id",
@@ -74,6 +87,11 @@ export const blastSuiEventSpecs = {
   NativeStakeUnwound: {
     custody: "vaultCustody",
   },
+  PackageCapabilityAdded: {
+    package_admin_id: "id",
+    capability_id: "id",
+    capability_type: "typeName",
+  },
   PackageAdminCreated: {
     package_admin_id: "id",
     publisher_id: "id",
@@ -103,9 +121,6 @@ export const blastSuiEventSpecs = {
     recipient: "address",
   },
   UpgradeAuthorized: {
-    package_id: "id",
-    package_version: "u64",
-    policy: "u8",
     digest: "bytes",
   },
   UpgradeCommitted: {
@@ -165,11 +180,13 @@ type DescriptorOutput<Descriptor extends BlastSuiEventFieldDescriptor> =
       ? BasisPoints
       : Descriptor extends "u8"
         ? number
-        : Descriptor extends "bytes"
-          ? Uint8Array
-          : Descriptor extends "vaultCustody"
-            ? VaultCustodyEvent
-            : string;
+        : Descriptor extends "bool"
+          ? boolean
+          : Descriptor extends "bytes"
+            ? Uint8Array
+            : Descriptor extends "vaultCustody"
+              ? VaultCustodyEvent
+              : string;
 
 type DescriptorInput<Descriptor extends BlastSuiEventFieldDescriptor> =
   Descriptor extends "basisPoints" ? bigint : DescriptorOutput<Descriptor>;
@@ -240,10 +257,12 @@ const BLAST_SUI_EVENT_FIELD_BCS: Record<
 > = {
   id: suiObjectIdBcs as BcsType<unknown, unknown>,
   address: AddressBcs as BcsType<unknown, unknown>,
+  bool: bcs.bool() as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,
   u8: bcs.u8() as BcsType<unknown, unknown>,
   bytes: BytesBcs as BcsType<unknown, unknown>,
   basisPoints: BasisPointsBcs as BcsType<unknown, unknown>,
+  typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
   vaultCustody: vaultCustodyEventBcs as BcsType<unknown, unknown>,
 };
 

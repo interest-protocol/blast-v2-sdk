@@ -20,7 +20,7 @@ const expectedEvents = {
   launchpad: 30,
   migrators: 6,
   vesting: 8,
-  blastSui: 20,
+  blastSui: 24,
 };
 
 type Artifact = {

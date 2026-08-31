@@ -7,6 +7,11 @@
       "sui/meme_template/Move.lock",
       "docs/research/sui-deepbook-indexer-architecture-2026.md"
     ],
+    "approvedAbiAmendments": [
+      "contracts ADR 0059: remove sender and unchanged state from event payloads",
+      "contracts ADR 0060: retain both currency metadata caps and the receipt-display cap in PackageAdmin custody",
+      "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody"
+    ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
   "packages": {
@@ -235,6 +240,55 @@
               "returns": []
             },
             {
+              "name": "destroy_admin_cap",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "acl"
+                        },
+                        "name": "ProtocolAuthority",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_sui",
+                      "name": "acl"
+                    },
+                    "name": "AdminCap",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
               "name": "destroy_retired_super_admin_cap",
               "sdk": "intentional-admin-exclusion",
               "entry": false,
@@ -264,6 +318,76 @@
                     "name": "SuperAdminCap",
                     "type_arguments": []
                   }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "grant_admin",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "acl"
+                        },
+                        "name": "ProtocolAuthority",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "acl"
+                        },
+                        "name": "SuperAdminCap",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                "address",
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 }
               ],
               "returns": []
@@ -301,9 +425,176 @@
                 }
               ],
               "returns": []
+            },
+            {
+              "name": "revoke_admin",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "acl"
+                        },
+                        "name": "ProtocolAuthority",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "acl"
+                        },
+                        "name": "SuperAdminCap",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "object"
+                    },
+                    "name": "ID",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "sign_in",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "acl"
+                        },
+                        "name": "ProtocolAuthority",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "acl"
+                        },
+                        "name": "AdminCap",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_sui",
+                      "name": "acl"
+                    },
+                    "name": "AdminWitness",
+                    "type_arguments": []
+                  }
+                }
+              ]
             }
           ],
           "structs": [
+            {
+              "name": "AdminCap",
+              "abilities": [
+                "Key",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AdminWitness",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
             {
               "name": "PendingSuperAdminTransfer",
               "abilities": [
@@ -354,6 +645,33 @@
                       },
                       "name": "ID",
                       "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "admins",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "vec_set"
+                      },
+                      "name": "VecSet",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
                     }
                   }
                 },
@@ -679,7 +997,32 @@
                   ]
                 }
               ],
-              "returns": []
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "display_registry"
+                    },
+                    "name": "DisplayCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "blast_sui",
+                              "name": "deposit_receipt"
+                            },
+                            "name": "BlastSuiDepositReceipt",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
             },
             {
               "name": "keep",
@@ -890,6 +1233,89 @@
           ],
           "enums": [],
           "events": [
+            {
+              "name": "AdminDestroyed",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "admin_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "was_active",
+                  "type": "bool"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "AdminGranted",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "admin_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "recipient",
+                  "type": "address"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "AdminRevoked",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "admin_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
             {
               "name": "BlastSuiDepositCancelled",
               "abilities": [
@@ -1338,6 +1764,57 @@
               "sdk": "decoder-reducer"
             },
             {
+              "name": "PackageCapabilityAdded",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "package_admin_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "capability_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "capability_type",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
               "name": "PackageVersionAdvanced",
               "abilities": [
                 "Copy",
@@ -1464,27 +1941,6 @@
               "typeParameters": [],
               "positional": false,
               "fields": [
-                {
-                  "name": "package_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "package_version",
-                  "type": "u64"
-                },
-                {
-                  "name": "policy",
-                  "type": "u8"
-                },
                 {
                   "name": "digest",
                   "type": {
@@ -1737,7 +2193,55 @@
                           "address": "blast_sui",
                           "name": "acl"
                         },
-                        "name": "ProtocolAuthority",
+                        "name": "AdminWitness",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "add_capability",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Capability",
+                  "phantom": false,
+                  "constraints": [
+                    "Key",
+                    "Store"
+                  ]
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
                         "type_arguments": []
                       }
                     }
@@ -1752,11 +2256,14 @@
                           "address": "blast_sui",
                           "name": "acl"
                         },
-                        "name": "SuperAdminCap",
+                        "name": "AdminWitness",
                         "type_arguments": []
                       }
                     }
                   ]
+                },
+                {
+                  "NamedTypeParameter": "Capability"
                 }
               ],
               "returns": []
@@ -1806,22 +2313,7 @@
                           "address": "blast_sui",
                           "name": "acl"
                         },
-                        "name": "ProtocolAuthority",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "acl"
-                        },
-                        "name": "SuperAdminCap",
+                        "name": "AdminWitness",
                         "type_arguments": []
                       }
                     }
@@ -1894,6 +2386,61 @@
               "returns": []
             },
             {
+              "name": "new",
+              "sdk": "intentional-deployment-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "package"
+                    },
+                    "name": "Publisher",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "package"
+                    },
+                    "name": "UpgradeCap",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_sui",
+                      "name": "package_admin"
+                    },
+                    "name": "PackageAdmin",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
               "name": "restrict_to_additive",
               "sdk": "intentional-admin-exclusion",
               "entry": false,
@@ -1938,22 +2485,7 @@
                           "address": "blast_sui",
                           "name": "acl"
                         },
-                        "name": "ProtocolAuthority",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "acl"
-                        },
-                        "name": "SuperAdminCap",
+                        "name": "AdminWitness",
                         "type_arguments": []
                       }
                     }
@@ -1963,51 +2495,48 @@
               "returns": []
             },
             {
-              "name": "wrap",
-              "sdk": "intentional-admin-exclusion",
+              "name": "share",
+              "sdk": "intentional-deployment-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
                 {
                   "Datatype": {
                     "module": {
-                      "address": "sui",
-                      "name": "package"
+                      "address": "blast_sui",
+                      "name": "package_admin"
                     },
-                    "name": "Publisher",
+                    "name": "PackageAdmin",
                     "type_arguments": []
                   }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "package"
-                    },
-                    "name": "UpgradeCap",
-                    "type_arguments": []
-                  }
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
                 }
               ],
               "returns": []
             }
           ],
           "structs": [
+            {
+              "name": "CapabilityKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Capability",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
             {
               "name": "PackageAdmin",
               "abilities": [
@@ -2935,22 +3464,7 @@
                           "address": "blast_sui",
                           "name": "acl"
                         },
-                        "name": "ProtocolAuthority",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "acl"
-                        },
-                        "name": "SuperAdminCap",
+                        "name": "AdminWitness",
                         "type_arguments": []
                       }
                     }

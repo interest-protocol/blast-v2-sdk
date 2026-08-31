@@ -5,7 +5,11 @@ import test from "node:test";
 import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
+import {
+  normalizeStructTag,
+  normalizeSuiAddress,
+  normalizeSuiObjectId,
+} from "@mysten/sui/utils";
 import type {
   BlastSuiEventKind,
   BlastSuiEventPackageIdentity,
@@ -54,6 +58,15 @@ type BlastSuiEventPayloadInput<Kind extends BlastSuiEventKind> = Parameters<
 >[0];
 
 const fixtures = [
+  {
+    kind: "AdminDestroyed",
+    payload: { admin_cap_id: "0x20", was_active: false },
+  },
+  {
+    kind: "AdminGranted",
+    payload: { admin_cap_id: "0x21", recipient: "0x22" },
+  },
+  { kind: "AdminRevoked", payload: { admin_cap_id: "0x23" } },
   {
     kind: "BlastSuiDepositCancelled",
     payload: {
@@ -110,6 +123,15 @@ const fixtures = [
   },
   { kind: "NativeStakeUnwound", payload: { custody } },
   {
+    kind: "PackageCapabilityAdded",
+    payload: {
+      package_admin_id: "0x8",
+      capability_id: "0xc",
+      capability_type:
+        "0x2::coin_registry::MetadataCap<0x122::blast_sui::BLAST_SUI>",
+    },
+  },
+  {
     kind: "PackageAdminCreated",
     payload: {
       package_admin_id: "0x8",
@@ -146,12 +168,7 @@ const fixtures = [
   },
   {
     kind: "UpgradeAuthorized",
-    payload: {
-      package_id: "0x11",
-      package_version: 123n,
-      policy: 2,
-      digest: new Uint8Array([1, 2, 3]),
-    },
+    payload: { digest: new Uint8Array([1, 2, 3]) },
   },
   {
     kind: "UpgradeCommitted",
@@ -190,6 +207,9 @@ const fixtures = [
 
 test("matches the complete frozen blast_sui event inventory", () => {
   const expectedNames = [
+    "AdminDestroyed",
+    "AdminGranted",
+    "AdminRevoked",
     "BlastSuiDepositCancelled",
     "BlastSuiDepositClaimed",
     "BlastSuiDepositRequested",
@@ -199,6 +219,7 @@ test("matches the complete frozen blast_sui event inventory", () => {
     "FunSuiRedeemed",
     "FunYieldSwept",
     "NativeStakeUnwound",
+    "PackageCapabilityAdded",
     "PackageAdminCreated",
     "PackageVersionAdvanced",
     "RedeemFeeChanged",
@@ -213,7 +234,7 @@ test("matches the complete frozen blast_sui event inventory", () => {
   ];
 
   assert.deepEqual(Object.keys(blastSuiEventSpecs), expectedNames);
-  assert.equal(fixtures.length, 20);
+  assert.equal(fixtures.length, 24);
   assert.deepEqual(normalizedSpecFields(), frozenEventFields());
 });
 
@@ -384,6 +405,11 @@ test("rejects malformed BCS and invalid native event metadata", () => {
 });
 
 test("validates all redeem-fee basis-point fields", () => {
+  const vaultCreatedFixture = fixtures.find(
+    (fixture) => fixture.kind === "VaultCreated",
+  );
+  if (!vaultCreatedFixture) throw new TypeError("missing VaultCreated fixture");
+
   const boundaryEvent = decodeBlastSuiEvent(
     suiEvent(
       "RedeemFeeChanged",
@@ -401,7 +427,7 @@ test("validates all redeem-fee basis-point fields", () => {
   assert.equal(boundaryEvent.payload.new_redeem_fee_bps, 10_000n);
 
   const vaultCreatedEvent = decodeBlastSuiEvent(
-    suiEvent("VaultCreated", fixtures[18].payload, 0),
+    suiEvent("VaultCreated", vaultCreatedFixture.payload, 0),
     packages,
   );
   if (vaultCreatedEvent.kind !== "VaultCreated") {
@@ -423,7 +449,7 @@ test("validates all redeem-fee basis-point fields", () => {
   );
   assert.throws(() =>
     blastSuiEventBcs.VaultCreated.serialize({
-      ...fixtures[18].payload,
+      ...vaultCreatedFixture.payload,
       redeem_fee_bps: 10_001n,
     }),
   );
@@ -498,6 +524,8 @@ function normalizePayload<Kind extends BlastSuiEventKind>(
         return [field, normalizeSuiObjectId(value as string)];
       if (descriptor === "address")
         return [field, normalizeSuiAddress(value as string)];
+      if (descriptor === "typeName")
+        return [field, normalizeStructTag(value as string)];
       return [field, value];
     }),
   ) as BlastSuiEventPayloads[Kind];
@@ -582,7 +610,8 @@ function readFrozenEventsModule(): {
 }
 
 function normalizedAbiType(type: unknown): string {
-  if (type === "u64" || type === "u8" || type === "address") return type;
+  if (type === "bool" || type === "u64" || type === "u8" || type === "address")
+    return type;
   if (!isRecord(type)) throw new TypeError("unsupported ABI event field");
   if (type.vector === "u8") return "bytes";
   const datatype = type.Datatype;
@@ -592,6 +621,7 @@ function normalizedAbiType(type: unknown): string {
   if (datatype.name === "VaultCustody") return "vaultCustody";
   if (datatype.name === "PoolCustody") return "poolCustody";
   if (datatype.name === "ExchangeRate") return "exchangeRate";
+  if (datatype.name === "TypeName") return "typeName";
   throw new TypeError(
     `unsupported ABI event datatype: ${String(datatype.name)}`,
   );
