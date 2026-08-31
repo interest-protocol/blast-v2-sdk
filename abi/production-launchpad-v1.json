@@ -5213,66 +5213,6 @@
           "enums": [],
           "events": []
         },
-        "migration_math": {
-          "functions": [
-            {
-              "name": "assert_price_within_bps",
-              "sdk": "sdk-arithmetic",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                "u64",
-                "u64",
-                "bool",
-                "u128",
-                "u64"
-              ],
-              "returns": []
-            },
-            {
-              "name": "assert_residual_within_bps",
-              "sdk": "sdk-arithmetic",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                "u64",
-                "u64",
-                "u64"
-              ],
-              "returns": []
-            },
-            {
-              "name": "minimum_utilized_amount",
-              "sdk": "sdk-arithmetic",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                "u64",
-                "u64"
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "sqrt_price_x64",
-              "sdk": "sdk-arithmetic",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                "u64",
-                "u64",
-                "bool"
-              ],
-              "returns": [
-                "u128"
-              ]
-            }
-          ],
-          "structs": [],
-          "enums": [],
-          "events": []
-        },
         "package_admin": {
           "functions": [
             {
@@ -8916,6 +8856,66 @@
               ]
             }
           ],
+          "enums": [],
+          "events": []
+        },
+        "migration_math": {
+          "functions": [
+            {
+              "name": "assert_price_within_bps",
+              "sdk": "sdk-arithmetic",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                "u64",
+                "u64",
+                "bool",
+                "u128",
+                "u64"
+              ],
+              "returns": []
+            },
+            {
+              "name": "assert_residual_within_bps",
+              "sdk": "sdk-arithmetic",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                "u64",
+                "u64",
+                "u64"
+              ],
+              "returns": []
+            },
+            {
+              "name": "minimum_utilized_amount",
+              "sdk": "sdk-arithmetic",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                "u64",
+                "u64"
+              ],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
+              "name": "sqrt_price_x64",
+              "sdk": "sdk-arithmetic",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                "u64",
+                "u64",
+                "bool"
+              ],
+              "returns": [
+                "u128"
+              ]
+            }
+          ],
+          "structs": [],
           "enums": [],
           "events": []
         },
