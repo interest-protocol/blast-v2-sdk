@@ -10,8 +10,11 @@ import { normalizeNativeTransactionPosition } from "../lib/events.ts";
 import { requireU64 } from "../lib/integers.ts";
 import type { DecodedMigratorEvent, MigratorEventKind } from "./events.ts";
 import { migratorEventId, migratorEventSpecs } from "./events.ts";
+import type { AftermathPolicy } from "./state.ts";
+import { AFTERMATH_DEFAULT_POLICY } from "./state.ts";
 
-export type VaultMigrationProjection = {
+export type ClmmVaultMigrationProjection = {
+  kind: "clmm";
   sourceMemeAmount: bigint;
   sourceQuoteAmount: bigint;
   usedMemeAmount: bigint;
@@ -24,6 +27,26 @@ export type VaultMigrationProjection = {
   tickSpacing: number;
   feeRate: bigint;
 };
+
+export type AftermathVaultMigrationProjection = {
+  kind: "aftermath";
+  sourceMemeAmount: bigint;
+  sourceQuoteAmount: bigint;
+  usedMemeAmount: bigint;
+  usedQuoteAmount: bigint;
+  residualMemeAmount: 0n;
+  residualQuoteAmount: 0n;
+  lpType: string;
+  lockedLpAmount: bigint;
+  memeWeight: bigint;
+  quoteWeight: bigint;
+  flatness: bigint;
+  swapInFee: bigint;
+};
+
+export type VaultMigrationProjection =
+  | ClmmVaultMigrationProjection
+  | AftermathVaultMigrationProjection;
 
 export type LpVaultEventProjection = {
   vaultId: string;
@@ -50,6 +73,7 @@ export type MigratorEventProjection = {
   venueTiers: Readonly<
     Record<string, { tickSpacing: number; feeRate: bigint }>
   >;
+  aftermathPolicy: AftermathPolicy;
 };
 
 export type { NativeTransactionPosition } from "../lib/events.ts";
@@ -119,6 +143,7 @@ export function createMigratorEventProjection(): MigratorEventProjection {
     ) as Record<MigratorEventKind, number>,
     vaults: {},
     venueTiers: {},
+    aftermathPolicy: AFTERMATH_DEFAULT_POLICY,
   };
 }
 
@@ -189,6 +214,7 @@ export function reduceMigratorEvent(
         protocolMemeResidual: payload.residual_meme_amount,
         protocolQuoteResidual: payload.residual_quote_amount,
         migration: {
+          kind: "clmm",
           sourceMemeAmount: payload.source_meme_amount,
           sourceQuoteAmount: payload.source_quote_amount,
           usedMemeAmount: payload.used_meme_amount,
@@ -200,6 +226,34 @@ export function reduceMigratorEvent(
           upperTickBits: payload.upper_tick_bits,
           tickSpacing: payload.tick_spacing,
           feeRate: payload.fee_rate,
+        },
+      }));
+    }
+    case "AftermathMigrationCompleted": {
+      const payload = event.payload;
+      return updateVault(next, payload.vault_id, (vault) => ({
+        ...vault,
+        launchId: payload.launch_id,
+        poolId: payload.pool_id,
+        venueType: payload.venue,
+        memeType: payload.meme,
+        quoteType: payload.quote,
+        protocolMemeResidual: 0n,
+        protocolQuoteResidual: 0n,
+        migration: {
+          kind: "aftermath",
+          sourceMemeAmount: payload.meme_amount,
+          sourceQuoteAmount: payload.quote_amount,
+          usedMemeAmount: payload.meme_amount,
+          usedQuoteAmount: payload.quote_amount,
+          residualMemeAmount: 0n,
+          residualQuoteAmount: 0n,
+          lpType: payload.lp,
+          lockedLpAmount: payload.locked_lp_amount,
+          memeWeight: payload.meme_weight,
+          quoteWeight: payload.quote_weight,
+          flatness: payload.flatness,
+          swapInFee: payload.swap_in_fee,
         },
       }));
     }
@@ -250,6 +304,16 @@ export function reduceMigratorEvent(
             tickSpacing: event.payload.new_tick_spacing,
             feeRate: event.payload.new_fee_rate,
           },
+        },
+      };
+    case "AftermathPolicyUpdated":
+      return {
+        ...next,
+        aftermathPolicy: {
+          memeWeight: event.payload.new_meme_weight,
+          quoteWeight: event.payload.new_quote_weight,
+          swapInFee: event.payload.new_swap_in_fee,
+          source: "override",
         },
       };
   }

@@ -4,7 +4,10 @@ import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
 
 import {
+  AFTERMATH_DEFAULT_POLICY,
+  aftermathPolicyBcs,
   decodeLpVaultObject,
+  getAftermathPolicy,
   getLpVault,
   getVenueTier,
   lpVaultBcs,
@@ -135,6 +138,87 @@ test("uses the documented venue default only when the tier field is absent", asy
       feeRate: 10_000,
       source: "default",
     },
+  );
+});
+
+test("reads a pinned Aftermath policy using its module-owned sealed key", async () => {
+  let request: unknown;
+  const client = {
+    core: {
+      getDynamicField: async (options: unknown) => {
+        request = options;
+        return {
+          dynamicField: {
+            value: {
+              type: `${originalPackageId}::aftermath::AftermathPolicy`,
+              bcs: aftermathPolicyBcs
+                .serialize({
+                  meme_weight: 600_000_000_000_000_000n,
+                  quote_weight: 400_000_000_000_000_000n,
+                  swap_in_fee: 20_000_000_000_000_000n,
+                })
+                .toBytes(),
+            },
+          },
+        };
+      },
+    },
+  } as unknown as ClientWithCoreApi;
+
+  const policy = await getAftermathPolicy(client, "0xe", originalPackageId);
+
+  assert.deepEqual(policy, {
+    memeWeight: 600_000_000_000_000_000n,
+    quoteWeight: 400_000_000_000_000_000n,
+    swapInFee: 20_000_000_000_000_000n,
+    source: "override",
+  });
+  assert.match(
+    String((request as { name: { type: string } }).name.type),
+    /::aftermath::PolicyKey$/,
+  );
+});
+
+test("uses the compiled Aftermath policy only when its field is absent", async () => {
+  const client = {
+    core: {
+      getDynamicField: async () => {
+        throw new ObjectError("notExists", "missing", {
+          reason: "notFound",
+        });
+      },
+    },
+  } as unknown as ClientWithCoreApi;
+
+  assert.equal(
+    await getAftermathPolicy(client, "0xe", originalPackageId),
+    AFTERMATH_DEFAULT_POLICY,
+  );
+});
+
+test("rejects a corrupt pinned Aftermath policy", async () => {
+  const client = {
+    core: {
+      getDynamicField: async () => ({
+        dynamicField: {
+          value: {
+            type: `${originalPackageId}::aftermath::AftermathPolicy`,
+            bcs: aftermathPolicyBcs
+              .serialize({
+                meme_weight: 500_000_000_000_000_000n,
+                quote_weight: 499_000_000_000_000_000n,
+                swap_in_fee: 20_000_000_000_000_000n,
+              })
+              .toBytes(),
+          },
+        },
+      }),
+    },
+  } as unknown as ClientWithCoreApi;
+
+  await assert.rejects(
+    getAftermathPolicy(client, "0xe", originalPackageId),
+    /sum to 100%/,
   );
 });
 

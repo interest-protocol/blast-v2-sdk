@@ -19,6 +19,11 @@ const FeeLedgerBcs = bcs.struct("FeeLedger", {
   creator_quote: suiBalanceBcs,
 });
 const TierKeyBcs = bcs.struct("TierKey", {});
+const AftermathPolicyKeyBcs = bcs.struct("PolicyKey", {});
+const AFTERMATH_FIXED_ONE = 1_000_000_000_000_000_000n;
+const AFTERMATH_MIN_WEIGHT = 10_000_000_000_000_000n;
+const AFTERMATH_MIN_SWAP_IN_FEE = 100_000_000_000_000n;
+const AFTERMATH_MAX_SWAP_IN_FEE = 100_000_000_000_000_000n;
 
 /** BCS layout of `blast_fun_migrators::vault::LpVault<Meme, Quote>`. */
 export const lpVaultBcs = bcs.struct("LpVault", {
@@ -33,7 +38,14 @@ export const venueTierBcs = bcs.struct("Tier", {
   fee_rate: bcs.u64(),
 });
 
-export const MIGRATOR_VENUES = [
+/** BCS layout of `blast_fun_migrators::aftermath::AftermathPolicy`. */
+export const aftermathPolicyBcs = bcs.struct("AftermathPolicy", {
+  meme_weight: bcs.u64(),
+  quote_weight: bcs.u64(),
+  swap_in_fee: bcs.u64(),
+});
+
+export const TIERED_MIGRATOR_VENUES = [
   "bluefin",
   "cetus",
   "mmt",
@@ -41,16 +53,39 @@ export const MIGRATOR_VENUES = [
   "fullsail",
 ] as const;
 
+export const MIGRATOR_VENUES = [
+  ...TIERED_MIGRATOR_VENUES,
+  "aftermath",
+] as const;
+
+export type TieredMigratorVenue = (typeof TIERED_MIGRATOR_VENUES)[number];
 export type MigratorVenue = (typeof MIGRATOR_VENUES)[number];
 
 export const VENUE_DEFAULT_TIERS: Readonly<
-  Record<MigratorVenue, Readonly<{ tickSpacing: number; feeRate: number }>>
+  Record<
+    TieredMigratorVenue,
+    Readonly<{ tickSpacing: number; feeRate: number }>
+  >
 > = Object.freeze({
   bluefin: Object.freeze({ tickSpacing: 200, feeRate: 10_000 }),
   cetus: Object.freeze({ tickSpacing: 260, feeRate: 40_000 }),
   mmt: Object.freeze({ tickSpacing: 400, feeRate: 20_000 }),
   turbos: Object.freeze({ tickSpacing: 800, feeRate: 40_000 }),
   fullsail: Object.freeze({ tickSpacing: 20, feeRate: 10_000 }),
+});
+
+export type AftermathPolicy = Readonly<{
+  memeWeight: bigint;
+  quoteWeight: bigint;
+  swapInFee: bigint;
+  source: "default" | "override";
+}>;
+
+export const AFTERMATH_DEFAULT_POLICY: AftermathPolicy = Object.freeze({
+  memeWeight: 500_000_000_000_000_000n,
+  quoteWeight: 500_000_000_000_000_000n,
+  swapInFee: 20_000_000_000_000_000n,
+  source: "default",
 });
 
 export type LpVaultState = SharedObjectReference<true> & {
@@ -150,7 +185,7 @@ export async function getLpVault(
 export async function getVenueTier(
   client: ClientWithCoreApi,
   venueConfigId: string,
-  venue: MigratorVenue,
+  venue: TieredMigratorVenue,
   originalPackageId: string,
 ): Promise<VenueTier> {
   const original = normalizeSuiAddress(originalPackageId);
@@ -186,6 +221,63 @@ export async function getVenueTier(
       throw error;
     }
     return { venue, ...VENUE_DEFAULT_TIERS[venue], source: "default" };
+  }
+}
+
+export async function getAftermathPolicy(
+  client: ClientWithCoreApi,
+  venueConfigId: string,
+  originalPackageId: string,
+): Promise<AftermathPolicy> {
+  const original = normalizeSuiAddress(originalPackageId);
+  try {
+    const { dynamicField } = await client.core.getDynamicField({
+      parentId: normalizeSuiObjectId(venueConfigId),
+      name: {
+        type: `${original}::aftermath::PolicyKey`,
+        bcs: AftermathPolicyKeyBcs.serialize({}).toBytes(),
+      },
+    });
+    const expectedType = normalizeStructTag(
+      `${original}::aftermath::AftermathPolicy`,
+    );
+    if (normalizeStructTag(dynamicField.value.type) !== expectedType) {
+      throw new TypeError("Aftermath policy has an unexpected type");
+    }
+    const parsed = aftermathPolicyBcs.parse(dynamicField.value.bcs);
+    const policy: AftermathPolicy = {
+      memeWeight: BigInt(parsed.meme_weight),
+      quoteWeight: BigInt(parsed.quote_weight),
+      swapInFee: BigInt(parsed.swap_in_fee),
+      source: "override",
+    };
+    assertValidAftermathPolicy(policy);
+    return policy;
+  } catch (error) {
+    if (!(error instanceof ObjectError) || error.reason !== "notFound") {
+      throw error;
+    }
+    return AFTERMATH_DEFAULT_POLICY;
+  }
+}
+
+function assertValidAftermathPolicy(policy: AftermathPolicy): void {
+  if (
+    policy.memeWeight < AFTERMATH_MIN_WEIGHT ||
+    policy.quoteWeight < AFTERMATH_MIN_WEIGHT ||
+    policy.memeWeight + policy.quoteWeight !== AFTERMATH_FIXED_ONE
+  ) {
+    throw new RangeError(
+      "Aftermath weights must each be at least 1% and sum to 100%",
+    );
+  }
+  if (
+    policy.swapInFee < AFTERMATH_MIN_SWAP_IN_FEE ||
+    policy.swapInFee > AFTERMATH_MAX_SWAP_IN_FEE
+  ) {
+    throw new RangeError(
+      "Aftermath swap-in fee is outside its supported range",
+    );
   }
 }
 

@@ -1942,6 +1942,27 @@
               "positional": false,
               "fields": [
                 {
+                  "name": "package_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "package_version",
+                  "type": "u64"
+                },
+                {
+                  "name": "policy",
+                  "type": "u8"
+                },
+                {
                   "name": "digest",
                   "type": {
                     "vector": "u8"

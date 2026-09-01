@@ -121,6 +121,9 @@ export const blastSuiEventSpecs = {
     recipient: "address",
   },
   UpgradeAuthorized: {
+    package_id: "id",
+    package_version: "u64",
+    policy: "u8",
     digest: "bytes",
   },
   UpgradeCommitted: {

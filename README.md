@@ -106,14 +106,16 @@ does not ship placeholder addresses.
 ## Migrators
 
 `@blast-fun/sdk/migrators` supports every production migration and LP-fee route
-for Bluefin, Cetus, MMT, Turbos, and Full Sail. Route options make coin order
-and new-pool or existing-pool selection explicit. Turbos also requires its
-`FeeType` and a `bigint` deadline.
+for Bluefin, Cetus, MMT, Turbos, Full Sail, and Aftermath. Route options make
+coin order and new-pool or existing-pool selection explicit. Turbos also
+requires its `FeeType` and a `bigint` deadline; Aftermath requires a fresh LP
+type and `CreatePoolCapV2`.
 
-The migrator client reads `LpVault` objects from BCS and reads venue-tier
-dynamic fields with original package type identity. If a tier field does not
-exist, the client returns the documented compiled default. It does not convert
-transport failures or corrupt fields into defaults.
+The migrator client reads `LpVault` objects from BCS, CLMM venue tiers, and the
+typed Aftermath weight-and-fee policy dynamic fields with original package type
+identity. If a policy field does not exist, the client returns the documented
+compiled default. It does not convert transport failures or corrupt fields into
+defaults.
 
 The event reducers require Sui checkpoint, transaction digest, and event index
 metadata. Stable replay identity uses transaction digest plus event index;

@@ -2,8 +2,13 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
-import type { LpVaultState, MigratorVenue, VenueTier } from "./state.ts";
-import { getLpVault, getVenueTier } from "./state.ts";
+import type {
+  AftermathPolicy,
+  LpVaultState,
+  TieredMigratorVenue,
+  VenueTier,
+} from "./state.ts";
+import { getAftermathPolicy, getLpVault, getVenueTier } from "./state.ts";
 import type { MigratorsDeployment } from "./transactions.ts";
 import { MigratorCalls, MigratorTransactions } from "./transactions.ts";
 
@@ -26,11 +31,19 @@ export class MigratorsClient {
     );
   }
 
-  async getVenueTier(venue: MigratorVenue): Promise<VenueTier> {
+  async getVenueTier(venue: TieredMigratorVenue): Promise<VenueTier> {
     return getVenueTier(
       this.#client,
       this.call.deployment.venueConfig.objectId,
       venue,
+      this.call.deployment.originalPackageId,
+    );
+  }
+
+  async getAftermathPolicy(): Promise<AftermathPolicy> {
+    return getAftermathPolicy(
+      this.#client,
+      this.call.deployment.venueConfig.objectId,
       this.call.deployment.originalPackageId,
     );
   }

@@ -804,21 +804,27 @@ function linearClaimed(
 
 function event<Kind extends VestingEventKind>(
   kind: Kind,
-  payload: PayloadForKind<Kind>,
+  payload: Omit<PayloadForKind<Kind>, "caller" | "funder">,
 ): Extract<DecodedVestingEvent, { kind: Kind }> {
   const [module, name] = kind.split(".") as [
     "linear" | "checkpoints",
     "VestingCreated" | "VestingClaimed" | "VestingCanceled" | "VestingClosed",
   ];
   const eventIndex = nextEventIndex++;
+  const sender = normalizeSuiAddress("0x101");
+  const completePayload = (
+    kind.endsWith(".VestingCreated")
+      ? { ...payload, funder: sender }
+      : { ...payload, caller: sender }
+  ) as PayloadForKind<Kind>;
   return {
     source: "vesting",
     module,
     name,
     kind,
-    payload,
+    payload: completePayload,
     emitterPackageId: normalizeSuiObjectId("0x100"),
-    sender: normalizeSuiAddress("0x101"),
+    sender,
     position: {
       checkpoint: BigInt(eventIndex + 1),
       transactionDigest: `vesting-${eventIndex}`,

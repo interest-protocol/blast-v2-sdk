@@ -265,7 +265,9 @@ function classifyMemeTemplateFunction(moduleName, functionName) {
 function classifyMigratorFunction(moduleName, functionName) {
   if (moduleName === "vault") return "builder";
   if (moduleName === "migration_math") return "sdk-arithmetic";
-  if (functionName === "set_tier") return "intentional-admin-exclusion";
+  if (functionName === "set_tier" || functionName === "set_policy") {
+    return "intentional-admin-exclusion";
+  }
   if (
     functionName.startsWith("migrate") ||
     functionName.startsWith("collect_fees")
@@ -299,6 +301,7 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
   if (key === "launch_ticket::new") return "template-builder";
   if (moduleName === "creator_authority") return "template-internal";
   if (moduleName === "fees") return "move-composition";
+  if (moduleName === "migration_math") return "sdk-arithmetic";
   if (isIntentionalAdminExclusion(moduleName, functionName, key)) {
     return "intentional-admin-exclusion";
   }

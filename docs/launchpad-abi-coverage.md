@@ -6,7 +6,7 @@ The frozen production ABI uses contracts commit
 `a5ed34ad49c6c001af2db5b9cbcb206075704412`. The three parity artifacts are:
 
 - `abi/production-launchpad-v1.json` for `launchpad`, `meme_template`, and the
-  five production migrators;
+  six production migrators;
 - `abi/production-vesting-v1.json` for `vesting`; and
 - `abi/production-blast-sui-v1.json` for `blast_sui`.
 
@@ -48,6 +48,7 @@ original package ID. The deployment model stores both IDs.
 | Cetus four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateCetus`, `collectCetusFees` with pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. |
 | Turbos four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateTurbos`, `collectTurbosFees` with pool route, `memeSide`, `feeType`, and deadline | `test/migrators-transactions.test.ts` | All six routes and the adapter-specific third type argument complete. |
 | Full Sail four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateFullSail`, `collectFullSailFees` with pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. Migration includes rewarder custody; collection does not add unused inputs. |
+| Aftermath `migrate_meme_{first,second}` and `set_policy` | `migrateAftermath`, `setAftermathPolicy` | `test/migrators-transactions.test.ts` | Both canonical orientations consume a fresh LP cap; the admin builder validates role weights and swap-in fee. |
 | `vault::claim_creator_fees`, `vault::claim_protocol_fees` | `MigratorCalls` and `MigratorTransactions` claim methods | `test/migrators-transactions.test.ts` | Both claims route both returned coins. |
 
 ### Vesting
@@ -94,7 +95,7 @@ recipient, and request-result-to-`keep` routing for every returned object.
 | `MigrationPayload<Meme, Quote, Witness>` returned linear value | `LaunchpadCalls.migrate`, `redeemMigration`; every adapter transaction | `test/transactions.test.ts`, `test/migrators-transactions.test.ts` |
 | `CreatorCap<Meme>` owned object | creator-cap and fee-claim builders | `test/transactions.test.ts`; current owner is a native ownership fact |
 | `LpVault<Meme, Quote>` shared mutable object | `lpVaultBcs`, `decodeLpVaultObject`, `getLpVault` | `test/migrators-state.test.ts`, `test/migrators-client.test.ts` |
-| `VenueConfig` and `TierKey<Venue>` | `migratorsDeployment`, `getVenueTier` | `test/deployments.test.ts`, `test/migrators-state.test.ts`, `test/migrators-client.test.ts` |
+| `VenueConfig`, `TierKey<Venue>`, and `aftermath::PolicyKey` | `migratorsDeployment`, `getVenueTier`, `getAftermathPolicy` | `test/deployments.test.ts`, `test/migrators-state.test.ts`, `test/migrators-client.test.ts` |
 | Launchpad and migrator package/shared-object identities | `launchpadDeployment`, `migratorsDeployment` | `test/deployments.test.ts` |
 | Venue `Witness`, `Venue`, and Turbos `FeeType` | original-package witness/type helpers and route-specific type arguments | `test/migrators-transactions.test.ts` |
 | `linear::Vesting<Coin>` and `checkpoints::Vesting<Coin>` shared mutable objects | `linearVestingBcs`, `checkpointVestingBcs`, `decodeVestingObject`, `getVesting` | `test/vesting-state.test.ts`, `test/vesting-client.test.ts` |
@@ -134,7 +135,7 @@ authoritative, and these helpers do not duplicate mutable admission policy.
 | Frozen event surface | SDK implementation | Verification |
 | --- | --- | --- |
 | 29 wrapped launchpad payloads: `AdminDestroyed`, `AdminGranted`, `AdminRevoked`, `Bought`, `CreatorCapClaimed`, `CreatorFeesClaimed`, `GraduationDefaultsChanged`, `LaunchCreated`, `LaunchTicketCreated`, `LaunchTradeFeesChanged`, `Migrated`, `MigrationWitnessAllowed`, `MigrationWitnessDisallowed`, `PackageAdminCreated`, `PackageVersionAdvanced`, `ProtocolFeesClaimed`, `ProtocolFeeShareChanged`, `QuoteAllowed`, `QuoteDisallowed`, `QuoteParametersChanged`, `Sold`, `SuperAdminTransferCancelled`, `SuperAdminTransferred`, `SuperAdminTransferStarted`, `UpgradeAuthorized`, `UpgradeCommitted`, `UpgradePolicyRestricted`, `XClaimSignerRevoked`, `XClaimSignerSet` | `launchpadEventSpecs`, `launchpadEventBcs`, `decodeLaunchpadEvent`, `reduceLaunchpadEvent` | `test/launchpad-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
-| Six direct migrator payloads: `CreatorFeesClaimed`, `LpFeesCollected`, `MigrationCompleted`, `ProtocolFeesClaimed`, `VaultCreated`, `VenueTierUpdated` | `migratorEventSpecs`, `migratorEventBcs`, `decodeMigratorEvent`, `reduceMigratorEvent` | `test/migrator-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
+| Eight direct migrator payloads: `AftermathMigrationCompleted`, `AftermathPolicyUpdated`, `CreatorFeesClaimed`, `LpFeesCollected`, `MigrationCompleted`, `ProtocolFeesClaimed`, `VaultCreated`, `VenueTierUpdated` | `migratorEventSpecs`, `migratorEventBcs`, `decodeMigratorEvent`, `reduceMigratorEvent` | `test/migrator-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
 | Ordered launch-to-vault replay | `reduceLaunchpadProductInput` | launchpad and migrator replay tests reconstruct launch lifecycle, reserves, launch fees, migration, vault/pool/position identity, principal, and LP-fee totals. Actor identities omitted from payloads are reconstructed from native event senders. |
 
 Vesting creation projections derive the funder from the native event sender;

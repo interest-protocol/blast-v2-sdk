@@ -92,6 +92,72 @@ test("signs in and routes both protocol LP-fee coins", () => {
   assert.equal(transferObjectCount(tx), 2);
 });
 
+test("signs in and pins one validated Aftermath policy", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const policy = {
+    adminCapId: "0xe",
+    memeWeight: 600_000_000_000_000_000n,
+    quoteWeight: 400_000_000_000_000_000n,
+    swapInFee: 20_000_000_000_000_000n,
+  };
+  const tx = sdk.setAftermathPolicy(policy);
+
+  assert.deepEqual(moveFunctions(tx), [
+    "acl::sign_in",
+    "aftermath::set_policy",
+  ]);
+  assert.deepEqual(sharedMutability(tx), [false, false, true]);
+  assertSharedArgumentIds(tx, ["0x5", "0x2", "0x60"]);
+  assert.equal(pureInputCount(tx), 3);
+  assert.throws(
+    () =>
+      sdk.setAftermathPolicy({
+        ...policy,
+        memeWeight: 500_000_000_000_000_000n,
+      }),
+    /sum to 100%/,
+  );
+  assert.throws(
+    () => sdk.setAftermathPolicy({ ...policy, swapInFee: 1n }),
+    /swap-in fee/,
+  );
+});
+
+test("routes both Aftermath canonical orientations with a fresh LP cap", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const lpType = "0x30::af_lp::AF_LP";
+  assert.equal(
+    sdk.call.migrationWitnessType("aftermath").endsWith("::aftermath::Witness"),
+    true,
+  );
+
+  for (const memeSide of ["first", "second"] as const) {
+    const tx = sdk.migrateAftermath({
+      ...types,
+      lpType,
+      memeSide,
+      launch: shared("0x10", "30", true),
+      memeCurrency: shared("0x11", "31", true),
+      poolRegistry: shared("0x12", "32", true),
+      createPoolCap: "0x13",
+    });
+
+    assert.deepEqual(moveFunctions(tx), [
+      `aftermath::migrate_meme_${memeSide}`,
+    ]);
+    assert.deepEqual(moveTypeArguments(tx), [
+      [
+        normalizedType(lpType),
+        normalizedType(types.memeType),
+        normalizedType(types.quoteType),
+      ],
+    ]);
+    assert.deepEqual(sharedMutability(tx), [true, false, false, true, true]);
+    assertSharedArgumentIds(tx, ["0x10", "0x2", "0x60", "0x11", "0x12"]);
+    assert.equal(tx.getData().commands.length, 1);
+  }
+});
+
 test("builds the complete Bluefin migration with frozen mutability", () => {
   const sdk = new MigratorTransactions(deployment);
   assert.equal(

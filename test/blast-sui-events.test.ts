@@ -168,7 +168,12 @@ const fixtures = [
   },
   {
     kind: "UpgradeAuthorized",
-    payload: { digest: new Uint8Array([1, 2, 3]) },
+    payload: {
+      package_id: "0x11",
+      package_version: 123n,
+      policy: 1,
+      digest: new Uint8Array([1, 2, 3]),
+    },
   },
   {
     kind: "UpgradeCommitted",

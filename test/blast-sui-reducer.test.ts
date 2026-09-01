@@ -199,6 +199,9 @@ test("replays all administration events and ignores duplicate events", () => {
       policy: 0,
     }),
     event("UpgradeAuthorized", {
+      package_id: normalizeSuiObjectId("0x18"),
+      package_version: 2n,
+      policy: 0,
       digest: new Uint8Array([1, 2, 3]),
     }),
     event("UpgradePolicyRestricted", {

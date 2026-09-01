@@ -34,7 +34,7 @@ const migratorPackages: MigratorEventPackageIdentity = {
 test("decodes and idempotently reduces every frozen migrator event", () => {
   assert.deepEqual(migratorEventSpecs, readFrozenMigratorEventSpecs());
   const kinds = Object.keys(migratorEventSpecs) as MigratorEventKind[];
-  assert.equal(kinds.length, 6);
+  assert.equal(kinds.length, 8);
 
   let projection = createLaunchpadProductProjection();
   for (const [eventIndex, kind] of kinds.entries()) {
@@ -178,6 +178,75 @@ test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
   assert.equal(vault.migration?.residualMemeAmount, 1n);
   assert.equal(vault.migration?.residualQuoteAmount, 1n);
   assert.equal(vault.principalLiquidity, 1_000n);
+});
+
+test("replays Aftermath policy and locked weighted-pool migration facts", () => {
+  const inputs = [
+    migratorDecoded(
+      "AftermathPolicyUpdated",
+      {
+        old_meme_weight: 500_000_000_000_000_000n,
+        old_quote_weight: 500_000_000_000_000_000n,
+        old_swap_in_fee: 20_000_000_000_000_000n,
+        new_meme_weight: 600_000_000_000_000_000n,
+        new_quote_weight: 400_000_000_000_000_000n,
+        new_swap_in_fee: 30_000_000_000_000_000n,
+      },
+      0,
+    ),
+    migratorDecoded(
+      "VaultCreated",
+      {
+        vault_id: "0xd",
+        pool_id: "0xe",
+        position_id: "0xf",
+        venue: "0x320::aftermath::Venue",
+        meme: "0xa::meme::MEME",
+        quote: "0x2::sui::SUI",
+      },
+      1,
+    ),
+    migratorDecoded(
+      "AftermathMigrationCompleted",
+      {
+        launch_id: "0xc",
+        vault_id: "0xd",
+        pool_id: "0xe",
+        venue: "0x320::aftermath::Venue",
+        lp: "0x30::af_lp::AF_LP",
+        meme: "0xa::meme::MEME",
+        quote: "0x2::sui::SUI",
+        meme_amount: 200n,
+        quote_amount: 190n,
+        locked_lp_amount: 180n,
+        meme_weight: 600_000_000_000_000_000n,
+        quote_weight: 400_000_000_000_000_000n,
+        flatness: 0n,
+        swap_in_fee: 30_000_000_000_000_000n,
+      },
+      2,
+    ),
+  ];
+
+  const projection = inputs.reduce(
+    reduceLaunchpadProductInput,
+    createLaunchpadProductProjection(),
+  );
+  const vault = projection.migrators.vaults[normalizeSuiObjectId("0xd")];
+
+  assert.deepEqual(projection.migrators.aftermathPolicy, {
+    memeWeight: 600_000_000_000_000_000n,
+    quoteWeight: 400_000_000_000_000_000n,
+    swapInFee: 30_000_000_000_000_000n,
+    source: "override",
+  });
+  assert.ok(vault?.migration?.kind === "aftermath");
+  assert.equal(vault.migration.lockedLpAmount, 180n);
+  assert.equal(vault.migration.memeWeight, 600_000_000_000_000_000n);
+  assert.equal(vault.migration.quoteWeight, 400_000_000_000_000_000n);
+  assert.equal(vault.migration.swapInFee, 30_000_000_000_000_000n);
+  assert.equal(vault.protocolMemeResidual, 0n);
+  assert.equal(vault.protocolQuoteResidual, 0n);
 });
 
 test("requires migrator event positions and current/original identities", () => {

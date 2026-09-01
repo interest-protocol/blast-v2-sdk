@@ -111,6 +111,64 @@ export class MigratorCalls {
       });
   }
 
+  setAftermathPolicy(options: {
+    adminWitness: TransactionObjectInput;
+    memeWeight: bigint;
+    quoteWeight: bigint;
+    swapInFee: bigint;
+  }) {
+    const policy = normalizeAftermathPolicy(options);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::aftermath::set_policy`,
+        arguments: [
+          sharedObject(
+            tx,
+            "venueConfig",
+            { ...this.deployment.venueConfig, mutable: true },
+            true,
+          ),
+          tx.object(options.adminWitness),
+          tx.pure.u64(policy.memeWeight),
+          tx.pure.u64(policy.quoteWeight),
+          tx.pure.u64(policy.swapInFee),
+        ],
+      });
+  }
+
+  migrateAftermath(
+    options: LaunchTypes & {
+      lpType: string;
+      memeSide: "first" | "second";
+      launch: SharedObjectReference<true>;
+      memeCurrency: SharedObjectReference<true>;
+      poolRegistry: SharedObjectReference<true>;
+      createPoolCap: TransactionObjectInput;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const lpType = normalizeStructTag(options.lpType);
+    const memeSide = normalizeAftermathMemeSide(options.memeSide);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::aftermath::migrate_meme_${memeSide}`,
+        typeArguments: [lpType, types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.launchpad.packageVersion,
+            false,
+          ),
+          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          sharedObject(tx, "poolRegistry", options.poolRegistry, true),
+          tx.object(options.createPoolCap),
+        ],
+      });
+  }
+
   migrateBluefin(
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
@@ -502,6 +560,28 @@ export class MigratorTransactions {
     return tx;
   }
 
+  setAftermathPolicy(options: {
+    adminCapId: string;
+    memeWeight: bigint;
+    quoteWeight: bigint;
+    swapInFee: bigint;
+  }): Transaction {
+    const tx = new Transaction();
+    const adminWitness = tx.add(
+      this.call.signIn({ adminCap: options.adminCapId }),
+    );
+    tx.add(this.call.setAftermathPolicy({ ...options, adminWitness }));
+    return tx;
+  }
+
+  migrateAftermath(
+    options: Parameters<MigratorCalls["migrateAftermath"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.migrateAftermath(options));
+    return tx;
+  }
+
   migrateBluefin(
     options: Parameters<MigratorCalls["migrateBluefin"]>[0],
   ): Transaction {
@@ -611,6 +691,43 @@ function normalizeMemeSideAb(value: "a" | "b"): "a" | "b" {
     throw new RangeError("memeSide must be a or b");
   }
   return value;
+}
+
+function normalizeAftermathMemeSide(
+  value: "first" | "second",
+): "first" | "second" {
+  if (value !== "first" && value !== "second") {
+    throw new RangeError("memeSide must be first or second");
+  }
+  return value;
+}
+
+function normalizeAftermathPolicy(policy: {
+  memeWeight: bigint;
+  quoteWeight: bigint;
+  swapInFee: bigint;
+}) {
+  const memeWeight = requireU64("memeWeight", policy.memeWeight);
+  const quoteWeight = requireU64("quoteWeight", policy.quoteWeight);
+  const swapInFee = requireU64("swapInFee", policy.swapInFee);
+  if (
+    memeWeight < 10_000_000_000_000_000n ||
+    quoteWeight < 10_000_000_000_000_000n ||
+    memeWeight + quoteWeight !== 1_000_000_000_000_000_000n
+  ) {
+    throw new RangeError(
+      "Aftermath weights must each be at least 1% and sum to 100%",
+    );
+  }
+  if (
+    swapInFee < 100_000_000_000_000n ||
+    swapInFee > 100_000_000_000_000_000n
+  ) {
+    throw new RangeError(
+      "Aftermath swap-in fee is outside its supported range",
+    );
+  }
+  return { memeWeight, quoteWeight, swapInFee };
 }
 
 function normalizePoolKind(value: "new" | "existing"): "new" | "existing" {
