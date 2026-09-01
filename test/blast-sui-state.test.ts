@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { TypeTagSerializer } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
+import { deriveDynamicFieldID, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import {
   blastSuiDepositReceiptBcs,
+  blastSuiTreasuryCapBcs,
   blastSuiVaultBcs,
   decodeBlastSuiDepositReceiptObject,
   decodeBlastSuiVaultObject,
@@ -11,8 +14,10 @@ import {
   getBlastSuiVault,
 } from "../src/blast-sui/state.ts";
 import {
+  BLAST_TREASURY_CAP_GOLDEN_BYTES,
   BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
   BLAST_SUI_VAULT_GOLDEN_BYTES,
+  FUN_TREASURY_CAP_GOLDEN_BYTES,
 } from "./blast-sui-golden.ts";
 
 const originalPackageId = "0x123";
@@ -20,6 +25,10 @@ const vaultId = "0x44";
 const poolId = "0x55";
 const receiptId = "0x77";
 const receiptOwner = "0xbeef";
+const funTreasuryCapId = "0xf1";
+const blastTreasuryCapId = "0xb1";
+const funCoinType = `${normalizeSuiAddress(originalPackageId)}::fun_sui::FUN_SUI`;
+const blastCoinType = `${normalizeSuiAddress(originalPackageId)}::blast_sui::BLAST_SUI`;
 const uid = (id: string) => ({ id: { bytes: id } });
 const id = (value: string) => ({ bytes: value });
 const balance = (value: bigint) => ({ value });
@@ -46,14 +55,6 @@ function serializeVaultWithUid(objectId: string): Uint8Array {
   return blastSuiVaultBcs
     .serialize({
       id: uid(objectId),
-      fun_cap: {
-        id: uid("0xf1"),
-        total_supply: { value: 100n },
-      },
-      blast_cap: {
-        id: uid("0xb1"),
-        total_supply: { value: 200n },
-      },
       pool_id: id(poolId),
       fun_custody: custody,
       blast_custody: custody,
@@ -64,6 +65,49 @@ function serializeVaultWithUid(objectId: string): Uint8Array {
       unwind_only: true,
     })
     .toBytes();
+}
+
+function treasuryCapObjects(
+  overrides: Partial<{
+    funObjectId: string;
+    funOwner: SuiClientTypes.ObjectOwner;
+    funType: string;
+    funContent: Uint8Array;
+    blastObjectId: string;
+    blastOwner: SuiClientTypes.ObjectOwner;
+    blastType: string;
+    blastContent: Uint8Array;
+  }> = {},
+) {
+  return {
+    fun: {
+      objectId: overrides.funObjectId ?? funTreasuryCapId,
+      owner: overrides.funOwner ?? treasuryCapOwner(funCoinType),
+      type: overrides.funType ?? `0x2::coin::TreasuryCap<${funCoinType}>`,
+      content: overrides.funContent ?? FUN_TREASURY_CAP_GOLDEN_BYTES,
+    },
+    blast: {
+      objectId: overrides.blastObjectId ?? blastTreasuryCapId,
+      owner: overrides.blastOwner ?? treasuryCapOwner(blastCoinType),
+      type: overrides.blastType ?? `0x2::coin::TreasuryCap<${blastCoinType}>`,
+      content: overrides.blastContent ?? BLAST_TREASURY_CAP_GOLDEN_BYTES,
+    },
+  };
+}
+
+function treasuryCapOwner(coinType: string): SuiClientTypes.ObjectOwner {
+  const keyType = `${normalizeSuiAddress(originalPackageId)}::vault::TreasuryKey<${coinType}>`;
+  const wrapperType = TypeTagSerializer.parseFromStr(
+    `0x2::dynamic_object_field::Wrapper<${keyType}>`,
+  );
+  return {
+    $kind: "ObjectOwner",
+    ObjectOwner: deriveDynamicFieldID(
+      vaultId,
+      wrapperType,
+      new Uint8Array([0]),
+    ),
+  };
 }
 
 function serializeReceiptWithUid(objectId: string): Uint8Array {
@@ -105,7 +149,11 @@ function addressOwner(address = receiptOwner): SuiClientTypes.ObjectOwner {
 }
 
 test("decodes the complete blast Sui vault and derives custody assets", () => {
-  const vault = decodeBlastSuiVaultObject(vaultObject(), originalPackageId);
+  const vault = decodeBlastSuiVaultObject(
+    vaultObject(),
+    treasuryCapObjects(),
+    originalPackageId,
+  );
 
   assert.equal(vault.objectId.endsWith("44"), true);
   assert.equal(vault.originalPackageId.endsWith("0123"), true);
@@ -145,18 +193,25 @@ test("rejects invalid vault identity, type, package, and mutability", () => {
     `${originalPackageId}::vault::Wrong`,
   ]) {
     assert.throws(
-      () => decodeBlastSuiVaultObject(vaultObject({ type }), originalPackageId),
+      () =>
+        decodeBlastSuiVaultObject(
+          vaultObject({ type }),
+          treasuryCapObjects(),
+          originalPackageId,
+        ),
       /not a blast Sui vault/,
     );
   }
   assert.throws(
-    () => decodeBlastSuiVaultObject(vaultObject(), "0x999"),
+    () =>
+      decodeBlastSuiVaultObject(vaultObject(), treasuryCapObjects(), "0x999"),
     /unexpected package/,
   );
   assert.throws(
     () =>
       decodeBlastSuiVaultObject(
         vaultObject({ content: serializeVaultWithUid("0x99") }),
+        treasuryCapObjects(),
         originalPackageId,
       ),
     /mismatched UID/,
@@ -165,9 +220,55 @@ test("rejects invalid vault identity, type, package, and mutability", () => {
     () =>
       decodeBlastSuiVaultObject(
         vaultObject({ mutable: false }),
+        treasuryCapObjects(),
         originalPackageId,
       ),
     /must be mutable/,
+  );
+});
+
+test("rejects a treasury cap with the wrong type, parent, or identity", () => {
+  assert.throws(
+    () =>
+      decodeBlastSuiVaultObject(
+        vaultObject(),
+        treasuryCapObjects({ funType: `0x2::coin::TreasuryCap<u64>` }),
+        originalPackageId,
+      ),
+    /is not the .*FUN_SUI TreasuryCap/,
+  );
+  assert.throws(
+    () =>
+      decodeBlastSuiVaultObject(
+        vaultObject(),
+        treasuryCapObjects({ funOwner: addressOwner() }),
+        originalPackageId,
+      ),
+    /must be a child object/,
+  );
+  assert.throws(
+    () =>
+      decodeBlastSuiVaultObject(
+        vaultObject(),
+        treasuryCapObjects({
+          funOwner: { $kind: "ObjectOwner", ObjectOwner: "0x999" },
+        }),
+        originalPackageId,
+      ),
+    /belongs to another parent/,
+  );
+  assert.throws(
+    () =>
+      decodeBlastSuiVaultObject(
+        vaultObject(),
+        treasuryCapObjects({
+          funContent: blastSuiTreasuryCapBcs
+            .serialize({ id: uid("0x88"), total_supply: { value: 100n } })
+            .toBytes(),
+        }),
+        originalPackageId,
+      ),
+    /mismatched UID/,
   );
 });
 
@@ -184,7 +285,11 @@ test("rejects a custody asset total that exceeds u64", () => {
 
   assert.throws(
     () =>
-      decodeBlastSuiVaultObject(vaultObject({ content }), originalPackageId),
+      decodeBlastSuiVaultObject(
+        vaultObject({ content }),
+        treasuryCapObjects(),
+        originalPackageId,
+      ),
     /assets must be a u64/,
   );
 });
@@ -274,8 +379,11 @@ test("requires original package identity at every exported object boundary", asy
     type: `${originalPackageId}::deposit_receipt::BlastSuiDepositReceipt`,
     content: BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
   };
-  // @ts-expect-error Original package identity is a required trust input.
-  assert.throws(() => decodeBlastSuiVaultObject(vaultObject()), TypeError);
+  assert.throws(
+    // @ts-expect-error Original package identity is a required trust input.
+    () => decodeBlastSuiVaultObject(vaultObject(), treasuryCapObjects()),
+    TypeError,
+  );
   assert.throws(
     // @ts-expect-error Original package identity is a required trust input.
     () => decodeBlastSuiDepositReceiptObject(receiptObject),
@@ -334,6 +442,14 @@ test("reads vault and receipt state through the transport-neutral Core API", asy
           },
         };
       },
+      getDynamicObjectField: async (options: { name: { type: string } }) => {
+        requests.push(options);
+        return {
+          object: options.name.type.includes("fun_sui::FUN_SUI")
+            ? treasuryCapObjects().fun
+            : treasuryCapObjects().blast,
+        };
+      },
     },
   } as unknown as ClientWithCoreApi;
 
@@ -348,6 +464,22 @@ test("reads vault and receipt state through the transport-neutral Core API", asy
   assert.equal(receipt.owner.endsWith("beef"), true);
   assert.deepEqual(requests, [
     { objectId: vaultId, include: { content: true } },
+    {
+      parentId: normalizeSuiAddress(vaultId),
+      name: {
+        type: `${normalizeSuiAddress(originalPackageId)}::vault::TreasuryKey<${funCoinType}>`,
+        bcs: new Uint8Array([0]),
+      },
+      include: { content: true },
+    },
+    {
+      parentId: normalizeSuiAddress(vaultId),
+      name: {
+        type: `${normalizeSuiAddress(originalPackageId)}::vault::TreasuryKey<${blastCoinType}>`,
+        bcs: new Uint8Array([0]),
+      },
+      include: { content: true },
+    },
     { objectId: receiptId, include: { content: true } },
   ]);
 });
@@ -362,6 +494,11 @@ test("rejects a non-shared vault read", async () => {
           type: `${originalPackageId}::vault::Vault`,
           content: BLAST_SUI_VAULT_GOLDEN_BYTES,
         },
+      }),
+      getDynamicObjectField: async (options: { name: { type: string } }) => ({
+        object: options.name.type.includes("fun_sui::FUN_SUI")
+          ? treasuryCapObjects().fun
+          : treasuryCapObjects().blast,
       }),
     },
   } as unknown as ClientWithCoreApi;

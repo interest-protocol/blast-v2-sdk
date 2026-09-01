@@ -33,6 +33,7 @@ const artifactDeclarations = [
       "contracts ADR 0059: remove sender and unchanged state from event payloads",
       "contracts ADR 0060: retain both currency metadata caps and the receipt-display cap in PackageAdmin custody",
       "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody",
+      "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody",
     ],
   },
 ];

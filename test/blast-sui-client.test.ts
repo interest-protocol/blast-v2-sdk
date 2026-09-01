@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { TypeTagSerializer } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { deriveDynamicFieldID, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import { BlastSuiClient, blastSui } from "../src/blast-sui/client.ts";
 import {
@@ -10,13 +12,16 @@ import {
 } from "../src/blast-sui/transactions.ts";
 import type { BlastSuiDeployment } from "../src/blast-sui/types.ts";
 import {
+  BLAST_TREASURY_CAP_GOLDEN_BYTES,
   BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
   BLAST_SUI_VAULT_GOLDEN_BYTES,
+  FUN_TREASURY_CAP_GOLDEN_BYTES,
 } from "./blast-sui-golden.ts";
 
+const originalPackageId = "0x122";
 const deployment: BlastSuiDeployment = {
   packageId: "0x123",
-  originalPackageId: "0x122",
+  originalPackageId,
   packageVersion: {
     objectId: "0x10",
     initialSharedVersion: "8",
@@ -35,6 +40,14 @@ test("registers calls, transactions, and exact Core API state reads", async () =
           ? { object: vaultObject() }
           : { object: receiptObject(options.objectId) };
       },
+      getDynamicObjectField: async (options: { name: { type: string } }) => {
+        requests.push(options);
+        return {
+          object: options.name.type.includes("fun_sui::FUN_SUI")
+            ? treasuryCapObject("fun")
+            : treasuryCapObject("blast"),
+        };
+      },
     },
   } as unknown as ClientWithCoreApi;
 
@@ -49,6 +62,22 @@ test("registers calls, transactions, and exact Core API state reads", async () =
   assert.deepEqual(requests, [
     {
       objectId: client.call.deployment.vault.objectId,
+      include: { content: true },
+    },
+    {
+      parentId: client.call.deployment.vault.objectId,
+      name: {
+        type: treasuryKeyType("fun"),
+        bcs: new Uint8Array([0]),
+      },
+      include: { content: true },
+    },
+    {
+      parentId: client.call.deployment.vault.objectId,
+      name: {
+        type: treasuryKeyType("blast"),
+        bcs: new Uint8Array([0]),
+      },
       include: { content: true },
     },
     { objectId: "0x77", include: { content: true } },
@@ -72,6 +101,39 @@ function vaultObject() {
     type: "0x122::vault::Vault",
     content: BLAST_SUI_VAULT_GOLDEN_BYTES,
   };
+}
+
+function treasuryCapObject(kind: "fun" | "blast") {
+  const coinType = treasuryCoinType(kind);
+  const wrapperType = TypeTagSerializer.parseFromStr(
+    `0x2::dynamic_object_field::Wrapper<${treasuryKeyType(kind)}>`,
+  );
+  const objectId = kind === "fun" ? "0xf1" : "0xb1";
+  return {
+    objectId,
+    owner: {
+      $kind: "ObjectOwner" as const,
+      ObjectOwner: deriveDynamicFieldID(
+        deployment.vault.objectId,
+        wrapperType,
+        new Uint8Array([0]),
+      ),
+    },
+    type: `0x2::coin::TreasuryCap<${coinType}>`,
+    content:
+      kind === "fun"
+        ? FUN_TREASURY_CAP_GOLDEN_BYTES
+        : BLAST_TREASURY_CAP_GOLDEN_BYTES,
+  };
+}
+
+function treasuryKeyType(kind: "fun" | "blast"): string {
+  return `${normalizeSuiAddress(originalPackageId)}::vault::TreasuryKey<${treasuryCoinType(kind)}>`;
+}
+
+function treasuryCoinType(kind: "fun" | "blast"): string {
+  const module = kind === "fun" ? "fun_sui::FUN_SUI" : "blast_sui::BLAST_SUI";
+  return `${normalizeSuiAddress(originalPackageId)}::${module}`;
 }
 
 function receiptObject(objectId: string) {

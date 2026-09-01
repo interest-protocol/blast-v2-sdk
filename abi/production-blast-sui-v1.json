@@ -10,7 +10,8 @@
     "approvedAbiAmendments": [
       "contracts ADR 0059: remove sender and unchanged state from event payloads",
       "contracts ADR 0060: retain both currency metadata caps and the receipt-display cap in PackageAdmin custody",
-      "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody"
+      "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody",
+      "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -3567,6 +3568,28 @@
           ],
           "structs": [
             {
+              "name": "TreasuryKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "CoinType",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
               "name": "Vault",
               "abilities": [
                 "Key"
@@ -3584,60 +3607,6 @@
                       },
                       "name": "UID",
                       "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "fun_cap",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "coin"
-                      },
-                      "name": "TreasuryCap",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_sui",
-                                "name": "fun_sui"
-                              },
-                              "name": "FUN_SUI",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": true
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
-                  "name": "blast_cap",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "coin"
-                      },
-                      "name": "TreasuryCap",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_sui",
-                                "name": "blast_sui"
-                              },
-                              "name": "BLAST_SUI",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": true
-                        }
-                      ]
                     }
                   }
                 },

@@ -1,8 +1,10 @@
-import { bcs } from "@mysten/sui/bcs";
+import { bcs, TypeTagSerializer } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
 import {
+  deriveDynamicFieldID,
   normalizeSuiAddress,
   normalizeSuiObjectId,
+  normalizeStructTag,
   parseStructTag,
 } from "@mysten/sui/utils";
 
@@ -14,9 +16,13 @@ import {
   requireU64,
 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
+import { blastSuiType, funSuiType } from "./types.ts";
 
 const supplyBcs = bcs.struct("Supply", { value: bcs.u64() });
-const treasuryCapBcs = bcs.struct("TreasuryCap", {
+const treasuryKeyBcs = bcs.struct("TreasuryKey", {
+  dummy_field: bcs.bool(),
+});
+export const blastSuiTreasuryCapBcs = bcs.struct("TreasuryCap", {
   id: suiUidBcs,
   total_supply: supplyBcs,
 });
@@ -41,8 +47,6 @@ const custodyBcs = bcs.struct("Custody", {
 /** BCS layout of `blast_sui::vault::Vault` at the pinned Sui revision. */
 export const blastSuiVaultBcs = bcs.struct("Vault", {
   id: suiUidBcs,
-  fun_cap: treasuryCapBcs,
-  blast_cap: treasuryCapBcs,
   pool_id: suiIdBcs,
   fun_custody: custodyBcs,
   blast_custody: custodyBcs,
@@ -112,6 +116,18 @@ export type BlastSuiVaultObject = SharedObjectReference & {
   content: Uint8Array;
 };
 
+export type BlastSuiTreasuryCapObject = {
+  objectId: string;
+  owner: SuiClientTypes.ObjectOwner;
+  type: string;
+  content: Uint8Array;
+};
+
+export type BlastSuiTreasuryCapObjects = {
+  fun: BlastSuiTreasuryCapObject;
+  blast: BlastSuiTreasuryCapObject;
+};
+
 export type BlastSuiDepositReceiptObject = {
   objectId: string;
   owner: SuiClientTypes.ObjectOwner;
@@ -122,6 +138,7 @@ export type BlastSuiDepositReceiptObject = {
 /** Decodes one canonical shared blast Sui vault object. */
 export function decodeBlastSuiVaultObject(
   object: BlastSuiVaultObject,
+  treasuryCaps: BlastSuiTreasuryCapObjects,
   originalPackageId: string,
 ): BlastSuiVaultState {
   const typePackageId = validateType(
@@ -139,6 +156,18 @@ export function decodeBlastSuiVaultObject(
   const parsed = blastSuiVaultBcs.parse(object.content);
   const objectId = normalizeSuiObjectId(object.objectId);
   assertUid("blast Sui vault", objectId, parsed.id.id.bytes);
+  const funSupply = decodeTreasuryCap(
+    treasuryCaps.fun,
+    objectId,
+    funSuiType(originalPackageId),
+    originalPackageId,
+  );
+  const blastSupply = decodeTreasuryCap(
+    treasuryCaps.blast,
+    objectId,
+    blastSuiType(originalPackageId),
+    originalPackageId,
+  );
 
   return {
     objectId,
@@ -149,8 +178,8 @@ export function decodeBlastSuiVaultObject(
     mutable: true,
     originalPackageId: typePackageId,
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
-    funSupply: decodedU64("funSupply", parsed.fun_cap.total_supply.value),
-    blastSupply: decodedU64("blastSupply", parsed.blast_cap.total_supply.value),
+    funSupply,
+    blastSupply,
     funCustody: decodeCustody("funCustody", parsed.fun_custody),
     blastCustody: decodeCustody("blastCustody", parsed.blast_custody),
     exchangeRate: {
@@ -212,10 +241,24 @@ export async function getBlastSuiVault(
   objectId: string,
   originalPackageId: string,
 ): Promise<BlastSuiVaultState> {
-  const { object } = await client.core.getObject({
-    objectId,
-    include: { content: true },
-  });
+  const normalizedVaultId = normalizeSuiObjectId(objectId);
+  const [vaultResponse, funResponse, blastResponse] = await Promise.all([
+    client.core.getObject({
+      objectId,
+      include: { content: true },
+    }),
+    client.core.getDynamicObjectField({
+      parentId: normalizedVaultId,
+      name: treasuryKey(originalPackageId, funSuiType(originalPackageId)),
+      include: { content: true },
+    }),
+    client.core.getDynamicObjectField({
+      parentId: normalizedVaultId,
+      name: treasuryKey(originalPackageId, blastSuiType(originalPackageId)),
+      include: { content: true },
+    }),
+  ]);
+  const { object } = vaultResponse;
   if (object.owner.$kind !== "Shared") {
     throw new TypeError(
       `blast Sui vault ${object.objectId} is not a shared object`,
@@ -228,6 +271,10 @@ export async function getBlastSuiVault(
       mutable: true,
       type: object.type,
       content: object.content,
+    },
+    {
+      fun: funResponse.object,
+      blast: blastResponse.object,
     },
     originalPackageId,
   );
@@ -295,6 +342,51 @@ function decodeCustody(
     activeStake,
     activeSui,
     assets,
+  };
+}
+
+function decodeTreasuryCap(
+  object: BlastSuiTreasuryCapObject,
+  vaultId: string,
+  coinType: string,
+  originalPackageId: string,
+): bigint {
+  const expectedType = normalizeStructTag(
+    `0x2::coin::TreasuryCap<${coinType}>`,
+  );
+  if (normalizeStructTag(object.type) !== expectedType) {
+    throw new TypeError(
+      `object ${object.objectId} is not the ${coinType} TreasuryCap`,
+    );
+  }
+  if (object.owner.$kind !== "ObjectOwner") {
+    throw new TypeError(`${coinType} TreasuryCap must be a child object`);
+  }
+  const key = treasuryKey(originalPackageId, coinType);
+  const wrapperType = TypeTagSerializer.parseFromStr(
+    `0x2::dynamic_object_field::Wrapper<${key.type}>`,
+  );
+  const fieldId = deriveDynamicFieldID(vaultId, wrapperType, key.bcs);
+  if (
+    normalizeSuiObjectId(object.owner.ObjectOwner) !==
+    normalizeSuiObjectId(fieldId)
+  ) {
+    throw new TypeError(`${coinType} TreasuryCap belongs to another parent`);
+  }
+
+  const parsed = blastSuiTreasuryCapBcs.parse(object.content);
+  const objectId = normalizeSuiObjectId(object.objectId);
+  assertUid(`${coinType} TreasuryCap`, objectId, parsed.id.id.bytes);
+  return decodedU64(`${coinType} totalSupply`, parsed.total_supply.value);
+}
+
+function treasuryKey(
+  originalPackageId: string,
+  coinType: string,
+): SuiClientTypes.DynamicFieldName {
+  return {
+    type: `${normalizeSuiAddress(originalPackageId)}::vault::TreasuryKey<${coinType}>`,
+    bcs: treasuryKeyBcs.serialize({ dummy_field: false }).toBytes(),
   };
 }
 

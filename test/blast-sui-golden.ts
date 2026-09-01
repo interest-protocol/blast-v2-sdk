@@ -1,16 +1,11 @@
 /**
- * Literal `vault::Vault` BCS bytes for contracts baseline
- * a5ed34ad49c6c001af2db5b9cbcb206075704412 and pinned Sui revision
- * 06734f6ff0af45d8632a14a4dc4b100197f6b1a2. The fixture follows the Move
- * field order and fixed test values in `blast-sui-state.test.ts`; it is not
- * serialized with the SDK layout under test.
+ * Literal `vault::Vault` BCS bytes for the ADR 0065 child-cap layout and pinned
+ * Sui revision 06734f6ff0af45d8632a14a4dc4b100197f6b1a2. The fixture follows
+ * the Move field order and fixed test values in `blast-sui-state.test.ts`; it
+ * is not serialized with the SDK layout under test.
  */
 const VAULT_GOLDEN_HEX = [
   "0000000000000000000000000000000000000000000000000000000000000044",
-  "00000000000000000000000000000000000000000000000000000000000000f1",
-  "6400000000000000",
-  "00000000000000000000000000000000000000000000000000000000000000b1",
-  "c800000000000000",
   "0000000000000000000000000000000000000000000000000000000000000055",
   "0b00000000000000",
   "01",
@@ -41,9 +36,19 @@ const VAULT_GOLDEN_HEX = [
   "01",
 ].join("");
 
+/** Literal native TreasuryCap bytes for the two vault child objects. */
+const FUN_TREASURY_CAP_GOLDEN_HEX = [
+  "00000000000000000000000000000000000000000000000000000000000000f1",
+  "6400000000000000",
+].join("");
+const BLAST_TREASURY_CAP_GOLDEN_HEX = [
+  "00000000000000000000000000000000000000000000000000000000000000b1",
+  "c800000000000000",
+].join("");
+
 /**
- * Literal `deposit_receipt::BlastSuiDepositReceipt` bytes from the same
- * contracts baseline and Sui revision. Do not regenerate this fixture with
+ * Literal `deposit_receipt::BlastSuiDepositReceipt` bytes from the same pinned
+ * Sui revision. Do not regenerate this fixture with
  * `blastSuiDepositReceiptBcs`.
  */
 const DEPOSIT_RECEIPT_GOLDEN_HEX = [
@@ -57,6 +62,14 @@ const DEPOSIT_RECEIPT_GOLDEN_HEX = [
 
 export const BLAST_SUI_VAULT_GOLDEN_BYTES = Uint8Array.from(
   Buffer.from(VAULT_GOLDEN_HEX, "hex"),
+);
+
+export const FUN_TREASURY_CAP_GOLDEN_BYTES = Uint8Array.from(
+  Buffer.from(FUN_TREASURY_CAP_GOLDEN_HEX, "hex"),
+);
+
+export const BLAST_TREASURY_CAP_GOLDEN_BYTES = Uint8Array.from(
+  Buffer.from(BLAST_TREASURY_CAP_GOLDEN_HEX, "hex"),
 );
 
 export const BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES = Uint8Array.from(
