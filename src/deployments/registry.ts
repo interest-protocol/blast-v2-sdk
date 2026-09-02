@@ -4,10 +4,10 @@ import {
   sharedObjectReference,
 } from "../lib/sui.ts";
 import type {
-  BlastSuiDeploymentConstants,
   BlastDeployment,
   BlastDeploymentRegistry,
   BlastNetwork,
+  BlastSuiDeploymentConstants,
   LaunchpadDeploymentConstants,
   MigratorsDeploymentConstants,
   VestingDeploymentConstants,

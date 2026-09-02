@@ -21,6 +21,10 @@ const artifactDeclarations = [
       ["memeTemplate", "meme_template", "meme_template"],
       ["migrators", "migrators", "blast_fun_migrators"],
     ],
+    approvedAbiAmendments: [
+      "contracts ADR 0067: retire the Full Sail migrator before release",
+      "contracts ADR 0068: compact the LP-fee principal snapshot before release",
+    ],
   },
   {
     path: "production-vesting-v1.json",
@@ -273,7 +277,7 @@ function classifyMigratorFunction(moduleName, functionName) {
     functionName.startsWith("migrate") ||
     functionName.startsWith("collect_fees") ||
     functionName.startsWith("accrue_") ||
-    (moduleName === "aftermath" && functionName === "update_fee")
+    functionName === "update_dao_fee"
   ) {
     return "builder";
   }

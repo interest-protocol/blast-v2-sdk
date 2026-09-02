@@ -53,7 +53,6 @@ export const TIERED_MIGRATOR_VENUES = [
   "cetus",
   "mmt",
   "turbos",
-  "fullsail",
 ] as const;
 
 export const MIGRATOR_VENUES = [
@@ -74,7 +73,6 @@ export const VENUE_DEFAULT_TIERS: Readonly<
   cetus: Object.freeze({ tickSpacing: 260, feeRate: 40_000 }),
   mmt: Object.freeze({ tickSpacing: 400, feeRate: 20_000 }),
   turbos: Object.freeze({ tickSpacing: 800, feeRate: 40_000 }),
-  fullsail: Object.freeze({ tickSpacing: 20, feeRate: 10_000 }),
 });
 
 export type AftermathPolicy = Readonly<{

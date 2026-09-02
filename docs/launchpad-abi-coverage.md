@@ -47,8 +47,7 @@ original package ID. The deployment model stores both IDs.
 | MMT `migrate_meme_x`, `migrate_meme_y`, `collect_fees_meme_x`, `collect_fees_meme_y` | `migrateMmt`, `collectMmtFees` with `memeSide` | `test/migrators-transactions.test.ts` | All four routes complete. |
 | Cetus four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateCetus`, `collectCetusFees` with pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. |
 | Turbos four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateTurbos`, `collectTurbosFees` with pool route, `memeSide`, `feeType`, and deadline | `test/migrators-transactions.test.ts` | All six routes and the adapter-specific third type argument complete. |
-| Full Sail four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateFullSail`, `collectFullSailFees` with pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. Migration includes rewarder custody; collection does not add unused inputs. |
-| Aftermath `migrate_meme_{first,second}`, `set_policy`, `update_fee`, and `accrue_fees` | `migrateAftermath`, `setAftermathPolicy`, `updateAftermathDaoFee`, `accrueAftermathDaoFees` | `test/migrators-transactions.test.ts` | Both canonical orientations consume a fresh LP cap and DAO version; admin builders validate future and existing DAO rates; one accrual builder accepts separate Meme and Quote vectors bounded at 100 total receiving objects and preserves locked LP principal. |
+| Aftermath `migrate_meme_{first,second}`, `set_policy`, `update_dao_fee`, and `accrue_dao_fees` | `migrateAftermath`, `setAftermathPolicy`, `updateAftermathDaoFee`, `accrueAftermathDaoFees` | `test/migrators-transactions.test.ts` | Both canonical orientations consume a fresh LP cap and DAO version; admin builders validate future and existing DAO rates; one accrual builder accepts separate Meme and Quote vectors bounded at 100 total receiving objects and preserves locked LP principal. |
 | `vault::claim_creator_fees`, `vault::claim_protocol_fees` | `MigratorCalls` and `MigratorTransactions` claim methods | `test/migrators-transactions.test.ts` | Both claims route both returned coins. |
 
 ### Vesting
@@ -226,7 +225,7 @@ that fact.
 | --- | --- |
 | Launchpad `acl` administration except `sign_in`; all `launch_config` administration; `runtime_config` setters/revocation | Intentional routine-administration exclusion. Product transactions do not need these calls. Their event schemas remain frozen and decoded. |
 | All launchpad `package_admin` functions | Intentional package-upgrade exclusion. Their event schemas remain frozen and decoded. |
-| Bluefin, Cetus, MMT, Turbos, and Full Sail `set_tier` | Intentional routine-administration exclusion. Frontend tier reads are complete. |
+| Bluefin, Cetus, MMT, and Turbos `set_tier` | Intentional routine-administration exclusion. Frontend tier reads are complete. |
 | Blast SUI `acl::{accept_super_admin_transfer,begin_super_admin_transfer,cancel_super_admin_transfer,destroy_admin_cap,destroy_retired_super_admin_cap,grant_admin,keep,revoke_admin,sign_in}` | Intentional administration exclusion. Their events remain decoded. |
 | Blast SUI `package_admin::{new,add_capability,share,authorize_upgrade,commit_upgrade,restrict_to_additive,activate_package_version}` | Intentional package-bootstrap/upgrade exclusion. Their objects and events remain typed. |
 | Blast SUI `vault::set_redeem_fee` | Intentional routine-administration exclusion. The live fee is available in vault state and events. |
@@ -248,8 +247,8 @@ network deployment entry. Before an indexer or API begins:
    transaction effects, including tickets, capabilities, receipts, vaults, and
    package-administration objects.
 3. Run live transaction simulation or dev-inspect coverage against the published
-   package generation. Complete the migrator mainnet matrix for all 17 migration
-   routes, all ten fee-accrual or collection routes, the Aftermath per-pool
+   package generation. Complete the migrator mainnet matrix for all 13 migration
+   routes, all eight fee-accrual or collection routes, the Aftermath per-pool
    DAO-fee update, and both LP-vault claims.
 4. Write normalized deployment records with chain ID, package lineage,
    transaction digests, shared-object initial versions, custodians, toolchain,

@@ -1,5 +1,5 @@
-import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
 import type { BlastSuiDeployment } from "../blast-sui/types.ts";
+import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
 import type { SharedObjectIdentity, SuiPackageReference } from "../lib/sui.ts";
 import type { MigratorsDeployment } from "../migrators/transactions.ts";
 import type { VestingDeployment } from "../vesting/transactions.ts";

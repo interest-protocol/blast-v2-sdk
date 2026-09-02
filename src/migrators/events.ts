@@ -84,8 +84,7 @@ export const migratorEventSpecs = {
     creator_meme_fee_total: "u64",
     protocol_quote_fee_total: "u64",
     creator_quote_fee_total: "u64",
-    principal_liquidity_before: "u128",
-    principal_liquidity_after: "u128",
+    principal_liquidity: "u128",
   },
   MigrationCompleted: {
     launch_id: "id",

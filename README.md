@@ -12,7 +12,7 @@ It provides:
   claims;
 - composable Move-call helpers for adapter-owned migration transactions;
 - complete migration and LP-fee transactions for Bluefin, Cetus, MMT, Turbos,
-  Full Sail, and Aftermath; and
+  and Aftermath; and
 - typed BCS event decoding and deterministic launch-to-vault replay.
 
 ## Client extension
@@ -106,7 +106,7 @@ does not ship placeholder addresses.
 ## Migrators
 
 `@blast-fun/sdk/migrators` supports every production migration and LP-fee route
-for Bluefin, Cetus, MMT, Turbos, Full Sail, and Aftermath. Route options make
+for Bluefin, Cetus, MMT, Turbos, and Aftermath. Route options make
 coin order and new-pool or existing-pool selection explicit. Turbos also
 requires its `FeeType` and a `bigint` deadline; Aftermath requires a fresh LP
 type, `CreatePoolCapV2`, and DAO `Version`. Aftermath builders also expose the

@@ -149,9 +149,9 @@ test("routes both Aftermath canonical orientations with a fresh LP cap", () => {
       lpType,
       memeSide,
       launch: shared("0x10", "30", true),
-      createPoolCap: "0x13",
       memeCurrency: shared("0x11", "31", true),
       poolRegistry: shared("0x12", "32", true),
+      createPoolCap: "0x13",
       daoFeeVersion: shared("0x14", "33", false),
     });
 
@@ -181,7 +181,7 @@ test("routes both Aftermath canonical orientations with a fresh LP cap", () => {
       "0x12",
       "0x14",
     ]);
-    assertOwnedArgumentId(tx, 0, 1, "0x13");
+    assertOwnedArgumentId(tx, 0, 5, "0x13");
     assert.equal(tx.getData().commands.length, 1);
   }
 });
@@ -200,11 +200,11 @@ test("signs in and updates one existing Aftermath DAO fee", () => {
 
   assert.deepEqual(moveFunctions(tx), [
     "acl::sign_in",
-    "aftermath::update_fee",
+    "aftermath::update_dao_fee",
   ]);
   assert.deepEqual(sharedMutability(tx), [false, false, true, true, false]);
   assertSharedArgumentIds(tx, ["0x5", "0x2", "0x10", "0x11", "0x12"]);
-  assert.deepEqual(moveCalls(tx)[1]?.arguments[1], {
+  assert.deepEqual(moveCalls(tx)[1]?.arguments[3], {
     Result: 0,
     $kind: "Result",
   });
@@ -233,7 +233,7 @@ test("batches both Aftermath DAO fee coin types through one vault call", () => {
     quoteFeeCoins: [receiving("0x13")],
   });
 
-  assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_fees"]);
+  assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_dao_fees"]);
   assert.deepEqual(sharedMutability(tx), [true, false]);
   assertSharedArgumentIds(tx, ["0x10", "0x4"]);
   assert.deepEqual(moveVectorLengths(tx), [2, 1]);
@@ -255,7 +255,7 @@ test("allows either Aftermath DAO fee coin vector to be empty", () => {
       quoteFeeCoins,
     });
 
-    assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_fees"]);
+    assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_dao_fees"]);
     assert.deepEqual(moveVectorLengths(tx), [
       memeFeeCoins.length,
       quoteFeeCoins.length,
@@ -579,77 +579,6 @@ test("routes both Turbos collection orientations and validates deadline", () => 
       () => sdk.collectTurbosFees({ ...options, deadline: 1n << 64n }),
       /deadline must be a u64/,
     );
-  }
-});
-
-test("routes all four Full Sail migrations including rewarder custody", () => {
-  const sdk = new MigratorTransactions(deployment);
-
-  for (const memeSide of ["a", "b"] as const) {
-    for (const poolKind of ["new", "existing"] as const) {
-      const pool =
-        poolKind === "new"
-          ? { kind: "new" as const, pools: shared("0x14", "34", true) }
-          : { kind: "existing" as const, pool: shared("0x14", "34", true) };
-      const tx = sdk.migrateFullSail({
-        ...types,
-        memeSide,
-        pool,
-        launch: shared("0x10", "30", true),
-        memeCurrency: shared("0x11", "31", true),
-        fullSailConfig: shared("0x12", "32", false),
-        rewarderGlobalVault: shared("0x13", "33", true),
-      });
-
-      assert.deepEqual(moveFunctions(tx), [
-        `fullsail::migrate_${poolKind}_meme_${memeSide}`,
-      ]);
-      assert.deepEqual(moveTypeArguments(tx), [
-        [normalizedType(types.memeType), normalizedType(types.quoteType)],
-      ]);
-      assert.deepEqual(sharedMutability(tx), [
-        true,
-        false,
-        false,
-        true,
-        false,
-        true,
-        true,
-        false,
-      ]);
-      assertSharedArgumentIds(tx, [
-        "0x10",
-        "0x2",
-        "0x60",
-        "0x11",
-        "0x12",
-        "0x13",
-        "0x14",
-        "0x6",
-      ]);
-      assert.equal(tx.getData().commands.length, 1);
-    }
-  }
-});
-
-test("routes both Full Sail collection orientations without rewarder inputs", () => {
-  const sdk = new MigratorTransactions(deployment);
-
-  for (const memeSide of ["a", "b"] as const) {
-    const tx = sdk.collectFullSailFees({
-      ...types,
-      memeSide,
-      vault: shared("0x20", "40", true),
-      fullSailConfig: shared("0x21", "41", false),
-      pool: shared("0x22", "42", true),
-    });
-
-    assert.deepEqual(moveFunctions(tx), [
-      `fullsail::collect_fees_meme_${memeSide}`,
-    ]);
-    assert.deepEqual(sharedMutability(tx), [true, false, false, true]);
-    assertSharedArgumentIds(tx, ["0x20", "0x4", "0x21", "0x22"]);
-    assert.equal(tx.getData().commands.length, 1);
   }
 });
 

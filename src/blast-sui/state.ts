@@ -2,9 +2,9 @@ import { bcs, TypeTagSerializer } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
 import {
   deriveDynamicFieldID,
+  normalizeStructTag,
   normalizeSuiAddress,
   normalizeSuiObjectId,
-  normalizeStructTag,
   parseStructTag,
 } from "@mysten/sui/utils";
 

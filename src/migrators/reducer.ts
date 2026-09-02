@@ -276,7 +276,7 @@ export function reduceMigratorEvent(
         creatorMemeFees: payload.creator_meme_fee_total,
         protocolQuoteFees: payload.protocol_quote_fee_total,
         creatorQuoteFees: payload.creator_quote_fee_total,
-        principalLiquidity: payload.principal_liquidity_after,
+        principalLiquidity: payload.principal_liquidity,
       }));
     }
     case "CreatorFeesClaimed": {

@@ -12,9 +12,9 @@ import {
 } from "../src/blast-sui/transactions.ts";
 import type { BlastSuiDeployment } from "../src/blast-sui/types.ts";
 import {
-  BLAST_TREASURY_CAP_GOLDEN_BYTES,
   BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
   BLAST_SUI_VAULT_GOLDEN_BYTES,
+  BLAST_TREASURY_CAP_GOLDEN_BYTES,
   FUN_TREASURY_CAP_GOLDEN_BYTES,
 } from "./blast-sui-golden.ts";
 
