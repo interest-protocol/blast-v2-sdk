@@ -12,7 +12,7 @@ It provides:
   claims;
 - composable Move-call helpers for adapter-owned migration transactions;
 - complete migration and LP-fee transactions for Bluefin, Cetus, MMT, Turbos,
-  and Full Sail; and
+  Full Sail, and Aftermath; and
 - typed BCS event decoding and deterministic launch-to-vault replay.
 
 ## Client extension
@@ -109,10 +109,14 @@ does not ship placeholder addresses.
 for Bluefin, Cetus, MMT, Turbos, Full Sail, and Aftermath. Route options make
 coin order and new-pool or existing-pool selection explicit. Turbos also
 requires its `FeeType` and a `bigint` deadline; Aftermath requires a fresh LP
-type and `CreatePoolCapV2`.
+type, `CreatePoolCapV2`, and DAO `Version`. Aftermath builders also expose the
+admin-only existing-pool DAO-rate update and permissionless Meme/Quote DAO-fee
+receipt through the vault. The accrual builder accepts separate Meme and Quote
+vectors with 1 through 100 total fully resolved receiving coin references.
+Either vector can be empty.
 
 The migrator client reads `LpVault` objects from BCS, CLMM venue tiers, and the
-typed Aftermath weight-and-fee policy dynamic fields with original package type
+typed Aftermath weight-and-DAO-fee policy dynamic fields with original package type
 identity. If a policy field does not exist, the client returns the documented
 compiled default. It does not convert transport failures or corrupt fields into
 defaults.

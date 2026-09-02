@@ -4898,9 +4898,9 @@
                     "Datatype": {
                       "module": {
                         "address": "sui",
-                        "name": "vec_map"
+                        "name": "table"
                       },
-                      "name": "VecMap",
+                      "name": "Table",
                       "type_arguments": [
                         {
                           "argument": {
@@ -4913,7 +4913,7 @@
                               "type_arguments": []
                             }
                           },
-                          "phantom": false
+                          "phantom": true
                         },
                         {
                           "argument": {
@@ -4926,7 +4926,7 @@
                               "type_arguments": []
                             }
                           },
-                          "phantom": false
+                          "phantom": true
                         }
                       ]
                     }
@@ -6001,6 +6001,155 @@
         "aftermath": {
           "functions": [
             {
+              "name": "accrue_dao_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Lp",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "vault"
+                        },
+                        "name": "LpVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "runtime_config"
+                        },
+                        "name": "RuntimeConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "vector": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "transfer"
+                      },
+                      "name": "Receiving",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "coin"
+                              },
+                              "name": "Coin",
+                              "type_arguments": [
+                                {
+                                  "argument": {
+                                    "NamedTypeParameter": "Meme"
+                                  },
+                                  "phantom": true
+                                }
+                              ]
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "vector": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "transfer"
+                      },
+                      "name": "Receiving",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "coin"
+                              },
+                              "name": "Coin",
+                              "type_arguments": [
+                                {
+                                  "argument": {
+                                    "NamedTypeParameter": "Quote"
+                                  },
+                                  "phantom": true
+                                }
+                              ]
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
               "name": "migrate_meme_first",
               "sdk": "builder",
               "entry": false,
@@ -6126,6 +6275,21 @@
                     "name": "CreatePoolCapV2",
                     "type_arguments": []
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "dao_fee_amm",
+                          "name": "version"
+                        },
+                        "name": "Version",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 {
                   "Reference": [
@@ -6274,6 +6438,21 @@
                 },
                 {
                   "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "dao_fee_amm",
+                          "name": "version"
+                        },
+                        "name": "Version",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
                     true,
                     {
                       "Datatype": {
@@ -6328,7 +6507,113 @@
                 },
                 "u64",
                 "u64",
-                "u64"
+                "u16"
+              ],
+              "returns": []
+            },
+            {
+              "name": "update_dao_fee",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Lp",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "vault"
+                        },
+                        "name": "LpVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "dao_fee_amm",
+                          "name": "pool"
+                        },
+                        "name": "DaoFeePool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Lp"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "dao_fee_amm",
+                          "name": "version"
+                        },
+                        "name": "Version",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                "u16"
               ],
               "returns": []
             }
@@ -6353,8 +6638,78 @@
                   "type": "u64"
                 },
                 {
-                  "name": "swap_in_fee",
-                  "type": "u64"
+                  "name": "dao_fee_bps",
+                  "type": "u16"
+                }
+              ]
+            },
+            {
+              "name": "AftermathPosition",
+              "abilities": [
+                "Key",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Lp",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "lp_coin",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "coin"
+                      },
+                      "name": "Coin",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Lp"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "dao_fee_owner_cap",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "dao_fee_amm",
+                        "name": "pool"
+                      },
+                      "name": "OwnerCap",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Lp"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
             },
@@ -7777,6 +8132,52 @@
           "enums": [],
           "events": [
             {
+              "name": "AftermathDaoFeeUpdated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "dao_fee_pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "old_dao_fee_bps",
+                  "type": "u16"
+                },
+                {
+                  "name": "new_dao_fee_bps",
+                  "type": "u16"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
               "name": "AftermathMigrationCompleted",
               "abilities": [
                 "Copy",
@@ -7812,7 +8213,20 @@
                   }
                 },
                 {
-                  "name": "pool_id",
+                  "name": "inner_pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "dao_fee_pool_id",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -7903,6 +8317,10 @@
                 {
                   "name": "swap_in_fee",
                   "type": "u64"
+                },
+                {
+                  "name": "dao_fee_bps",
+                  "type": "u16"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -7925,8 +8343,8 @@
                   "type": "u64"
                 },
                 {
-                  "name": "old_swap_in_fee",
-                  "type": "u64"
+                  "name": "old_dao_fee_bps",
+                  "type": "u16"
                 },
                 {
                   "name": "new_meme_weight",
@@ -7937,8 +8355,8 @@
                   "type": "u64"
                 },
                 {
-                  "name": "new_swap_in_fee",
-                  "type": "u64"
+                  "name": "new_dao_fee_bps",
+                  "type": "u16"
                 }
               ],
               "sdk": "decoder-reducer"

@@ -5,6 +5,7 @@ import type {
 } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
 import {
+  isValidTransactionDigest,
   normalizeStructTag,
   normalizeSuiAddress,
   normalizeSuiObjectId,
@@ -14,7 +15,7 @@ import type {
   LaunchTypes,
 } from "../launchpad/transactions.ts";
 import { LaunchpadCalls } from "../launchpad/transactions.ts";
-import { requireU64 } from "../lib/integers.ts";
+import { normalizePositiveU64, requireU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import { normalizeSharedObjectReference } from "../lib/sui.ts";
 import type { MigratorVenue } from "./state.ts";
@@ -39,6 +40,16 @@ export type TurbosMigrationPool =
   | { kind: "existing"; pool: SharedObjectReference<true> };
 
 export type FullSailMigrationPool = CetusMigrationPool;
+
+/** A fully resolved object reference that Sui can encode as `Receiving<T>`. */
+export type ReceivingCoinReference = Readonly<{
+  objectId: string;
+  version: number | string;
+  digest: string;
+}>;
+
+/** Maximum Aftermath DAO fee coin objects accepted by one accrual call. */
+export const AFTERMATH_MAX_DAO_FEE_COINS_PER_BATCH = 100;
 
 type NormalizedDeployment = Required<Omit<MigratorsDeployment, "launchpad">> & {
   launchpad: LaunchpadDeployment;
@@ -115,7 +126,7 @@ export class MigratorCalls {
     adminWitness: TransactionObjectInput;
     memeWeight: bigint;
     quoteWeight: bigint;
-    swapInFee: bigint;
+    daoFeeBps: number;
   }) {
     const policy = normalizeAftermathPolicy(options);
     return (tx: Transaction): TransactionResult =>
@@ -131,7 +142,7 @@ export class MigratorCalls {
           tx.object(options.adminWitness),
           tx.pure.u64(policy.memeWeight),
           tx.pure.u64(policy.quoteWeight),
-          tx.pure.u64(policy.swapInFee),
+          tx.pure.u16(policy.daoFeeBps),
         ],
       });
   }
@@ -144,6 +155,7 @@ export class MigratorCalls {
       memeCurrency: SharedObjectReference<true>;
       poolRegistry: SharedObjectReference<true>;
       createPoolCap: TransactionObjectInput;
+      daoFeeVersion: SharedObjectReference<false>;
     },
   ) {
     const types = normalizeLaunchTypes(options);
@@ -165,8 +177,78 @@ export class MigratorCalls {
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "poolRegistry", options.poolRegistry, true),
           tx.object(options.createPoolCap),
+          sharedObject(tx, "daoFeeVersion", options.daoFeeVersion, false),
         ],
       });
+  }
+
+  updateAftermathDaoFee(
+    options: LaunchTypes & {
+      lpType: string;
+      vault: SharedObjectReference<true>;
+      daoFeePool: SharedObjectReference<true>;
+      daoFeeVersion: SharedObjectReference<false>;
+      adminWitness: TransactionObjectInput;
+      daoFeeBps: number;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const lpType = normalizeStructTag(options.lpType);
+    const daoFeeBps = normalizeAftermathDaoFeeBps(options.daoFeeBps);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::aftermath::update_dao_fee`,
+        typeArguments: [lpType, types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          sharedObject(tx, "daoFeePool", options.daoFeePool, true),
+          sharedObject(tx, "daoFeeVersion", options.daoFeeVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.u16(daoFeeBps),
+        ],
+      });
+  }
+
+  accrueAftermathDaoFees(
+    options: LaunchTypes & {
+      lpType: string;
+      vault: SharedObjectReference<true>;
+      memeFeeCoins: readonly ReceivingCoinReference[];
+      quoteFeeCoins: readonly ReceivingCoinReference[];
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const lpType = normalizeStructTag(options.lpType);
+    const { memeFeeCoins, quoteFeeCoins } = normalizeAftermathFeeCoinBatches(
+      options.memeFeeCoins,
+      options.quoteFeeCoins,
+    );
+    return (tx: Transaction): TransactionResult => {
+      const memeReceivings = tx.makeMoveVec({
+        type: receivingCoinType(types.memeType),
+        elements: memeFeeCoins.map((feeCoin) => tx.receivingRef(feeCoin)),
+      });
+      const quoteReceivings = tx.makeMoveVec({
+        type: receivingCoinType(types.quoteType),
+        elements: quoteFeeCoins.map((feeCoin) => tx.receivingRef(feeCoin)),
+      });
+
+      return tx.moveCall({
+        target: `${this.deployment.packageId}::aftermath::accrue_dao_fees`,
+        typeArguments: [lpType, types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          sharedObject(
+            tx,
+            "runtimeConfig",
+            this.deployment.launchpad.runtimeConfig,
+            false,
+          ),
+          memeReceivings,
+          quoteReceivings,
+        ],
+      });
+    };
   }
 
   migrateBluefin(
@@ -564,7 +646,7 @@ export class MigratorTransactions {
     adminCapId: string;
     memeWeight: bigint;
     quoteWeight: bigint;
-    swapInFee: bigint;
+    daoFeeBps: number;
   }): Transaction {
     const tx = new Transaction();
     const adminWitness = tx.add(
@@ -579,6 +661,28 @@ export class MigratorTransactions {
   ): Transaction {
     const tx = new Transaction();
     tx.add(this.call.migrateAftermath(options));
+    return tx;
+  }
+
+  updateAftermathDaoFee(
+    options: Omit<
+      Parameters<MigratorCalls["updateAftermathDaoFee"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    const tx = new Transaction();
+    const adminWitness = tx.add(
+      this.call.signIn({ adminCap: options.adminCapId }),
+    );
+    tx.add(this.call.updateAftermathDaoFee({ ...options, adminWitness }));
+    return tx;
+  }
+
+  accrueAftermathDaoFees(
+    options: Parameters<MigratorCalls["accrueAftermathDaoFees"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.accrueAftermathDaoFees(options));
     return tx;
   }
 
@@ -705,11 +809,10 @@ function normalizeAftermathMemeSide(
 function normalizeAftermathPolicy(policy: {
   memeWeight: bigint;
   quoteWeight: bigint;
-  swapInFee: bigint;
+  daoFeeBps: number;
 }) {
   const memeWeight = requireU64("memeWeight", policy.memeWeight);
   const quoteWeight = requireU64("quoteWeight", policy.quoteWeight);
-  const swapInFee = requireU64("swapInFee", policy.swapInFee);
   if (
     memeWeight < 10_000_000_000_000_000n ||
     quoteWeight < 10_000_000_000_000_000n ||
@@ -719,15 +822,86 @@ function normalizeAftermathPolicy(policy: {
       "Aftermath weights must each be at least 1% and sum to 100%",
     );
   }
-  if (
-    swapInFee < 100_000_000_000_000n ||
-    swapInFee > 100_000_000_000_000_000n
-  ) {
+  const daoFeeBps = normalizeAftermathDaoFeeBps(policy.daoFeeBps);
+  return { memeWeight, quoteWeight, daoFeeBps };
+}
+
+function normalizeAftermathDaoFeeBps(value: number): number {
+  if (!Number.isInteger(value) || value < 0 || value > 10_000) {
     throw new RangeError(
-      "Aftermath swap-in fee is outside its supported range",
+      "Aftermath DAO fee must be between 0 and 10,000 basis points",
     );
   }
-  return { memeWeight, quoteWeight, swapInFee };
+  return value;
+}
+
+function receivingCoinType(coinType: string): string {
+  return normalizeStructTag(
+    `0x2::transfer::Receiving<0x2::coin::Coin<${coinType}>>`,
+  );
+}
+
+function normalizeAftermathFeeCoinBatches(
+  memeFeeCoins: readonly ReceivingCoinReference[],
+  quoteFeeCoins: readonly ReceivingCoinReference[],
+): {
+  memeFeeCoins: ReceivingCoinReference[];
+  quoteFeeCoins: ReceivingCoinReference[];
+} {
+  if (!Array.isArray(memeFeeCoins)) {
+    throw new TypeError(
+      "memeFeeCoins must be an array of receiving references",
+    );
+  }
+  if (!Array.isArray(quoteFeeCoins)) {
+    throw new TypeError(
+      "quoteFeeCoins must be an array of receiving references",
+    );
+  }
+  const totalFeeCoins = memeFeeCoins.length + quoteFeeCoins.length;
+  if (
+    totalFeeCoins === 0 ||
+    totalFeeCoins > AFTERMATH_MAX_DAO_FEE_COINS_PER_BATCH
+  ) {
+    throw new RangeError(
+      `memeFeeCoins and quoteFeeCoins must contain between 1 and ${AFTERMATH_MAX_DAO_FEE_COINS_PER_BATCH} total receiving references`,
+    );
+  }
+
+  return {
+    memeFeeCoins: normalizeReceivingCoinReferences(
+      "memeFeeCoins",
+      memeFeeCoins,
+    ),
+    quoteFeeCoins: normalizeReceivingCoinReferences(
+      "quoteFeeCoins",
+      quoteFeeCoins,
+    ),
+  };
+}
+
+function normalizeReceivingCoinReferences(
+  name: string,
+  feeCoins: readonly ReceivingCoinReference[],
+): ReceivingCoinReference[] {
+  return feeCoins.map((feeCoin, index) => {
+    if (typeof feeCoin !== "object" || feeCoin === null) {
+      throw new TypeError(`${name}[${index}] must be an object reference`);
+    }
+    if (!isValidTransactionDigest(feeCoin.digest)) {
+      throw new TypeError(
+        `${name}[${index}].digest must be a Sui object digest`,
+      );
+    }
+    return {
+      objectId: normalizeSuiObjectId(feeCoin.objectId),
+      version: normalizePositiveU64(
+        `${name}[${index}].version`,
+        feeCoin.version,
+      ),
+      digest: feeCoin.digest,
+    };
+  });
 }
 
 function normalizePoolKind(value: "new" | "existing"): "new" | "existing" {

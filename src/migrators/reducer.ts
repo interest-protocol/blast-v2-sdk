@@ -30,6 +30,8 @@ export type ClmmVaultMigrationProjection = {
 
 export type AftermathVaultMigrationProjection = {
   kind: "aftermath";
+  innerPoolId: string;
+  daoFeePoolId: string;
   sourceMemeAmount: bigint;
   sourceQuoteAmount: bigint;
   usedMemeAmount: bigint;
@@ -42,6 +44,7 @@ export type AftermathVaultMigrationProjection = {
   quoteWeight: bigint;
   flatness: bigint;
   swapInFee: bigint;
+  daoFeeBps: number;
 };
 
 export type VaultMigrationProjection =
@@ -234,7 +237,7 @@ export function reduceMigratorEvent(
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
         launchId: payload.launch_id,
-        poolId: payload.pool_id,
+        poolId: payload.dao_fee_pool_id,
         venueType: payload.venue,
         memeType: payload.meme,
         quoteType: payload.quote,
@@ -242,6 +245,8 @@ export function reduceMigratorEvent(
         protocolQuoteResidual: 0n,
         migration: {
           kind: "aftermath",
+          innerPoolId: payload.inner_pool_id,
+          daoFeePoolId: payload.dao_fee_pool_id,
           sourceMemeAmount: payload.meme_amount,
           sourceQuoteAmount: payload.quote_amount,
           usedMemeAmount: payload.meme_amount,
@@ -254,6 +259,7 @@ export function reduceMigratorEvent(
           quoteWeight: payload.quote_weight,
           flatness: payload.flatness,
           swapInFee: payload.swap_in_fee,
+          daoFeeBps: payload.dao_fee_bps,
         },
       }));
     }
@@ -312,10 +318,30 @@ export function reduceMigratorEvent(
         aftermathPolicy: {
           memeWeight: event.payload.new_meme_weight,
           quoteWeight: event.payload.new_quote_weight,
-          swapInFee: event.payload.new_swap_in_fee,
+          daoFeeBps: event.payload.new_dao_fee_bps,
           source: "override",
         },
       };
+    case "AftermathDaoFeeUpdated":
+      return updateVault(next, event.payload.vault_id, (vault) => {
+        if (vault.migration?.kind !== "aftermath") {
+          throw new TypeError(
+            `vault ${vault.vaultId} has no Aftermath migration`,
+          );
+        }
+        if (vault.poolId !== event.payload.dao_fee_pool_id) {
+          throw new TypeError(
+            `vault ${vault.vaultId} has an unexpected DAO fee pool`,
+          );
+        }
+        return {
+          ...vault,
+          migration: {
+            ...vault.migration,
+            daoFeeBps: event.payload.new_dao_fee_bps,
+          },
+        };
+      });
   }
 }
 

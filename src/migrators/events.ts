@@ -17,13 +17,15 @@ type MigratorEventFieldDescriptor =
   | "address"
   | "u64"
   | "u128"
+  | "u16"
   | "u32";
 
 export const migratorEventSpecs = {
   AftermathMigrationCompleted: {
     launch_id: "id",
     vault_id: "id",
-    pool_id: "id",
+    inner_pool_id: "id",
+    dao_fee_pool_id: "id",
     venue: "typeName",
     lp: "typeName",
     meme: "typeName",
@@ -35,14 +37,21 @@ export const migratorEventSpecs = {
     quote_weight: "u64",
     flatness: "u64",
     swap_in_fee: "u64",
+    dao_fee_bps: "u16",
   },
   AftermathPolicyUpdated: {
     old_meme_weight: "u64",
     old_quote_weight: "u64",
-    old_swap_in_fee: "u64",
+    old_dao_fee_bps: "u16",
     new_meme_weight: "u64",
     new_quote_weight: "u64",
-    new_swap_in_fee: "u64",
+    new_dao_fee_bps: "u16",
+  },
+  AftermathDaoFeeUpdated: {
+    vault_id: "id",
+    dao_fee_pool_id: "id",
+    old_dao_fee_bps: "u16",
+    new_dao_fee_bps: "u16",
   },
   CreatorFeesClaimed: {
     vault_id: "id",
@@ -134,7 +143,7 @@ export type MigratorEventKind = keyof typeof migratorEventSpecs;
 type DescriptorOutput<Descriptor extends MigratorEventFieldDescriptor> =
   Descriptor extends "u64" | "u128"
     ? bigint
-    : Descriptor extends "u32"
+    : Descriptor extends "u16" | "u32"
       ? number
       : string;
 
@@ -170,6 +179,7 @@ const MIGRATOR_EVENT_FIELD_BCS: Record<
   address: AddressBcs as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,
   u128: U128Bcs as BcsType<unknown, unknown>,
+  u16: bcs.u16() as BcsType<unknown, unknown>,
   u32: bcs.u32() as BcsType<unknown, unknown>,
 };
 

@@ -22,8 +22,11 @@ const TierKeyBcs = bcs.struct("TierKey", {});
 const AftermathPolicyKeyBcs = bcs.struct("PolicyKey", {});
 const AFTERMATH_FIXED_ONE = 1_000_000_000_000_000_000n;
 const AFTERMATH_MIN_WEIGHT = 10_000_000_000_000_000n;
-const AFTERMATH_MIN_SWAP_IN_FEE = 100_000_000_000_000n;
-const AFTERMATH_MAX_SWAP_IN_FEE = 100_000_000_000_000_000n;
+const AFTERMATH_MIN_DAO_FEE_BPS = 0;
+const AFTERMATH_MAX_DAO_FEE_BPS = 10_000;
+
+/** Unavoidable 0.01% fee retained by the permanently locked base LP. */
+export const AFTERMATH_BASE_SWAP_IN_FEE = 100_000_000_000_000n;
 
 /** BCS layout of `blast_fun_migrators::vault::LpVault<Meme, Quote>`. */
 export const lpVaultBcs = bcs.struct("LpVault", {
@@ -42,7 +45,7 @@ export const venueTierBcs = bcs.struct("Tier", {
 export const aftermathPolicyBcs = bcs.struct("AftermathPolicy", {
   meme_weight: bcs.u64(),
   quote_weight: bcs.u64(),
-  swap_in_fee: bcs.u64(),
+  dao_fee_bps: bcs.u16(),
 });
 
 export const TIERED_MIGRATOR_VENUES = [
@@ -77,14 +80,14 @@ export const VENUE_DEFAULT_TIERS: Readonly<
 export type AftermathPolicy = Readonly<{
   memeWeight: bigint;
   quoteWeight: bigint;
-  swapInFee: bigint;
+  daoFeeBps: number;
   source: "default" | "override";
 }>;
 
 export const AFTERMATH_DEFAULT_POLICY: AftermathPolicy = Object.freeze({
   memeWeight: 500_000_000_000_000_000n,
   quoteWeight: 500_000_000_000_000_000n,
-  swapInFee: 20_000_000_000_000_000n,
+  daoFeeBps: 200,
   source: "default",
 });
 
@@ -248,7 +251,7 @@ export async function getAftermathPolicy(
     const policy: AftermathPolicy = {
       memeWeight: BigInt(parsed.meme_weight),
       quoteWeight: BigInt(parsed.quote_weight),
-      swapInFee: BigInt(parsed.swap_in_fee),
+      daoFeeBps: parsed.dao_fee_bps,
       source: "override",
     };
     assertValidAftermathPolicy(policy);
@@ -272,11 +275,12 @@ function assertValidAftermathPolicy(policy: AftermathPolicy): void {
     );
   }
   if (
-    policy.swapInFee < AFTERMATH_MIN_SWAP_IN_FEE ||
-    policy.swapInFee > AFTERMATH_MAX_SWAP_IN_FEE
+    !Number.isInteger(policy.daoFeeBps) ||
+    policy.daoFeeBps < AFTERMATH_MIN_DAO_FEE_BPS ||
+    policy.daoFeeBps > AFTERMATH_MAX_DAO_FEE_BPS
   ) {
     throw new RangeError(
-      "Aftermath swap-in fee is outside its supported range",
+      "Aftermath DAO fee must be between 0 and 10,000 basis points",
     );
   }
 }

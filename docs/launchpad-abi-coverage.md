@@ -48,7 +48,7 @@ original package ID. The deployment model stores both IDs.
 | Cetus four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateCetus`, `collectCetusFees` with pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. |
 | Turbos four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateTurbos`, `collectTurbosFees` with pool route, `memeSide`, `feeType`, and deadline | `test/migrators-transactions.test.ts` | All six routes and the adapter-specific third type argument complete. |
 | Full Sail four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateFullSail`, `collectFullSailFees` with pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. Migration includes rewarder custody; collection does not add unused inputs. |
-| Aftermath `migrate_meme_{first,second}` and `set_policy` | `migrateAftermath`, `setAftermathPolicy` | `test/migrators-transactions.test.ts` | Both canonical orientations consume a fresh LP cap; the admin builder validates role weights and swap-in fee. |
+| Aftermath `migrate_meme_{first,second}`, `set_policy`, `update_dao_fee`, and `accrue_dao_fees` | `migrateAftermath`, `setAftermathPolicy`, `updateAftermathDaoFee`, `accrueAftermathDaoFees` | `test/migrators-transactions.test.ts` | Both canonical orientations consume a fresh LP cap and DAO version; admin builders validate future and existing DAO rates; one accrual builder accepts separate Meme and Quote vectors bounded at 100 total receiving objects and preserves locked LP principal. |
 | `vault::claim_creator_fees`, `vault::claim_protocol_fees` | `MigratorCalls` and `MigratorTransactions` claim methods | `test/migrators-transactions.test.ts` | Both claims route both returned coins. |
 
 ### Vesting
@@ -135,7 +135,7 @@ authoritative, and these helpers do not duplicate mutable admission policy.
 | Frozen event surface | SDK implementation | Verification |
 | --- | --- | --- |
 | 29 wrapped launchpad payloads: `AdminDestroyed`, `AdminGranted`, `AdminRevoked`, `Bought`, `CreatorCapClaimed`, `CreatorFeesClaimed`, `GraduationDefaultsChanged`, `LaunchCreated`, `LaunchTicketCreated`, `LaunchTradeFeesChanged`, `Migrated`, `MigrationWitnessAllowed`, `MigrationWitnessDisallowed`, `PackageAdminCreated`, `PackageVersionAdvanced`, `ProtocolFeesClaimed`, `ProtocolFeeShareChanged`, `QuoteAllowed`, `QuoteDisallowed`, `QuoteParametersChanged`, `Sold`, `SuperAdminTransferCancelled`, `SuperAdminTransferred`, `SuperAdminTransferStarted`, `UpgradeAuthorized`, `UpgradeCommitted`, `UpgradePolicyRestricted`, `XClaimSignerRevoked`, `XClaimSignerSet` | `launchpadEventSpecs`, `launchpadEventBcs`, `decodeLaunchpadEvent`, `reduceLaunchpadEvent` | `test/launchpad-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
-| Eight direct migrator payloads: `AftermathMigrationCompleted`, `AftermathPolicyUpdated`, `CreatorFeesClaimed`, `LpFeesCollected`, `MigrationCompleted`, `ProtocolFeesClaimed`, `VaultCreated`, `VenueTierUpdated` | `migratorEventSpecs`, `migratorEventBcs`, `decodeMigratorEvent`, `reduceMigratorEvent` | `test/migrator-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
+| Nine direct migrator payloads: `AftermathDaoFeeUpdated`, `AftermathMigrationCompleted`, `AftermathPolicyUpdated`, `CreatorFeesClaimed`, `LpFeesCollected`, `MigrationCompleted`, `ProtocolFeesClaimed`, `VaultCreated`, `VenueTierUpdated` | `migratorEventSpecs`, `migratorEventBcs`, `decodeMigratorEvent`, `reduceMigratorEvent` | `test/migrator-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
 | Ordered launch-to-vault replay | `reduceLaunchpadProductInput` | launchpad and migrator replay tests reconstruct launch lifecycle, reserves, launch fees, migration, vault/pool/position identity, principal, and LP-fee totals. Actor identities omitted from payloads are reconstructed from native event senders. |
 
 Vesting creation projections derive the funder from the native event sender;
@@ -248,8 +248,9 @@ network deployment entry. Before an indexer or API begins:
    transaction effects, including tickets, capabilities, receipts, vaults, and
    package-administration objects.
 3. Run live transaction simulation or dev-inspect coverage against the published
-   package generation. Complete the migrator mainnet matrix for all 15 migration
-   routes, all nine fee-collection routes, and both LP-vault claims.
+   package generation. Complete the migrator mainnet matrix for all 17 migration
+   routes, all ten fee-accrual or collection routes, the Aftermath per-pool
+   DAO-fee update, and both LP-vault claims.
 4. Write normalized deployment records with chain ID, package lineage,
    transaction digests, shared-object initial versions, custodians, toolchain,
    source commit, and post-deploy verification. Only then add real entries to

@@ -34,7 +34,7 @@ const migratorPackages: MigratorEventPackageIdentity = {
 test("decodes and idempotently reduces every frozen migrator event", () => {
   assert.deepEqual(migratorEventSpecs, readFrozenMigratorEventSpecs());
   const kinds = Object.keys(migratorEventSpecs) as MigratorEventKind[];
-  assert.equal(kinds.length, 8);
+  assert.equal(kinds.length, 9);
 
   let projection = createLaunchpadProductProjection();
   for (const [eventIndex, kind] of kinds.entries()) {
@@ -187,10 +187,10 @@ test("replays Aftermath policy and locked weighted-pool migration facts", () => 
       {
         old_meme_weight: 500_000_000_000_000_000n,
         old_quote_weight: 500_000_000_000_000_000n,
-        old_swap_in_fee: 20_000_000_000_000_000n,
+        old_dao_fee_bps: 200,
         new_meme_weight: 600_000_000_000_000_000n,
         new_quote_weight: 400_000_000_000_000_000n,
-        new_swap_in_fee: 30_000_000_000_000_000n,
+        new_dao_fee_bps: 300,
       },
       0,
     ),
@@ -211,7 +211,8 @@ test("replays Aftermath policy and locked weighted-pool migration facts", () => 
       {
         launch_id: "0xc",
         vault_id: "0xd",
-        pool_id: "0xe",
+        inner_pool_id: "0x10",
+        dao_fee_pool_id: "0xe",
         venue: "0x320::aftermath::Venue",
         lp: "0x30::af_lp::AF_LP",
         meme: "0xa::meme::MEME",
@@ -222,9 +223,20 @@ test("replays Aftermath policy and locked weighted-pool migration facts", () => 
         meme_weight: 600_000_000_000_000_000n,
         quote_weight: 400_000_000_000_000_000n,
         flatness: 0n,
-        swap_in_fee: 30_000_000_000_000_000n,
+        swap_in_fee: 100_000_000_000_000n,
+        dao_fee_bps: 300,
       },
       2,
+    ),
+    migratorDecoded(
+      "AftermathDaoFeeUpdated",
+      {
+        vault_id: "0xd",
+        dao_fee_pool_id: "0xe",
+        old_dao_fee_bps: 300,
+        new_dao_fee_bps: 350,
+      },
+      3,
     ),
   ];
 
@@ -237,14 +249,17 @@ test("replays Aftermath policy and locked weighted-pool migration facts", () => 
   assert.deepEqual(projection.migrators.aftermathPolicy, {
     memeWeight: 600_000_000_000_000_000n,
     quoteWeight: 400_000_000_000_000_000n,
-    swapInFee: 30_000_000_000_000_000n,
+    daoFeeBps: 300,
     source: "override",
   });
   assert.ok(vault?.migration?.kind === "aftermath");
   assert.equal(vault.migration.lockedLpAmount, 180n);
   assert.equal(vault.migration.memeWeight, 600_000_000_000_000_000n);
   assert.equal(vault.migration.quoteWeight, 400_000_000_000_000_000n);
-  assert.equal(vault.migration.swapInFee, 30_000_000_000_000_000n);
+  assert.equal(vault.migration.innerPoolId, normalizeSuiObjectId("0x10"));
+  assert.equal(vault.migration.daoFeePoolId, normalizeSuiObjectId("0xe"));
+  assert.equal(vault.migration.swapInFee, 100_000_000_000_000n);
+  assert.equal(vault.migration.daoFeeBps, 350);
   assert.equal(vault.protocolMemeResidual, 0n);
   assert.equal(vault.protocolQuoteResidual, 0n);
 });
@@ -437,6 +452,7 @@ function sampleValue(descriptor: string): unknown {
     case "u128":
       return 1n;
     case "u8":
+    case "u16":
     case "u32":
       return 1;
     case "bool":
@@ -486,7 +502,11 @@ function readFrozenMigratorEventSpecs(): Record<
 }
 
 function abiDescriptor(type: unknown): string {
-  if (["u64", "u128", "u32", "u8", "bool", "address"].includes(String(type))) {
+  if (
+    ["u64", "u128", "u32", "u16", "u8", "bool", "address"].includes(
+      String(type),
+    )
+  ) {
     return String(type);
   }
   if (!isRecord(type)) throw new TypeError("unsupported ABI event field");

@@ -155,7 +155,7 @@ test("reads a pinned Aftermath policy using its module-owned sealed key", async 
                 .serialize({
                   meme_weight: 600_000_000_000_000_000n,
                   quote_weight: 400_000_000_000_000_000n,
-                  swap_in_fee: 20_000_000_000_000_000n,
+                  dao_fee_bps: 300,
                 })
                 .toBytes(),
             },
@@ -170,7 +170,7 @@ test("reads a pinned Aftermath policy using its module-owned sealed key", async 
   assert.deepEqual(policy, {
     memeWeight: 600_000_000_000_000_000n,
     quoteWeight: 400_000_000_000_000_000n,
-    swapInFee: 20_000_000_000_000_000n,
+    daoFeeBps: 300,
     source: "override",
   });
   assert.match(
@@ -207,7 +207,7 @@ test("rejects a corrupt pinned Aftermath policy", async () => {
               .serialize({
                 meme_weight: 500_000_000_000_000_000n,
                 quote_weight: 499_000_000_000_000_000n,
-                swap_in_fee: 20_000_000_000_000_000n,
+                dao_fee_bps: 200,
               })
               .toBytes(),
           },

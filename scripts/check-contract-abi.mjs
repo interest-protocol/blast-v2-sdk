@@ -271,7 +271,9 @@ function classifyMigratorFunction(moduleName, functionName) {
   }
   if (
     functionName.startsWith("migrate") ||
-    functionName.startsWith("collect_fees")
+    functionName.startsWith("collect_fees") ||
+    functionName.startsWith("accrue_") ||
+    functionName === "update_dao_fee"
   ) {
     return "builder";
   }

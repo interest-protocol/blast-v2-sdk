@@ -3,8 +3,12 @@ import test from "node:test";
 
 import { Transaction } from "@mysten/sui/transactions";
 import type { SharedObjectReference } from "../src/lib/sui.ts";
-import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
+import type {
+  MigratorsDeployment,
+  ReceivingCoinReference,
+} from "../src/migrators/transactions.ts";
 import {
+  AFTERMATH_MAX_DAO_FEE_COINS_PER_BATCH,
   MigratorCalls,
   MigratorTransactions,
 } from "../src/migrators/transactions.ts";
@@ -15,6 +19,14 @@ function shared<const Mutable extends boolean>(
   mutable: Mutable,
 ): SharedObjectReference<Mutable> {
   return { objectId, initialSharedVersion, mutable };
+}
+
+function receiving(objectId: string): ReceivingCoinReference {
+  return {
+    objectId,
+    version: "1",
+    digest: "11111111111111111111111111111111",
+  };
 }
 
 const deployment: MigratorsDeployment = {
@@ -98,7 +110,7 @@ test("signs in and pins one validated Aftermath policy", () => {
     adminCapId: "0xe",
     memeWeight: 600_000_000_000_000_000n,
     quoteWeight: 400_000_000_000_000_000n,
-    swapInFee: 20_000_000_000_000_000n,
+    daoFeeBps: 200,
   };
   const tx = sdk.setAftermathPolicy(policy);
 
@@ -118,8 +130,8 @@ test("signs in and pins one validated Aftermath policy", () => {
     /sum to 100%/,
   );
   assert.throws(
-    () => sdk.setAftermathPolicy({ ...policy, swapInFee: 1n }),
-    /swap-in fee/,
+    () => sdk.setAftermathPolicy({ ...policy, daoFeeBps: -1 }),
+    /DAO fee/,
   );
 });
 
@@ -140,6 +152,7 @@ test("routes both Aftermath canonical orientations with a fresh LP cap", () => {
       memeCurrency: shared("0x11", "31", true),
       poolRegistry: shared("0x12", "32", true),
       createPoolCap: "0x13",
+      daoFeeVersion: shared("0x14", "33", false),
     });
 
     assert.deepEqual(moveFunctions(tx), [
@@ -152,10 +165,129 @@ test("routes both Aftermath canonical orientations with a fresh LP cap", () => {
         normalizedType(types.quoteType),
       ],
     ]);
-    assert.deepEqual(sharedMutability(tx), [true, false, false, true, true]);
-    assertSharedArgumentIds(tx, ["0x10", "0x2", "0x60", "0x11", "0x12"]);
+    assert.deepEqual(sharedMutability(tx), [
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+    ]);
+    assertSharedArgumentIds(tx, [
+      "0x10",
+      "0x2",
+      "0x60",
+      "0x11",
+      "0x12",
+      "0x14",
+    ]);
     assert.equal(tx.getData().commands.length, 1);
   }
+});
+
+test("signs in and updates one existing Aftermath DAO fee", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const tx = sdk.updateAftermathDaoFee({
+    ...types,
+    lpType: "0x30::af_lp::AF_LP",
+    vault: shared("0x10", "30", true),
+    daoFeePool: shared("0x11", "31", true),
+    daoFeeVersion: shared("0x12", "32", false),
+    adminCapId: "0x13",
+    daoFeeBps: 350,
+  });
+
+  assert.deepEqual(moveFunctions(tx), [
+    "acl::sign_in",
+    "aftermath::update_dao_fee",
+  ]);
+  assert.deepEqual(sharedMutability(tx), [false, false, true, true, false]);
+  assertSharedArgumentIds(tx, ["0x5", "0x2", "0x10", "0x11", "0x12"]);
+  assert.throws(
+    () =>
+      sdk.updateAftermathDaoFee({
+        ...types,
+        lpType: "0x30::af_lp::AF_LP",
+        vault: shared("0x10", "30", true),
+        daoFeePool: shared("0x11", "31", true),
+        daoFeeVersion: shared("0x12", "32", false),
+        adminCapId: "0x13",
+        daoFeeBps: 10_001,
+      }),
+    /DAO fee/,
+  );
+});
+
+test("batches both Aftermath DAO fee coin types through one vault call", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const tx = sdk.accrueAftermathDaoFees({
+    ...types,
+    lpType: "0x30::af_lp::AF_LP",
+    vault: shared("0x10", "30", true),
+    memeFeeCoins: [receiving("0x11"), receiving("0x12")],
+    quoteFeeCoins: [receiving("0x13")],
+  });
+
+  assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_dao_fees"]);
+  assert.deepEqual(sharedMutability(tx), [true, false]);
+  assertSharedArgumentIds(tx, ["0x10", "0x4"]);
+  assert.deepEqual(moveVectorLengths(tx), [2, 1]);
+  assert.equal(receivingInputCount(tx), 3);
+});
+
+test("allows either Aftermath DAO fee coin vector to be empty", () => {
+  const sdk = new MigratorTransactions(deployment);
+
+  for (const [memeFeeCoins, quoteFeeCoins] of [
+    [[receiving("0x11")], []],
+    [[], [receiving("0x12")]],
+  ] satisfies [ReceivingCoinReference[], ReceivingCoinReference[]][]) {
+    const tx = sdk.accrueAftermathDaoFees({
+      ...types,
+      lpType: "0x30::af_lp::AF_LP",
+      vault: shared("0x10", "30", true),
+      memeFeeCoins,
+      quoteFeeCoins,
+    });
+
+    assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_dao_fees"]);
+    assert.deepEqual(moveVectorLengths(tx), [
+      memeFeeCoins.length,
+      quoteFeeCoins.length,
+    ]);
+  }
+});
+
+test("rejects empty and oversized Aftermath DAO fee batches", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const options = {
+    ...types,
+    lpType: "0x30::af_lp::AF_LP",
+    vault: shared("0x10", "30", true),
+  };
+
+  assert.equal(AFTERMATH_MAX_DAO_FEE_COINS_PER_BATCH, 100);
+  assert.throws(
+    () =>
+      sdk.accrueAftermathDaoFees({
+        ...options,
+        memeFeeCoins: [],
+        quoteFeeCoins: [],
+      }),
+    /between 1 and 100/,
+  );
+  assert.throws(
+    () =>
+      sdk.accrueAftermathDaoFees({
+        ...options,
+        memeFeeCoins: Array.from(
+          { length: AFTERMATH_MAX_DAO_FEE_COINS_PER_BATCH + 1 },
+          (_, index) => receiving(`0x${(index + 1).toString(16)}`),
+        ),
+        quoteFeeCoins: [],
+      }),
+    /between 1 and 100/,
+  );
 });
 
 test("builds the complete Bluefin migration with frozen mutability", () => {
@@ -572,6 +704,24 @@ function sharedMoveArguments(tx: Transaction) {
 
 function pureInputCount(tx: Transaction): number {
   return tx.getData().inputs.filter((input) => input.$kind === "Pure").length;
+}
+
+function receivingInputCount(tx: Transaction): number {
+  return tx
+    .getData()
+    .inputs.filter(
+      (input) => input.$kind === "Object" && input.Object.$kind === "Receiving",
+    ).length;
+}
+
+function moveVectorLengths(tx: Transaction): number[] {
+  return tx
+    .getData()
+    .commands.flatMap((command) =>
+      command.$kind === "MakeMoveVec"
+        ? [command.MakeMoveVec.elements.length]
+        : [],
+    );
 }
 
 function normalizedType(type: string): string {
