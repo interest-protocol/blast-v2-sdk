@@ -6001,7 +6001,7 @@
         "aftermath": {
           "functions": [
             {
-              "name": "accrue_dao_fees",
+              "name": "accrue_fees",
               "sdk": "builder",
               "entry": false,
               "typeParameters": [
@@ -6200,6 +6200,16 @@
                   ]
                 },
                 {
+                  "Datatype": {
+                    "module": {
+                      "address": "amm",
+                      "name": "pool"
+                    },
+                    "name": "CreatePoolCapV2",
+                    "type_arguments": []
+                  }
+                },
+                {
                   "Reference": [
                     false,
                     {
@@ -6265,16 +6275,6 @@
                       }
                     }
                   ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "amm",
-                      "name": "pool"
-                    },
-                    "name": "CreatePoolCapV2",
-                    "type_arguments": []
-                  }
                 },
                 {
                   "Reference": [
@@ -6360,6 +6360,16 @@
                   ]
                 },
                 {
+                  "Datatype": {
+                    "module": {
+                      "address": "amm",
+                      "name": "pool"
+                    },
+                    "name": "CreatePoolCapV2",
+                    "type_arguments": []
+                  }
+                },
+                {
                   "Reference": [
                     false,
                     {
@@ -6425,16 +6435,6 @@
                       }
                     }
                   ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "amm",
-                      "name": "pool"
-                    },
-                    "name": "CreatePoolCapV2",
-                    "type_arguments": []
-                  }
                 },
                 {
                   "Reference": [
@@ -6512,7 +6512,7 @@
               "returns": []
             },
             {
-              "name": "update_dao_fee",
+              "name": "update_fee",
               "sdk": "builder",
               "entry": false,
               "typeParameters": [
@@ -6563,6 +6563,21 @@
                 },
                 {
                   "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
                     true,
                     {
                       "Datatype": {
@@ -6593,21 +6608,6 @@
                           "name": "version"
                         },
                         "name": "Version",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "AdminWitness",
                         "type_arguments": []
                       }
                     }
@@ -6692,7 +6692,7 @@
                   }
                 },
                 {
-                  "name": "dao_fee_owner_cap",
+                  "name": "owner_cap",
                   "type": {
                     "Datatype": {
                       "module": {

@@ -152,9 +152,9 @@ export class MigratorCalls {
       lpType: string;
       memeSide: "first" | "second";
       launch: SharedObjectReference<true>;
+      createPoolCap: TransactionObjectInput;
       memeCurrency: SharedObjectReference<true>;
       poolRegistry: SharedObjectReference<true>;
-      createPoolCap: TransactionObjectInput;
       daoFeeVersion: SharedObjectReference<false>;
     },
   ) {
@@ -167,6 +167,7 @@ export class MigratorCalls {
         typeArguments: [lpType, types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "launch", options.launch, true),
+          tx.object(options.createPoolCap),
           sharedObject(
             tx,
             "packageVersion",
@@ -176,7 +177,6 @@ export class MigratorCalls {
           sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "poolRegistry", options.poolRegistry, true),
-          tx.object(options.createPoolCap),
           sharedObject(tx, "daoFeeVersion", options.daoFeeVersion, false),
         ],
       });
@@ -186,9 +186,9 @@ export class MigratorCalls {
     options: LaunchTypes & {
       lpType: string;
       vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
       daoFeePool: SharedObjectReference<true>;
       daoFeeVersion: SharedObjectReference<false>;
-      adminWitness: TransactionObjectInput;
       daoFeeBps: number;
     },
   ) {
@@ -197,13 +197,13 @@ export class MigratorCalls {
     const daoFeeBps = normalizeAftermathDaoFeeBps(options.daoFeeBps);
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::aftermath::update_dao_fee`,
+        target: `${this.deployment.packageId}::aftermath::update_fee`,
         typeArguments: [lpType, types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
+          tx.object(options.adminWitness),
           sharedObject(tx, "daoFeePool", options.daoFeePool, true),
           sharedObject(tx, "daoFeeVersion", options.daoFeeVersion, false),
-          tx.object(options.adminWitness),
           tx.pure.u16(daoFeeBps),
         ],
       });
@@ -234,7 +234,7 @@ export class MigratorCalls {
       });
 
       return tx.moveCall({
-        target: `${this.deployment.packageId}::aftermath::accrue_dao_fees`,
+        target: `${this.deployment.packageId}::aftermath::accrue_fees`,
         typeArguments: [lpType, types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),

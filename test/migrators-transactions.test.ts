@@ -149,9 +149,9 @@ test("routes both Aftermath canonical orientations with a fresh LP cap", () => {
       lpType,
       memeSide,
       launch: shared("0x10", "30", true),
+      createPoolCap: "0x13",
       memeCurrency: shared("0x11", "31", true),
       poolRegistry: shared("0x12", "32", true),
-      createPoolCap: "0x13",
       daoFeeVersion: shared("0x14", "33", false),
     });
 
@@ -181,6 +181,7 @@ test("routes both Aftermath canonical orientations with a fresh LP cap", () => {
       "0x12",
       "0x14",
     ]);
+    assertOwnedArgumentId(tx, 0, 1, "0x13");
     assert.equal(tx.getData().commands.length, 1);
   }
 });
@@ -199,10 +200,14 @@ test("signs in and updates one existing Aftermath DAO fee", () => {
 
   assert.deepEqual(moveFunctions(tx), [
     "acl::sign_in",
-    "aftermath::update_dao_fee",
+    "aftermath::update_fee",
   ]);
   assert.deepEqual(sharedMutability(tx), [false, false, true, true, false]);
   assertSharedArgumentIds(tx, ["0x5", "0x2", "0x10", "0x11", "0x12"]);
+  assert.deepEqual(moveCalls(tx)[1]?.arguments[1], {
+    Result: 0,
+    $kind: "Result",
+  });
   assert.throws(
     () =>
       sdk.updateAftermathDaoFee({
@@ -228,7 +233,7 @@ test("batches both Aftermath DAO fee coin types through one vault call", () => {
     quoteFeeCoins: [receiving("0x13")],
   });
 
-  assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_dao_fees"]);
+  assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_fees"]);
   assert.deepEqual(sharedMutability(tx), [true, false]);
   assertSharedArgumentIds(tx, ["0x10", "0x4"]);
   assert.deepEqual(moveVectorLengths(tx), [2, 1]);
@@ -250,7 +255,7 @@ test("allows either Aftermath DAO fee coin vector to be empty", () => {
       quoteFeeCoins,
     });
 
-    assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_dao_fees"]);
+    assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_fees"]);
     assert.deepEqual(moveVectorLengths(tx), [
       memeFeeCoins.length,
       quoteFeeCoins.length,
@@ -649,13 +654,33 @@ test("routes both Full Sail collection orientations without rewarder inputs", ()
 });
 
 function moveFunctions(tx: Transaction): string[] {
+  return moveCalls(tx).map((call) => `${call.module}::${call.function}`);
+}
+
+function moveCalls(tx: Transaction) {
   return tx
     .getData()
     .commands.flatMap((command) =>
-      command.$kind === "MoveCall"
-        ? [`${command.MoveCall.module}::${command.MoveCall.function}`]
-        : [],
+      command.$kind === "MoveCall" ? [command.MoveCall] : [],
     );
+}
+
+function assertOwnedArgumentId(
+  tx: Transaction,
+  callIndex: number,
+  argumentIndex: number,
+  objectId: string,
+): void {
+  const argument = moveCalls(tx)[callIndex]?.arguments[argumentIndex];
+  assert.equal(argument?.$kind, "Input");
+  assert.ok(argument?.$kind === "Input");
+  const input = tx.getData().inputs[argument.Input];
+  assert.equal(input?.$kind, "UnresolvedObject");
+  assert.ok(input?.$kind === "UnresolvedObject");
+  assert.equal(
+    input.UnresolvedObject.objectId,
+    `0x${objectId.replace(/^0x/, "").padStart(64, "0")}`,
+  );
 }
 
 function transferObjectCount(tx: Transaction): number {

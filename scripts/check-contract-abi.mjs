@@ -273,7 +273,7 @@ function classifyMigratorFunction(moduleName, functionName) {
     functionName.startsWith("migrate") ||
     functionName.startsWith("collect_fees") ||
     functionName.startsWith("accrue_") ||
-    functionName === "update_dao_fee"
+    (moduleName === "aftermath" && functionName === "update_fee")
   ) {
     return "builder";
   }
