@@ -9,7 +9,8 @@
     ],
     "approvedAbiAmendments": [
       "contracts ADR 0067: retire the Full Sail migrator before release",
-      "contracts ADR 0068: compact the LP-fee principal snapshot before release"
+      "contracts ADR 0068: compact the LP-fee principal snapshot before release",
+      "contracts ADR 0069: consolidate launch graduation and move migration math into migrators"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -2985,12 +2986,6 @@
           "enums": [],
           "events": []
         },
-        "graduation": {
-          "functions": [],
-          "structs": [],
-          "enums": [],
-          "events": []
-        },
         "launch": {
           "functions": [
             {
@@ -5267,66 +5262,6 @@
               ]
             }
           ],
-          "enums": [],
-          "events": []
-        },
-        "migration_math": {
-          "functions": [
-            {
-              "name": "assert_price_within_bps",
-              "sdk": "sdk-arithmetic",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                "u64",
-                "u64",
-                "bool",
-                "u128",
-                "u64"
-              ],
-              "returns": []
-            },
-            {
-              "name": "assert_residual_within_bps",
-              "sdk": "sdk-arithmetic",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                "u64",
-                "u64",
-                "u64"
-              ],
-              "returns": []
-            },
-            {
-              "name": "minimum_utilized_amount",
-              "sdk": "sdk-arithmetic",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                "u64",
-                "u64"
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "sqrt_price_x64",
-              "sdk": "sdk-arithmetic",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                "u64",
-                "u64",
-                "bool"
-              ],
-              "returns": [
-                "u128"
-              ]
-            }
-          ],
-          "structs": [],
           "enums": [],
           "events": []
         },
@@ -8931,6 +8866,12 @@
               "sdk": "decoder-reducer"
             }
           ]
+        },
+        "migration_math": {
+          "functions": [],
+          "structs": [],
+          "enums": [],
+          "events": []
         },
         "mmt": {
           "functions": [
