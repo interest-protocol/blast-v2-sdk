@@ -15,6 +15,9 @@ It provides:
   and Aftermath; and
 - typed BCS event decoding and deterministic launch-to-vault replay.
 
+See [optional holder rewards](docs/holder-distributor.md) for standalone creator-cap
+custody, holder accounting, signed rounds, and permissionless airdrops.
+
 ## Client extension
 
 ```ts

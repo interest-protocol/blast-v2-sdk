@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "distributorId": "0x000000000000000000000000000000000000000000000000000000000000000d",
+  "number": "0",
+  "startCheckpoint": "10",
+  "endCheckpoint": "20",
+  "root": "93f46ab27a1d3a5def3379afd0a3b02cc149d6fa03b7105b2697deba8c12cb2d",
+  "manifestDigest": "670ebe7c8d3d3b8ecf52eac1a72ebabb255f56e5eacb9d0b0da5e88c943bdcbd",
+  "memeAmount": "90",
+  "quoteAmount": "120",
+  "allocations": [
+    {
+      "index": "0",
+      "beneficiary": "0x000000000000000000000000000000000000000000000000000000000000000a",
+      "memeAmount": "10",
+      "quoteAmount": "20",
+      "proof": [
+        "f0290d0717f5ac2c221a66e27d80e3c76a9ea2774a7dc7399cc5d108633526f1",
+        "4fd4325f78a40a6972b998c35cf40ec26237d6ff9e5dc2934fb882b9aa18e08a"
+      ]
+    },
+    {
+      "index": "1",
+      "beneficiary": "0x000000000000000000000000000000000000000000000000000000000000000b",
+      "memeAmount": "30",
+      "quoteAmount": "40",
+      "proof": [
+        "18ba1db53bc0da39eb6f1f00df49fa5be0932e85ca8f8257f4d278edea7f1aa8",
+        "4fd4325f78a40a6972b998c35cf40ec26237d6ff9e5dc2934fb882b9aa18e08a"
+      ]
+    },
+    {
+      "index": "2",
+      "beneficiary": "0x000000000000000000000000000000000000000000000000000000000000000c",
+      "memeAmount": "50",
+      "quoteAmount": "60",
+      "proof": [
+        "ef14b30e5f92e3eba63d68eeb6f1f55bf7c7f5d81941a6d0a0d3c61be362bd17",
+        "ca047224c2edac2b2dcd7f28d0a6d6c7175a2f10beef5f440b0597d0e1c7a7f5"
+      ]
+    }
+  ]
+}

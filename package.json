@@ -11,7 +11,8 @@
     "./launchpad": "./src/launchpad/index.ts",
     "./launchpad/template": "./src/launchpad/template.ts",
     "./migrators": "./src/migrators/index.ts",
-    "./vesting": "./src/vesting/index.ts"
+    "./vesting": "./src/vesting/index.ts",
+    "./distributor": "./src/distributor/index.ts"
   },
   "engines": {
     "node": ">=22.18"
@@ -24,7 +25,8 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "test": "node --test test/*.test.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "distributor": "node scripts/distributor.mjs"
   },
   "peerDependencies": {
     "@mysten/move-bytecode-template": "^0.4.1",
@@ -36,5 +38,8 @@
     "@mysten/sui": "2.26.2",
     "@types/node": "^24.3.0",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.4.0"
   }
 }
