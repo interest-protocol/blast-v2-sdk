@@ -1,0 +1,4478 @@
+{
+  "schemaVersion": 1,
+  "baseline": {
+    "contractsCommit": "a5ed34ad49c6c001af2db5b9cbcb206075704412",
+    "workingTreeDifferedAtFreeze": true,
+    "abiNeutralDifferences": [
+      "sui/meme_template/Move.lock",
+      "docs/research/sui-deepbook-indexer-architecture-2026.md"
+    ],
+    "approvedAbiAmendments": [
+      "contracts ADR 0076: native V2, sealed AutoLP and per-asset signed compound limits"
+    ],
+    "suiCli": "1.77.2-51d177ad7d65"
+  },
+  "packages": {
+    "dex": {
+      "address": "blast_fun_dex",
+      "modules": {
+        "math": {
+          "functions": [],
+          "structs": [],
+          "enums": [],
+          "events": []
+        },
+        "migration": {
+          "functions": [
+            {
+              "name": "claim_creator_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "migration"
+                        },
+                        "name": "LockedLpVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "creator_authority"
+                        },
+                        "name": "CreatorCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "claim_protocol_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "migration"
+                        },
+                        "name": "LockedLpVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "collect",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "migration"
+                        },
+                        "name": "LockedLpVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "runtime_config"
+                        },
+                        "name": "RuntimeConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "migrate",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            }
+          ],
+          "structs": [
+            {
+              "name": "LockedLpVault",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "fees",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun",
+                        "name": "fees"
+                      },
+                      "name": "FeeLedger",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Meme"
+                          },
+                          "phantom": true
+                        },
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Quote"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PositionKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "Witness",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": [
+            {
+              "name": "CreatorFeesClaimed",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "FeesCollected",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_share_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_delta",
+                  "type": "u64"
+                },
+                {
+                  "name": "creator_delta",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_total",
+                  "type": "u64"
+                },
+                {
+                  "name": "creator_total",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "Migrated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "launch_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "position_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "ProtocolFeesClaimed",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            }
+          ]
+        },
+        "pool": {
+          "functions": [
+            {
+              "name": "activate",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "add_liquidity",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Position",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                "u128",
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "assert_current",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "buy",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                "u64",
+                "u64",
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "buy_and_burn",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "u64",
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "claim_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Position",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "create",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "creator_authority"
+                        },
+                        "name": "CreatorCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun_dex",
+                      "name": "pool"
+                    },
+                    "name": "Pool",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun_dex",
+                      "name": "pool"
+                    },
+                    "name": "Position",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "deposit_amounts",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "u64"
+              ],
+              "returns": [
+                "u64",
+                "u64",
+                "u128"
+              ]
+            },
+            {
+              "name": "destroy_empty",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun_dex",
+                      "name": "pool"
+                    },
+                    "name": "Position",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "new_position",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun_dex",
+                      "name": "pool"
+                    },
+                    "name": "Position",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "remove_liquidity",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Position",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u128",
+                "u64",
+                "u64",
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "sell",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                "u64",
+                "u64",
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "sell_and_burn",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "u64",
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "set_max_fee",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                "u64"
+              ],
+              "returns": []
+            },
+            {
+              "name": "share",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun_dex",
+                      "name": "pool"
+                    },
+                    "name": "Pool",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ],
+              "returns": []
+            }
+          ],
+          "structs": [
+            {
+              "name": "Factory",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "version",
+                  "type": "u64"
+                },
+                {
+                  "name": "pools",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "table"
+                      },
+                      "name": "Table",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "std",
+                                "name": "type_name"
+                              },
+                              "name": "TypeName",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        },
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Pool",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Meme"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Quote"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "quote_fees",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Quote"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "total_shares",
+                  "type": "u128"
+                },
+                {
+                  "name": "fee_growth_x64",
+                  "type": "u128"
+                },
+                {
+                  "name": "volume_x32",
+                  "type": "u128"
+                },
+                {
+                  "name": "last_trade_seconds",
+                  "type": "u64"
+                },
+                {
+                  "name": "volume_target",
+                  "type": "u64"
+                },
+                {
+                  "name": "max_fee_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "burn_bps",
+                  "type": "u64"
+                }
+              ]
+            },
+            {
+              "name": "Position",
+              "abilities": [
+                "Key",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "shares",
+                  "type": "u128"
+                },
+                {
+                  "name": "fee_checkpoint_x64",
+                  "type": "u128"
+                },
+                {
+                  "name": "fees_owed",
+                  "type": "u64"
+                },
+                {
+                  "name": "fee_fraction_x64",
+                  "type": "u64"
+                }
+              ]
+            },
+            {
+              "name": "Trade",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "meme",
+                  "type": "u64"
+                },
+                {
+                  "name": "fee",
+                  "type": "u64"
+                },
+                {
+                  "name": "burn",
+                  "type": "u64"
+                },
+                {
+                  "name": "next_volume",
+                  "type": "u128"
+                },
+                {
+                  "name": "timestamp_seconds",
+                  "type": "u64"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": [
+            {
+              "name": "FeesClaimed",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "position_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "LiquidityChanged",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "position_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "added",
+                  "type": "bool"
+                },
+                {
+                  "name": "shares",
+                  "type": "u128"
+                },
+                {
+                  "name": "meme",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "total_shares",
+                  "type": "u128"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "MaximumFeeChanged",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "previous_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "maximum_bps",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "PoolCreated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "position_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "total_shares",
+                  "type": "u128"
+                },
+                {
+                  "name": "burn_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "max_fee_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "timestamp_seconds",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "PositionClosed",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "position_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "PositionCreated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "position_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "Swapped",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "buy",
+                  "type": "bool"
+                },
+                {
+                  "name": "meme_principal",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote_principal",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote_fee",
+                  "type": "u64"
+                },
+                {
+                  "name": "meme_burn",
+                  "type": "u64"
+                },
+                {
+                  "name": "meme_reserve",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote_reserve",
+                  "type": "u64"
+                },
+                {
+                  "name": "fee_balance",
+                  "type": "u64"
+                },
+                {
+                  "name": "volume_x32",
+                  "type": "u128"
+                },
+                {
+                  "name": "timestamp_seconds",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "VersionActivated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "previous_version",
+                  "type": "u64"
+                },
+                {
+                  "name": "version",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            }
+          ]
+        }
+      }
+    },
+    "autoLp": {
+      "address": "blast_fun_auto_lp",
+      "modules": {
+        "vault": {
+          "functions": [
+            {
+              "name": "activate",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Control",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "collect_curve",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Control",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "collect_external_lp",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Control",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "vault"
+                        },
+                        "name": "LpVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "collect_native_lp",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Control",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "migration"
+                        },
+                        "name": "LockedLpVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "collect_own_lp",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Control",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "compound",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Control",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "u64",
+                "u128",
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "contribute",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Control",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "new",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_auto_lp",
+                          "name": "vault"
+                        },
+                        "name": "Control",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "creator_authority"
+                    },
+                    "name": "CreatorCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_dex",
+                          "name": "pool"
+                        },
+                        "name": "Factory",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                "address",
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun_auto_lp",
+                      "name": "vault"
+                    },
+                    "name": "Vault",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "share",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun_auto_lp",
+                      "name": "vault"
+                    },
+                    "name": "Vault",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ],
+              "returns": []
+            }
+          ],
+          "structs": [
+            {
+              "name": "Control",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "version",
+                  "type": "u64"
+                }
+              ]
+            },
+            {
+              "name": "CreatorCapKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "PositionKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "Vault",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "executor",
+                  "type": "address"
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Meme"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Quote"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": [
+            {
+              "name": "Compounded",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "shares",
+                  "type": "u128"
+                },
+                {
+                  "name": "meme_total",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote_total",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "Contributed",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "meme_total",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote_total",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "Enrolled",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "creator_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "position_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "executor",
+                  "type": "address"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "FeesCollected",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "source_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "meme_total",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote_total",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "VersionActivated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "previous_version",
+                  "type": "u64"
+                },
+                {
+                  "name": "version",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

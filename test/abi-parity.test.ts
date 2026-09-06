@@ -96,6 +96,7 @@ test("freezes every production package and event", () => {
   const launchpad = readArtifact("production-launchpad-v1.json");
   const vesting = readArtifact("production-vesting-v1.json");
   const blastSui = readArtifact("production-blast-sui-v1.json");
+  const native = readArtifact("production-native-dex-v1.json");
 
   assert.deepEqual(Object.keys(launchpad.packages).sort(), [
     "launchpad",
@@ -112,7 +113,10 @@ test("freezes every production package and event", () => {
   assert.ok(eventWrapper);
   assert.ok(eventWrapper.structs.some(({ name }) => name === "Event"));
 
-  for (const artifact of [launchpad, vesting, blastSui]) {
+  assert.deepEqual(Object.keys(native.packages), ["dex", "autoLp"]);
+  assert.equal(countEvents(native, "dex"), 12);
+  assert.equal(countEvents(native, "autoLp"), 5);
+  for (const artifact of [launchpad, vesting, blastSui, native]) {
     assertEveryOperationIsClassified(artifact);
   }
 });

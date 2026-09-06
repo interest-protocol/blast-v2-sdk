@@ -1,4 +1,6 @@
+import type { AutoLpDeployment } from "../auto-lp/transactions.ts";
 import type { BlastSuiDeployment } from "../blast-sui/types.ts";
+import type { DexDeployment } from "../dex/transactions.ts";
 import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
 import type { SharedObjectIdentity, SuiPackageReference } from "../lib/sui.ts";
 import type { MigratorsDeployment } from "../migrators/transactions.ts";
@@ -19,6 +21,8 @@ export type BlastPackages = Readonly<
     blastSui?: SuiPackageReference;
     migrators?: SuiPackageReference;
     vesting?: SuiPackageReference;
+    dex?: SuiPackageReference;
+    autoLp?: SuiPackageReference;
   }
 >;
 
@@ -39,6 +43,8 @@ export type BlastSharedObjects = Readonly<
     blastSuiPackageAdmin?: SharedObjectIdentity;
     blastSuiVault?: SharedObjectIdentity;
     venueConfig?: SharedObjectIdentity;
+    dexFactory?: SharedObjectIdentity;
+    autoLpControl?: SharedObjectIdentity;
     packageAdmin?: SharedObjectIdentity;
   }
 >;
@@ -58,3 +64,6 @@ export type LaunchpadDeploymentConstants = LaunchpadDeployment;
 export type BlastSuiDeploymentConstants = BlastSuiDeployment;
 export type MigratorsDeploymentConstants = MigratorsDeployment;
 export type VestingDeploymentConstants = VestingDeployment;
+
+export type DexDeploymentConstants = DexDeployment;
+export type AutoLpDeploymentConstants = AutoLpDeployment;

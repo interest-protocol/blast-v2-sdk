@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -25,6 +26,7 @@ const artifactDeclarations = [
       "contracts ADR 0067: retire the Full Sail migrator before release",
       "contracts ADR 0068: compact the LP-fee principal snapshot before release",
       "contracts ADR 0069: consolidate launch graduation and move migration math into migrators",
+      "contracts ADR 0076: add migrated-launch assertion for native pool admission",
     ],
   },
   {
@@ -42,6 +44,16 @@ const artifactDeclarations = [
     ],
   },
 ];
+artifactDeclarations.push({
+  path: "production-native-dex-v1.json",
+  packages: [
+    ["dex", "dex", "blast_fun_dex"],
+    ["autoLp", "auto_lp", "blast_fun_auto_lp"],
+  ],
+  approvedAbiAmendments: [
+    "contracts ADR 0076: native V2, sealed AutoLP and per-asset signed compound limits",
+  ],
+});
 const contractsRoot = resolve(
   sdkRoot,
   process.argv.slice(2).find((argument) => !argument.startsWith("--")) ??
@@ -56,8 +68,25 @@ function main() {
     for (const declaration of artifactDeclarations) {
       checkArtifact(declaration);
     }
+    checkDexFeeVectors();
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+function checkDexFeeVectors() {
+  const source = readFileSync(
+    join(contractsRoot, "docs/vectors/dex-fees.json"),
+    "utf8",
+  );
+  const fixture = join(sdkRoot, "test/fixtures/dex-fees.json");
+  if (write) {
+    writeFileSync(fixture, source);
+  } else if (readFileSync(fixture, "utf8") !== source) {
+    console.error(
+      "DEX fee vectors differ from contracts; regenerate the contract vectors then run npm run check:abi:write",
+    );
+    process.exitCode = 1;
   }
 }
 
@@ -117,6 +146,7 @@ function verifySuiCliVersion() {
   const actual = result.stdout.trim().replace(/^sui\s+/, "");
   for (const declaration of artifactDeclarations) {
     const artifactPath = join(sdkRoot, "abi", declaration.path);
+    if (write && !existsSync(artifactPath)) continue;
     const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
     const expected = artifact.baseline?.suiCli;
     if (typeof expected !== "string") {
@@ -260,7 +290,52 @@ const functionClassifiers = {
   blast_fun_migrators: classifyMigratorFunction,
   blast_fun_vesting: classifyVestingFunction,
   blast_sui: classifyBlastSuiFunction,
+  blast_fun_dex: classifyNativeDexFunction,
+  blast_fun_auto_lp: classifyAutoLpFunction,
 };
+
+const nativeDexBuilders = new Set([
+  "pool::assert_current",
+  "pool::activate",
+  "pool::create",
+  "pool::share",
+  "pool::new_position",
+  "pool::set_max_fee",
+  "pool::deposit_amounts",
+  "pool::add_liquidity",
+  "pool::remove_liquidity",
+  "pool::claim_fees",
+  "pool::destroy_empty",
+  "pool::buy",
+  "pool::sell",
+  "pool::buy_and_burn",
+  "pool::sell_and_burn",
+  "migration::migrate",
+  "migration::collect",
+  "migration::claim_creator_fees",
+  "migration::claim_protocol_fees",
+]);
+const autoLpBuilders = new Set([
+  "vault::new",
+  "vault::share",
+  "vault::collect_curve",
+  "vault::collect_external_lp",
+  "vault::collect_native_lp",
+  "vault::collect_own_lp",
+  "vault::contribute",
+  "vault::compound",
+  "vault::activate",
+]);
+function classifyNativeDexFunction(moduleName, functionName) {
+  const key = `${moduleName}::${functionName}`;
+  if (nativeDexBuilders.has(key)) return "builder";
+  throw new Error(`unclassified function blast_fun_dex::${key}`);
+}
+function classifyAutoLpFunction(moduleName, functionName) {
+  const key = `${moduleName}::${functionName}`;
+  if (autoLpBuilders.has(key)) return "builder";
+  throw new Error(`unclassified function blast_fun_auto_lp::${key}`);
+}
 
 function classifyMemeTemplateFunction(moduleName, functionName) {
   throw new Error(
@@ -305,6 +380,7 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
   ) {
     return "compositional";
   }
+  if (key === "launch::assert_migrated") return "move-composition";
   if (key === "launch_ticket::new") return "template-builder";
   if (moduleName === "creator_authority") return "template-internal";
   if (moduleName === "fees") return "move-composition";
@@ -433,7 +509,32 @@ const blastSuiEventNames = new Set([
   "NativeStakeUnwound",
 ]);
 
+const nativeDexEvents = new Set([
+  "pool::PoolCreated",
+  "pool::PositionCreated",
+  "pool::PositionClosed",
+  "pool::Swapped",
+  "pool::LiquidityChanged",
+  "pool::FeesClaimed",
+  "pool::MaximumFeeChanged",
+  "pool::VersionActivated",
+  "migration::Migrated",
+  "migration::FeesCollected",
+  "migration::CreatorFeesClaimed",
+  "migration::ProtocolFeesClaimed",
+]);
+const autoLpEvents = new Set([
+  "Enrolled",
+  "FeesCollected",
+  "Contributed",
+  "Compounded",
+  "VersionActivated",
+]);
 function isEventStruct(packageName, moduleName, structName) {
+  if (packageName === "blast_fun_dex")
+    return nativeDexEvents.has(`${moduleName}::${structName}`);
+  if (packageName === "blast_fun_auto_lp" && moduleName === "vault")
+    return autoLpEvents.has(structName);
   if (packageName === "blast_sui" && moduleName === "events") {
     return blastSuiEventNames.has(structName);
   }

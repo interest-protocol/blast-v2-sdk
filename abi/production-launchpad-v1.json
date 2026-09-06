@@ -10,7 +10,8 @@
     "approvedAbiAmendments": [
       "contracts ADR 0067: retire the Full Sail migrator before release",
       "contracts ADR 0068: compact the LP-fee principal snapshot before release",
-      "contracts ADR 0069: consolidate launch graduation and move migration math into migrators"
+      "contracts ADR 0069: consolidate launch graduation and move migration math into migrators",
+      "contracts ADR 0076: add migrated-launch assertion for native pool admission"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -2988,6 +2989,54 @@
         },
         "launch": {
           "functions": [
+            {
+              "name": "assert_migrated",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
             {
               "name": "buy",
               "sdk": "builder",

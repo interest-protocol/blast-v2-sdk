@@ -12,7 +12,9 @@
     "./launchpad/template": "./src/launchpad/template.ts",
     "./migrators": "./src/migrators/index.ts",
     "./vesting": "./src/vesting/index.ts",
-    "./distributor": "./src/distributor/index.ts"
+    "./distributor": "./src/distributor/index.ts",
+    "./dex": "./src/dex/index.ts",
+    "./auto-lp": "./src/auto-lp/index.ts"
   },
   "engines": {
     "node": ">=22.18"

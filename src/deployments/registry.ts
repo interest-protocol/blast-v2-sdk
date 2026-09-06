@@ -4,10 +4,12 @@ import {
   sharedObjectReference,
 } from "../lib/sui.ts";
 import type {
+  AutoLpDeploymentConstants,
   BlastDeployment,
   BlastDeploymentRegistry,
   BlastNetwork,
   BlastSuiDeploymentConstants,
+  DexDeploymentConstants,
   LaunchpadDeploymentConstants,
   MigratorsDeploymentConstants,
   VestingDeploymentConstants,
@@ -160,4 +162,28 @@ function normalizeRecord<Value, Normalized>(
       ]),
     ),
   );
+}
+
+/** Returns native DEX identities without inventing an unpublished deployment. */
+export function dexDeployment(
+  deployment: BlastDeployment,
+): DexDeploymentConstants {
+  const reference = deployment.packages.dex;
+  const factory = deployment.sharedObjects.dexFactory;
+  if (!reference || !factory)
+    throw new TypeError(
+      "packages.dex and sharedObjects.dexFactory are required",
+    );
+  return { ...reference, factory };
+}
+export function autoLpDeployment(
+  deployment: BlastDeployment,
+): AutoLpDeploymentConstants {
+  const reference = deployment.packages.autoLp;
+  const control = deployment.sharedObjects.autoLpControl;
+  if (!reference || !control)
+    throw new TypeError(
+      "packages.autoLp and sharedObjects.autoLpControl are required",
+    );
+  return { ...reference, control, dex: dexDeployment(deployment) };
 }

@@ -15,6 +15,9 @@ It provides:
   and Aftermath; and
 - typed BCS event decoding and deterministic launch-to-vault replay.
 
+See [native DEX and auto-LP](docs/native-dex-and-auto-lp.md) for full-range pools,
+native migration, paired compounding, retained leftovers, and execution limits.
+
 See [optional holder rewards](docs/holder-distributor.md) for standalone creator-cap
 custody, holder accounting, signed rounds, and permissionless airdrops.
 
