@@ -315,10 +315,10 @@ test("rejects invalid policy, dependency, and identifier inputs", async () => {
   );
   await assert.rejects(
     buildMemePackageBytecode(
-      { ...options, sellBurnBps: 10_001n },
+      { ...options, sellBurnBps: 5_001n },
       blastPackageId,
     ),
-    /between 0 and 10,000/,
+    /exceeds 5,000/,
   );
   await assert.rejects(
     buildMemePackageBytecode(options, "0x2"),

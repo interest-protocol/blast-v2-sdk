@@ -17,6 +17,8 @@ export type CurveState = {
   memeFeeBps: bigint;
 };
 
+export const MAX_SELL_BURN_BPS = 5_000n;
+
 export type BuyPreview = {
   quoteSupplied: bigint;
   quoteInGross: bigint;
@@ -121,16 +123,20 @@ export function previewBuy(
  * Mirrors `launch::sell` for one live launch.
  *
  * Inputs and outputs use atomic units. Fees and pending burn round up to their
- * recipients. Progress, the burn-rate ramp, and Quote output round down.
+ * recipients. The creator-selected burn is applied after the Meme fee; Quote
+ * output and progress telemetry round down.
  */
 export function previewSell(
   state: CurveState,
   memeInGross: bigint,
-  maxBurnBps: bigint,
+  sellBurnBps: bigint,
 ): SellPreview {
   validateCurveState(state);
   requirePositiveU64("memeInGross", memeInGross);
-  requireBasisPoints("maxBurnBps", maxBurnBps);
+  requireBasisPoints("sellBurnBps", sellBurnBps);
+  if (sellBurnBps > MAX_SELL_BURN_BPS) {
+    throw new RangeError("sellBurnBps exceeds 5,000");
+  }
 
   const memeFee = applyBpsUp(memeInGross, state.memeFeeBps);
   const memeInAfterFee = memeInGross - memeFee;
@@ -144,7 +150,7 @@ export function previewSell(
           BASIS_POINTS_DENOMINATOR,
           state.migrationQuoteTarget,
         );
-  const burnBps = mulDivDown(progressBps, maxBurnBps, BASIS_POINTS_DENOMINATOR);
+  const burnBps = sellBurnBps;
   const pendingBurnDelta = applyBpsUp(memeInAfterFee, burnBps);
   const memeInEffective = memeInAfterFee - pendingBurnDelta;
   requirePositiveOutput("memeInEffective", memeInEffective);

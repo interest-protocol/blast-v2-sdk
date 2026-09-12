@@ -14,6 +14,7 @@ import {
 } from "@mysten/sui/utils";
 
 import { requireBasisPoints } from "../lib/integers.ts";
+import { MAX_SELL_BURN_BPS } from "./curve.ts";
 
 const ZERO_ADDRESS = normalizeSuiObjectId("0x0");
 const SYSTEM_ADDRESSES = new Set([
@@ -222,6 +223,9 @@ function validateOptions(options: MemeTemplateOptions) {
     throw new TypeError("sellBurnBps must be a bigint");
   }
   requireBasisPoints("sellBurnBps", options.sellBurnBps);
+  if (options.sellBurnBps > MAX_SELL_BURN_BPS) {
+    throw new RangeError("sellBurnBps exceeds 5,000");
+  }
 
   return {
     symbol: requireNonEmptyString("symbol", options.symbol),

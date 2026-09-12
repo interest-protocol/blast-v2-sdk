@@ -54,7 +54,7 @@ test("caps the terminal buy at the exact net Quote target", () => {
   );
 });
 
-test("matches the contract progress-burn sell vector", () => {
+test("matches the contract fixed-burn sell vector", () => {
   assert.deepEqual(
     previewSell(
       {
@@ -70,14 +70,49 @@ test("matches the contract progress-burn sell vector", () => {
       memeFee: 0n,
       memeInAfterFee: 1_000_000_000_000_000n,
       progressBps: 1_653n,
-      burnBps: 16n,
-      pendingBurnDelta: 1_600_000_000_000n,
-      memeInEffective: 998_400_000_000_000n,
-      quoteOutGross: 2_787_801_814n,
-      quoteFee: 27_878_019n,
-      quoteOutNet: 2_759_923_795n,
-      memeReserveAfter: 535_761_332_907_305_531n,
-      realQuoteReserveAfter: 493_202_198_186n,
+      burnBps: 100n,
+      pendingBurnDelta: 10_000_000_000_000n,
+      memeInEffective: 990_000_000_000_000n,
+      quoteOutGross: 2_764_390_092n,
+      quoteFee: 27_643_901n,
+      quoteOutNet: 2_736_746_191n,
+      memeReserveAfter: 535_752_932_907_305_531n,
+      realQuoteReserveAfter: 493_225_609_908n,
+    },
+  );
+});
+
+test("rejects sell burn above the contract maximum", () => {
+  assert.throws(() => previewSell(baseState, 1_000n, 5_001n), /exceeds 5,000/);
+});
+
+test("applies the maximum burn after the Meme fee", () => {
+  assert.deepEqual(
+    previewSell(
+      {
+        memeReserve: 1_000n,
+        realQuoteReserve: 500n,
+        virtualQuote: 1_000n,
+        migrationQuoteTarget: 1_000n,
+        quoteFeeBps: 0n,
+        memeFeeBps: 100n,
+      },
+      1_000n,
+      5_000n,
+    ),
+    {
+      memeInGross: 1_000n,
+      memeFee: 10n,
+      memeInAfterFee: 990n,
+      progressBps: 5_000n,
+      burnBps: 5_000n,
+      pendingBurnDelta: 495n,
+      memeInEffective: 495n,
+      quoteOutGross: 496n,
+      quoteFee: 0n,
+      quoteOutNet: 496n,
+      memeReserveAfter: 1_495n,
+      realQuoteReserveAfter: 4n,
     },
   );
 });
