@@ -48,7 +48,7 @@ function serializeLaunch(id = objectId): Uint8Array {
         creator_quote: balance(4n),
       },
       metadata_cap: { id: uid(metadataCapId) },
-      creator_authority: { identity: { Address: creator } },
+      creator_authority: { recipient: { Address: creator } },
     })
     .toBytes();
 }
@@ -79,7 +79,7 @@ test("decodes the complete launch BCS state", () => {
   assert.equal(state.protocolMemeTradeFees, 1n);
   assert.equal(state.creatorQuoteTradeFees, 4n);
   assert.equal(state.metadataCapId?.endsWith("0d"), true);
-  assert.deepEqual(state.creatorIdentity, {
+  assert.deepEqual(state.creatorRecipient, {
     kind: "address",
     address:
       "0x000000000000000000000000000000000000000000000000000000000000000e",

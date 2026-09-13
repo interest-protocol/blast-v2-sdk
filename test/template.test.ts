@@ -25,11 +25,11 @@ const options = {
   iconUrl: "https://blast.fun/dog.png",
   burnable: true,
   sellBurnBps: 2_500n,
-  creatorIdentity: { kind: "address", address: "0xc" } as const,
+  creatorRecipient: { kind: "address", address: "0xc" } as const,
 };
 
 test("locks the embedded artifact to the eight source constants", async () => {
-  const creatorIdentityBytes = Uint8Array.from(
+  const creatorRecipientBytes = Uint8Array.from(
     { length: 32 },
     (_, index) => index,
   );
@@ -40,16 +40,16 @@ test("locks the embedded artifact to the eight source constants", async () => {
     iconUrl: "https://blast.fun/meme.png",
     burnable: false,
     sellBurnBps: 0n,
-    creatorIdentity: {
-      kind: "x" as const,
-      xIdentityHash: creatorIdentityBytes,
+    creatorRecipient: {
+      kind: "account" as const,
+      accountCommitment: creatorRecipientBytes,
     },
   };
   const bytecode = await buildMemePackageBytecode(defaults, "0xda74");
 
   assert.equal(
     createHash("sha256").update(bytecode).digest("hex"),
-    "6747a1c0711a6ff8b94f7fc3f015f462e7ce11ec4b2d58ff2b2bd416357309c1",
+    "e35e26dcf39354bcf3a7be6d9c9d33e670846b7d50a046ad06c564467b777b74",
   );
   assert.deepEqual(get_constants(bytecode), [
     {
@@ -75,7 +75,7 @@ test("locks the embedded artifact to the eight source constants", async () => {
       value_bcs: Array.from(
         bcs
           .vector(bcs.u8())
-          .serialize(Array.from(creatorIdentityBytes))
+          .serialize(Array.from(creatorRecipientBytes))
           .toBytes(),
       ),
     },
@@ -129,7 +129,7 @@ test("patches identifiers, constants, and the Blast dependency", async () => {
   );
 
   const creatorAddress = bcs.Address.serialize(
-    normalizeSuiObjectId(options.creatorIdentity.address),
+    normalizeSuiObjectId(options.creatorRecipient.address),
   ).toBytes();
   assert.deepEqual(get_constants(bytecode), [
     {
@@ -171,15 +171,15 @@ test("patches identifiers, constants, and the Blast dependency", async () => {
   ]);
 });
 
-test("patches a 32-byte X identity in the same compiled template", async () => {
-  const xIdentityHash = Uint8Array.from(
+test("patches a 32-byte account commitment in the same compiled template", async () => {
+  const accountCommitment = Uint8Array.from(
     { length: 32 },
     (_, index) => 255 - index,
   );
   const bytecode = await buildMemePackageBytecode(
     {
       ...options,
-      creatorIdentity: { kind: "x", xIdentityHash },
+      creatorRecipient: { kind: "account", accountCommitment },
       burnable: false,
     },
     blastPackageId,
@@ -189,7 +189,7 @@ test("patches a 32-byte X identity in the same compiled template", async () => {
   assert.deepEqual(constants[4], {
     type_: "Vector(U8)",
     value_bcs: Array.from(
-      bcs.vector(bcs.u8()).serialize(Array.from(xIdentityHash)).toBytes(),
+      bcs.vector(bcs.u8()).serialize(Array.from(accountCommitment)).toBytes(),
     ),
   });
   assert.deepEqual(constants[5], {
@@ -294,9 +294,9 @@ test("rejects invalid policy, dependency, and identifier inputs", async () => {
     buildMemePackageBytecode(
       {
         ...options,
-        creatorIdentity: {
-          kind: "x",
-          xIdentityHash: new Uint8Array(31),
+        creatorRecipient: {
+          kind: "account",
+          accountCommitment: new Uint8Array(31),
         },
       },
       blastPackageId,
@@ -307,7 +307,7 @@ test("rejects invalid policy, dependency, and identifier inputs", async () => {
     buildMemePackageBytecode(
       {
         ...options,
-        creatorIdentity: { kind: "address", address: "0x0" },
+        creatorRecipient: { kind: "address", address: "0x0" },
       },
       blastPackageId,
     ),

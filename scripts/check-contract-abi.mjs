@@ -25,6 +25,7 @@ const artifactDeclarations = [
       "contracts ADR 0067: retire the Full Sail migrator before release",
       "contracts ADR 0068: compact the LP-fee principal snapshot before release",
       "contracts ADR 0069: consolidate launch graduation and move migration math into migrators",
+      "contracts ADR 0080: make creator recipients provider-independent",
     ],
   },
   {
@@ -270,6 +271,8 @@ function classifyMemeTemplateFunction(moduleName, functionName) {
 
 function classifyMigratorFunction(moduleName, functionName) {
   if (moduleName === "vault") return "builder";
+  if (moduleName === "package_admin") return "intentional-admin-exclusion";
+  if (moduleName === "package_version") return "move-composition";
   if (functionName === "set_tier" || functionName === "set_policy") {
     return "intentional-admin-exclusion";
   }
@@ -332,7 +335,7 @@ function isIntentionalAdminExclusion(moduleName, functionName, key) {
     moduleName === "launch_config" ||
     moduleName === "package_admin" ||
     (moduleName === "runtime_config" && functionName.startsWith("set_")) ||
-    key === "runtime_config::revoke_x_claim_signer"
+    key === "runtime_config::revoke_creator_claim_signer"
   );
 }
 

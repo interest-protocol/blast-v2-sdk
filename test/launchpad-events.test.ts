@@ -162,13 +162,13 @@ test("replays creator claims and signer changes", () => {
       "CreatorCapClaimed",
       {
         meme: "0xa::meme::MEME",
-        x_identity_hash: new Uint8Array([7, 2]),
-        x_claim_expiry_ms: 99n,
+        account_commitment: new Uint8Array([7, 2]),
+        claim_expiry_ms: 99n,
       },
       30,
     ),
     decoded(
-      "XClaimSignerSet",
+      "CreatorClaimSignerSet",
       {
         signer_public_key: new Uint8Array([9]),
       },
@@ -177,13 +177,13 @@ test("replays creator claims and signer changes", () => {
   ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
 
   assert.deepEqual(
-    beforeRevocation.administration.xClaimSignerPublicKey,
+    beforeRevocation.administration.creatorClaimSignerPublicKey,
     new Uint8Array([9]),
   );
   const projection = reduceLaunchpadEvent(
     beforeRevocation,
     decoded(
-      "XClaimSignerRevoked",
+      "CreatorClaimSignerRevoked",
       { previous_public_key: new Uint8Array([9]) },
       32,
     ),
@@ -194,12 +194,12 @@ test("replays creator claims and signer changes", () => {
     ],
     {
       memeType: normalizedType("0xa::meme::MEME"),
-      creator: normalizeSuiObjectId("0xd"),
-      xIdentityHash: new Uint8Array([7, 2]),
-      xClaimExpiryMs: 99n,
+      claimant: normalizeSuiObjectId("0xd"),
+      accountCommitment: new Uint8Array([7, 2]),
+      claimExpiryMs: 99n,
     },
   );
-  assert.equal(projection.administration.xClaimSignerPublicKey, null);
+  assert.equal(projection.administration.creatorClaimSignerPublicKey, null);
 });
 
 test("requires native event position and current/original package identities", () => {

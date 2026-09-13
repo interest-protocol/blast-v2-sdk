@@ -44,8 +44,8 @@ export const launchpadEventSpecs = {
   },
   CreatorCapClaimed: {
     meme: "typeName",
-    x_identity_hash: "optionBytes",
-    x_claim_expiry_ms: "optionU64",
+    account_commitment: "optionBytes",
+    claim_expiry_ms: "optionU64",
   },
   CreatorFeesClaimed: {
     launch_id: "id",
@@ -81,8 +81,8 @@ export const launchpadEventSpecs = {
     meme: "typeName",
     initial_supply: "u64",
     metadata_cap_id: "id",
-    creator: "optionAddress",
-    x_identity_hash: "optionBytes",
+    creator_address: "optionAddress",
+    account_commitment: "optionBytes",
     burnable: "bool",
     sell_burn_bps: "u64",
   },
@@ -150,8 +150,8 @@ export const launchpadEventSpecs = {
     meme_reserve: "u64",
     real_quote_reserve: "u64",
   },
-  XClaimSignerRevoked: { previous_public_key: "bytes" },
-  XClaimSignerSet: {
+  CreatorClaimSignerRevoked: { previous_public_key: "bytes" },
+  CreatorClaimSignerSet: {
     previous_public_key: "bytes",
     signer_public_key: "bytes",
   },

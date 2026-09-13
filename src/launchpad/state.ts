@@ -22,12 +22,12 @@ const LifecycleBcs = bcs.enum("Lifecycle", {
   MigrationReady: null,
   Migrated: null,
 });
-const CreatorIdentityBcs = bcs.enum("CreatorIdentity", {
+const CreatorRecipientBcs = bcs.enum("CreatorRecipient", {
   Address: bcs.Address,
-  X: bcs.vector(bcs.u8()),
+  Account: bcs.vector(bcs.u8()),
 });
 const CreatorAuthorityBcs = bcs.struct("CreatorAuthority", {
-  identity: CreatorIdentityBcs,
+  recipient: CreatorRecipientBcs,
 });
 const MetadataCapBcs = bcs.struct("MetadataCap", { id: suiUidBcs });
 const FeeLedgerBcs = bcs.struct("FeeLedger", {
@@ -60,9 +60,9 @@ export const launchBcs = bcs.struct("Launch", {
 
 export type LaunchLifecycle = "Live" | "MigrationReady" | "Migrated";
 
-export type CreatorIdentity =
+export type CreatorRecipient =
   | { kind: "address"; address: string }
-  | { kind: "x"; identityHash: Uint8Array }
+  | { kind: "account"; accountCommitment: Uint8Array }
   | null;
 
 export type LaunchState = CurveState &
@@ -81,7 +81,7 @@ export type LaunchState = CurveState &
     protocolQuoteTradeFees: bigint;
     creatorQuoteTradeFees: bigint;
     metadataCapId: string | null;
-    creatorIdentity: CreatorIdentity;
+    creatorRecipient: CreatorRecipient;
   };
 
 export type LaunchObject = SharedObjectReference<true> & {
@@ -157,7 +157,7 @@ export function decodeLaunchObject(
     protocolQuoteTradeFees: toBigInt(parsed.fee_ledger.protocol_quote.value),
     creatorQuoteTradeFees: toBigInt(parsed.fee_ledger.creator_quote.value),
     metadataCapId,
-    creatorIdentity: decodeCreatorIdentity(parsed.creator_authority),
+    creatorRecipient: decodeCreatorRecipient(parsed.creator_authority),
   };
 }
 
@@ -188,19 +188,19 @@ export async function getLaunch(
   );
 }
 
-function decodeCreatorIdentity(
+function decodeCreatorRecipient(
   authority: ReturnType<typeof launchBcs.parse>["creator_authority"],
-): CreatorIdentity {
+): CreatorRecipient {
   if (!authority) return null;
-  if (authority.identity.$kind === "Address") {
+  if (authority.recipient.$kind === "Address") {
     return {
       kind: "address",
-      address: normalizeSuiAddress(authority.identity.Address),
+      address: normalizeSuiAddress(authority.recipient.Address),
     };
   }
   return {
-    kind: "x",
-    identityHash: Uint8Array.from(authority.identity.X),
+    kind: "account",
+    accountCommitment: Uint8Array.from(authority.recipient.Account),
   };
 }
 

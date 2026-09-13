@@ -10,7 +10,8 @@
     "approvedAbiAmendments": [
       "contracts ADR 0067: retire the Full Sail migrator before release",
       "contracts ADR 0068: compact the LP-fee principal snapshot before release",
-      "contracts ADR 0069: consolidate launch graduation and move migration math into migrators"
+      "contracts ADR 0069: consolidate launch graduation and move migration math into migrators",
+      "contracts ADR 0080: make creator recipients provider-independent"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -71,28 +72,7 @@
         "creator_authority": {
           "functions": [
             {
-              "name": "new_address",
-              "sdk": "template-internal",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                "address"
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "creator_authority"
-                    },
-                    "name": "CreatorIdentity",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
-              "name": "new_x",
+              "name": "new_account",
               "sdk": "template-internal",
               "entry": false,
               "typeParameters": [],
@@ -108,7 +88,28 @@
                       "address": "blast_fun",
                       "name": "creator_authority"
                     },
-                    "name": "CreatorIdentity",
+                    "name": "CreatorRecipient",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "new_address",
+              "sdk": "template-internal",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                "address"
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "creator_authority"
+                    },
+                    "name": "CreatorRecipient",
                     "type_arguments": []
                   }
                 }
@@ -131,14 +132,14 @@
               "positional": false,
               "fields": [
                 {
-                  "name": "identity",
+                  "name": "recipient",
                   "type": {
                     "Datatype": {
                       "module": {
                         "address": "blast_fun",
                         "name": "creator_authority"
                       },
-                      "name": "CreatorIdentity",
+                      "name": "CreatorRecipient",
                       "type_arguments": []
                     }
                   }
@@ -176,7 +177,7 @@
               ]
             },
             {
-              "name": "XClaimMessage",
+              "name": "CreatorClaimMessage",
               "abilities": [
                 "Copy",
                 "Drop"
@@ -198,7 +199,7 @@
                   }
                 },
                 {
-                  "name": "x_identity_hash",
+                  "name": "account_commitment",
                   "type": {
                     "vector": "u8"
                   }
@@ -216,7 +217,7 @@
           ],
           "enums": [
             {
-              "name": "CreatorIdentity",
+              "name": "CreatorRecipient",
               "abilities": [
                 "Drop",
                 "Store"
@@ -233,7 +234,7 @@
                   ]
                 },
                 {
-                  "name": "X",
+                  "name": "Account",
                   "fields": [
                     {
                       "name": "pos0",
@@ -369,7 +370,7 @@
                   }
                 },
                 {
-                  "name": "x_identity_hash",
+                  "name": "account_commitment",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -389,7 +390,7 @@
                   }
                 },
                 {
-                  "name": "x_claim_expiry_ms",
+                  "name": "claim_expiry_ms",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -404,6 +405,48 @@
                         }
                       ]
                     }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "CreatorClaimSignerRevoked",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "previous_public_key",
+                  "type": {
+                    "vector": "u8"
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "CreatorClaimSignerSet",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "previous_public_key",
+                  "type": {
+                    "vector": "u8"
+                  }
+                },
+                {
+                  "name": "signer_public_key",
+                  "type": {
+                    "vector": "u8"
                   }
                 }
               ],
@@ -635,7 +678,7 @@
                   }
                 },
                 {
-                  "name": "creator",
+                  "name": "creator_address",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -653,7 +696,7 @@
                   }
                 },
                 {
-                  "name": "x_identity_hash",
+                  "name": "account_commitment",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -1063,48 +1106,6 @@
                 {
                   "name": "real_quote_reserve",
                   "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "XClaimSignerRevoked",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "previous_public_key",
-                  "type": {
-                    "vector": "u8"
-                  }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "XClaimSignerSet",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "previous_public_key",
-                  "type": {
-                    "vector": "u8"
-                  }
-                },
-                {
-                  "name": "signer_public_key",
-                  "type": {
-                    "vector": "u8"
-                  }
                 }
               ],
               "sdk": "decoder-reducer"
@@ -3950,7 +3951,7 @@
                       "address": "blast_fun",
                       "name": "creator_authority"
                     },
-                    "name": "CreatorIdentity",
+                    "name": "CreatorRecipient",
                     "type_arguments": []
                   }
                 },
@@ -4711,7 +4712,7 @@
               ]
             },
             {
-              "name": "revoke_x_claim_signer",
+              "name": "revoke_creator_claim_signer",
               "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
@@ -4774,6 +4775,77 @@
                       }
                     }
                   ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "set_creator_claim_signer",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "runtime_config"
+                        },
+                        "name": "RuntimeConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "vector": "u8"
                 }
               ],
               "returns": []
@@ -4846,77 +4918,6 @@
                 "u64"
               ],
               "returns": []
-            },
-            {
-              "name": "set_x_claim_signer",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_fun",
-                                  "name": "launchpad_domain"
-                                },
-                                "name": "LAUNCHPAD_DOMAIN",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "vector": "u8"
-                }
-              ],
-              "returns": []
             }
           ],
           "structs": [
@@ -4942,7 +4943,7 @@
                   }
                 },
                 {
-                  "name": "x_claim_signer_public_key",
+                  "name": "creator_claim_signer_public_key",
                   "type": {
                     "vector": "u8"
                   }

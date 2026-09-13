@@ -66,7 +66,7 @@ test("constructs the generated Meme publish and makes it immutable", async () =>
     iconUrl: "https://example.com/dog.png",
     burnable: false,
     sellBurnBps: 0n,
-    creatorIdentity: { kind: "address", address: "0xc" },
+    creatorRecipient: { kind: "address", address: "0xc" },
   });
 
   await tx.prepareForSerialization({});
@@ -181,7 +181,7 @@ test("uses a fully qualified immutable Clock reference", () => {
     calls.claimCreatorCap({
       ...types,
       launch: shared("0xc", "20", true),
-      xAttestation: null,
+      accountAttestation: null,
     }),
   );
 

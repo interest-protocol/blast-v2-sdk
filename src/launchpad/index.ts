@@ -1,4 +1,5 @@
 export * from "./client.ts";
+export * from "./creator-claim.ts";
 export * from "./curve.ts";
 export * from "./economics.ts";
 export * from "./events.ts";

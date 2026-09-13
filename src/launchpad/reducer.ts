@@ -45,8 +45,8 @@ export type LaunchTicketEventProjection = {
   initialSupply: bigint;
   metadataCapId: string;
   launcher: string;
-  creator: string | null;
-  xIdentityHash: Uint8Array | null;
+  creatorAddress: string | null;
+  accountCommitment: Uint8Array | null;
   burnable: boolean;
   sellBurnBps: bigint;
 };
@@ -74,13 +74,13 @@ export type LaunchpadAdministrationProjection = {
       string,
       {
         memeType: string;
-        creator: string;
-        xIdentityHash: Uint8Array | null;
-        xClaimExpiryMs: bigint | null;
+        claimant: string;
+        accountCommitment: Uint8Array | null;
+        claimExpiryMs: bigint | null;
       }
     >
   >;
-  xClaimSignerPublicKey: Uint8Array | null;
+  creatorClaimSignerPublicKey: Uint8Array | null;
 };
 
 export type LaunchpadEventProjection = {
@@ -109,7 +109,7 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
     },
     administration: {
       creatorCapClaims: {},
-      xClaimSignerPublicKey: null,
+      creatorClaimSignerPublicKey: null,
     },
   };
 }
@@ -143,8 +143,8 @@ export function reduceLaunchpadEvent(
             initialSupply: payload.initial_supply,
             metadataCapId: payload.metadata_cap_id,
             launcher: event.sender,
-            creator: payload.creator,
-            xIdentityHash: payload.x_identity_hash,
+            creatorAddress: payload.creator_address,
+            accountCommitment: payload.account_commitment,
             burnable: payload.burnable,
             sellBurnBps: payload.sell_burn_bps,
           },
@@ -331,22 +331,22 @@ export function reduceLaunchpadEvent(
           ...state.administration.creatorCapClaims,
           [payload.meme]: {
             memeType: payload.meme,
-            creator: event.sender,
-            xIdentityHash: payload.x_identity_hash,
-            xClaimExpiryMs: payload.x_claim_expiry_ms,
+            claimant: event.sender,
+            accountCommitment: payload.account_commitment,
+            claimExpiryMs: payload.claim_expiry_ms,
           },
         },
       });
     }
-    case "XClaimSignerSet":
+    case "CreatorClaimSignerSet":
       return updateAdministration(next, {
         ...state.administration,
-        xClaimSignerPublicKey: event.payload.signer_public_key,
+        creatorClaimSignerPublicKey: event.payload.signer_public_key,
       });
-    case "XClaimSignerRevoked":
+    case "CreatorClaimSignerRevoked":
       return updateAdministration(next, {
         ...state.administration,
-        xClaimSignerPublicKey: null,
+        creatorClaimSignerPublicKey: null,
       });
   }
 }

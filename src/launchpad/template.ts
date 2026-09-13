@@ -25,11 +25,11 @@ const SYSTEM_ADDRESSES = new Set([
 
 // Built from contracts/sui/meme_template/sources/meme.move with
 // Sui CLI 1.77.2-51d177ad7d65. SHA-256:
-// 6747a1c0711a6ff8b94f7fc3f015f462e7ce11ec4b2d58ff2b2bd416357309c1
+// e35e26dcf39354bcf3a7be6d9c9d33e670846b7d50a046ad06c564467b777b74
 const TEMPLATE_BYTECODE_BASE64 =
-  "oRzrCwcAAAUKAQAOAg4WAyQqBE4EBVJAB5IByQEI2wKAAQbbA4QBCt8EBQzkBEMACwMGAwoBEQIFAhICEwACAgABAAYAAgEMAQABAwMHAAYEAgAACQABAAENBQQAAQ4DBAACDAgJAQIDFAMGAAQIAwUABQ8MAQEMBhAKBQADBwYLAggABwgEAAIIAQgBAQoCAQgBAQUBCAMBCAAJCQAIAwgDCAMIAwgBAQMHCAQBCwIBCQABBggEAQsCAQgAAgkABQ9DcmVhdG9ySWRlbnRpdHkMTGF1bmNoVGlja2V0BE1FTUUGU3RyaW5nCVR4Q29udGV4dAdhZGRyZXNzEWNyZWF0b3JfYXV0aG9yaXR5C2R1bW15X2ZpZWxkCmZyb21fYnl0ZXMEaW5pdA1sYXVuY2hfdGlja2V0BG1lbWUDbmV3C25ld19hZGRyZXNzBW5ld194D3B1YmxpY190cmFuc2ZlcgZzZW5kZXIGc3RyaW5nCHRyYW5zZmVyCnR4X2NvbnRleHQEdXRmOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANp0CgIFBE1FTUUKAgsKQmxhc3QgTWVtZQoCGRhBIE1lbWUgbGF1bmNoZWQgb24gQmxhc3QKAhsaaHR0cHM6Ly9ibGFzdC5mdW4vbWVtZS5wbmcKAiEgAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8BAQEBAQADCAAAAAAAAAAAAAIBBwEAAAAAAh8HBQQGBwQRAgwCBQoHBBEFEQEMAgsCDAMLAAcAEQQHAREEBwIRBAcDEQQLAwcGBwcKATgACwEuEQc4AQIAAA==";
+  "oRzrCwcAAAUKAQAOAg4WAyQqBE4EBVJAB5IB0AEI4gKAAQbiA4QBCuYEBQzrBEMACwMGAwoBEQIFAhICEwACAgABAAYAAgEMAQABAwMHAAYEAgAACQABAAENAwQAAQ4FBAACDAgJAQIDFAMGAAQIAwUABQ8MAQEMBhAKBQADBwYLAggABwgEAAIIAQgBAQoCAQgBAQUBCAMBCAAJCQAIAwgDCAMIAwgBAQMHCAQBCwIBCQABBggEAQsCAQgAAgkABRBDcmVhdG9yUmVjaXBpZW50DExhdW5jaFRpY2tldARNRU1FBlN0cmluZwlUeENvbnRleHQHYWRkcmVzcxFjcmVhdG9yX2F1dGhvcml0eQtkdW1teV9maWVsZApmcm9tX2J5dGVzBGluaXQNbGF1bmNoX3RpY2tldARtZW1lA25ldwtuZXdfYWNjb3VudAtuZXdfYWRkcmVzcw9wdWJsaWNfdHJhbnNmZXIGc2VuZGVyBnN0cmluZwh0cmFuc2Zlcgp0eF9jb250ZXh0BHV0ZjgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADadAoCBQRNRU1FCgILCkJsYXN0IE1lbWUKAhkYQSBNZW1lIGxhdW5jaGVkIG9uIEJsYXN0CgIbGmh0dHBzOi8vYmxhc3QuZnVuL21lbWUucG5nCgIhIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fAQEBAQEAAwgAAAAAAAAAAAACAQcBAAAAAAIfBwUEBgcEEQEMAgUKBwQRBRECDAILAgwDCwAHABEEBwERBAcCEQQHAxEECwMHBgcHCgE4AAsBLhEHOAECAAA=";
 
-const DEFAULT_CREATOR_IDENTITY_BYTES = fromHex(
+const DEFAULT_CREATOR_RECIPIENT_BYTES = fromHex(
   "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
 );
 
@@ -38,11 +38,11 @@ const defaults = {
   name: bcs.string().serialize("Blast Meme").toBytes(),
   description: bcs.string().serialize("A Meme launched on Blast").toBytes(),
   iconUrl: bcs.string().serialize("https://blast.fun/meme.png").toBytes(),
-  creatorIdentityBytes: bcs
+  creatorRecipientBytes: bcs
     .vector(bcs.u8())
-    .serialize(Array.from(DEFAULT_CREATOR_IDENTITY_BYTES))
+    .serialize(Array.from(DEFAULT_CREATOR_RECIPIENT_BYTES))
     .toBytes(),
-  creatorIsX: bcs.bool().serialize(true).toBytes(),
+  creatorIsAccount: bcs.bool().serialize(true).toBytes(),
   burnable: bcs.bool().serialize(false).toBytes(),
   sellBurnBps: bcs.u64().serialize(0n).toBytes(),
 } as const;
@@ -67,13 +67,13 @@ export type MemeTemplateOptions = {
   iconUrl: string;
   burnable: boolean;
   sellBurnBps: bigint;
-  creatorIdentity: MemeCreatorIdentityInput;
+  creatorRecipient: MemeCreatorRecipientInput;
   moduleName?: string;
 };
 
-export type MemeCreatorIdentityInput =
+export type MemeCreatorRecipientInput =
   | { kind: "address"; address: string }
-  | { kind: "x"; xIdentityHash: Uint8Array };
+  | { kind: "account"; accountCommitment: Uint8Array };
 
 export type MemeTemplateIdentifiers = {
   moduleName: string;
@@ -108,7 +108,7 @@ export function initializeMemeTemplate(
 /**
  * Builds the one-module Meme package used by the launch intake.
  *
- * Its initializer creates the selected address or X identity, calls
+ * Its initializer creates the selected address or Blast account recipient, calls
  * `blast_fun::launch_ticket::new`, and transfers the ticket to the publisher.
  */
 export async function buildMemePackageBytecode(
@@ -116,7 +116,7 @@ export async function buildMemePackageBytecode(
   blastOriginalPackageId: string,
 ): Promise<Uint8Array> {
   const metadata = validateOptions(options);
-  const creatorIdentity = validateCreatorIdentity(options.creatorIdentity);
+  const creatorRecipient = validateCreatorRecipient(options.creatorRecipient);
   const dependency = normalizeBlastPackageId(blastOriginalPackageId);
   const identifiers = deriveMemeTemplateIdentifiers(
     metadata.symbol,
@@ -153,19 +153,19 @@ export async function buildMemePackageBytecode(
       replacement: bcs.string().serialize(metadata.iconUrl).toBytes(),
     },
     {
-      name: "creatorIdentityBytes",
+      name: "creatorRecipientBytes",
       type: "Vector(U8)",
-      expected: defaults.creatorIdentityBytes,
+      expected: defaults.creatorRecipientBytes,
       replacement: bcs
         .vector(bcs.u8())
-        .serialize(Array.from(creatorIdentity.bytes))
+        .serialize(Array.from(creatorRecipient.bytes))
         .toBytes(),
     },
     {
-      name: "creatorIsX",
+      name: "creatorIsAccount",
       type: "Bool",
-      expected: defaults.creatorIsX,
-      replacement: bcs.bool().serialize(creatorIdentity.isX).toBytes(),
+      expected: defaults.creatorIsAccount,
+      replacement: bcs.bool().serialize(creatorRecipient.isAccount).toBytes(),
     },
     {
       name: "burnable",
@@ -235,37 +235,43 @@ function validateOptions(options: MemeTemplateOptions) {
   };
 }
 
-function validateCreatorIdentity(identity: MemeCreatorIdentityInput): {
+function validateCreatorRecipient(recipient: MemeCreatorRecipientInput): {
   bytes: Uint8Array;
-  isX: boolean;
+  isAccount: boolean;
 } {
-  if (typeof identity !== "object" || identity === null) {
-    throw new TypeError("creatorIdentity is required");
+  if (typeof recipient !== "object" || recipient === null) {
+    throw new TypeError("creatorRecipient is required");
   }
-  if (identity.kind === "address") {
-    if (typeof identity.address !== "string") {
-      throw new TypeError("creatorIdentity.address must be a string");
+  if (recipient.kind === "address") {
+    if (typeof recipient.address !== "string") {
+      throw new TypeError("creatorRecipient.address must be a string");
     }
-    const address = normalizeSuiObjectId(identity.address);
+    const address = normalizeSuiObjectId(recipient.address);
     if (!isValidSuiObjectId(address) || address === ZERO_ADDRESS) {
       throw new RangeError(
-        "creatorIdentity.address must be a nonzero Sui address",
+        "creatorRecipient.address must be a nonzero Sui address",
       );
     }
-    return { bytes: bcs.Address.serialize(address).toBytes(), isX: false };
+    return {
+      bytes: bcs.Address.serialize(address).toBytes(),
+      isAccount: false,
+    };
   }
-  if (identity.kind === "x") {
+  if (recipient.kind === "account") {
     if (
-      !(identity.xIdentityHash instanceof Uint8Array) ||
-      identity.xIdentityHash.length !== 32
+      !(recipient.accountCommitment instanceof Uint8Array) ||
+      recipient.accountCommitment.length !== 32
     ) {
       throw new RangeError(
-        "creatorIdentity.xIdentityHash must contain 32 bytes",
+        "creatorRecipient.accountCommitment must contain 32 bytes",
       );
     }
-    return { bytes: Uint8Array.from(identity.xIdentityHash), isX: true };
+    return {
+      bytes: Uint8Array.from(recipient.accountCommitment),
+      isAccount: true,
+    };
   }
-  throw new TypeError("creatorIdentity.kind must be address or x");
+  throw new TypeError("creatorRecipient.kind must be address or account");
 }
 
 function requireString(name: string, value: string): string {
@@ -426,16 +432,18 @@ function assertTemplateWiring(
       compiled.address_identifiers[handle.address] === blastAddress &&
       compiled.identifiers[handle.name] === "creator_authority",
   );
-  const identityFunctions = compiled.function_handles.flatMap((handle) =>
+  const recipientFunctions = compiled.function_handles.flatMap((handle) =>
     handle.module === creatorAuthorityModule
       ? [compiled.identifiers[handle.name]]
       : [],
   );
   if (
-    !identityFunctions.includes("new_address") ||
-    !identityFunctions.includes("new_x")
+    !recipientFunctions.includes("new_address") ||
+    !recipientFunctions.includes("new_account")
   ) {
-    throw new TypeError("Meme template must support address and X identities");
+    throw new TypeError(
+      "Meme template must support address and account recipients",
+    );
   }
 }
 

@@ -150,7 +150,7 @@ export class LaunchpadCalls {
   claimCreatorCap(
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
-      xAttestation?: Uint8Array | null;
+      accountAttestation?: Uint8Array | null;
     },
   ) {
     const types = normalizeLaunchTypes(options);
@@ -174,7 +174,9 @@ export class LaunchpadCalls {
           ),
           tx.pure.option(
             "vector<u8>",
-            options.xAttestation ? Array.from(options.xAttestation) : null,
+            options.accountAttestation
+              ? Array.from(options.accountAttestation)
+              : null,
           ),
           tx.object.clock(),
         ],
@@ -398,7 +400,7 @@ export class LaunchpadTransactions {
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
       recipient: string;
-      xAttestation?: Uint8Array | null;
+      accountAttestation?: Uint8Array | null;
     },
   ): Transaction {
     const tx = new Transaction();

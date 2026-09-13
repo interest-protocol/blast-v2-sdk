@@ -196,11 +196,12 @@ execution.
 ## Generated Meme package
 
 `publishMeme` uses the reviewed, compiled Move template. It patches the type
-identifiers, metadata, creator identity, launch policy, and deployed Blast
-package dependency. The creator can be the publisher, another Sui address, or
-an X identity. The transaction publishes the module and immediately makes the
-package immutable. Its initializer calls `blast_fun::launch_ticket::new`, so the
-publisher receives the resulting launch ticket for the next launch transaction.
+identifiers, metadata, creator recipient, launch policy, and deployed Blast
+package dependency. The recipient can be the publisher, another Sui address,
+or a provider-independent Blast account. The transaction publishes the module
+and immediately makes the package immutable. Its initializer calls
+`blast_fun::launch_ticket::new`, so the publisher receives the resulting launch
+ticket for the next launch transaction.
 
 ```ts
 const transaction = client.blastLaunchpad.tx.publishMeme({
@@ -210,15 +211,22 @@ const transaction = client.blastLaunchpad.tx.publishMeme({
   iconUrl: "https://example.com/dog.png",
   burnable: false,
   sellBurnBps: 0n,
-  creatorIdentity: { kind: "address", address: "0x..." },
+  creatorRecipient: { kind: "address", address: "0x..." },
 });
 ```
 
-For an X creator, pass its 32-byte identity hash instead:
+For a Blast account recipient, pass its 32-byte account commitment instead:
 
 ```ts
-creatorIdentity: { kind: "x", xIdentityHash },
+creatorRecipient: { kind: "account", accountCommitment },
 ```
+
+An account commitment may identify an unclaimed account created for a future
+recipient. The backend binds provider logins to that account by immutable
+provider subject ID; mutable handles such as `@name` are display metadata only.
+Use `encodeCreatorClaimMessage` for the bytes signed by the creator-claim key,
+then wrap its Ed25519 signature with `encodeCreatorClaimAttestation` before
+passing it as `accountAttestation` to `claimCreatorCap`.
 
 Browser builds initialize `@mysten/move-bytecode-template` automatically. If a
 bundler cannot locate its WASM asset, call `initializeMemeTemplate` once with
