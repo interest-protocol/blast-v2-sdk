@@ -126,7 +126,7 @@ test("replays lifecycle, reserves, and fee deltas from ordered events", () => {
         migration_quote: 190n,
         disposed_meme: 612n,
         protocol_meme_graduation_fee: 20n,
-        quote_migration_fee: 19n,
+        protocol_quote_migration_fee: 19n,
       },
       6,
     ),

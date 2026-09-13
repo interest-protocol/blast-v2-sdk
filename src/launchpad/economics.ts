@@ -11,13 +11,13 @@ export type LaunchEconomicsInput = {
   poolMemeProvision: bigint;
   virtualQuote: bigint;
   migrationQuoteTarget: bigint;
-  quoteMigrationFeeBps: bigint;
+  protocolQuoteMigrationFeeBps: bigint;
 };
 
 export type LaunchEconomics = {
   terminalCurveMeme: bigint;
   curveMemeReleased: bigint;
-  quoteMigrationFee: bigint;
+  protocolQuoteMigrationFee: bigint;
   netQuote: bigint;
   openingValuation: bigint;
   curveTerminalValuation: bigint;
@@ -39,7 +39,7 @@ export function deriveLaunchEconomics(
     poolMemeProvision,
     virtualQuote,
     migrationQuoteTarget,
-    quoteMigrationFeeBps,
+    protocolQuoteMigrationFeeBps,
   } = input;
 
   requirePositiveU64("initialMemeSupply", initialMemeSupply);
@@ -53,7 +53,10 @@ export function deriveLaunchEconomics(
       "curveMemeInventory + poolMemeProvision cannot exceed initialMemeSupply",
     );
   }
-  requireBasisPoints("quoteMigrationFeeBps", quoteMigrationFeeBps);
+  requireBasisPoints(
+    "protocolQuoteMigrationFeeBps",
+    protocolQuoteMigrationFeeBps,
+  );
 
   const effectiveTerminalQuote = virtualQuote + migrationQuoteTarget;
   const terminalCurveMeme = mulDivUp(
@@ -62,17 +65,17 @@ export function deriveLaunchEconomics(
     effectiveTerminalQuote,
   );
   const curveMemeReleased = curveMemeInventory - terminalCurveMeme;
-  const quoteMigrationFee = mulDivUp(
+  const protocolQuoteMigrationFee = mulDivUp(
     migrationQuoteTarget,
-    quoteMigrationFeeBps,
+    protocolQuoteMigrationFeeBps,
     BASIS_POINTS_DENOMINATOR,
   );
-  const netQuote = migrationQuoteTarget - quoteMigrationFee;
+  const netQuote = migrationQuoteTarget - protocolQuoteMigrationFee;
 
   return {
     terminalCurveMeme,
     curveMemeReleased,
-    quoteMigrationFee,
+    protocolQuoteMigrationFee,
     netQuote,
     openingValuation: (initialMemeSupply * virtualQuote) / curveMemeInventory,
     curveTerminalValuation:

@@ -76,8 +76,6 @@ test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
         migration_meme: 200n,
         migration_quote: 190n,
         disposed_meme: 610n,
-        protocol_meme_fee_total: 5n,
-        protocol_quote_fee_total: 6n,
       },
       2,
     ),
@@ -117,43 +115,64 @@ test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
         pool_id: "0xe",
         position_id: "0xf",
         venue: "0x320::cetus::Venue",
-        protocol_meme_fee_total: 11n,
-        creator_meme_fee_total: 12n,
-        protocol_quote_fee_total: 13n,
-        creator_quote_fee_total: 14n,
+        protocol_meme_fee_delta: 11n,
+        creator_meme_fee_delta: 12n,
+        protocol_quote_fee_delta: 13n,
+        creator_quote_fee_delta: 14n,
         principal_liquidity: 1_000n,
       },
       5,
     ),
     migratorDecoded(
+      "LpFeesCollected",
+      {
+        vault_id: "0xd",
+        pool_id: "0xe",
+        position_id: "0xf",
+        venue: "0x320::cetus::Venue",
+        protocol_meme_fee_delta: 2n,
+        creator_meme_fee_delta: 3n,
+        protocol_quote_fee_delta: 4n,
+        creator_quote_fee_delta: 5n,
+        principal_liquidity: 1_000n,
+      },
+      6,
+    ),
+    migratorDecoded(
       "CreatorFeesClaimed",
       {
         vault_id: "0xd",
-        protocol_meme_fee_total: 11n,
-        creator_meme_fee_total: 0n,
-        protocol_quote_fee_total: 13n,
-        creator_quote_fee_total: 0n,
       },
-      6,
+      7,
     ),
     migratorDecoded(
       "ProtocolFeesClaimed",
       {
         vault_id: "0xd",
-        protocol_meme_fee_total: 0n,
-        creator_meme_fee_total: 0n,
-        protocol_quote_fee_total: 0n,
-        creator_quote_fee_total: 0n,
       },
-      7,
+      8,
     ),
   ];
+
+  const beforeCreatorClaim = inputs
+    .slice(0, -2)
+    .reduce(reduceLaunchpadProductInput, createLaunchpadProductProjection());
+  const accruedVault =
+    beforeCreatorClaim.migrators.vaults[normalizeSuiObjectId("0xd")];
+  assert.equal(accruedVault?.protocolMemeFees, 13n);
+  assert.equal(accruedVault?.creatorMemeFees, 15n);
+  assert.equal(accruedVault?.protocolQuoteFees, 17n);
+  assert.equal(accruedVault?.creatorQuoteFees, 19n);
 
   const beforeProtocolClaim = inputs
     .slice(0, -1)
     .reduce(reduceLaunchpadProductInput, createLaunchpadProductProjection());
   const beforeClaimVault =
     beforeProtocolClaim.migrators.vaults[normalizeSuiObjectId("0xd")];
+  assert.equal(beforeClaimVault?.protocolMemeFees, 13n);
+  assert.equal(beforeClaimVault?.creatorMemeFees, 0n);
+  assert.equal(beforeClaimVault?.protocolQuoteFees, 17n);
+  assert.equal(beforeClaimVault?.creatorQuoteFees, 0n);
   assert.equal(beforeClaimVault?.protocolMemeResidual, 1n);
   assert.equal(beforeClaimVault?.protocolQuoteResidual, 1n);
 

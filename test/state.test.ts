@@ -34,7 +34,7 @@ function serializeLaunch(id = objectId): Uint8Array {
       migration_quote_target: 3_000n,
       quote_fee_bps: bps(100n),
       meme_fee_bps: bps(25n),
-      quote_migration_fee_bps: bps(75n),
+      protocol_quote_migration_fee_bps: bps(75n),
       migration_witness: typeName(migrationWitness),
       meme_reserve: balance(800_000n),
       real_quote_reserve: balance(500n),

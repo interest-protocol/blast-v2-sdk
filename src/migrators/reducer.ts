@@ -272,10 +272,13 @@ export function reduceMigratorEvent(
         venueType: payload.venue,
         memeType: payload.meme,
         quoteType: payload.quote,
-        protocolMemeFees: payload.protocol_meme_fee_total,
-        creatorMemeFees: payload.creator_meme_fee_total,
-        protocolQuoteFees: payload.protocol_quote_fee_total,
-        creatorQuoteFees: payload.creator_quote_fee_total,
+        protocolMemeFees:
+          vault.protocolMemeFees + payload.protocol_meme_fee_delta,
+        creatorMemeFees: vault.creatorMemeFees + payload.creator_meme_fee_delta,
+        protocolQuoteFees:
+          vault.protocolQuoteFees + payload.protocol_quote_fee_delta,
+        creatorQuoteFees:
+          vault.creatorQuoteFees + payload.creator_quote_fee_delta,
         principalLiquidity: payload.principal_liquidity,
       }));
     }
@@ -283,20 +286,16 @@ export function reduceMigratorEvent(
       const payload = event.payload;
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
-        protocolMemeFees: payload.protocol_meme_fee_total,
-        creatorMemeFees: payload.creator_meme_fee_total,
-        protocolQuoteFees: payload.protocol_quote_fee_total,
-        creatorQuoteFees: payload.creator_quote_fee_total,
+        creatorMemeFees: 0n,
+        creatorQuoteFees: 0n,
       }));
     }
     case "ProtocolFeesClaimed": {
       const payload = event.payload;
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
-        protocolMemeFees: payload.protocol_meme_fee_total,
-        creatorMemeFees: payload.creator_meme_fee_total,
-        protocolQuoteFees: payload.protocol_quote_fee_total,
-        creatorQuoteFees: payload.creator_quote_fee_total,
+        protocolMemeFees: 0n,
+        protocolQuoteFees: 0n,
         protocolMemeResidual: 0n,
         protocolQuoteResidual: 0n,
       }));

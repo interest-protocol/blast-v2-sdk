@@ -8,7 +8,8 @@
       "docs/research/sui-deepbook-indexer-architecture-2026.md"
     ],
     "approvedAbiAmendments": [
-      "contracts ADR 0011: compact singleton event payloads before release",
+      "contracts ADR 0011: compact replay-complete event payloads before release",
+      "contracts ADR 0027: make protocol ownership explicit in Quote migration fee names",
       "contracts ADR 0067: retire the Full Sail migrator before release",
       "contracts ADR 0068: compact the LP-fee principal snapshot before release",
       "contracts ADR 0069: consolidate launch graduation and move migration math into migrators",
@@ -427,7 +428,7 @@
               "positional": false,
               "fields": [
                 {
-                  "name": "quote_migration_fee_bps",
+                  "name": "protocol_quote_migration_fee_bps",
                   "type": "u64"
                 },
                 {
@@ -531,7 +532,7 @@
                   "type": "u64"
                 },
                 {
-                  "name": "quote_migration_fee_bps",
+                  "name": "protocol_quote_migration_fee_bps",
                   "type": "u64"
                 },
                 {
@@ -713,7 +714,7 @@
                   "type": "u64"
                 },
                 {
-                  "name": "quote_migration_fee",
+                  "name": "protocol_quote_migration_fee",
                   "type": "u64"
                 }
               ],
@@ -1110,10 +1111,6 @@
                 "u64",
                 "u64",
                 "u64",
-                "u64",
-                "u64",
-                "u64",
-                "u64",
                 "u64"
               ]
             },
@@ -1365,50 +1362,7 @@
               ]
             },
             {
-              "name": "new",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "fees"
-                    },
-                    "name": "FeeLedger",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      },
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "totals",
+              "name": "has_protocol_fees",
               "sdk": "move-composition",
               "entry": false,
               "typeParameters": [
@@ -1454,10 +1408,50 @@
                 }
               ],
               "returns": [
-                "u64",
-                "u64",
-                "u64",
-                "u64"
+                "bool"
+              ]
+            },
+            {
+              "name": "new",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "fees"
+                    },
+                    "name": "FeeLedger",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
               ]
             }
           ],
@@ -2811,7 +2805,7 @@
                   }
                 },
                 {
-                  "name": "quote_migration_fee_bps",
+                  "name": "protocol_quote_migration_fee_bps",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -3659,7 +3653,7 @@
                   }
                 },
                 {
-                  "name": "quote_migration_fee_bps",
+                  "name": "protocol_quote_migration_fee_bps",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -7565,22 +7559,6 @@
                 {
                   "name": "quote_amount",
                   "type": "u64"
-                },
-                {
-                  "name": "protocol_meme_fee_total",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_meme_fee_total",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_quote_fee_total",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_quote_fee_total",
-                  "type": "u64"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -7702,22 +7680,6 @@
                 },
                 {
                   "name": "creator_quote_fee_delta",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_meme_fee_total",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_meme_fee_total",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_quote_fee_total",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_quote_fee_total",
                   "type": "u64"
                 },
                 {
@@ -7919,22 +7881,6 @@
                 },
                 {
                   "name": "quote_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_meme_fee_total",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_meme_fee_total",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_quote_fee_total",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_quote_fee_total",
                   "type": "u64"
                 }
               ],

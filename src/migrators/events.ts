@@ -60,10 +60,6 @@ export const migratorEventSpecs = {
     claimant: "address",
     meme_amount: "u64",
     quote_amount: "u64",
-    protocol_meme_fee_total: "u64",
-    creator_meme_fee_total: "u64",
-    protocol_quote_fee_total: "u64",
-    creator_quote_fee_total: "u64",
   },
   LpFeesCollected: {
     vault_id: "id",
@@ -80,10 +76,6 @@ export const migratorEventSpecs = {
     creator_meme_fee_delta: "u64",
     protocol_quote_fee_delta: "u64",
     creator_quote_fee_delta: "u64",
-    protocol_meme_fee_total: "u64",
-    creator_meme_fee_total: "u64",
-    protocol_quote_fee_total: "u64",
-    creator_quote_fee_total: "u64",
     principal_liquidity: "u128",
   },
   MigrationCompleted: {
@@ -112,10 +104,6 @@ export const migratorEventSpecs = {
     claimant: "address",
     meme_amount: "u64",
     quote_amount: "u64",
-    protocol_meme_fee_total: "u64",
-    creator_meme_fee_total: "u64",
-    protocol_quote_fee_total: "u64",
-    creator_quote_fee_total: "u64",
   },
   VaultCreated: {
     vault_id: "id",

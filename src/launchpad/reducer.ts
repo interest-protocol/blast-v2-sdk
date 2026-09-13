@@ -33,7 +33,7 @@ export type LaunchEventProjection = {
   migrationQuoteTarget: bigint;
   quoteFeeBps: bigint;
   memeFeeBps: bigint;
-  quoteMigrationFeeBps: bigint;
+  protocolQuoteMigrationFeeBps: bigint;
   protocolMemeGraduationFeeBps: bigint;
   memeLiquidityProvisionBps: bigint;
   migration: LaunchMigrationProjection | null;
@@ -58,7 +58,7 @@ export type LaunchpadConfigProjection = {
     memeFeeBps: bigint;
   } | null;
   graduationDefaults: {
-    quoteMigrationFeeBps: bigint;
+    protocolQuoteMigrationFeeBps: bigint;
     protocolMemeGraduationFeeBps: bigint;
     memeLiquidityProvisionBps: bigint;
   } | null;
@@ -182,7 +182,8 @@ export function reduceLaunchpadEvent(
             migrationQuoteTarget: payload.migration_quote_target,
             quoteFeeBps: payload.quote_fee_bps,
             memeFeeBps: payload.meme_fee_bps,
-            quoteMigrationFeeBps: payload.quote_migration_fee_bps,
+            protocolQuoteMigrationFeeBps:
+              payload.protocol_quote_migration_fee_bps,
             protocolMemeGraduationFeeBps:
               payload.protocol_meme_graduation_fee_bps,
             memeLiquidityProvisionBps: payload.meme_liquidity_provision_bps,
@@ -203,7 +204,8 @@ export function reduceLaunchpadEvent(
         realQuoteReserve: payload.real_quote_reserve,
         protocolMemeFees:
           launch.protocolMemeFees + payload.protocol_meme_fee_delta,
-        creatorMemeFees: launch.creatorMemeFees + payload.creator_meme_fee_delta,
+        creatorMemeFees:
+          launch.creatorMemeFees + payload.creator_meme_fee_delta,
         protocolQuoteFees:
           launch.protocolQuoteFees + payload.protocol_quote_fee_delta,
         creatorQuoteFees:
@@ -252,7 +254,7 @@ export function reduceLaunchpadEvent(
         protocolMemeFees:
           launch.protocolMemeFees + payload.protocol_meme_graduation_fee,
         protocolQuoteFees:
-          launch.protocolQuoteFees + payload.quote_migration_fee,
+          launch.protocolQuoteFees + payload.protocol_quote_migration_fee,
         migration: {
           memeAmount: payload.migration_meme,
           quoteAmount: payload.migration_quote,
@@ -279,11 +281,11 @@ export function reduceLaunchpadEvent(
       return updateConfig(next, {
         ...state.config,
         graduationDefaults: {
-          quoteMigrationFeeBps: event.payload.quote_migration_fee_bps,
+          protocolQuoteMigrationFeeBps:
+            event.payload.protocol_quote_migration_fee_bps,
           protocolMemeGraduationFeeBps:
             event.payload.protocol_meme_graduation_fee_bps,
-          memeLiquidityProvisionBps:
-            event.payload.meme_liquidity_provision_bps,
+          memeLiquidityProvisionBps: event.payload.meme_liquidity_provision_bps,
         },
       });
     case "QuoteAllowed": {

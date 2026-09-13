@@ -46,7 +46,7 @@ export const launchBcs = bcs.struct("Launch", {
   migration_quote_target: bcs.u64(),
   quote_fee_bps: BpsBcs,
   meme_fee_bps: BpsBcs,
-  quote_migration_fee_bps: BpsBcs,
+  protocol_quote_migration_fee_bps: BpsBcs,
   migration_witness: TypeNameBcs,
   meme_reserve: suiBalanceBcs,
   real_quote_reserve: suiBalanceBcs,
@@ -71,7 +71,7 @@ export type LaunchState = CurveState &
     quoteType: string;
     lifecycle: LaunchLifecycle;
     sellBurnBps: bigint;
-    quoteMigrationFeeBps: bigint;
+    protocolQuoteMigrationFeeBps: bigint;
     migrationWitnessType: string;
     pendingBurn: bigint;
     protocolMemeGraduationFee: bigint;
@@ -141,7 +141,9 @@ export function decodeLaunchObject(
     migrationQuoteTarget: toBigInt(parsed.migration_quote_target),
     quoteFeeBps: toBigInt(parsed.quote_fee_bps.value),
     memeFeeBps: toBigInt(parsed.meme_fee_bps.value),
-    quoteMigrationFeeBps: toBigInt(parsed.quote_migration_fee_bps.value),
+    protocolQuoteMigrationFeeBps: toBigInt(
+      parsed.protocol_quote_migration_fee_bps.value,
+    ),
     migrationWitnessType: normalizeStructTag(
       decodeTypeName(parsed.migration_witness.name.bytes),
     ),

@@ -22,7 +22,8 @@ const artifactDeclarations = [
       ["migrators", "migrators", "blast_fun_migrators"],
     ],
     approvedAbiAmendments: [
-      "contracts ADR 0011: compact singleton event payloads before release",
+      "contracts ADR 0011: compact replay-complete event payloads before release",
+      "contracts ADR 0027: make protocol ownership explicit in Quote migration fee names",
       "contracts ADR 0067: retire the Full Sail migrator before release",
       "contracts ADR 0068: compact the LP-fee principal snapshot before release",
       "contracts ADR 0069: consolidate launch graduation and move migration math into migrators",
