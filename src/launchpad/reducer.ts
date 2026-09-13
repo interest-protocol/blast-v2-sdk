@@ -307,7 +307,7 @@ export function reduceLaunchpadEvent(
     }
     case "QuoteDisallowed": {
       const quotes = { ...state.config.quotes };
-      delete quotes[event.payload.quote];
+      delete quotes[event.payload.pos0];
       return updateConfig(next, { ...state.config, quotes });
     }
     case "MigrationWitnessAllowed":
@@ -315,12 +315,12 @@ export function reduceLaunchpadEvent(
         ...state.config,
         migrationWitnesses: {
           ...state.config.migrationWitnesses,
-          [event.payload.migration_witness]: true,
+          [event.payload.pos0]: true,
         },
       });
     case "MigrationWitnessDisallowed": {
       const migrationWitnesses = { ...state.config.migrationWitnesses };
-      delete migrationWitnesses[event.payload.migration_witness];
+      delete migrationWitnesses[event.payload.pos0];
       return updateConfig(next, { ...state.config, migrationWitnesses });
     }
     case "CreatorCapClaimed": {

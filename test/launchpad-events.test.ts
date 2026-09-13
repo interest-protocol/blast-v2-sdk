@@ -182,11 +182,7 @@ test("replays creator claims and signer changes", () => {
   );
   const projection = reduceLaunchpadEvent(
     beforeRevocation,
-    decoded(
-      "CreatorClaimSignerRevoked",
-      { previous_public_key: new Uint8Array([9]) },
-      32,
-    ),
+    decoded("CreatorClaimSignerRevoked", { pos0: new Uint8Array([9]) }, 32),
   );
   assert.deepEqual(
     projection.administration.creatorCapClaims[

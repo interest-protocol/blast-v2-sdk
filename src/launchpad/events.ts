@@ -104,8 +104,8 @@ export const launchpadEventSpecs = {
     protocol_meme_fee_total: "u64",
     protocol_quote_fee_total: "u64",
   },
-  MigrationWitnessAllowed: { migration_witness: "typeName" },
-  MigrationWitnessDisallowed: { migration_witness: "typeName" },
+  MigrationWitnessAllowed: { pos0: "typeName" },
+  MigrationWitnessDisallowed: { pos0: "typeName" },
   ProtocolFeesClaimed: {
     launch_id: "id",
     meme_amount: "u64",
@@ -120,11 +120,7 @@ export const launchpadEventSpecs = {
     virtual_quote: "u64",
     migration_quote_target: "u64",
   },
-  QuoteDisallowed: {
-    quote: "typeName",
-    previous_virtual_quote: "u64",
-    previous_migration_quote_target: "u64",
-  },
+  QuoteDisallowed: { pos0: "typeName" },
   QuoteParametersChanged: {
     quote: "typeName",
     old_virtual_quote: "u64",
@@ -150,7 +146,7 @@ export const launchpadEventSpecs = {
     meme_reserve: "u64",
     real_quote_reserve: "u64",
   },
-  CreatorClaimSignerRevoked: { previous_public_key: "bytes" },
+  CreatorClaimSignerRevoked: { pos0: "bytes" },
   CreatorClaimSignerSet: {
     previous_public_key: "bytes",
     signer_public_key: "bytes",
