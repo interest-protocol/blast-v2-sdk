@@ -26,6 +26,7 @@ const artifactDeclarations = [
       "contracts ADR 0067: retire the Full Sail migrator before release",
       "contracts ADR 0068: compact the LP-fee principal snapshot before release",
       "contracts ADR 0069: consolidate launch graduation and move migration math into migrators",
+      "contracts ADR 0079: remove redundant launch event totals and history",
       "contracts ADR 0080: make creator recipients provider-independent",
     ],
   },

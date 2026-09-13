@@ -75,8 +75,6 @@ export type LaunchpadAdministrationProjection = {
       {
         memeType: string;
         claimant: string;
-        accountCommitment: Uint8Array | null;
-        claimExpiryMs: bigint | null;
       }
     >
   >;
@@ -203,10 +201,13 @@ export function reduceLaunchpadEvent(
             : launch.lifecycle,
         memeReserve: payload.meme_reserve,
         realQuoteReserve: payload.real_quote_reserve,
-        protocolMemeFees: payload.protocol_meme_fee_total,
-        creatorMemeFees: payload.creator_meme_fee_total,
-        protocolQuoteFees: payload.protocol_quote_fee_total,
-        creatorQuoteFees: payload.creator_quote_fee_total,
+        protocolMemeFees:
+          launch.protocolMemeFees + payload.protocol_meme_fee_delta,
+        creatorMemeFees: launch.creatorMemeFees + payload.creator_meme_fee_delta,
+        protocolQuoteFees:
+          launch.protocolQuoteFees + payload.protocol_quote_fee_delta,
+        creatorQuoteFees:
+          launch.creatorQuoteFees + payload.creator_quote_fee_delta,
       }));
     }
     case "Sold": {
@@ -216,10 +217,14 @@ export function reduceLaunchpadEvent(
         memeReserve: payload.meme_reserve,
         realQuoteReserve: payload.real_quote_reserve,
         pendingBurn: payload.pending_burn_total,
-        protocolMemeFees: payload.protocol_meme_fee_total,
-        creatorMemeFees: payload.creator_meme_fee_total,
-        protocolQuoteFees: payload.protocol_quote_fee_total,
-        creatorQuoteFees: payload.creator_quote_fee_total,
+        protocolMemeFees:
+          launch.protocolMemeFees + payload.protocol_meme_fee_delta,
+        creatorMemeFees:
+          launch.creatorMemeFees + payload.creator_meme_fee_delta,
+        protocolQuoteFees:
+          launch.protocolQuoteFees + payload.protocol_quote_fee_delta,
+        creatorQuoteFees:
+          launch.creatorQuoteFees + payload.creator_quote_fee_delta,
       }));
     }
     case "CreatorFeesClaimed":
@@ -244,8 +249,10 @@ export function reduceLaunchpadEvent(
         pendingBurn: 0n,
         protocolMemeGraduationFee: 0n,
         memeLiquidityProvision: 0n,
-        protocolMemeFees: payload.protocol_meme_fee_total,
-        protocolQuoteFees: payload.protocol_quote_fee_total,
+        protocolMemeFees:
+          launch.protocolMemeFees + payload.protocol_meme_graduation_fee,
+        protocolQuoteFees:
+          launch.protocolQuoteFees + payload.quote_migration_fee,
         migration: {
           memeAmount: payload.migration_meme,
           quoteAmount: payload.migration_quote,
@@ -258,25 +265,25 @@ export function reduceLaunchpadEvent(
     case "ProtocolFeeShareChanged":
       return updateConfig(next, {
         ...state.config,
-        protocolFeeShareBps: event.payload.new_protocol_fee_share_bps,
+        protocolFeeShareBps: event.payload.pos0,
       });
     case "LaunchTradeFeesChanged":
       return updateConfig(next, {
         ...state.config,
         tradeFeeDefaults: {
-          quoteFeeBps: event.payload.new_quote_fee_bps,
-          memeFeeBps: event.payload.new_meme_fee_bps,
+          quoteFeeBps: event.payload.quote_fee_bps,
+          memeFeeBps: event.payload.meme_fee_bps,
         },
       });
     case "GraduationDefaultsChanged":
       return updateConfig(next, {
         ...state.config,
         graduationDefaults: {
-          quoteMigrationFeeBps: event.payload.new_quote_migration_fee_bps,
+          quoteMigrationFeeBps: event.payload.quote_migration_fee_bps,
           protocolMemeGraduationFeeBps:
-            event.payload.new_protocol_meme_graduation_fee_bps,
+            event.payload.protocol_meme_graduation_fee_bps,
           memeLiquidityProvisionBps:
-            event.payload.new_meme_liquidity_provision_bps,
+            event.payload.meme_liquidity_provision_bps,
         },
       });
     case "QuoteAllowed": {
@@ -299,8 +306,8 @@ export function reduceLaunchpadEvent(
         quotes: {
           ...state.config.quotes,
           [payload.quote]: {
-            virtualQuote: payload.new_virtual_quote,
-            migrationQuoteTarget: payload.new_migration_quote_target,
+            virtualQuote: payload.virtual_quote,
+            migrationQuoteTarget: payload.migration_quote_target,
           },
         },
       });
@@ -329,11 +336,9 @@ export function reduceLaunchpadEvent(
         ...state.administration,
         creatorCapClaims: {
           ...state.administration.creatorCapClaims,
-          [payload.meme]: {
-            memeType: payload.meme,
+          [payload.pos0]: {
+            memeType: payload.pos0,
             claimant: event.sender,
-            accountCommitment: payload.account_commitment,
-            claimExpiryMs: payload.claim_expiry_ms,
           },
         },
       });
@@ -341,7 +346,7 @@ export function reduceLaunchpadEvent(
     case "CreatorClaimSignerSet":
       return updateAdministration(next, {
         ...state.administration,
-        creatorClaimSignerPublicKey: event.payload.signer_public_key,
+        creatorClaimSignerPublicKey: event.payload.pos0,
       });
     case "CreatorClaimSignerRevoked":
       return updateAdministration(next, {

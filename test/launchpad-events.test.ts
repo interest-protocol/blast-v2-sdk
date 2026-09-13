@@ -47,7 +47,7 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
   }
 });
 
-test("replays lifecycle, reserves, and launch fee totals from ordered events", () => {
+test("replays lifecycle, reserves, and fee deltas from ordered events", () => {
   const events = [
     decoded(
       "LaunchTicketCreated",
@@ -75,10 +75,10 @@ test("replays lifecycle, reserves, and launch fee totals from ordered events", (
         launch_id: "0xc",
         meme_reserve: 700n,
         real_quote_reserve: 100n,
-        protocol_meme_fee_total: 2n,
-        creator_meme_fee_total: 3n,
-        protocol_quote_fee_total: 4n,
-        creator_quote_fee_total: 5n,
+        protocol_meme_fee_delta: 2n,
+        creator_meme_fee_delta: 3n,
+        protocol_quote_fee_delta: 4n,
+        creator_quote_fee_delta: 5n,
       },
       2,
     ),
@@ -89,10 +89,10 @@ test("replays lifecycle, reserves, and launch fee totals from ordered events", (
         meme_reserve: 720n,
         real_quote_reserve: 80n,
         pending_burn_total: 12n,
-        protocol_meme_fee_total: 6n,
-        creator_meme_fee_total: 7n,
-        protocol_quote_fee_total: 8n,
-        creator_quote_fee_total: 9n,
+        protocol_meme_fee_delta: 4n,
+        creator_meme_fee_delta: 4n,
+        protocol_quote_fee_delta: 4n,
+        creator_quote_fee_delta: 4n,
       },
       3,
     ),
@@ -102,10 +102,10 @@ test("replays lifecycle, reserves, and launch fee totals from ordered events", (
         launch_id: "0xc",
         meme_reserve: 600n,
         real_quote_reserve: 200n,
-        protocol_meme_fee_total: 10n,
-        creator_meme_fee_total: 11n,
-        protocol_quote_fee_total: 12n,
-        creator_quote_fee_total: 13n,
+        protocol_meme_fee_delta: 4n,
+        creator_meme_fee_delta: 4n,
+        protocol_quote_fee_delta: 4n,
+        creator_quote_fee_delta: 4n,
       },
       4,
     ),
@@ -125,8 +125,8 @@ test("replays lifecycle, reserves, and launch fee totals from ordered events", (
         migration_meme: 200n,
         migration_quote: 190n,
         disposed_meme: 612n,
-        protocol_meme_fee_total: 30n,
-        protocol_quote_fee_total: 31n,
+        protocol_meme_graduation_fee: 20n,
+        quote_migration_fee: 19n,
       },
       6,
     ),
@@ -161,16 +161,14 @@ test("replays creator claims and signer changes", () => {
     decoded(
       "CreatorCapClaimed",
       {
-        meme: "0xa::meme::MEME",
-        account_commitment: new Uint8Array([7, 2]),
-        claim_expiry_ms: 99n,
+        pos0: "0xa::meme::MEME",
       },
       30,
     ),
     decoded(
       "CreatorClaimSignerSet",
       {
-        signer_public_key: new Uint8Array([9]),
+        pos0: new Uint8Array([9]),
       },
       31,
     ),
@@ -182,7 +180,7 @@ test("replays creator claims and signer changes", () => {
   );
   const projection = reduceLaunchpadEvent(
     beforeRevocation,
-    decoded("CreatorClaimSignerRevoked", { pos0: new Uint8Array([9]) }, 32),
+    decoded("CreatorClaimSignerRevoked", {}, 32),
   );
   assert.deepEqual(
     projection.administration.creatorCapClaims[
@@ -191,8 +189,6 @@ test("replays creator claims and signer changes", () => {
     {
       memeType: normalizedType("0xa::meme::MEME"),
       claimant: normalizeSuiObjectId("0xd"),
-      accountCommitment: new Uint8Array([7, 2]),
-      claimExpiryMs: 99n,
     },
   );
   assert.equal(projection.administration.creatorClaimSignerPublicKey, null);
