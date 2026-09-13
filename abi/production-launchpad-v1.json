@@ -18,674 +18,6 @@
     "launchpad": {
       "address": "blast_fun",
       "modules": {
-        "acl": {
-          "functions": [
-            {
-              "name": "accept_super_admin_transfer",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "ProtocolAuthority",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "clock"
-                        },
-                        "name": "Clock",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "begin_super_admin_transfer",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "ProtocolAuthority",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "SuperAdminCap",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                "address",
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "clock"
-                        },
-                        "name": "Clock",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "cancel_super_admin_transfer",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "ProtocolAuthority",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "SuperAdminCap",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "destroy_admin_cap",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "ProtocolAuthority",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "acl"
-                    },
-                    "name": "AdminCap",
-                    "type_arguments": []
-                  }
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "destroy_retired_super_admin_cap",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "ProtocolAuthority",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "acl"
-                    },
-                    "name": "SuperAdminCap",
-                    "type_arguments": []
-                  }
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "grant_admin",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "ProtocolAuthority",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "SuperAdminCap",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                "address",
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "revoke_admin",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "ProtocolAuthority",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "SuperAdminCap",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "object"
-                    },
-                    "name": "ID",
-                    "type_arguments": []
-                  }
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "sign_in",
-              "sdk": "compositional",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "ProtocolAuthority",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "acl"
-                    },
-                    "name": "AdminWitness",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            }
-          ],
-          "structs": [
-            {
-              "name": "AdminCap",
-              "abilities": [
-                "Key",
-                "Store"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "AdminWitness",
-              "abilities": [
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": true,
-              "fields": [
-                {
-                  "name": "dummy_field",
-                  "type": "bool"
-                }
-              ]
-            },
-            {
-              "name": "PendingSuperAdminTransfer",
-              "abilities": [
-                "Drop",
-                "Store"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "recipient",
-                  "type": "address"
-                },
-                {
-                  "name": "execute_after_ms",
-                  "type": "u64"
-                }
-              ]
-            },
-            {
-              "name": "ProtocolAuthority",
-              "abilities": [
-                "Key"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "super_admin_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "admins",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "vec_set"
-                      },
-                      "name": "VecSet",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "sui",
-                                "name": "object"
-                              },
-                              "name": "ID",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": false
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
-                  "name": "pending_super_admin",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "option"
-                      },
-                      "name": "Option",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_fun",
-                                "name": "acl"
-                              },
-                              "name": "PendingSuperAdminTransfer",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": false
-                        }
-                      ]
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "SuperAdminCap",
-              "abilities": [
-                "Key"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ]
-            }
-          ],
-          "enums": [],
-          "events": []
-        },
         "blast": {
           "functions": [],
           "structs": [
@@ -934,89 +266,6 @@
           "enums": [],
           "events": [
             {
-              "name": "AdminDestroyed",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "admin_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "was_active",
-                  "type": "bool"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "AdminGranted",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "admin_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "recipient",
-                  "type": "address"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "AdminRevoked",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "admin_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
               "name": "Bought",
               "abilities": [
                 "Copy",
@@ -1039,40 +288,6 @@
                   }
                 },
                 {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "buyer",
-                  "type": "address"
-                },
-                {
-                  "name": "quote_supplied",
-                  "type": "u64"
-                },
-                {
                   "name": "quote_in_gross",
                   "type": "u64"
                 },
@@ -1081,23 +296,7 @@
                   "type": "u64"
                 },
                 {
-                  "name": "quote_fee",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_in_net",
-                  "type": "u64"
-                },
-                {
                   "name": "meme_out_gross",
-                  "type": "u64"
-                },
-                {
-                  "name": "meme_fee",
-                  "type": "u64"
-                },
-                {
-                  "name": "meme_out_net",
                   "type": "u64"
                 },
                 {
@@ -1143,10 +342,6 @@
                 {
                   "name": "real_quote_reserve",
                   "type": "u64"
-                },
-                {
-                  "name": "crossed_threshold",
-                  "type": "bool"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -1194,10 +389,6 @@
                   }
                 },
                 {
-                  "name": "creator",
-                  "type": "address"
-                },
-                {
                   "name": "x_claim_expiry_ms",
                   "type": {
                     "Datatype": {
@@ -1239,36 +430,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "claimant",
-                  "type": "address"
                 },
                 {
                   "name": "meme_amount",
@@ -1353,19 +514,6 @@
                   }
                 },
                 {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
                   "name": "quote",
                   "type": {
                     "Datatype": {
@@ -1392,40 +540,7 @@
                   }
                 },
                 {
-                  "name": "launcher",
-                  "type": "address"
-                },
-                {
-                  "name": "metadata_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "sell_burn_bps",
-                  "type": "u64"
-                },
-                {
-                  "name": "initial_meme_supply",
-                  "type": "u64"
-                },
-                {
                   "name": "meme_reserve",
-                  "type": "u64"
-                },
-                {
-                  "name": "real_quote_reserve",
-                  "type": "u64"
-                },
-                {
-                  "name": "pending_burn",
                   "type": "u64"
                 },
                 {
@@ -1434,22 +549,6 @@
                 },
                 {
                   "name": "meme_liquidity_provision",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_meme_trade_fees",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_meme_trade_fees",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_quote_trade_fees",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_quote_trade_fees",
                   "type": "u64"
                 },
                 {
@@ -1534,10 +633,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "launcher",
-                  "type": "address"
                 },
                 {
                   "name": "creator",
@@ -1639,49 +734,6 @@
                   }
                 },
                 {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "migration_witness",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "migrator",
-                  "type": "address"
-                },
-                {
                   "name": "migration_meme",
                   "type": "u64"
                 },
@@ -1771,98 +823,6 @@
               "sdk": "decoder-reducer"
             },
             {
-              "name": "PackageAdminCreated",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "package_admin_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "publisher_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "upgrade_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "package_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "package_version",
-                  "type": "u64"
-                },
-                {
-                  "name": "policy",
-                  "type": "u8"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "PackageVersionAdvanced",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "previous_version",
-                  "type": "u64"
-                },
-                {
-                  "name": "new_version",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
               "name": "ProtocolFeesClaimed",
               "abilities": [
                 "Copy",
@@ -1883,36 +843,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "claimant",
-                  "type": "address"
                 },
                 {
                   "name": "meme_amount",
@@ -2075,53 +1005,7 @@
                   }
                 },
                 {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "seller",
-                  "type": "address"
-                },
-                {
                   "name": "meme_in_gross",
-                  "type": "u64"
-                },
-                {
-                  "name": "meme_fee",
-                  "type": "u64"
-                },
-                {
-                  "name": "meme_in_after_fee",
-                  "type": "u64"
-                },
-                {
-                  "name": "progress_bps",
-                  "type": "u64"
-                },
-                {
-                  "name": "burn_bps",
                   "type": "u64"
                 },
                 {
@@ -2133,19 +1017,7 @@
                   "type": "u64"
                 },
                 {
-                  "name": "meme_in_effective",
-                  "type": "u64"
-                },
-                {
                   "name": "quote_out_gross",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_fee",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_out_net",
                   "type": "u64"
                 },
                 {
@@ -2191,176 +1063,6 @@
                 {
                   "name": "real_quote_reserve",
                   "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "SuperAdminTransferCancelled",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "recipient",
-                  "type": "address"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "SuperAdminTransferred",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "previous_super_admin_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "new_super_admin_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "recipient",
-                  "type": "address"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "SuperAdminTransferStarted",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "recipient",
-                  "type": "address"
-                },
-                {
-                  "name": "execute_after_ms",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "UpgradeAuthorized",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "package_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "package_version",
-                  "type": "u64"
-                },
-                {
-                  "name": "policy",
-                  "type": "u8"
-                },
-                {
-                  "name": "digest",
-                  "type": {
-                    "vector": "u8"
-                  }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "UpgradeCommitted",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "new_package_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "previous_version",
-                  "type": "u64"
-                },
-                {
-                  "name": "new_version",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "UpgradePolicyRestricted",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "previous_policy",
-                  "type": "u8"
-                },
-                {
-                  "name": "new_policy",
-                  "type": "u8"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -2721,11 +1423,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -2988,6 +1704,54 @@
         },
         "launch": {
           "functions": [
+            {
+              "name": "assert_migrated",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
             {
               "name": "buy",
               "sdk": "builder",
@@ -3495,11 +2259,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -4181,32 +2959,6 @@
                   }
                 },
                 {
-                  "name": "protocol_meme_graduation_fee_bps",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_fun",
-                        "name": "bps"
-                      },
-                      "name": "Bps",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "meme_liquidity_provision_bps",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_fun",
-                        "name": "bps"
-                      },
-                      "name": "Bps",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
                   "name": "migration_witness",
                   "type": {
                     "Datatype": {
@@ -4559,11 +3311,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -4619,11 +3385,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -4683,11 +3463,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -4743,11 +3537,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -4797,11 +3605,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -4854,11 +3676,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -5265,47 +4101,40 @@
           "enums": [],
           "events": []
         },
-        "package_admin": {
+        "launchpad_domain": {
           "functions": [
             {
-              "name": "activate_package_version",
-              "sdk": "intentional-admin-exclusion",
+              "name": "package_admin_role",
+              "sdk": "move-composition",
               "entry": false,
               "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
+              "parameters": [],
+              "returns": [
+                "u64"
+              ]
+            }
+          ],
+          "structs": [
+            {
+              "name": "LAUNCHPAD_DOMAIN",
+              "abilities": [
+                "Drop"
               ],
-              "returns": []
-            },
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "package_admin": {
+          "functions": [
             {
               "name": "authorize_upgrade",
               "sdk": "intentional-admin-exclusion",
@@ -5348,11 +4177,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -5375,7 +4218,111 @@
               ]
             },
             {
-              "name": "commit_upgrade",
+              "name": "commit_upgrade_and_advance",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "package"
+                    },
+                    "name": "UpgradeReceipt",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "has_upgrade_cap",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                "bool"
+              ]
+            },
+            {
+              "name": "make_immutable",
               "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
@@ -5411,14 +4358,33 @@
                   ]
                 },
                 {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "package"
-                    },
-                    "name": "UpgradeReceipt",
-                    "type_arguments": []
-                  }
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
                 }
               ],
               "returns": []
@@ -5465,11 +4431,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -5519,11 +4499,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -5599,28 +4593,29 @@
                   }
                 },
                 {
-                  "name": "publisher",
+                  "name": "custody",
                   "type": {
                     "Datatype": {
                       "module": {
-                        "address": "sui",
-                        "name": "package"
+                        "address": "blast_admin",
+                        "name": "upgrade_custody"
                       },
-                      "name": "Publisher",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "upgrade_cap",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "package"
-                      },
-                      "name": "UpgradeCap",
-                      "type_arguments": []
+                      "name": "UpgradeCustody",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_fun",
+                                "name": "blast"
+                              },
+                              "name": "BLAST",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
                     }
                   }
                 }
@@ -5655,8 +4650,31 @@
                   }
                 },
                 {
-                  "name": "version",
-                  "type": "u64"
+                  "name": "generation",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "operational_version"
+                      },
+                      "name": "OperationalVersion",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_fun",
+                                "name": "blast"
+                              },
+                              "name": "BLAST",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
             }
@@ -5734,11 +4752,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -5788,11 +4820,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -5843,11 +4889,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -5985,6 +5045,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -6160,6 +5235,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
                         "name": "VenueConfig",
@@ -6320,6 +5410,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
                         "name": "VenueConfig",
@@ -6435,11 +5540,40 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -6502,6 +5636,21 @@
                 },
                 {
                   "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
                     true,
                     {
                       "Datatype": {
@@ -6543,11 +5692,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -6753,6 +5916,21 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "blast_fun",
                           "name": "runtime_config"
                         },
@@ -6905,6 +6083,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
                         "name": "VenueConfig",
@@ -7032,11 +6225,40 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -7123,6 +6345,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -7244,6 +6481,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -7376,6 +6628,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
@@ -7564,6 +6831,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
                         "name": "VenueConfig",
@@ -7722,6 +7004,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
@@ -7897,6 +7194,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
                         "name": "VenueConfig",
@@ -8017,11 +7329,40 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -8926,6 +8267,21 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "blast_fun",
                           "name": "runtime_config"
                         },
@@ -9052,6 +8408,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -9199,6 +8570,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
@@ -9374,6 +8760,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
                         "name": "VenueConfig",
@@ -9494,11 +8895,40 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -9535,6 +8965,601 @@
                 {
                   "name": "dummy_field",
                   "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "package_admin": {
+          "functions": [
+            {
+              "name": "authorize_upgrade",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "vector": "u8"
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "package"
+                    },
+                    "name": "UpgradeTicket",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "commit_upgrade_and_advance",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "package"
+                    },
+                    "name": "UpgradeReceipt",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "has_upgrade_cap",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                "bool"
+              ]
+            },
+            {
+              "name": "make_immutable",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "restrict_to_additive",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "restrict_to_dependency_only",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "wrap",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "package"
+                    },
+                    "name": "Publisher",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "package"
+                    },
+                    "name": "UpgradeCap",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            }
+          ],
+          "structs": [
+            {
+              "name": "PackageAdmin",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "custody",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "upgrade_custody"
+                      },
+                      "name": "UpgradeCustody",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_fun_migrators",
+                                "name": "package_marker"
+                              },
+                              "name": "PACKAGE_MARKER",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "package_marker": {
+          "functions": [],
+          "structs": [
+            {
+              "name": "PACKAGE_MARKER",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "package_version": {
+          "functions": [
+            {
+              "name": "assert_current",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            }
+          ],
+          "structs": [
+            {
+              "name": "PackageVersion",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "generation",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "operational_version"
+                      },
+                      "name": "OperationalVersion",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_fun_migrators",
+                                "name": "package_marker"
+                              },
+                              "name": "PACKAGE_MARKER",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
             }
@@ -9590,6 +9615,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -9753,6 +9793,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -9927,6 +9982,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
@@ -10142,6 +10212,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
                         "name": "VenueConfig",
@@ -10327,6 +10412,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "package_version"
                         },
                         "name": "PackageVersion",
@@ -10545,6 +10645,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
                           "name": "venue_config"
                         },
                         "name": "VenueConfig",
@@ -10703,11 +10818,40 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -10794,6 +10938,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -10924,11 +11083,40 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
                           "name": "acl"
                         },
                         "name": "AdminWitness",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]

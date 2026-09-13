@@ -53,18 +53,21 @@ test("decodes and idempotently reduces every frozen migrator event", () => {
 test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
   const inputs = [
     launchpadDecoded(
+      "LaunchTicketCreated",
+      {
+        ticket_id: "0xb",
+        initial_supply: 1_000n,
+      },
+      0,
+    ),
+    launchpadDecoded(
       "LaunchCreated",
       {
         launch_id: "0xc",
+        ticket_id: "0xb",
         meme_reserve: 800n,
-        real_quote_reserve: 0n,
-        pending_burn: 10n,
-        protocol_meme_trade_fees: 0n,
-        creator_meme_trade_fees: 0n,
-        protocol_quote_trade_fees: 0n,
-        creator_quote_trade_fees: 0n,
       },
-      0,
+      1,
     ),
     launchpadDecoded(
       "Migrated",
@@ -76,7 +79,7 @@ test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
         protocol_meme_fee_total: 5n,
         protocol_quote_fee_total: 6n,
       },
-      1,
+      2,
     ),
     migratorDecoded(
       "VaultCreated",
@@ -86,7 +89,7 @@ test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
         position_id: "0xf",
         venue: "0x320::cetus::Venue",
       },
-      2,
+      3,
     ),
     migratorDecoded(
       "MigrationCompleted",
@@ -105,7 +108,7 @@ test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
         tick_spacing: 260,
         fee_rate: 40_000n,
       },
-      3,
+      4,
     ),
     migratorDecoded(
       "LpFeesCollected",
@@ -120,7 +123,7 @@ test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
         creator_quote_fee_total: 14n,
         principal_liquidity: 1_000n,
       },
-      4,
+      5,
     ),
     migratorDecoded(
       "CreatorFeesClaimed",
@@ -131,7 +134,7 @@ test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
         protocol_quote_fee_total: 13n,
         creator_quote_fee_total: 0n,
       },
-      5,
+      6,
     ),
     migratorDecoded(
       "ProtocolFeesClaimed",
@@ -142,7 +145,7 @@ test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
         protocol_quote_fee_total: 0n,
         creator_quote_fee_total: 0n,
       },
-      6,
+      7,
     ),
   ];
 

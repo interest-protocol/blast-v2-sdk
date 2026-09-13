@@ -308,10 +308,19 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
   if (key === "launch_ticket::new") return "template-builder";
   if (moduleName === "creator_authority") return "template-internal";
   if (moduleName === "fees") return "move-composition";
+  if (
+    moduleName === "launchpad_domain" &&
+    functionName === "package_admin_role"
+  ) {
+    return "move-composition";
+  }
   if (isIntentionalAdminExclusion(moduleName, functionName, key)) {
     return "intentional-admin-exclusion";
   }
-  if (key === "runtime_config::protocol_fee_share_bps") {
+  if (
+    key === "runtime_config::protocol_fee_share_bps" ||
+    key === "launch::assert_migrated"
+  ) {
     return "move-composition";
   }
   throw new Error(`unclassified function ${packageName}::${key}`);

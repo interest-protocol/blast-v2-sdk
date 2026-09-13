@@ -28,7 +28,7 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
   const frozenSpecs = readFrozenLaunchpadEventSpecs();
   assert.deepEqual(launchpadEventSpecs, frozenSpecs);
   const kinds = Object.keys(frozenSpecs) as LaunchpadEventKind[];
-  assert.equal(kinds.length, 29);
+  assert.equal(kinds.length, 18);
 
   let projection = createLaunchpadEventProjection();
   for (const [eventIndex, kind] of orderedForReplay(kinds).entries()) {
@@ -50,20 +50,24 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
 test("replays lifecycle, reserves, and launch fee totals from ordered events", () => {
   const events = [
     decoded(
+      "LaunchTicketCreated",
+      {
+        ticket_id: "0xb",
+        initial_supply: 1_020n,
+      },
+      0,
+    ),
+    decoded(
       "LaunchCreated",
       {
         launch_id: "0xc",
+        ticket_id: "0xb",
         meme_reserve: 800n,
-        real_quote_reserve: 0n,
-        pending_burn: 10n,
         protocol_meme_graduation_fee: 20n,
         meme_liquidity_provision: 200n,
-        protocol_meme_trade_fees: 0n,
-        creator_meme_trade_fees: 0n,
-        protocol_quote_trade_fees: 0n,
-        creator_quote_trade_fees: 0n,
+        migration_quote_target: 200n,
       },
-      0,
+      1,
     ),
     decoded(
       "Bought",
@@ -71,14 +75,12 @@ test("replays lifecycle, reserves, and launch fee totals from ordered events", (
         launch_id: "0xc",
         meme_reserve: 700n,
         real_quote_reserve: 100n,
-        pending_burn_total: undefined,
         protocol_meme_fee_total: 2n,
         creator_meme_fee_total: 3n,
         protocol_quote_fee_total: 4n,
         creator_quote_fee_total: 5n,
-        crossed_threshold: false,
       },
-      1,
+      2,
     ),
     decoded(
       "Sold",
@@ -92,7 +94,7 @@ test("replays lifecycle, reserves, and launch fee totals from ordered events", (
         protocol_quote_fee_total: 8n,
         creator_quote_fee_total: 9n,
       },
-      2,
+      3,
     ),
     decoded(
       "Bought",
@@ -104,9 +106,8 @@ test("replays lifecycle, reserves, and launch fee totals from ordered events", (
         creator_meme_fee_total: 11n,
         protocol_quote_fee_total: 12n,
         creator_quote_fee_total: 13n,
-        crossed_threshold: true,
       },
-      3,
+      4,
     ),
     decoded(
       "CreatorFeesClaimed",
@@ -115,7 +116,7 @@ test("replays lifecycle, reserves, and launch fee totals from ordered events", (
         meme_amount: 11n,
         quote_amount: 13n,
       },
-      4,
+      5,
     ),
     decoded(
       "Migrated",
@@ -127,7 +128,7 @@ test("replays lifecycle, reserves, and launch fee totals from ordered events", (
         protocol_meme_fee_total: 30n,
         protocol_quote_fee_total: 31n,
       },
-      5,
+      6,
     ),
   ];
 
@@ -155,16 +156,8 @@ test("replays lifecycle, reserves, and launch fee totals from ordered events", (
   });
 });
 
-test("replays launchpad capability, signer, and package administration facts", () => {
+test("replays creator claims and signer changes", () => {
   const beforeRevocation = [
-    decoded(
-      "AdminGranted",
-      {
-        admin_cap_id: "0x70",
-        recipient: "0x71",
-      },
-      30,
-    ),
     decoded(
       "CreatorCapClaimed",
       {
@@ -172,125 +165,28 @@ test("replays launchpad capability, signer, and package administration facts", (
         x_identity_hash: new Uint8Array([7, 2]),
         x_claim_expiry_ms: 99n,
       },
-      31,
-    ),
-    decoded(
-      "PackageAdminCreated",
-      {
-        package_admin_id: "0x73",
-        publisher_id: "0x74",
-        upgrade_cap_id: "0x75",
-        package_id: "0x76",
-        package_version: 1n,
-        policy: 0,
-      },
-      32,
-    ),
-    decoded(
-      "SuperAdminTransferStarted",
-      {
-        recipient: "0x77",
-        execute_after_ms: 100n,
-      },
-      33,
-    ),
-    decoded(
-      "UpgradeAuthorized",
-      {
-        digest: new Uint8Array([8]),
-      },
-      34,
+      30,
     ),
     decoded(
       "XClaimSignerSet",
       {
         signer_public_key: new Uint8Array([9]),
       },
-      35,
+      31,
     ),
   ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
 
-  assert.equal(
-    beforeRevocation.administration.admins[normalizeSuiObjectId("0x70")]
-      ?.active,
-    true,
-  );
   assert.deepEqual(
     beforeRevocation.administration.xClaimSignerPublicKey,
     new Uint8Array([9]),
   );
-  assert.equal(
-    beforeRevocation.administration.pendingSuperAdminTransfer?.executeAfterMs,
-    100n,
-  );
-  assert.equal(
-    beforeRevocation.administration.pendingUpgrade?.packageVersion,
-    1n,
-  );
-
-  const projection = [
-    decoded("AdminRevoked", { admin_cap_id: "0x70" }, 36),
-    decoded(
-      "AdminDestroyed",
-      {
-        admin_cap_id: "0x70",
-        was_active: false,
-      },
-      37,
-    ),
-    decoded("SuperAdminTransferCancelled", { recipient: "0x77" }, 38),
-    decoded(
-      "SuperAdminTransferStarted",
-      {
-        recipient: "0x79",
-        execute_after_ms: 101n,
-      },
-      39,
-    ),
-    decoded(
-      "SuperAdminTransferred",
-      {
-        previous_super_admin_cap_id: "0x7a",
-        new_super_admin_cap_id: "0x7b",
-        recipient: "0x79",
-      },
-      40,
-    ),
-    decoded(
-      "UpgradePolicyRestricted",
-      {
-        previous_policy: 0,
-        new_policy: 1,
-      },
-      41,
-    ),
-    decoded(
-      "UpgradeCommitted",
-      {
-        new_package_id: "0x78",
-        previous_version: 1n,
-        new_version: 2n,
-      },
-      42,
-    ),
+  const projection = reduceLaunchpadEvent(
+    beforeRevocation,
     decoded(
       "XClaimSignerRevoked",
-      {
-        previous_public_key: new Uint8Array([9]),
-      },
-      43,
+      { previous_public_key: new Uint8Array([9]) },
+      32,
     ),
-  ].reduce(reduceLaunchpadEvent, beforeRevocation);
-
-  assert.deepEqual(
-    projection.administration.admins[normalizeSuiObjectId("0x70")],
-    {
-      adminCapId: normalizeSuiObjectId("0x70"),
-      recipient: normalizeSuiObjectId("0x71"),
-      active: false,
-      destroyed: true,
-      wasActiveAtDestruction: false,
-    },
   );
   assert.deepEqual(
     projection.administration.creatorCapClaims[
@@ -303,26 +199,6 @@ test("replays launchpad capability, signer, and package administration facts", (
       xClaimExpiryMs: 99n,
     },
   );
-  assert.deepEqual(projection.administration.packageAdmin, {
-    packageAdminId: normalizeSuiObjectId("0x73"),
-    publisherId: normalizeSuiObjectId("0x74"),
-    upgradeCapId: normalizeSuiObjectId("0x75"),
-    packageId: normalizeSuiObjectId("0x78"),
-    packageVersion: 2n,
-    policy: 1,
-  });
-  assert.equal(projection.administration.pendingSuperAdminTransfer, null);
-  assert.deepEqual(projection.administration.superAdmin, {
-    previousCapId: normalizeSuiObjectId("0x7a"),
-    capId: normalizeSuiObjectId("0x7b"),
-    recipient: normalizeSuiObjectId("0x79"),
-  });
-  assert.equal(projection.administration.pendingUpgrade, null);
-  assert.deepEqual(projection.administration.lastUpgradeCommit, {
-    packageId: normalizeSuiObjectId("0x78"),
-    previousVersion: 1n,
-    newVersion: 2n,
-  });
   assert.equal(projection.administration.xClaimSignerPublicKey, null);
 });
 
@@ -360,7 +236,10 @@ test("uses transaction digest and event index as the stable replay identity", ()
     packages,
   );
   const projection = reduceLaunchpadEvent(
-    createLaunchpadEventProjection(),
+    reduceLaunchpadEvent(
+      createLaunchpadEventProjection(),
+      decoded("LaunchTicketCreated", {}, 1),
+    ),
     first,
   );
 

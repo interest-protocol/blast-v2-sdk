@@ -52,7 +52,6 @@ export type LaunchTicketEventProjection = {
 };
 
 export type LaunchpadConfigProjection = {
-  packageVersion: bigint | null;
   protocolFeeShareBps: bigint | null;
   tradeFeeDefaults: {
     quoteFeeBps: bigint;
@@ -70,18 +69,6 @@ export type LaunchpadConfigProjection = {
 };
 
 export type LaunchpadAdministrationProjection = {
-  admins: Readonly<
-    Record<
-      string,
-      {
-        adminCapId: string;
-        recipient: string | null;
-        active: boolean;
-        destroyed: boolean;
-        wasActiveAtDestruction: boolean | null;
-      }
-    >
-  >;
   creatorCapClaims: Readonly<
     Record<
       string,
@@ -93,34 +80,6 @@ export type LaunchpadAdministrationProjection = {
       }
     >
   >;
-  packageAdmin: {
-    packageAdminId: string;
-    publisherId: string;
-    upgradeCapId: string;
-    packageId: string;
-    packageVersion: bigint;
-    policy: number;
-  } | null;
-  pendingSuperAdminTransfer: {
-    recipient: string;
-    executeAfterMs: bigint;
-  } | null;
-  superAdmin: {
-    previousCapId: string;
-    capId: string;
-    recipient: string;
-  } | null;
-  pendingUpgrade: {
-    packageId: string;
-    packageVersion: bigint;
-    policy: number;
-    digest: Uint8Array;
-  } | null;
-  lastUpgradeCommit: {
-    packageId: string;
-    previousVersion: bigint;
-    newVersion: bigint;
-  } | null;
   xClaimSignerPublicKey: Uint8Array | null;
 };
 
@@ -142,7 +101,6 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
     launches: {},
     tickets: {},
     config: {
-      packageVersion: null,
       protocolFeeShareBps: null,
       tradeFeeDefaults: null,
       graduationDefaults: null,
@@ -150,13 +108,7 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
       migrationWitnesses: {},
     },
     administration: {
-      admins: {},
       creatorCapClaims: {},
-      packageAdmin: null,
-      pendingSuperAdminTransfer: null,
-      superAdmin: null,
-      pendingUpgrade: null,
-      lastUpgradeCommit: null,
       xClaimSignerPublicKey: null,
     },
   };
@@ -201,6 +153,9 @@ export function reduceLaunchpadEvent(
     }
     case "LaunchCreated": {
       const payload = event.payload;
+      const ticket = state.tickets[payload.ticket_id];
+      if (!ticket)
+        throw new Error(`unknown launch ticket ${payload.ticket_id}`);
       return {
         ...next,
         launches: {
@@ -208,23 +163,23 @@ export function reduceLaunchpadEvent(
           [payload.launch_id]: {
             launchId: payload.launch_id,
             ticketId: payload.ticket_id,
-            memeType: payload.meme,
+            memeType: ticket.memeType,
             quoteType: payload.quote,
             migrationWitnessType: payload.migration_witness,
-            launcher: event.sender,
-            metadataCapId: payload.metadata_cap_id,
+            launcher: ticket.launcher,
+            metadataCapId: ticket.metadataCapId,
             lifecycle: "Live",
-            sellBurnBps: payload.sell_burn_bps,
-            initialMemeSupply: payload.initial_meme_supply,
+            sellBurnBps: ticket.sellBurnBps,
+            initialMemeSupply: ticket.initialSupply,
             memeReserve: payload.meme_reserve,
-            realQuoteReserve: payload.real_quote_reserve,
-            pendingBurn: payload.pending_burn,
+            realQuoteReserve: 0n,
+            pendingBurn: 0n,
             protocolMemeGraduationFee: payload.protocol_meme_graduation_fee,
             memeLiquidityProvision: payload.meme_liquidity_provision,
-            protocolMemeFees: payload.protocol_meme_trade_fees,
-            creatorMemeFees: payload.creator_meme_trade_fees,
-            protocolQuoteFees: payload.protocol_quote_trade_fees,
-            creatorQuoteFees: payload.creator_quote_trade_fees,
+            protocolMemeFees: 0n,
+            creatorMemeFees: 0n,
+            protocolQuoteFees: 0n,
+            creatorQuoteFees: 0n,
             virtualQuote: payload.virtual_quote,
             migrationQuoteTarget: payload.migration_quote_target,
             quoteFeeBps: payload.quote_fee_bps,
@@ -242,9 +197,10 @@ export function reduceLaunchpadEvent(
       const payload = event.payload;
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
-        lifecycle: payload.crossed_threshold
-          ? "MigrationReady"
-          : launch.lifecycle,
+        lifecycle:
+          payload.real_quote_reserve >= launch.migrationQuoteTarget
+            ? "MigrationReady"
+            : launch.lifecycle,
         memeReserve: payload.meme_reserve,
         realQuoteReserve: payload.real_quote_reserve,
         protocolMemeFees: payload.protocol_meme_fee_total,
@@ -299,11 +255,6 @@ export function reduceLaunchpadEvent(
         },
       }));
     }
-    case "PackageVersionAdvanced":
-      return updateConfig(next, {
-        ...state.config,
-        packageVersion: event.payload.new_version,
-      });
     case "ProtocolFeeShareChanged":
       return updateConfig(next, {
         ...state.config,
@@ -372,56 +323,6 @@ export function reduceLaunchpadEvent(
       delete migrationWitnesses[event.payload.migration_witness];
       return updateConfig(next, { ...state.config, migrationWitnesses });
     }
-    case "AdminGranted": {
-      const payload = event.payload;
-      return updateAdministration(next, {
-        ...state.administration,
-        admins: {
-          ...state.administration.admins,
-          [payload.admin_cap_id]: {
-            adminCapId: payload.admin_cap_id,
-            recipient: payload.recipient,
-            active: true,
-            destroyed: false,
-            wasActiveAtDestruction: null,
-          },
-        },
-      });
-    }
-    case "AdminRevoked": {
-      const payload = event.payload;
-      const previous = state.administration.admins[payload.admin_cap_id];
-      return updateAdministration(next, {
-        ...state.administration,
-        admins: {
-          ...state.administration.admins,
-          [payload.admin_cap_id]: {
-            adminCapId: payload.admin_cap_id,
-            recipient: previous?.recipient ?? null,
-            active: false,
-            destroyed: false,
-            wasActiveAtDestruction: null,
-          },
-        },
-      });
-    }
-    case "AdminDestroyed": {
-      const payload = event.payload;
-      const previous = state.administration.admins[payload.admin_cap_id];
-      return updateAdministration(next, {
-        ...state.administration,
-        admins: {
-          ...state.administration.admins,
-          [payload.admin_cap_id]: {
-            adminCapId: payload.admin_cap_id,
-            recipient: previous?.recipient ?? null,
-            active: false,
-            destroyed: true,
-            wasActiveAtDestruction: payload.was_active,
-          },
-        },
-      });
-    }
     case "CreatorCapClaimed": {
       const payload = event.payload;
       return updateAdministration(next, {
@@ -435,86 +336,6 @@ export function reduceLaunchpadEvent(
             xClaimExpiryMs: payload.x_claim_expiry_ms,
           },
         },
-      });
-    }
-    case "PackageAdminCreated": {
-      const payload = event.payload;
-      return updateAdministration(next, {
-        ...state.administration,
-        packageAdmin: {
-          packageAdminId: payload.package_admin_id,
-          publisherId: payload.publisher_id,
-          upgradeCapId: payload.upgrade_cap_id,
-          packageId: payload.package_id,
-          packageVersion: payload.package_version,
-          policy: payload.policy,
-        },
-      });
-    }
-    case "SuperAdminTransferStarted":
-      return updateAdministration(next, {
-        ...state.administration,
-        pendingSuperAdminTransfer: {
-          recipient: event.payload.recipient,
-          executeAfterMs: event.payload.execute_after_ms,
-        },
-      });
-    case "SuperAdminTransferCancelled":
-      return updateAdministration(next, {
-        ...state.administration,
-        pendingSuperAdminTransfer: null,
-      });
-    case "SuperAdminTransferred":
-      return updateAdministration(next, {
-        ...state.administration,
-        pendingSuperAdminTransfer: null,
-        superAdmin: {
-          previousCapId: event.payload.previous_super_admin_cap_id,
-          capId: event.payload.new_super_admin_cap_id,
-          recipient: event.payload.recipient,
-        },
-      });
-    case "UpgradeAuthorized": {
-      const packageAdmin = state.administration.packageAdmin;
-      return updateAdministration(next, {
-        ...state.administration,
-        pendingUpgrade: packageAdmin
-          ? {
-              packageId: packageAdmin.packageId,
-              packageVersion: packageAdmin.packageVersion,
-              policy: packageAdmin.policy,
-              digest: event.payload.digest,
-            }
-          : null,
-      });
-    }
-    case "UpgradeCommitted": {
-      const payload = event.payload;
-      const packageAdmin = state.administration.packageAdmin;
-      return updateAdministration(next, {
-        ...state.administration,
-        packageAdmin: packageAdmin
-          ? {
-              ...packageAdmin,
-              packageId: payload.new_package_id,
-              packageVersion: payload.new_version,
-            }
-          : null,
-        pendingUpgrade: null,
-        lastUpgradeCommit: {
-          packageId: payload.new_package_id,
-          previousVersion: payload.previous_version,
-          newVersion: payload.new_version,
-        },
-      });
-    }
-    case "UpgradePolicyRestricted": {
-      const packageAdmin = state.administration.packageAdmin;
-      return updateAdministration(next, {
-        ...state.administration,
-        packageAdmin: packageAdmin
-          ? { ...packageAdmin, policy: event.payload.new_policy }
-          : null,
       });
     }
     case "XClaimSignerSet":
