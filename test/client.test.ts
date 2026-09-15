@@ -27,11 +27,6 @@ test("registers the typed launchpad client extension", () => {
         initialSharedVersion: "12",
         mutable: false,
       },
-      lpFeePolicy: {
-        objectId: "0x40",
-        initialSharedVersion: "18",
-        mutable: false,
-      },
       protocolAuthority: {
         objectId: "0x5",
         initialSharedVersion: "13",

@@ -5,13 +5,12 @@ import {
   createLaunchpadEventProjection,
   reduceLaunchpadEvent,
 } from "../launchpad/reducer.ts";
-import type { CreatorFeeAuthority } from "../launchpad/state.ts";
 import type { NativeTransactionPosition } from "../lib/events.ts";
 import { normalizeNativeTransactionPosition } from "../lib/events.ts";
 import { requireU64 } from "../lib/integers.ts";
 import type { DecodedMigratorEvent, MigratorEventKind } from "./events.ts";
 import { migratorEventId, migratorEventSpecs } from "./events.ts";
-import type { AftermathPolicy } from "./state.ts";
+import type { AftermathPolicy, LpFeeAuthority } from "./state.ts";
 import { AFTERMATH_DEFAULT_POLICY } from "./state.ts";
 
 export type ClmmVaultMigrationProjection = {
@@ -60,8 +59,8 @@ export type LpVaultEventProjection = {
   venueType: string;
   memeType: string;
   quoteType: string;
-  /** Live creator LP-fee authority, from cap issuance and locks. */
-  lpFeeAuthority: CreatorFeeAuthority;
+  /** Live creator LP-fee authority, from cap claims, issuance, and locks. */
+  lpFeeAuthority: LpFeeAuthority;
   protocolMemeFees: bigint;
   creatorMemeFees: bigint;
   protocolQuoteFees: bigint;
@@ -80,6 +79,14 @@ export type MigratorEventProjection = {
     Record<string, { tickSpacing: number; feeRate: bigint }>
   >;
   aftermathPolicy: AftermathPolicy;
+  lpFeePolicy: LpFeePolicyProjection;
+};
+
+export type LpFeePolicyProjection = {
+  /** Migrator-wide LP-fee protocol share, once an update event is replayed. */
+  protocolFeeShareBps: bigint | null;
+  /** Meme-keyed partner-project pins that override the migrator-wide share. */
+  projectProtocolFeeShareBps: Readonly<Record<string, bigint>>;
 };
 
 export type { NativeTransactionPosition } from "../lib/events.ts";
@@ -150,6 +157,7 @@ export function createMigratorEventProjection(): MigratorEventProjection {
     vaults: {},
     venueTiers: {},
     aftermathPolicy: AFTERMATH_DEFAULT_POLICY,
+    lpFeePolicy: { protocolFeeShareBps: null, projectProtocolFeeShareBps: {} },
   };
 }
 
@@ -196,7 +204,7 @@ export function reduceMigratorEvent(
             venueType: payload.venue,
             memeType: payload.meme,
             quoteType: payload.quote,
-            lpFeeAuthority: { kind: "unassigned" },
+            lpFeeAuthority: { kind: "pending" },
             protocolMemeFees: 0n,
             creatorMemeFees: 0n,
             protocolQuoteFees: 0n,
@@ -285,6 +293,44 @@ export function reduceMigratorEvent(
           vault.creatorQuoteFees + payload.creator_quote_fee_delta,
         principalLiquidity: payload.principal_liquidity,
       }));
+    }
+    case "LpFeeCapClaimed": {
+      const payload = event.payload;
+      return updateVault(next, payload.vault_id, (vault) => ({
+        ...vault,
+        lpFeeAuthority: { kind: "cap", capId: payload.lp_fee_cap_id },
+      }));
+    }
+    case "LpProtocolFeeShareChanged":
+      return {
+        ...next,
+        lpFeePolicy: {
+          ...state.lpFeePolicy,
+          protocolFeeShareBps: event.payload.pos0,
+        },
+      };
+    case "ProjectLpProtocolFeeShareSet": {
+      const payload = event.payload;
+      return {
+        ...next,
+        lpFeePolicy: {
+          ...state.lpFeePolicy,
+          projectProtocolFeeShareBps: {
+            ...state.lpFeePolicy.projectProtocolFeeShareBps,
+            [payload.meme]: payload.protocol_fee_share_bps,
+          },
+        },
+      };
+    }
+    case "ProjectLpProtocolFeeShareCleared": {
+      const projectProtocolFeeShareBps = {
+        ...state.lpFeePolicy.projectProtocolFeeShareBps,
+      };
+      delete projectProtocolFeeShareBps[event.payload.pos0];
+      return {
+        ...next,
+        lpFeePolicy: { ...state.lpFeePolicy, projectProtocolFeeShareBps },
+      };
     }
     case "LpFeeCapIssued": {
       const payload = event.payload;

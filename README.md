@@ -131,8 +131,8 @@ publication and returned-coin recipient facts. Object ownership reads provide
 the current `CurveFeeCap`, `BlastMetadataCap`, and `LpFeeCap` owners. Blast
 events do not provide these native facts. Events do record which capability ID
 each launch and LP vault currently honors (`curveFeeAuthority`,
-`blastMetadataCapId`, `lpFeeAuthority`), including administrator reassignments
-and permanent custodian locks.
+`blastMetadataCapId`, `lpFeeAuthority`), including pending migration-born LP-fee
+rights, administrator reassignments, and permanent custodian locks.
 
 ## Vesting
 
@@ -233,8 +233,13 @@ then wrap its Ed25519 signature with `encodeCreatorClaimAttestation` before
 passing it as `accountAttestation` to `claimCreatorCaps`. The claim returns a
 `CurveFeeCap` for bonding-curve creator fees and a `BlastMetadataCap` for the
 `setName`, `setDescription`, and `setIconUrl` launch metadata builders.
-Post-migration creator LP fees use a separate administrator-issued `LpFeeCap`
-(`MigratorTransactions.issueLpFeeCap`, then `claimCreatorFees`).
+Post-migration creator LP fees use a separate `LpFeeCap` owned by the
+migrators package. Each vault's migration leaves that right pending; the live
+`CurveFeeCap` holder claims it once with `MigratorTransactions.claimLpFeeCap`,
+then uses `claimCreatorFees`. A creator administrator can reissue it for a
+community takeover with `issueLpFeeCap`. Migrators also own the shared
+`LpFeePolicy` object (`sharedObjects.lpFeePolicy`, required by
+`migratorsDeployment`) and emit its LP-fee share events.
 
 Browser builds initialize `@mysten/move-bytecode-template` automatically. If a
 bundler cannot locate its WASM asset, call `initializeMemeTemplate` once with

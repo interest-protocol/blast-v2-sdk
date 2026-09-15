@@ -38,10 +38,10 @@ const deployment: MigratorsDeployment = {
     packageVersion: shared("0x2", "10", false),
     launchConfig: shared("0x3", "11", false),
     runtimeConfig: shared("0x4", "12", false),
-    lpFeePolicy: shared("0x40", "18", false),
     protocolAuthority: shared("0x5", "13", false),
   },
   migratorsVersion: shared("0x61", "15", false),
+  lpFeePolicy: shared("0x40", "18", false),
   venueConfig: shared("0x60", "14", false),
 };
 const types = {
@@ -102,11 +102,32 @@ test("signs in and issues a revocable LP-fee cap to a recipient", () => {
   assert.deepEqual(moveArgumentKinds(tx, 1), [
     "shared:0xc",
     "shared:0x61",
-    "shared:0x2",
     "Result",
     "pure",
   ]);
   assert.equal(tx.getData().commands.length, 2);
+});
+
+test("claims the migration-born LP-fee cap with the live curve-fee cap", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const tx = sdk.claimLpFeeCap({
+    ...types,
+    vault: shared("0xc", "20", true),
+    launch: shared("0x10", "30", false),
+    curveFeeCapId: "0xd",
+    recipient: "0xf",
+  });
+
+  assert.deepEqual(moveFunctions(tx), ["vault::claim_lp_fee_cap"]);
+  assert.deepEqual(moveArgumentKinds(tx, 0), [
+    "shared:0xc",
+    "shared:0x61",
+    "shared:0x10",
+    "object:0xd",
+  ]);
+  assert.deepEqual(sharedMutability(tx), [true, false, false]);
+  assert.equal(tx.getData().commands.at(-1)?.$kind, "TransferObjects");
+  assert.equal(transferObjectCount(tx), 1);
 });
 
 test("routes both creator LP-fee coins to the requested recipient", () => {

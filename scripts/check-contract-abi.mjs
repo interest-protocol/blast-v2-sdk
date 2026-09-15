@@ -274,15 +274,24 @@ function classifyMemeTemplateFunction(moduleName, functionName) {
 
 function classifyMigratorFunction(moduleName, functionName) {
   if (
-    moduleName === "vault" &&
-    (functionName === "lock_creator_fees" ||
-      functionName === "claim_custodied_creator_fees" ||
-      functionName === "assert_lp_fee_cap")
+    (moduleName === "vault" &&
+      (functionName === "lock_creator_fees" ||
+        functionName === "lock_pending_creator_fees" ||
+        functionName === "claim_custodied_creator_fees" ||
+        functionName === "assert_lp_fee_cap")) ||
+    moduleName === "lp_fee_authority" ||
+    (moduleName === "lp_fee_policy" && functionName === "protocol_fee_share")
   ) {
     return "move-composition";
   }
   if (moduleName === "vault") return "builder";
-  if (moduleName === "package_admin") return "intentional-admin-exclusion";
+  if (
+    moduleName === "package_admin" ||
+    (moduleName === "lp_fee_policy" &&
+      (functionName.startsWith("set_") || functionName.startsWith("clear_")))
+  ) {
+    return "intentional-admin-exclusion";
+  }
   if (moduleName === "package_version") return "move-composition";
   if (functionName === "set_tier" || functionName === "set_policy") {
     return "intentional-admin-exclusion";
@@ -323,9 +332,6 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
     return "compositional";
   }
   if (key === "launch_ticket::new") return "template-builder";
-  if (key === "creator_authority::new_lp_fee_cap") {
-    return "intentional-admin-exclusion";
-  }
   if (moduleName === "creator_authority" && functionName.startsWith("new_")) {
     return "template-internal";
   }
@@ -345,10 +351,10 @@ function isLaunchpadMoveComposition(moduleName, functionName, key) {
     (moduleName === "creator_authority" &&
       functionName.startsWith("destroy_")) ||
     (moduleName === "launchpad_domain" && functionName.endsWith("_role")) ||
-    key === "lp_fee_policy::protocol_fee_share" ||
     key === "runtime_config::protocol_fee_share_bps" ||
     key === "launch::assert_migrated" ||
     key === "launch::assert_curve_fee_cap" ||
+    key === "launch::assert_fee_custodian" ||
     key === "launch::lock_creator_fees" ||
     key === "launch::claim_custodied_creator_fees"
   );
@@ -360,8 +366,6 @@ function isIntentionalAdminExclusion(moduleName, functionName, key) {
     moduleName === "launch_config" ||
     moduleName === "package_admin" ||
     (moduleName === "runtime_config" && functionName.startsWith("set_")) ||
-    (moduleName === "lp_fee_policy" &&
-      (functionName.startsWith("set_") || functionName.startsWith("clear_"))) ||
     key === "runtime_config::revoke_creator_claim_signer" ||
     key === "launch::reassign_curve_fee_cap" ||
     key === "launch::reassign_metadata_cap"

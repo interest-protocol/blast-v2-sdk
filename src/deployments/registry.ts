@@ -18,7 +18,6 @@ const REQUIRED_SHARED_OBJECTS = [
   "packageVersion",
   "launchConfig",
   "runtimeConfig",
-  "lpFeePolicy",
   "protocolAuthority",
 ] as const;
 
@@ -88,7 +87,6 @@ export function launchpadDeployment(
     packageVersion: sharedObjectReference(objects.packageVersion, false),
     launchConfig: sharedObjectReference(objects.launchConfig, false),
     runtimeConfig: sharedObjectReference(objects.runtimeConfig, false),
-    lpFeePolicy: sharedObjectReference(objects.lpFeePolicy, false),
     protocolAuthority: sharedObjectReference(objects.protocolAuthority, false),
   };
 }
@@ -141,6 +139,10 @@ export function migratorsDeployment(
   if (!migratorsVersion) {
     throw new TypeError("sharedObjects.migratorsPackageVersion is required");
   }
+  const lpFeePolicy = deployment.sharedObjects.lpFeePolicy;
+  if (!lpFeePolicy) {
+    throw new TypeError("sharedObjects.lpFeePolicy is required");
+  }
   const venueConfig = deployment.sharedObjects.venueConfig;
   if (!venueConfig) {
     throw new TypeError("sharedObjects.venueConfig is required");
@@ -150,6 +152,7 @@ export function migratorsDeployment(
     originalPackageId: packageReference.originalPackageId,
     launchpad: launchpadDeployment(deployment),
     migratorsVersion: sharedObjectReference(migratorsVersion, false),
+    lpFeePolicy: sharedObjectReference(lpFeePolicy, false),
     venueConfig: sharedObjectReference(venueConfig, false),
   };
 }

@@ -250,11 +250,6 @@ test("publishes against 0x1, 0x2, and Blast, then makes the package immutable", 
       initialSharedVersion: "12",
       mutable: false,
     },
-    lpFeePolicy: {
-      objectId: "0x40",
-      initialSharedVersion: "18",
-      mutable: false,
-    },
     protocolAuthority: {
       objectId: "0x6",
       initialSharedVersion: "13",

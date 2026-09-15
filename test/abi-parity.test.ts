@@ -15,8 +15,8 @@ import test from "node:test";
 const contractsDirectory = process.env.BLAST_CONTRACTS_DIR ?? "../contracts";
 const contractsManifest = join(contractsDirectory, "sui/launchpad/Move.toml");
 const expectedEvents = {
-  launchpad: 25,
-  migrators: 11,
+  launchpad: 22,
+  migrators: 15,
   vesting: 8,
   blastSui: 13,
 };

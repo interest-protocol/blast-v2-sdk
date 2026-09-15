@@ -26,6 +26,8 @@ export type MigratorsDeployment = {
   launchpad: LaunchpadDeployment;
   /** Migrators `package_version::PackageVersion` checked by every protected entry. */
   migratorsVersion: SharedObjectReference<false>;
+  /** Migrators `lp_fee_policy::LpFeePolicy` read by every LP-fee collection. */
+  lpFeePolicy: SharedObjectReference<false>;
   venueConfig: SharedObjectReference<false>;
 };
 
@@ -73,6 +75,11 @@ export class MigratorCalls {
         deployment.migratorsVersion,
         false,
       ),
+      lpFeePolicy: normalizeSharedObjectReference(
+        "lpFeePolicy",
+        deployment.lpFeePolicy,
+        false,
+      ),
       venueConfig: normalizeSharedObjectReference(
         "venueConfig",
         deployment.venueConfig,
@@ -116,17 +123,37 @@ export class MigratorCalls {
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
-          sharedObject(
-            tx,
-            "packageVersion",
-            this.deployment.launchpad.packageVersion,
-            false,
-          ),
           tx.object(options.adminWitness),
           tx.pure.address(recipient),
         ],
       });
     };
+  }
+
+  /**
+   * Claims the vault's migration-born `LpFeeCap` once with the launch's live
+   * `CurveFeeCap`. `launch` is read immutably by Move; pass `mutable: true`
+   * only when the same PTB also mutates the launch.
+   */
+  claimLpFeeCap(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      launch: SharedObjectReference;
+      curveFeeCap: TransactionObjectInput;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::vault::claim_lp_fee_cap`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          sharedObject(tx, "launch", options.launch, options.launch.mutable),
+          tx.object(options.curveFeeCap),
+        ],
+      });
   }
 
   claimCreatorFees(
@@ -287,12 +314,7 @@ export class MigratorCalls {
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
-          sharedObject(
-            tx,
-            "lpFeePolicy",
-            this.deployment.launchpad.lpFeePolicy,
-            false,
-          ),
+          sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false),
           memeReceivings,
           quoteReceivings,
         ],
@@ -346,12 +368,7 @@ export class MigratorCalls {
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
-          sharedObject(
-            tx,
-            "lpFeePolicy",
-            this.deployment.launchpad.lpFeePolicy,
-            false,
-          ),
+          sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
           sharedObject(tx, "pool", options.pool, true),
           tx.object.clock(),
@@ -409,12 +426,7 @@ export class MigratorCalls {
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
-          sharedObject(
-            tx,
-            "lpFeePolicy",
-            this.deployment.launchpad.lpFeePolicy,
-            false,
-          ),
+          sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false),
           sharedObject(tx, "pool", options.pool, true),
           sharedObject(tx, "mmtVersion", options.mmtVersion, false),
           tx.object.clock(),
@@ -475,12 +487,7 @@ export class MigratorCalls {
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
-          sharedObject(
-            tx,
-            "lpFeePolicy",
-            this.deployment.launchpad.lpFeePolicy,
-            false,
-          ),
+          sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "pool", options.pool, true),
         ],
@@ -561,12 +568,7 @@ export class MigratorCalls {
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
-          sharedObject(
-            tx,
-            "lpFeePolicy",
-            this.deployment.launchpad.lpFeePolicy,
-            false,
-          ),
+          sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false),
           sharedObject(tx, "pool", options.pool, true),
           sharedObject(tx, "positions", options.positions, true),
           tx.pure.u64(options.deadline),
@@ -596,6 +598,25 @@ export class MigratorTransactions {
       this.call.signIn({ adminCap: options.adminCapId }),
     );
     tx.add(this.call.issueLpFeeCap({ ...options, adminWitness }));
+    return tx;
+  }
+
+  claimLpFeeCap(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      launch: SharedObjectReference;
+      curveFeeCapId: string;
+      recipient: string;
+    },
+  ): Transaction {
+    const tx = new Transaction();
+    const lpFeeCap = tx.add(
+      this.call.claimLpFeeCap({
+        ...options,
+        curveFeeCap: options.curveFeeCapId,
+      }),
+    );
+    tx.transferObjects([lpFeeCap], normalizeSuiAddress(options.recipient));
     return tx;
   }
 

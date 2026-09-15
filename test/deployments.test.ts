@@ -83,12 +83,6 @@ test("derives call-specific launchpad shared references", () => {
       initialSharedVersion: "12",
       mutable: false,
     },
-    lpFeePolicy: {
-      objectId:
-        "0x0000000000000000000000000000000000000000000000000000000000000040",
-      initialSharedVersion: "18",
-      mutable: false,
-    },
     protocolAuthority: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000005",
@@ -143,20 +137,9 @@ test("requires blast Sui deployment constants only when requested", () => {
         packageVersion: deployment.sharedObjects.packageVersion,
         launchConfig: deployment.sharedObjects.launchConfig,
         runtimeConfig: deployment.sharedObjects.runtimeConfig,
-        lpFeePolicy: deployment.sharedObjects.lpFeePolicy,
         protocolAuthority: deployment.sharedObjects.protocolAuthority,
       },
     }),
-  );
-  const { lpFeePolicy: _lpFeePolicy, ...withoutLpFeePolicy } =
-    deployment.sharedObjects;
-  assert.throws(
-    () =>
-      defineBlastDeployment({
-        ...deployment,
-        sharedObjects: withoutLpFeePolicy as typeof deployment.sharedObjects,
-      }),
-    /sharedObjects\.lpFeePolicy is required/,
   );
   assert.throws(
     () =>
@@ -201,6 +184,12 @@ test("derives migrator package and shared-object references", () => {
       initialSharedVersion: "19",
       mutable: false,
     },
+    lpFeePolicy: {
+      objectId:
+        "0x0000000000000000000000000000000000000000000000000000000000000040",
+      initialSharedVersion: "18",
+      mutable: false,
+    },
     venueConfig: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000007",
@@ -211,8 +200,15 @@ test("derives migrator package and shared-object references", () => {
 });
 
 test("requires migrator deployment constants only when requested", () => {
-  const { migratorsPackageVersion, venueConfig } = deployment.sharedObjects;
-  assert.ok(migratorsPackageVersion && venueConfig);
+  const { lpFeePolicy, migratorsPackageVersion, venueConfig } =
+    deployment.sharedObjects;
+  assert.ok(lpFeePolicy && migratorsPackageVersion && venueConfig);
+  const launchpadObjects = {
+    packageVersion: deployment.sharedObjects.packageVersion,
+    launchConfig: deployment.sharedObjects.launchConfig,
+    runtimeConfig: deployment.sharedObjects.runtimeConfig,
+    protocolAuthority: deployment.sharedObjects.protocolAuthority,
+  };
   assert.throws(
     () =>
       migratorsDeployment({
@@ -225,14 +221,7 @@ test("requires migrator deployment constants only when requested", () => {
     () =>
       migratorsDeployment({
         ...deployment,
-        sharedObjects: {
-          packageVersion: deployment.sharedObjects.packageVersion,
-          launchConfig: deployment.sharedObjects.launchConfig,
-          runtimeConfig: deployment.sharedObjects.runtimeConfig,
-          lpFeePolicy: deployment.sharedObjects.lpFeePolicy,
-          protocolAuthority: deployment.sharedObjects.protocolAuthority,
-          venueConfig,
-        },
+        sharedObjects: { ...launchpadObjects, lpFeePolicy, venueConfig },
       }),
     /sharedObjects\.migratorsPackageVersion is required/,
   );
@@ -241,11 +230,20 @@ test("requires migrator deployment constants only when requested", () => {
       migratorsDeployment({
         ...deployment,
         sharedObjects: {
-          packageVersion: deployment.sharedObjects.packageVersion,
-          launchConfig: deployment.sharedObjects.launchConfig,
-          runtimeConfig: deployment.sharedObjects.runtimeConfig,
-          lpFeePolicy: deployment.sharedObjects.lpFeePolicy,
-          protocolAuthority: deployment.sharedObjects.protocolAuthority,
+          ...launchpadObjects,
+          migratorsPackageVersion,
+          venueConfig,
+        },
+      }),
+    /sharedObjects\.lpFeePolicy is required/,
+  );
+  assert.throws(
+    () =>
+      migratorsDeployment({
+        ...deployment,
+        sharedObjects: {
+          ...launchpadObjects,
+          lpFeePolicy,
           migratorsPackageVersion,
         },
       }),

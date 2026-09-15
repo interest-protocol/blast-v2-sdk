@@ -8,11 +8,6 @@ import {
   parseStructTag,
 } from "@mysten/sui/utils";
 
-import type { CreatorFeeAuthority } from "../launchpad/state.ts";
-import {
-  creatorFeeAuthorityBcs,
-  decodeCreatorFeeAuthority,
-} from "../launchpad/state.ts";
 import { suiBalanceBcs, suiIdBcs, suiUidBcs } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
@@ -33,11 +28,28 @@ const AFTERMATH_MAX_DAO_FEE_BPS = 10_000;
 /** Unavoidable 0.01% fee retained by the permanently locked base LP. */
 export const AFTERMATH_BASE_SWAP_IN_FEE = 100_000_000_000_000n;
 
+/** BCS layout of `blast_fun_migrators::lp_fee_authority::LpFeeAuthority<Meme>`. */
+export const lpFeeAuthorityBcs = bcs.enum("LpFeeAuthority", {
+  Pending: null,
+  Cap: suiIdBcs,
+  Custodian: suiIdBcs,
+});
+
+/**
+ * Who may drain creator LP fees: the migration-born pending right (claimable
+ * once by the launch's live `CurveFeeCap` holder or bindable by its fee
+ * custodian), the live `LpFeeCap`, or the custodian the fees are bound to.
+ */
+export type LpFeeAuthority =
+  | { kind: "pending" }
+  | { kind: "cap"; capId: string }
+  | { kind: "custodian"; custodianId: string };
+
 /** BCS layout of `blast_fun_migrators::vault::LpVault<Meme, Quote>`. */
 export const lpVaultBcs = bcs.struct("LpVault", {
   id: suiUidBcs,
   pool_id: suiIdBcs,
-  lp_fee_authority: creatorFeeAuthorityBcs,
+  lp_fee_authority: lpFeeAuthorityBcs,
   protocol_meme_residual: suiBalanceBcs,
   protocol_quote_residual: suiBalanceBcs,
   fee_ledger: FeeLedgerBcs,
@@ -101,7 +113,7 @@ export type LpVaultState = SharedObjectReference<true> & {
   memeType: string;
   quoteType: string;
   poolId: string;
-  lpFeeAuthority: CreatorFeeAuthority;
+  lpFeeAuthority: LpFeeAuthority;
   protocolMemeFees: bigint;
   creatorMemeFees: bigint;
   protocolQuoteFees: bigint;
@@ -163,7 +175,7 @@ export function decodeLpVaultObject(
     memeType: normalizeTypeParameter(tag.typeParams[0]!),
     quoteType: normalizeTypeParameter(tag.typeParams[1]!),
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
-    lpFeeAuthority: decodeCreatorFeeAuthority(parsed.lp_fee_authority),
+    lpFeeAuthority: decodeLpFeeAuthority(parsed.lp_fee_authority),
     protocolMemeFees: BigInt(parsed.fee_ledger.protocol_meme.value),
     creatorMemeFees: BigInt(parsed.fee_ledger.creator_meme.value),
     protocolQuoteFees: BigInt(parsed.fee_ledger.protocol_quote.value),
@@ -274,6 +286,22 @@ export async function getAftermathPolicy(
     }
     return AFTERMATH_DEFAULT_POLICY;
   }
+}
+
+/** Decodes a vault `LpFeeAuthority` value. */
+export function decodeLpFeeAuthority(
+  authority: ReturnType<typeof lpFeeAuthorityBcs.parse>,
+): LpFeeAuthority {
+  if (authority.$kind === "Cap") {
+    return { kind: "cap", capId: normalizeSuiObjectId(authority.Cap.bytes) };
+  }
+  if (authority.$kind === "Custodian") {
+    return {
+      kind: "custodian",
+      custodianId: normalizeSuiObjectId(authority.Custodian.bytes),
+    };
+  }
+  return { kind: "pending" };
 }
 
 function assertValidAftermathPolicy(policy: AftermathPolicy): void {

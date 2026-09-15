@@ -28,7 +28,7 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
   const frozenSpecs = readFrozenLaunchpadEventSpecs();
   assert.deepEqual(launchpadEventSpecs, frozenSpecs);
   const kinds = Object.keys(frozenSpecs) as LaunchpadEventKind[];
-  assert.equal(kinds.length, 25);
+  assert.equal(kinds.length, 22);
 
   let projection = createLaunchpadEventProjection();
   for (const [eventIndex, kind] of orderedForReplay(kinds).entries()) {
@@ -280,59 +280,6 @@ test("replays creator capability claims, reassignments, locks, and metadata", ()
     description: "Good dog",
     iconUrl: "https://example.com/dog.png",
   });
-});
-
-test("replays LP-fee protocol share defaults and project overrides", () => {
-  const pinned = [
-    decoded("LpProtocolFeeShareChanged", { pos0: 3_000n }, 40),
-    decoded(
-      "ProjectLpProtocolFeeShareSet",
-      { meme: "0xa::meme::MEME", protocol_fee_share_bps: 2_500n },
-      41,
-    ),
-    decoded(
-      "ProjectLpProtocolFeeShareSet",
-      { meme: "0xb::partner::PARTNER", protocol_fee_share_bps: 1_000n },
-      42,
-    ),
-  ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
-
-  assert.equal(pinned.config.lpProtocolFeeShareBps, 3_000n);
-  assert.deepEqual(pinned.config.projectLpProtocolFeeShareBps, {
-    [normalizedType("0xa::meme::MEME")]: 2_500n,
-    [normalizedType("0xb::partner::PARTNER")]: 1_000n,
-  });
-
-  const repinned = reduceLaunchpadEvent(
-    pinned,
-    decoded(
-      "ProjectLpProtocolFeeShareSet",
-      { meme: "0xa::meme::MEME", protocol_fee_share_bps: 5_000n },
-      43,
-    ),
-  );
-  assert.deepEqual(repinned.config.projectLpProtocolFeeShareBps, {
-    [normalizedType("0xa::meme::MEME")]: 5_000n,
-    [normalizedType("0xb::partner::PARTNER")]: 1_000n,
-  });
-
-  const projection = [
-    decoded(
-      "ProjectLpProtocolFeeShareCleared",
-      { pos0: "0xa::meme::MEME" },
-      44,
-    ),
-    decoded("LpProtocolFeeShareChanged", { pos0: 4_000n }, 45),
-  ].reduce(reduceLaunchpadEvent, repinned);
-
-  assert.equal(projection.config.lpProtocolFeeShareBps, 4_000n);
-  assert.deepEqual(projection.config.projectLpProtocolFeeShareBps, {
-    [normalizedType("0xb::partner::PARTNER")]: 1_000n,
-  });
-  assert.equal(projection.config.protocolFeeShareBps, null);
-  assert.equal(projection.eventCounts.ProjectLpProtocolFeeShareSet, 3);
-  assert.equal(projection.eventCounts.ProjectLpProtocolFeeShareCleared, 1);
-  assert.equal(projection.eventCounts.LpProtocolFeeShareChanged, 2);
 });
 
 test("requires native event position and current/original package identities", () => {

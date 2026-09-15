@@ -94,7 +94,6 @@ export const launchpadEventSpecs = {
     quote_fee_bps: "u64",
     meme_fee_bps: "u64",
   },
-  LpProtocolFeeShareChanged: { pos0: "u64" },
   Migrated: {
     launch_id: "id",
     migration_meme: "u64",
@@ -119,11 +118,6 @@ export const launchpadEventSpecs = {
   },
   MigrationWitnessAllowed: { pos0: "typeName" },
   MigrationWitnessDisallowed: { pos0: "typeName" },
-  ProjectLpProtocolFeeShareCleared: { pos0: "typeName" },
-  ProjectLpProtocolFeeShareSet: {
-    meme: "typeName",
-    protocol_fee_share_bps: "u64",
-  },
   ProtocolFeesClaimed: {
     launch_id: "id",
     meme_amount: "u64",

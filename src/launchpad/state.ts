@@ -30,7 +30,7 @@ const CreatorAuthorityBcs = bcs.struct("CreatorAuthority", {
   recipient: CreatorRecipientBcs,
 });
 const MetadataCapBcs = bcs.struct("MetadataCap", { id: suiUidBcs });
-/** BCS layout shared by launch `CurveFeeAuthority` and vault `LpFeeAuthority`. */
+/** BCS layout of `blast_fun::launch::CurveFeeAuthority`. */
 export const creatorFeeAuthorityBcs = bcs.enum("CreatorFeeAuthority", {
   Unassigned: null,
   Cap: suiIdBcs,
@@ -211,7 +211,7 @@ export async function getLaunch(
   );
 }
 
-/** Decodes a launch `CurveFeeAuthority` or vault `LpFeeAuthority` value. */
+/** Decodes a launch `CurveFeeAuthority` value. */
 export function decodeCreatorFeeAuthority(
   authority: ReturnType<typeof creatorFeeAuthorityBcs.parse>,
 ): CreatorFeeAuthority {

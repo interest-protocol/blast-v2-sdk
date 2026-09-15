@@ -34,7 +34,7 @@ const migratorPackages: MigratorEventPackageIdentity = {
 test("decodes and idempotently reduces every frozen migrator event", () => {
   assert.deepEqual(migratorEventSpecs, readFrozenMigratorEventSpecs());
   const kinds = Object.keys(migratorEventSpecs) as MigratorEventKind[];
-  assert.equal(kinds.length, 11);
+  assert.equal(kinds.length, 15);
 
   let projection = createLaunchpadProductProjection();
   for (const [eventIndex, kind] of kinds.entries()) {
@@ -285,27 +285,31 @@ test("replays Aftermath policy and locked weighted-pool migration facts", () => 
   assert.equal(vault.protocolQuoteResidual, 0n);
 });
 
-test("replays LP-fee cap issuance, reissuance, and custodian locks", () => {
+test("replays migration-born LP-fee claims, reissuance, and custodian locks", () => {
   const vaultId = normalizeSuiObjectId("0xd");
   const created = reduceLaunchpadProductInput(
     createLaunchpadProductProjection(),
     migratorDecoded("VaultCreated", { vault_id: "0xd" }, 0),
   );
   assert.deepEqual(created.migrators.vaults[vaultId]?.lpFeeAuthority, {
-    kind: "unassigned",
+    kind: "pending",
   });
 
-  const issued = [
+  const claimed = reduceLaunchpadProductInput(
+    created,
     migratorDecoded(
-      "LpFeeCapIssued",
-      {
-        vault_id: "0xd",
-        revoked_lp_fee_cap_id: null,
-        lp_fee_cap_id: "0x20",
-        recipient: "0xe",
-      },
+      "LpFeeCapClaimed",
+      { vault_id: "0xd", lp_fee_cap_id: "0x20", claimant: "0xe" },
       1,
     ),
+  );
+  assert.deepEqual(claimed.migrators.vaults[vaultId]?.lpFeeAuthority, {
+    kind: "cap",
+    capId: normalizeSuiObjectId("0x20"),
+  });
+
+  const reissued = reduceLaunchpadProductInput(
+    claimed,
     migratorDecoded(
       "LpFeeCapIssued",
       {
@@ -316,14 +320,14 @@ test("replays LP-fee cap issuance, reissuance, and custodian locks", () => {
       },
       2,
     ),
-  ].reduce(reduceLaunchpadProductInput, created);
-  assert.deepEqual(issued.migrators.vaults[vaultId]?.lpFeeAuthority, {
+  );
+  assert.deepEqual(reissued.migrators.vaults[vaultId]?.lpFeeAuthority, {
     kind: "cap",
     capId: normalizeSuiObjectId("0x21"),
   });
 
   const locked = reduceLaunchpadProductInput(
-    issued,
+    reissued,
     migratorDecoded(
       "LpFeesLocked",
       { vault_id: "0xd", lp_fee_cap_id: "0x21", custodian_id: "0x30" },
@@ -334,6 +338,71 @@ test("replays LP-fee cap issuance, reissuance, and custodian locks", () => {
     kind: "custodian",
     custodianId: normalizeSuiObjectId("0x30"),
   });
+
+  const pendingLocked = reduceLaunchpadProductInput(
+    created,
+    migratorDecoded(
+      "LpFeesLocked",
+      { vault_id: "0xd", lp_fee_cap_id: null, custodian_id: "0x31" },
+      4,
+    ),
+  );
+  assert.deepEqual(pendingLocked.migrators.vaults[vaultId]?.lpFeeAuthority, {
+    kind: "custodian",
+    custodianId: normalizeSuiObjectId("0x31"),
+  });
+});
+
+test("replays LP-fee protocol share defaults and project overrides", () => {
+  const pinned = [
+    migratorDecoded("LpProtocolFeeShareChanged", { pos0: 3_000n }, 40),
+    migratorDecoded(
+      "ProjectLpProtocolFeeShareSet",
+      { meme: "0xa::meme::MEME", protocol_fee_share_bps: 2_500n },
+      41,
+    ),
+    migratorDecoded(
+      "ProjectLpProtocolFeeShareSet",
+      { meme: "0xb::partner::PARTNER", protocol_fee_share_bps: 1_000n },
+      42,
+    ),
+  ].reduce(reduceLaunchpadProductInput, createLaunchpadProductProjection());
+
+  assert.equal(pinned.migrators.lpFeePolicy.protocolFeeShareBps, 3_000n);
+  assert.deepEqual(pinned.migrators.lpFeePolicy.projectProtocolFeeShareBps, {
+    [normalizedType("0xa::meme::MEME")]: 2_500n,
+    [normalizedType("0xb::partner::PARTNER")]: 1_000n,
+  });
+
+  const projection = [
+    migratorDecoded(
+      "ProjectLpProtocolFeeShareSet",
+      { meme: "0xa::meme::MEME", protocol_fee_share_bps: 5_000n },
+      43,
+    ),
+    migratorDecoded(
+      "ProjectLpProtocolFeeShareCleared",
+      { pos0: "0xa::meme::MEME" },
+      44,
+    ),
+    migratorDecoded("LpProtocolFeeShareChanged", { pos0: 4_000n }, 45),
+  ].reduce(reduceLaunchpadProductInput, pinned);
+
+  assert.equal(projection.migrators.lpFeePolicy.protocolFeeShareBps, 4_000n);
+  assert.deepEqual(
+    projection.migrators.lpFeePolicy.projectProtocolFeeShareBps,
+    { [normalizedType("0xb::partner::PARTNER")]: 1_000n },
+  );
+  assert.equal(projection.launchpad.config.protocolFeeShareBps, null);
+  assert.equal(
+    projection.migrators.eventCounts.ProjectLpProtocolFeeShareSet,
+    3,
+  );
+  assert.equal(
+    projection.migrators.eventCounts.ProjectLpProtocolFeeShareCleared,
+    1,
+  );
+  assert.equal(projection.migrators.eventCounts.LpProtocolFeeShareChanged, 2);
 });
 
 test("requires migrator event positions and current/original identities", () => {
@@ -605,4 +674,11 @@ function abiDescriptor(type: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function normalizedType(type: string): string {
+  return type.replace(
+    /^0x([0-9a-f]+)::/,
+    (_match, address: string) => `0x${address.padStart(64, "0")}::`,
+  );
 }

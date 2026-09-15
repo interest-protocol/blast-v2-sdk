@@ -62,6 +62,13 @@ export const migratorEventSpecs = {
     meme_amount: "u64",
     quote_amount: "u64",
   },
+  LpFeeCapClaimed: {
+    vault_id: "id",
+    meme: "typeName",
+    quote: "typeName",
+    lp_fee_cap_id: "id",
+    claimant: "address",
+  },
   LpFeeCapIssued: {
     vault_id: "id",
     meme: "typeName",
@@ -74,8 +81,14 @@ export const migratorEventSpecs = {
     vault_id: "id",
     meme: "typeName",
     quote: "typeName",
-    lp_fee_cap_id: "id",
+    lp_fee_cap_id: "optionId",
     custodian_id: "id",
+  },
+  LpProtocolFeeShareChanged: { pos0: "u64" },
+  ProjectLpProtocolFeeShareCleared: { pos0: "typeName" },
+  ProjectLpProtocolFeeShareSet: {
+    meme: "typeName",
+    protocol_fee_share_bps: "u64",
   },
   LpFeesCollected: {
     vault_id: "id",

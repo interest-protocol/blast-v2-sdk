@@ -134,8 +134,34 @@ export class DistributorCalls {
     };
   }
 
-  /** Destroys the vault's live LP-fee cap and binds its creator LP fees to the distributor. */
+  /** Binds a vault's pending creator LP fees to the distributor through its enrolled launch. */
   lockLpFees(
+    options: DistributorPair & {
+      distributor: TransactionObjectInput;
+      lpVault: TransactionObjectInput;
+      /** Migrators `PackageVersion`. */
+      migratorsVersion: TransactionObjectInput;
+      launch: TransactionObjectInput;
+    },
+  ) {
+    const types = pairTypes(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.packageId}::distributor::lock_lp_fees`,
+        typeArguments: types,
+        arguments: [
+          tx.object(options.distributor),
+          tx.object(this.packageVersion),
+          tx.object(options.lpVault),
+          tx.object(options.migratorsVersion),
+          tx.object(options.launch),
+        ],
+      });
+    };
+  }
+
+  /** Destroys an already-claimed LP-fee cap and binds its creator LP fees to the distributor. */
+  lockLpFeesWithCap(
     options: DistributorPair & {
       distributor: TransactionObjectInput;
       lpVault: TransactionObjectInput;
@@ -147,7 +173,7 @@ export class DistributorCalls {
     const types = pairTypes(options);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.packageId}::distributor::lock_lp_fees`,
+        target: `${this.packageId}::distributor::lock_lp_fees_with_cap`,
         typeArguments: types,
         arguments: [
           tx.object(options.distributor),

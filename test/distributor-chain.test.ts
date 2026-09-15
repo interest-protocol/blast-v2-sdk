@@ -250,6 +250,15 @@ test("all reward transitions use the shared version and admin controls take the 
       distributor: "0xd",
       lpVault: "0x13",
       migratorsVersion: "0x14",
+      launch: "0x10",
+    }),
+  );
+  tx.add(
+    calls.lockLpFeesWithCap({
+      ...pair,
+      distributor: "0xd",
+      lpVault: "0x13",
+      migratorsVersion: "0x14",
       lpFeeCap: "0x15",
     }),
   );
@@ -269,6 +278,7 @@ test("all reward transitions use the shared version and admin controls take the 
     [5, 0],
     [6, 0],
     [7, 1],
+    [8, 1],
   ]) {
     const call = data.commands[i!]!.MoveCall!;
     assert.equal(call.package, addr("0x100"));
@@ -299,6 +309,14 @@ test("all reward transitions use the shared version and admin controls take the 
   );
   assert.equal(data.commands[7]?.MoveCall?.function, "lock_lp_fees");
   assert.deepEqual(objectArguments(7), [
+    inputIndex("0xd"),
+    controlIndex,
+    inputIndex("0x13"),
+    inputIndex("0x14"),
+    inputIndex("0x10"),
+  ]);
+  assert.equal(data.commands[8]?.MoveCall?.function, "lock_lp_fees_with_cap");
+  assert.deepEqual(objectArguments(8), [
     inputIndex("0xd"),
     controlIndex,
     inputIndex("0x13"),

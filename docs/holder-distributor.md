@@ -39,9 +39,12 @@ For an existing ID, pass `tx.object(curveFeeCapId)` as `curveFeeCap` in this
 example. The Blast metadata capability stays on its existing path. Enrollment
 destroys the `CurveFeeCap` and binds the launch's curve creator fees to the
 distributor object permanently; no fee capability survives, so there is no
-opt-out and no administrator reassignment. After migration, the holder of the
-vault's administrator-issued `LpFeeCap` can bind creator LP fees the same way with
-`calls.lockLpFees({ ...pair, distributor, lpVault, migratorsVersion, lpFeeCap })`.
+opt-out and no administrator reassignment. After migration, the vault's LP-fee
+right starts pending; the distributor binds it through the enrolled launch with
+no capability using
+`calls.lockLpFees({ ...pair, distributor, lpVault, migratorsVersion, launch })`.
+If the creator already claimed the vault's `LpFeeCap`, its holder binds it with
+`calls.lockLpFeesWithCap({ ...pair, distributor, lpVault, migratorsVersion, lpFeeCap })`.
 `getLaunch(...).curveFeeAuthority` and `getLpVault(...).lpFeeAuthority` expose the
 bound custodian ID for UI/explorer custody evidence. `getDistributor` and
 `getRewardRound` read the funds and claim bitmap.
