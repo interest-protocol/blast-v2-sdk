@@ -38,6 +38,7 @@ const deployment: MigratorsDeployment = {
     packageVersion: shared("0x2", "10", false),
     launchConfig: shared("0x3", "11", false),
     runtimeConfig: shared("0x4", "12", false),
+    lpFeePolicy: shared("0x40", "18", false),
     protocolAuthority: shared("0x5", "13", false),
   },
   venueConfig: shared("0x60", "14", false),
@@ -235,7 +236,7 @@ test("batches both Aftermath DAO fee coin types through one vault call", () => {
 
   assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_dao_fees"]);
   assert.deepEqual(sharedMutability(tx), [true, false]);
-  assertSharedArgumentIds(tx, ["0x10", "0x4"]);
+  assertSharedArgumentIds(tx, ["0x10", "0x40"]);
   assert.deepEqual(moveVectorLengths(tx), [2, 1]);
   assert.equal(receivingInputCount(tx), 3);
 });
@@ -345,7 +346,7 @@ test("builds Bluefin LP-fee collection without unhandled results", () => {
 
   assert.deepEqual(moveFunctions(tx), ["bluefin::collect_fees"]);
   assert.deepEqual(sharedMutability(tx), [true, false, false, true, false]);
-  assertSharedArgumentIds(tx, ["0x20", "0x4", "0x21", "0x22", "0x6"]);
+  assertSharedArgumentIds(tx, ["0x20", "0x40", "0x21", "0x22", "0x6"]);
   assert.equal(tx.getData().commands.length, 1);
 });
 
@@ -405,7 +406,7 @@ test("routes both MMT collection orientations without unhandled results", () => 
 
     assert.deepEqual(moveFunctions(tx), [`mmt::collect_fees_meme_${memeSide}`]);
     assert.deepEqual(sharedMutability(tx), [true, false, true, false, false]);
-    assertSharedArgumentIds(tx, ["0x20", "0x4", "0x21", "0x22", "0x6"]);
+    assertSharedArgumentIds(tx, ["0x20", "0x40", "0x21", "0x22", "0x6"]);
     assert.equal(tx.getData().commands.length, 1);
   }
 });
@@ -473,7 +474,7 @@ test("routes both Cetus LP-fee collection orientations", () => {
       `cetus::collect_fees_meme_${memeSide}`,
     ]);
     assert.deepEqual(sharedMutability(tx), [true, false, false, true]);
-    assertSharedArgumentIds(tx, ["0x20", "0x4", "0x21", "0x22"]);
+    assertSharedArgumentIds(tx, ["0x20", "0x40", "0x21", "0x22"]);
     assert.equal(tx.getData().commands.length, 1);
   }
 });
@@ -572,7 +573,14 @@ test("routes both Turbos collection orientations and validates deadline", () => 
       false,
       false,
     ]);
-    assertSharedArgumentIds(tx, ["0x20", "0x4", "0x21", "0x22", "0x6", "0x23"]);
+    assertSharedArgumentIds(tx, [
+      "0x20",
+      "0x40",
+      "0x21",
+      "0x22",
+      "0x6",
+      "0x23",
+    ]);
     assert.equal(pureInputCount(tx), 1);
     assert.equal(tx.getData().commands.length, 1);
     assert.throws(

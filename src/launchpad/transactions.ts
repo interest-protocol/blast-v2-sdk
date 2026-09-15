@@ -26,6 +26,7 @@ export type LaunchpadDeployment = {
   packageVersion: SharedObjectReference<false>;
   launchConfig: SharedObjectReference<false>;
   runtimeConfig: SharedObjectReference<false>;
+  lpFeePolicy: SharedObjectReference<false>;
   protocolAuthority: SharedObjectReference<false>;
 };
 
@@ -488,6 +489,11 @@ function normalizeDeployment(
     runtimeConfig: normalizeSharedObjectReference(
       "runtimeConfig",
       deployment.runtimeConfig,
+      false,
+    ),
+    lpFeePolicy: normalizeSharedObjectReference(
+      "lpFeePolicy",
+      deployment.lpFeePolicy,
       false,
     ),
     protocolAuthority: normalizeSharedObjectReference(

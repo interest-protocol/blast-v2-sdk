@@ -53,6 +53,8 @@ export type LaunchTicketEventProjection = {
 
 export type LaunchpadConfigProjection = {
   protocolFeeShareBps: bigint | null;
+  lpProtocolFeeShareBps: bigint | null;
+  projectLpProtocolFeeShareBps: Readonly<Record<string, bigint>>;
   tradeFeeDefaults: {
     quoteFeeBps: bigint;
     memeFeeBps: bigint;
@@ -100,6 +102,8 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
     tickets: {},
     config: {
       protocolFeeShareBps: null,
+      lpProtocolFeeShareBps: null,
+      projectLpProtocolFeeShareBps: {},
       tradeFeeDefaults: null,
       graduationDefaults: null,
       quotes: {},
@@ -269,6 +273,31 @@ export function reduceLaunchpadEvent(
         ...state.config,
         protocolFeeShareBps: event.payload.pos0,
       });
+    case "LpProtocolFeeShareChanged":
+      return updateConfig(next, {
+        ...state.config,
+        lpProtocolFeeShareBps: event.payload.pos0,
+      });
+    case "ProjectLpProtocolFeeShareSet": {
+      const payload = event.payload;
+      return updateConfig(next, {
+        ...state.config,
+        projectLpProtocolFeeShareBps: {
+          ...state.config.projectLpProtocolFeeShareBps,
+          [payload.meme]: payload.protocol_fee_share_bps,
+        },
+      });
+    }
+    case "ProjectLpProtocolFeeShareCleared": {
+      const projectLpProtocolFeeShareBps = {
+        ...state.config.projectLpProtocolFeeShareBps,
+      };
+      delete projectLpProtocolFeeShareBps[event.payload.pos0];
+      return updateConfig(next, {
+        ...state.config,
+        projectLpProtocolFeeShareBps,
+      });
+    }
     case "LaunchTradeFeesChanged":
       return updateConfig(next, {
         ...state.config,

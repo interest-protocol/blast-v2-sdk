@@ -33,6 +33,7 @@ export type BlastSharedObjects = Readonly<
     packageVersion: SharedObjectIdentity;
     launchConfig: SharedObjectIdentity;
     runtimeConfig: SharedObjectIdentity;
+    lpFeePolicy: SharedObjectIdentity;
     protocolAuthority: SharedObjectIdentity;
     blastSuiPackageVersion?: SharedObjectIdentity;
     blastSuiProtocolAuthority?: SharedObjectIdentity;

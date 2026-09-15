@@ -32,6 +32,8 @@ export const AFTERMATH_BASE_SWAP_IN_FEE = 100_000_000_000_000n;
 export const lpVaultBcs = bcs.struct("LpVault", {
   id: suiUidBcs,
   pool_id: suiIdBcs,
+  protocol_meme_residual: suiBalanceBcs,
+  protocol_quote_residual: suiBalanceBcs,
   fee_ledger: FeeLedgerBcs,
 });
 
@@ -97,6 +99,8 @@ export type LpVaultState = SharedObjectReference<true> & {
   creatorMemeFees: bigint;
   protocolQuoteFees: bigint;
   creatorQuoteFees: bigint;
+  protocolMemeResidual: bigint;
+  protocolQuoteResidual: bigint;
 };
 
 export type LpVaultObject = SharedObjectReference<true> & {
@@ -156,6 +160,8 @@ export function decodeLpVaultObject(
     creatorMemeFees: BigInt(parsed.fee_ledger.creator_meme.value),
     protocolQuoteFees: BigInt(parsed.fee_ledger.protocol_quote.value),
     creatorQuoteFees: BigInt(parsed.fee_ledger.creator_quote.value),
+    protocolMemeResidual: BigInt(parsed.protocol_meme_residual.value),
+    protocolQuoteResidual: BigInt(parsed.protocol_quote_residual.value),
   };
 }
 

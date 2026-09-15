@@ -36,6 +36,7 @@ const deployment = defineBlastDeployment({
     packageVersion: { objectId: "0x2", initialSharedVersion: "10" },
     launchConfig: { objectId: "0x3", initialSharedVersion: "11" },
     runtimeConfig: { objectId: "0x4", initialSharedVersion: "12" },
+    lpFeePolicy: { objectId: "0x40", initialSharedVersion: "18" },
     protocolAuthority: { objectId: "0x5", initialSharedVersion: "13" },
     blastSuiPackageVersion: { objectId: "0x8", initialSharedVersion: "16" },
     blastSuiVault: { objectId: "0x9", initialSharedVersion: "17" },
@@ -79,6 +80,12 @@ test("derives call-specific launchpad shared references", () => {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000004",
       initialSharedVersion: "12",
+      mutable: false,
+    },
+    lpFeePolicy: {
+      objectId:
+        "0x0000000000000000000000000000000000000000000000000000000000000040",
+      initialSharedVersion: "18",
       mutable: false,
     },
     protocolAuthority: {
@@ -135,9 +142,20 @@ test("requires blast Sui deployment constants only when requested", () => {
         packageVersion: deployment.sharedObjects.packageVersion,
         launchConfig: deployment.sharedObjects.launchConfig,
         runtimeConfig: deployment.sharedObjects.runtimeConfig,
+        lpFeePolicy: deployment.sharedObjects.lpFeePolicy,
         protocolAuthority: deployment.sharedObjects.protocolAuthority,
       },
     }),
+  );
+  const { lpFeePolicy: _lpFeePolicy, ...withoutLpFeePolicy } =
+    deployment.sharedObjects;
+  assert.throws(
+    () =>
+      defineBlastDeployment({
+        ...deployment,
+        sharedObjects: withoutLpFeePolicy as typeof deployment.sharedObjects,
+      }),
+    /sharedObjects\.lpFeePolicy is required/,
   );
   assert.throws(
     () =>
@@ -202,6 +220,7 @@ test("requires migrator deployment constants only when requested", () => {
           packageVersion: deployment.sharedObjects.packageVersion,
           launchConfig: deployment.sharedObjects.launchConfig,
           runtimeConfig: deployment.sharedObjects.runtimeConfig,
+          lpFeePolicy: deployment.sharedObjects.lpFeePolicy,
           protocolAuthority: deployment.sharedObjects.protocolAuthority,
         },
       }),

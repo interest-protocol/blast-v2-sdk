@@ -25,6 +25,8 @@ function serializeVault(id = objectId): Uint8Array {
     .serialize({
       id: uid(id),
       pool_id: { bytes: poolId },
+      protocol_meme_residual: balance(5n),
+      protocol_quote_residual: balance(6n),
       fee_ledger: {
         protocol_meme: balance(1n),
         creator_meme: balance(2n),
@@ -35,7 +37,7 @@ function serializeVault(id = objectId): Uint8Array {
     .toBytes();
 }
 
-test("decodes LP-vault identity, pool, types, and atomic fee totals", () => {
+test("decodes LP-vault identity, pool, types, residuals, and atomic fee totals", () => {
   const vault = decodeLpVaultObject(
     {
       objectId,
@@ -59,6 +61,10 @@ test("decodes LP-vault identity, pool, types, and atomic fee totals", () => {
       vault.creatorQuoteFees,
     ],
     [1n, 2n, 3n, 4n],
+  );
+  assert.deepEqual(
+    [vault.protocolMemeResidual, vault.protocolQuoteResidual],
+    [5n, 6n],
   );
 });
 

@@ -314,6 +314,9 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
   if (key === "launch_ticket::new") return "template-builder";
   if (moduleName === "creator_authority") return "template-internal";
   if (moduleName === "fees") return "move-composition";
+  if (key === "bps::value" || key === "lp_fee_policy::protocol_fee_share") {
+    return "move-composition";
+  }
   if (
     moduleName === "launchpad_domain" &&
     functionName === "package_admin_role"
@@ -338,6 +341,8 @@ function isIntentionalAdminExclusion(moduleName, functionName, key) {
     moduleName === "launch_config" ||
     moduleName === "package_admin" ||
     (moduleName === "runtime_config" && functionName.startsWith("set_")) ||
+    (moduleName === "lp_fee_policy" &&
+      (functionName.startsWith("set_") || functionName.startsWith("clear_"))) ||
     key === "runtime_config::revoke_creator_claim_signer"
   );
 }
