@@ -691,14 +691,14 @@
                   }
                 },
                 {
-                  "name": "custodian_id",
+                  "name": "custodian",
                   "type": {
                     "Datatype": {
                       "module": {
-                        "address": "sui",
-                        "name": "object"
+                        "address": "std",
+                        "name": "type_name"
                       },
-                      "name": "ID",
+                      "name": "TypeName",
                       "type_arguments": []
                     }
                   }
@@ -2110,6 +2110,13 @@
                   "name": "Quote",
                   "phantom": false,
                   "constraints": []
+                },
+                {
+                  "name": "Custodian",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
                 }
               ],
               "parameters": [
@@ -2142,19 +2149,7 @@
                   ]
                 },
                 {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "object"
-                        },
-                        "name": "UID",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
+                  "NamedTypeParameter": "Custodian"
                 }
               ],
               "returns": []
@@ -2662,6 +2657,13 @@
                   "name": "Quote",
                   "phantom": false,
                   "constraints": []
+                },
+                {
+                  "name": "Custodian",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
                 }
               ],
               "parameters": [
@@ -2709,19 +2711,7 @@
                   ]
                 },
                 {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "object"
-                        },
-                        "name": "UID",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
+                  "NamedTypeParameter": "Custodian"
                 },
                 {
                   "Reference": [
@@ -2982,6 +2972,13 @@
                   "name": "Quote",
                   "phantom": false,
                   "constraints": []
+                },
+                {
+                  "name": "Custodian",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
                 }
               ],
               "parameters": [
@@ -3046,19 +3043,7 @@
                   }
                 },
                 {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "object"
-                        },
-                        "name": "UID",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
+                  "NamedTypeParameter": "Custodian"
                 }
               ],
               "returns": []
@@ -4593,10 +4578,10 @@
                       "type": {
                         "Datatype": {
                           "module": {
-                            "address": "sui",
-                            "name": "object"
+                            "address": "std",
+                            "name": "type_name"
                           },
-                          "name": "ID",
+                          "name": "TypeName",
                           "type_arguments": []
                         }
                       }
@@ -9505,14 +9490,14 @@
                   }
                 },
                 {
-                  "name": "custodian_id",
+                  "name": "custodian",
                   "type": {
                     "Datatype": {
                       "module": {
-                        "address": "sui",
-                        "name": "object"
+                        "address": "std",
+                        "name": "type_name"
                       },
-                      "name": "ID",
+                      "name": "TypeName",
                       "type_arguments": []
                     }
                   }
@@ -10032,10 +10017,10 @@
                       "type": {
                         "Datatype": {
                           "module": {
-                            "address": "sui",
-                            "name": "object"
+                            "address": "std",
+                            "name": "type_name"
                           },
-                          "name": "ID",
+                          "name": "TypeName",
                           "type_arguments": []
                         }
                       }
@@ -13316,6 +13301,13 @@
                   "name": "Quote",
                   "phantom": false,
                   "constraints": []
+                },
+                {
+                  "name": "Custodian",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
                 }
               ],
               "parameters": [
@@ -13363,19 +13355,7 @@
                   ]
                 },
                 {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "object"
-                        },
-                        "name": "UID",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
+                  "NamedTypeParameter": "Custodian"
                 },
                 {
                   "Reference": [
@@ -13868,6 +13848,13 @@
                   "name": "Quote",
                   "phantom": false,
                   "constraints": []
+                },
+                {
+                  "name": "Custodian",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
                 }
               ],
               "parameters": [
@@ -13932,19 +13919,7 @@
                   }
                 },
                 {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "object"
-                        },
-                        "name": "UID",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
+                  "NamedTypeParameter": "Custodian"
                 }
               ],
               "returns": []
@@ -13963,6 +13938,13 @@
                   "name": "Quote",
                   "phantom": false,
                   "constraints": []
+                },
+                {
+                  "name": "Custodian",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
                 }
               ],
               "parameters": [
@@ -14038,19 +14020,7 @@
                   ]
                 },
                 {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "object"
-                        },
-                        "name": "UID",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
+                  "NamedTypeParameter": "Custodian"
                 }
               ],
               "returns": []

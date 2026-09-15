@@ -259,6 +259,7 @@ test("all reward transitions use the shared version and admin controls take the 
       distributor: "0xd",
       lpVault: "0x13",
       migratorsVersion: "0x14",
+      launch: "0x10",
       lpFeeCap: "0x15",
     }),
   );
@@ -321,6 +322,7 @@ test("all reward transitions use the shared version and admin controls take the 
     controlIndex,
     inputIndex("0x13"),
     inputIndex("0x14"),
+    inputIndex("0x10"),
     inputIndex("0x15"),
   ]);
 });

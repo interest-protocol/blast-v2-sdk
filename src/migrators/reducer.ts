@@ -345,7 +345,7 @@ export function reduceMigratorEvent(
         ...vault,
         lpFeeAuthority: {
           kind: "custodian",
-          custodianId: payload.custodian_id,
+          custodianType: payload.custodian,
         },
       }));
     }

@@ -44,9 +44,9 @@ right starts pending; the distributor binds it through the enrolled launch with
 no capability using
 `calls.lockLpFees({ ...pair, distributor, lpVault, migratorsVersion, launch })`.
 If the creator already claimed the vault's `LpFeeCap`, its holder binds it with
-`calls.lockLpFeesWithCap({ ...pair, distributor, lpVault, migratorsVersion, lpFeeCap })`.
+`calls.lockLpFeesWithCap({ ...pair, distributor, lpVault, migratorsVersion, launch, lpFeeCap })`.
 `getLaunch(...).curveFeeAuthority` and `getLpVault(...).lpFeeAuthority` expose the
-bound custodian ID for UI/explorer custody evidence. `getDistributor` and
+bound custodian's witness type for UI/explorer custody evidence. `getDistributor` and
 `getRewardRound` read the funds and claim bitmap.
 
 ## Operator configuration

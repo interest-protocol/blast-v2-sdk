@@ -4,7 +4,7 @@ import test from "node:test";
 
 import type { BcsType } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { normalizeSuiObjectId } from "@mysten/sui/utils";
+import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 import type {
   LaunchpadEventKind,
   LaunchpadEventPackageIdentity,
@@ -264,7 +264,11 @@ test("replays creator capability claims, reassignments, locks, and metadata", ()
     ),
     decoded(
       "CreatorFeesLocked",
-      { launch_id: "0xc", curve_fee_cap_id: "0x30", custodian_id: "0x40" },
+      {
+        launch_id: "0xc",
+        curve_fee_cap_id: "0x30",
+        custodian: "0xd15::distributor::Witness",
+      },
       6,
     ),
   ].reduce(reduceLaunchpadEvent, claimed);
@@ -272,7 +276,7 @@ test("replays creator capability claims, reassignments, locks, and metadata", ()
 
   assert.deepEqual(launch?.curveFeeAuthority, {
     kind: "custodian",
-    custodianId: normalizeSuiObjectId("0x40"),
+    custodianType: normalizeStructTag("0xd15::distributor::Witness"),
   });
   assert.equal(launch?.blastMetadataCapId, normalizeSuiObjectId("0x31"));
   assert.deepEqual(launch?.memeMetadata, {

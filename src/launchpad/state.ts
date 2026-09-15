@@ -7,7 +7,12 @@ import {
   parseStructTag,
 } from "@mysten/sui/utils";
 
-import { suiBalanceBcs, suiIdBcs, suiUidBcs } from "../lib/bcs.ts";
+import {
+  moveTypeNameBcs,
+  suiBalanceBcs,
+  suiIdBcs,
+  suiUidBcs,
+} from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
 import type { CurveState } from "./curve.ts";
 import type { SharedObjectReference } from "./transactions.ts";
@@ -34,7 +39,7 @@ const MetadataCapBcs = bcs.struct("MetadataCap", { id: suiUidBcs });
 export const creatorFeeAuthorityBcs = bcs.enum("CreatorFeeAuthority", {
   Unassigned: null,
   Cap: suiIdBcs,
-  Custodian: suiIdBcs,
+  Custodian: moveTypeNameBcs,
 });
 const FeeLedgerBcs = bcs.struct("FeeLedger", {
   protocol_meme: suiBalanceBcs,
@@ -75,12 +80,12 @@ export type CreatorRecipient =
 
 /**
  * Who may claim creator fees: nobody yet, the live capability object, or the
- * custodian object the fees are permanently bound to.
+ * custodian module whose witness type the fees are permanently bound to.
  */
 export type CreatorFeeAuthority =
   | { kind: "unassigned" }
   | { kind: "cap"; capId: string }
-  | { kind: "custodian"; custodianId: string };
+  | { kind: "custodian"; custodianType: string };
 
 export type LaunchState = CurveState &
   SharedObjectReference<true> & {
@@ -219,10 +224,7 @@ export function decodeCreatorFeeAuthority(
     return { kind: "cap", capId: normalizeSuiObjectId(authority.Cap.bytes) };
   }
   if (authority.$kind === "Custodian") {
-    return {
-      kind: "custodian",
-      custodianId: normalizeSuiObjectId(authority.Custodian.bytes),
-    };
+    return { kind: "custodian", custodianType: authority.Custodian };
   }
   return { kind: "unassigned" };
 }

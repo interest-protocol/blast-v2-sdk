@@ -390,7 +390,7 @@ export function reduceLaunchpadEvent(
         ...launch,
         curveFeeAuthority: {
           kind: "custodian",
-          custodianId: payload.custodian_id,
+          custodianType: payload.custodian,
         },
       }));
     }

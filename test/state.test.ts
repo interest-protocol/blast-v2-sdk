@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { normalizeStructTag } from "@mysten/sui/utils";
 
 import {
   decodeLaunchObject,
@@ -49,7 +50,7 @@ function serializeLaunch(id = objectId): Uint8Array {
       },
       metadata_cap: { id: uid(metadataCapId) },
       creator_authority: { recipient: { Address: creator } },
-      curve_fee_authority: { Custodian: { bytes: "0x10" } },
+      curve_fee_authority: { Custodian: "0xd15::distributor::Witness" },
       blast_metadata_cap_id: { bytes: "0x11" },
     })
     .toBytes();
@@ -83,8 +84,7 @@ test("decodes the complete launch BCS state", () => {
   assert.equal(state.metadataCapId.endsWith("0d"), true);
   assert.deepEqual(state.curveFeeAuthority, {
     kind: "custodian",
-    custodianId:
-      "0x0000000000000000000000000000000000000000000000000000000000000010",
+    custodianType: normalizeStructTag("0xd15::distributor::Witness"),
   });
   assert.equal(
     state.blastMetadataCapId,

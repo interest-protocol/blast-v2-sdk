@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { Transaction } from "@mysten/sui/transactions";
+import { normalizeStructTag } from "@mysten/sui/utils";
 import { getLaunch } from "../launchpad/state.ts";
 import type { RewardManifest } from "./allocations.ts";
 import {
@@ -274,7 +275,8 @@ async function inspectDistributor(context: OperatorContext): Promise<void> {
     curveFeeAuthority,
     curveFeesBoundToDistributor:
       curveFeeAuthority.kind === "custodian" &&
-      curveFeeAuthority.custodianId === distributor.objectId,
+      curveFeeAuthority.custodianType ===
+        normalizeStructTag(`${config.originalPackageId}::distributor::Witness`),
     memeType: distributor.memeType,
     quoteType: distributor.quoteType,
     memeAmount: distributor.memeAmount,

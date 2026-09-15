@@ -167,6 +167,7 @@ export class DistributorCalls {
       lpVault: TransactionObjectInput;
       /** Migrators `PackageVersion`. */
       migratorsVersion: TransactionObjectInput;
+      launch: TransactionObjectInput;
       lpFeeCap: TransactionObjectInput;
     },
   ) {
@@ -180,6 +181,7 @@ export class DistributorCalls {
           tx.object(this.packageVersion),
           tx.object(options.lpVault),
           tx.object(options.migratorsVersion),
+          tx.object(options.launch),
           tx.object(options.lpFeeCap),
         ],
       });

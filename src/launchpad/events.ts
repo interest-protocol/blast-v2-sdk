@@ -46,7 +46,7 @@ export const launchpadEventSpecs = {
   CreatorFeesLocked: {
     launch_id: "id",
     curve_fee_cap_id: "id",
-    custodian_id: "id",
+    custodian: "typeName",
   },
   CurveFeeCapReassigned: {
     launch_id: "id",

@@ -4,7 +4,7 @@ import test from "node:test";
 
 import type { BcsType } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { normalizeSuiObjectId } from "@mysten/sui/utils";
+import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 import type { LaunchpadEventKind } from "../src/launchpad/events.ts";
 import {
   decodeLaunchpadEvent,
@@ -330,26 +330,34 @@ test("replays migration-born LP-fee claims, reissuance, and custodian locks", ()
     reissued,
     migratorDecoded(
       "LpFeesLocked",
-      { vault_id: "0xd", lp_fee_cap_id: "0x21", custodian_id: "0x30" },
+      {
+        vault_id: "0xd",
+        lp_fee_cap_id: "0x21",
+        custodian: "0xd15::distributor::Witness",
+      },
       3,
     ),
   );
   assert.deepEqual(locked.migrators.vaults[vaultId]?.lpFeeAuthority, {
     kind: "custodian",
-    custodianId: normalizeSuiObjectId("0x30"),
+    custodianType: normalizeStructTag("0xd15::distributor::Witness"),
   });
 
   const pendingLocked = reduceLaunchpadProductInput(
     created,
     migratorDecoded(
       "LpFeesLocked",
-      { vault_id: "0xd", lp_fee_cap_id: null, custodian_id: "0x31" },
+      {
+        vault_id: "0xd",
+        lp_fee_cap_id: null,
+        custodian: "0xa11::auto_lp::Witness",
+      },
       4,
     ),
   );
   assert.deepEqual(pendingLocked.migrators.vaults[vaultId]?.lpFeeAuthority, {
     kind: "custodian",
-    custodianId: normalizeSuiObjectId("0x31"),
+    custodianType: normalizeStructTag("0xa11::auto_lp::Witness"),
   });
 });
 

@@ -82,7 +82,7 @@ export const migratorEventSpecs = {
     meme: "typeName",
     quote: "typeName",
     lp_fee_cap_id: "optionId",
-    custodian_id: "id",
+    custodian: "typeName",
   },
   LpProtocolFeeShareChanged: { pos0: "u64" },
   ProjectLpProtocolFeeShareCleared: { pos0: "typeName" },
