@@ -3,6 +3,18 @@
 These rules apply to this repository. The seam below is self-contained so this
 repository remains valid when cloned independently of the Blast V2 workspace.
 
+## Shared skill routing
+
+- For coding, configuration, refactoring, fixing, or code review, load
+  `../.agents/skills/ponytail/SKILL.md`.
+- For a stress-test or grill request, load
+  `../.agents/skills/grilling/SKILL.md`; for batch grilling, also load
+  `../.agents/skills/batch-grill-me/SKILL.md`.
+- When the user asks for brief or token-minimal replies, load
+  `../.agents/skills/caveman/SKILL.md`.
+- For ASD-STE100 writing or review, load
+  `../.agents/skills/asd-ste100/SKILL.md`.
+
 ## Contract/SDK seam
 
 Contract state and completed events are authoritative. This SDK derives
