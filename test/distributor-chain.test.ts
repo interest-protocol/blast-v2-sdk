@@ -233,7 +233,7 @@ test("creator cap lookup uses Move's unit-struct dummy boolean BCS", async () =>
   assert.equal(result.objectId, cap.objectId);
 });
 
-test("all reward transitions use the shared version and admin controls consume a witness", () => {
+test("all reward transitions use the shared version and admin controls take the admin cap", () => {
   const calls = new DistributorCalls({
     packageId: "0x100",
     packageVersion: "0x77",
@@ -264,16 +264,14 @@ test("all reward transitions use the shared version and admin controls consume a
       allocation: manifest.allocations[0]!,
     }),
   );
-  const witness = tx.moveCall({
-    target: "0x42::acl::sign_in",
-    arguments: [tx.object("0x40"), tx.object("0x66"), tx.object("0x41")],
-  });
-  tx.add(calls.setPaused({ adminWitness: witness, paused: true }));
-  tx.add(calls.activateVersion({ adminWitness: witness }));
+  tx.add(calls.setPaused({ adminCap: "0x41", paused: true }));
+  tx.add(calls.migrate({ adminCap: "0x41" }));
   const data = tx.getData();
-  const controlIndex = data.inputs.findIndex(
-    (input) => input.UnresolvedObject?.objectId === addr("0x77"),
-  );
+  const inputIndex = (id: string) =>
+    data.inputs.findIndex(
+      (input) => input.UnresolvedObject?.objectId === addr(id),
+    );
+  const controlIndex = inputIndex("0x77");
   assert.notEqual(controlIndex, -1);
   for (const [i, arg] of [
     [0, 0],
@@ -281,8 +279,8 @@ test("all reward transitions use the shared version and admin controls consume a
     [2, 1],
     [3, 2],
     [4, 1],
+    [5, 0],
     [6, 0],
-    [7, 0],
   ]) {
     const call = data.commands[i!]!.MoveCall!;
     assert.equal(call.package, addr("0x100"));
@@ -290,17 +288,23 @@ test("all reward transitions use the shared version and admin controls consume a
     assert(input.$kind === "Input");
     assert.equal(input.Input, controlIndex);
   }
-  assert.equal(data.commands[6]!.MoveCall!.function, "set_paused");
-  assert.equal(data.commands[7]!.MoveCall!.function, "activate");
-  const authorization = data.commands[6]!.MoveCall!.arguments[1]!;
-  assert(authorization.$kind === "Result");
-  assert.equal(authorization.Result, 5);
+  for (const [i, fn] of [
+    [5, "set_paused"],
+    [6, "migrate"],
+  ] as const) {
+    const call = data.commands[i]!.MoveCall!;
+    assert.equal(call.module, "distributor");
+    assert.equal(call.function, fn);
+    const adminCap = call.arguments[1]!;
+    assert(adminCap.$kind === "Input");
+    assert.equal(adminCap.Input, inputIndex("0x41"));
+  }
 });
 
 test("version reads use the original type origin and expose pause without trusting the callable package ID", () => {
   const object = {
     objectId: addr("0x77"),
-    type: `${addr("0x99")}::package_version::PackageVersion`,
+    type: `${addr("0x99")}::distributor::Version`,
     content: distributorVersionBcs
       .serialize({ id: uid("0x77"), version: 2n, paused: true })
       .toBytes(),

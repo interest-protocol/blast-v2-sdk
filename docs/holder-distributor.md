@@ -164,34 +164,26 @@ provided the distributor is on its active generation and unpaused.
 
 ## Pause and compatible upgrades
 
-The owner retains the native distributor UpgradeCap. Active launchpad admins can
-pause/resume or activate a compatible upgrade, using the existing ACL:
+The owner retains the native distributor UpgradeCap. The holder of the
+distributor `AdminCap`, created at publication, can pause/resume or migrate
+after a compatible upgrade:
 
 ```ts
-const adminWitness = tx.moveCall({
-  target: `${activeLaunchpadPackageId}::acl::sign_in`,
-  arguments: [
-    tx.object(protocolAuthorityId),
-    tx.object(corePackageVersionId),
-    tx.object(adminCapId),
-  ],
-});
-tx.add(calls.setPaused({ adminWitness, paused: true }));
+tx.add(calls.setPaused({ adminCap: adminCapId, paused: true }));
 // To resume, use paused: false. After a versioned upgrade, use:
-// tx.add(calls.activateVersion({ adminWitness }));
+// tx.add(calls.migrate({ adminCap: adminCapId }));
 ```
 
-The witness is a transaction result, never a saved signature or object ID. Use
-core's currently active package to obtain it. `getDistributorVersion` and operator
-`inspect` expose canonical version and pause state. All reward mutations check
+`getDistributorVersion` and operator `inspect` expose canonical version and
+pause state. All reward mutations check
 these on chain; indexing can continue during a pause.
 
 Pause stops enrollment, fee collection, publishing, and payouts. An admin resumes
 existing claims without rewriting their allocations or replay bits. The owner
 repairs bugs through a compatible upgrade of the same package, preserving stored
 layouts and public signatures. A behavioral cutover increments the compiled
-version by exactly one; the admin then activates it using the new callable
-`packageId`. Activation preserves pause and rejects arbitrary bumps or rollback.
+version; the admin then calls `migrate` using the new callable `packageId`.
+Migration preserves pause and rejects rollback or repetition.
 Dependency-only relinks can retain the operational generation. Test relinked curve
 collection before an upstream core cutover. A fresh independent publication cannot
 access the old package's creator caps or round balances.

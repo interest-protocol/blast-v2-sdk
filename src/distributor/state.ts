@@ -10,7 +10,7 @@ import { suiBalanceBcs, suiIdBcs, suiUidBcs } from "../lib/bcs.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import { MAX_REWARD_LEAVES, rewardAddress } from "./allocations.ts";
 
-export const distributorVersionBcs = bcs.struct("PackageVersion", {
+export const distributorVersionBcs = bcs.struct("Version", {
   id: suiUidBcs,
   version: bcs.u64(),
   paused: bcs.bool(),
@@ -48,7 +48,7 @@ export function decodeDistributorVersion(
   originalPackageId: string,
 ) {
   const expected = normalizeStructTag(
-    `${rewardAddress(originalPackageId)}::package_version::PackageVersion`,
+    `${rewardAddress(originalPackageId)}::distributor::Version`,
   );
   if (normalizeStructTag(object.type) !== expected || object.mutable !== true)
     throw new Error("invalid distributor version type");

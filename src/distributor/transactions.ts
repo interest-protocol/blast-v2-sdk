@@ -27,26 +27,29 @@ export class DistributorCalls {
     this.packageVersion = deployment.packageVersion;
   }
 
-  /** Compose with acl.sign_in from the active launchpad package. */
-  setPaused(options: { adminWitness: TransactionArgument; paused: boolean }) {
+  /** Requires the distributor AdminCap created at publication. */
+  setPaused(options: { adminCap: TransactionObjectInput; paused: boolean }) {
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.packageId}::package_version::set_paused`,
+        target: `${this.packageId}::distributor::set_paused`,
         arguments: [
           tx.object(this.packageVersion),
-          options.adminWitness,
+          tx.object(options.adminCap),
           tx.pure.bool(options.paused),
         ],
       });
     };
   }
 
-  /** Activates only the next generation compiled into the selected package. */
-  activateVersion(options: { adminWitness: TransactionArgument }) {
+  /** Moves the shared version to the selected upgraded package's version. */
+  migrate(options: { adminCap: TransactionObjectInput }) {
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.packageId}::package_version::activate`,
-        arguments: [tx.object(this.packageVersion), options.adminWitness],
+        target: `${this.packageId}::distributor::migrate`,
+        arguments: [
+          tx.object(this.packageVersion),
+          tx.object(options.adminCap),
+        ],
       });
     };
   }
