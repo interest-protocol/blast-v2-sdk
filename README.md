@@ -237,7 +237,9 @@ Post-migration creator LP fees use a separate `LpFeeCap` owned by the
 migrators package. Each vault's migration leaves that right pending; the live
 `CurveFeeCap` holder claims it once with `MigratorTransactions.claimLpFeeCap`,
 then uses `claimCreatorFees`. A creator administrator can reissue it for a
-community takeover with `issueLpFeeCap`. Migrators also own the shared
+community takeover with `issueLpFeeCap`, except while it is still pending for a
+launch whose creator fees are bound to a custodian: those fees are reserved for
+that custodian. Migrators also own the shared
 `LpFeePolicy` object (`sharedObjects.lpFeePolicy`, required by
 `migratorsDeployment`) and emit its LP-fee share events.
 

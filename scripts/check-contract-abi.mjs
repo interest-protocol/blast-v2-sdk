@@ -355,6 +355,7 @@ function isLaunchpadMoveComposition(moduleName, functionName, key) {
     key === "launch::assert_migrated" ||
     key === "launch::assert_curve_fee_cap" ||
     key === "launch::assert_fee_custodian" ||
+    key === "launch::has_fee_custodian" ||
     key === "launch::lock_creator_fees" ||
     key === "launch::claim_custodied_creator_fees"
   );

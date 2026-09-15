@@ -107,9 +107,15 @@ export class MigratorCalls {
     );
   }
 
+  /**
+   * Reissues the vault's `LpFeeCap` under creator-admin authority. Move reads
+   * `launch` immutably and aborts while the vault is pending if the launch's
+   * creator fees are already bound to a custodian.
+   */
   issueLpFeeCap(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
+      launch: SharedObjectReference;
       adminWitness: TransactionObjectInput;
       recipient: string;
     },
@@ -123,6 +129,7 @@ export class MigratorCalls {
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
+          sharedObject(tx, "launch", options.launch, options.launch.mutable),
           tx.object(options.adminWitness),
           tx.pure.address(recipient),
         ],
@@ -589,6 +596,7 @@ export class MigratorTransactions {
   issueLpFeeCap(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
+      launch: SharedObjectReference;
       adminCapId: string;
       recipient: string;
     },
