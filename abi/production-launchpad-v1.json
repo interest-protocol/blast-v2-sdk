@@ -44,7 +44,124 @@
           "events": []
         },
         "bps": {
-          "functions": [],
+          "functions": [
+            {
+              "name": "apply_down",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                "u64"
+              ],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
+              "name": "apply_up",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                "u64"
+              ],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
+              "name": "complement",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "new",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                "u64"
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "value",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": [
+                "u64"
+              ]
+            }
+          ],
           "structs": [
             {
               "name": "Bps",
@@ -74,6 +191,102 @@
         },
         "creator_authority": {
           "functions": [
+            {
+              "name": "destroy_curve_fee_cap",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "creator_authority"
+                    },
+                    "name": "CurveFeeCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "destroy_lp_fee_cap",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "creator_authority"
+                    },
+                    "name": "LpFeeCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "destroy_metadata_cap",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "creator_authority"
+                    },
+                    "name": "BlastMetadataCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ],
+              "returns": []
+            },
             {
               "name": "new_account",
               "sdk": "template-internal",
@@ -117,9 +330,131 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "new_lp_fee_cap",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "creator_authority"
+                    },
+                    "name": "LpFeeCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
             }
           ],
           "structs": [
+            {
+              "name": "BlastMetadataCap",
+              "abilities": [
+                "Key",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ]
+            },
             {
               "name": "CreatorAuthority",
               "abilities": [
@@ -143,36 +478,6 @@
                         "name": "creator_authority"
                       },
                       "name": "CreatorRecipient",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "CreatorCap",
-              "abilities": [
-                "Key",
-                "Store"
-              ],
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": true,
-                  "constraints": []
-                }
-              ],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
                       "type_arguments": []
                     }
                   }
@@ -214,6 +519,66 @@
                 {
                   "name": "expiry_ms",
                   "type": "u64"
+                }
+              ]
+            },
+            {
+              "name": "CurveFeeCap",
+              "abilities": [
+                "Key",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "LpFeeCap",
+              "abilities": [
+                "Key",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
                 }
               ]
             }
@@ -327,16 +692,16 @@
               "sdk": "decoder-reducer"
             },
             {
-              "name": "CreatorCapClaimed",
+              "name": "CreatorCapsClaimed",
               "abilities": [
                 "Copy",
                 "Drop"
               ],
               "typeParameters": [],
-              "positional": true,
+              "positional": false,
               "fields": [
                 {
-                  "name": "pos0",
+                  "name": "meme",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -344,6 +709,32 @@
                         "name": "type_name"
                       },
                       "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "curve_fee_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "metadata_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
                       "type_arguments": []
                     }
                   }
@@ -414,6 +805,126 @@
                 {
                   "name": "quote_amount",
                   "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "CreatorFeesLocked",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "launch_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "curve_fee_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "custodian_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "CurveFeeCapReassigned",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "launch_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "revoked_curve_fee_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "curve_fee_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "recipient",
+                  "type": "address"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -668,6 +1179,155 @@
               "sdk": "decoder-reducer"
             },
             {
+              "name": "LpProtocolFeeShareChanged",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "pos0",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "MemeMetadataUpdated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "launch_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "name",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "string"
+                      },
+                      "name": "String",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "description",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "string"
+                      },
+                      "name": "String",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "icon_url",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "string"
+                      },
+                      "name": "String",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "MetadataCapReassigned",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "launch_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "revoked_metadata_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "metadata_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "recipient",
+                  "type": "address"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
               "name": "Migrated",
               "abilities": [
                 "Copy",
@@ -766,6 +1426,60 @@
                       "type_arguments": []
                     }
                   }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "ProjectLpProtocolFeeShareCleared",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "pos0",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "ProjectLpProtocolFeeShareSet",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "protocol_fee_share_bps",
+                  "type": "u64"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -1013,7 +1727,7 @@
         "fees": {
           "functions": [
             {
-              "name": "accrue_from_runtime",
+              "name": "accrue",
               "sdk": "move-composition",
               "entry": false,
               "typeParameters": [
@@ -1092,19 +1806,14 @@
                   }
                 },
                 {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
                 }
               ],
               "returns": [
@@ -1151,28 +1860,6 @@
                           {
                             "argument": {
                               "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "creator_authority"
-                        },
-                        "name": "CreatorCap",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
                             },
                             "phantom": true
                           }
@@ -1564,6 +2251,76 @@
         "launch": {
           "functions": [
             {
+              "name": "assert_curve_fee_cap",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "creator_authority"
+                        },
+                        "name": "CurveFeeCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
               "name": "assert_migrated",
               "sdk": "move-composition",
               "entry": false,
@@ -1758,7 +2515,7 @@
               ]
             },
             {
-              "name": "claim_creator_cap",
+              "name": "claim_creator_caps",
               "sdk": "builder",
               "entry": false,
               "typeParameters": [
@@ -1887,7 +2644,7 @@
                       "address": "blast_fun",
                       "name": "creator_authority"
                     },
-                    "name": "CreatorCap",
+                    "name": "CurveFeeCap",
                     "type_arguments": [
                       {
                         "argument": {
@@ -1901,10 +2658,10 @@
                 {
                   "Datatype": {
                     "module": {
-                      "address": "sui",
-                      "name": "coin_registry"
+                      "address": "blast_fun",
+                      "name": "creator_authority"
                     },
-                    "name": "MetadataCap",
+                    "name": "BlastMetadataCap",
                     "type_arguments": [
                       {
                         "argument": {
@@ -1986,7 +2743,7 @@
                           "address": "blast_fun",
                           "name": "creator_authority"
                         },
-                        "name": "CreatorCap",
+                        "name": "CurveFeeCap",
                         "type_arguments": [
                           {
                             "argument": {
@@ -1995,6 +2752,134 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "claim_custodied_creator_fees",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "object"
+                        },
+                        "name": "UID",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -2193,6 +3078,101 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "lock_creator_fees",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "creator_authority"
+                    },
+                    "name": "CurveFeeCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "object"
+                        },
+                        "name": "UID",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
             },
             {
               "name": "migrate",
@@ -2445,6 +3425,222 @@
               ]
             },
             {
+              "name": "reassign_curve_fee_cap",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "address",
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "reassign_metadata_cap",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "address",
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
               "name": "redeem_migration",
               "sdk": "compositional",
               "entry": false,
@@ -2666,6 +3862,357 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "set_description",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "creator_authority"
+                        },
+                        "name": "BlastMetadataCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "std",
+                      "name": "string"
+                    },
+                    "name": "String",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "set_icon_url",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "creator_authority"
+                        },
+                        "name": "BlastMetadataCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "std",
+                      "name": "string"
+                    },
+                    "name": "String",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "set_name",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "creator_authority"
+                        },
+                        "name": "BlastMetadataCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "std",
+                      "name": "string"
+                    },
+                    "name": "String",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": []
             },
             {
               "name": "share",
@@ -2961,30 +4508,16 @@
                   "type": {
                     "Datatype": {
                       "module": {
-                        "address": "std",
-                        "name": "option"
+                        "address": "sui",
+                        "name": "coin_registry"
                       },
-                      "name": "Option",
+                      "name": "MetadataCap",
                       "type_arguments": [
                         {
                           "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "sui",
-                                "name": "coin_registry"
-                              },
-                              "name": "MetadataCap",
-                              "type_arguments": [
-                                {
-                                  "argument": {
-                                    "NamedTypeParameter": "Meme"
-                                  },
-                                  "phantom": true
-                                }
-                              ]
-                            }
+                            "NamedTypeParameter": "Meme"
                           },
-                          "phantom": false
+                          "phantom": true
                         }
                       ]
                     }
@@ -3016,6 +4549,46 @@
                                   "phantom": true
                                 }
                               ]
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "curve_fee_authority",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun",
+                        "name": "launch"
+                      },
+                      "name": "CurveFeeAuthority",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "blast_metadata_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
                             }
                           },
                           "phantom": false
@@ -3092,6 +4665,57 @@
             }
           ],
           "enums": [
+            {
+              "name": "CurveFeeAuthority",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "variants": [
+                {
+                  "name": "Unassigned",
+                  "fields": []
+                },
+                {
+                  "name": "Cap",
+                  "fields": [
+                    {
+                      "name": "pos0",
+                      "type": {
+                        "Datatype": {
+                          "module": {
+                            "address": "sui",
+                            "name": "object"
+                          },
+                          "name": "ID",
+                          "type_arguments": []
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "Custodian",
+                  "fields": [
+                    {
+                      "name": "pos0",
+                      "type": {
+                        "Datatype": {
+                          "module": {
+                            "address": "sui",
+                            "name": "object"
+                          },
+                          "name": "ID",
+                          "type_arguments": []
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
             {
               "name": "Lifecycle",
               "abilities": [
@@ -3487,9 +5111,36 @@
                     }
                   ]
                 },
-                "u64",
-                "u64",
-                "u64"
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
               ],
               "returns": []
             },
@@ -3558,8 +5209,26 @@
                     }
                   ]
                 },
-                "u64",
-                "u64"
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
               ],
               "returns": []
             }
@@ -3963,6 +5632,16 @@
         "launchpad_domain": {
           "functions": [
             {
+              "name": "creator_admin_role",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
               "name": "package_admin_role",
               "sdk": "move-composition",
               "entry": false,
@@ -3980,11 +5659,372 @@
                 "Drop"
               ],
               "typeParameters": [],
-              "positional": false,
+              "positional": true,
               "fields": [
                 {
                   "name": "dummy_field",
                   "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "lp_fee_policy": {
+          "functions": [
+            {
+              "name": "clear_project_protocol_fee_share",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "lp_fee_policy"
+                        },
+                        "name": "LpFeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "protocol_fee_share",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "lp_fee_policy"
+                        },
+                        "name": "LpFeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "set_project_protocol_fee_share",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "lp_fee_policy"
+                        },
+                        "name": "LpFeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "set_protocol_fee_share",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "lp_fee_policy"
+                        },
+                        "name": "LpFeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": []
+            }
+          ],
+          "structs": [
+            {
+              "name": "LpFeePolicy",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "protocol_fee_share_bps",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun",
+                        "name": "bps"
+                      },
+                      "name": "Bps",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "project_protocol_fee_shares",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "table"
+                      },
+                      "name": "Table",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "std",
+                                "name": "type_name"
+                              },
+                              "name": "TypeName",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        },
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_fun",
+                                "name": "bps"
+                              },
+                              "name": "Bps",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
             }
@@ -4773,7 +6813,16 @@
                     }
                   ]
                 },
-                "u64"
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
               ],
               "returns": []
             }
@@ -4930,9 +6979,9 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "runtime_config"
+                          "name": "lp_fee_policy"
                         },
-                        "name": "RuntimeConfig",
+                        "name": "LpFeePolicy",
                         "type_arguments": []
                       }
                     }
@@ -5791,9 +7840,9 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "runtime_config"
+                          "name": "lp_fee_policy"
                         },
-                        "name": "RuntimeConfig",
+                        "name": "LpFeePolicy",
                         "type_arguments": []
                       }
                     }
@@ -6230,9 +8279,9 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "runtime_config"
+                          "name": "lp_fee_policy"
                         },
-                        "name": "RuntimeConfig",
+                        "name": "LpFeePolicy",
                         "type_arguments": []
                       }
                     }
@@ -6366,9 +8415,9 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "runtime_config"
+                          "name": "lp_fee_policy"
                         },
-                        "name": "RuntimeConfig",
+                        "name": "LpFeePolicy",
                         "type_arguments": []
                       }
                     }
@@ -7564,6 +9613,101 @@
               "sdk": "decoder-reducer"
             },
             {
+              "name": "LpFeeCapIssued",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "revoked_lp_fee_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "lp_fee_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "recipient",
+                  "type": "address"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
               "name": "LpFeesCollected",
               "abilities": [
                 "Copy",
@@ -7685,6 +9829,83 @@
                 {
                   "name": "principal_liquidity",
                   "type": "u128"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "LpFeesLocked",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "lp_fee_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "custodian_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
                 }
               ],
               "sdk": "decoder-reducer"
@@ -8094,9 +10315,9 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "runtime_config"
+                          "name": "lp_fee_policy"
                         },
-                        "name": "RuntimeConfig",
+                        "name": "LpFeePolicy",
                         "type_arguments": []
                       }
                     }
@@ -8245,9 +10466,9 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "runtime_config"
+                          "name": "lp_fee_policy"
                         },
-                        "name": "RuntimeConfig",
+                        "name": "LpFeePolicy",
                         "type_arguments": []
                       }
                     }
@@ -9452,9 +11673,9 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "runtime_config"
+                          "name": "lp_fee_policy"
                         },
-                        "name": "RuntimeConfig",
+                        "name": "LpFeePolicy",
                         "type_arguments": []
                       }
                     }
@@ -9630,9 +11851,9 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "runtime_config"
+                          "name": "lp_fee_policy"
                         },
-                        "name": "RuntimeConfig",
+                        "name": "LpFeePolicy",
                         "type_arguments": []
                       }
                     }
@@ -10709,6 +12930,76 @@
         "vault": {
           "functions": [
             {
+              "name": "assert_lp_fee_cap",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "vault"
+                        },
+                        "name": "LpVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "creator_authority"
+                        },
+                        "name": "LpFeeCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
               "name": "claim_creator_fees",
               "sdk": "builder",
               "entry": false,
@@ -10777,7 +13068,7 @@
                           "address": "blast_fun",
                           "name": "creator_authority"
                         },
-                        "name": "CreatorCap",
+                        "name": "LpFeeCap",
                         "type_arguments": [
                           {
                             "argument": {
@@ -10786,6 +13077,134 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "claim_custodied_creator_fees",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "vault"
+                        },
+                        "name": "LpVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "object"
+                        },
+                        "name": "UID",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -10984,6 +13403,224 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "issue_lp_fee_cap",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "vault"
+                        },
+                        "name": "LpVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "launchpad_domain"
+                                },
+                                "name": "LAUNCHPAD_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "address",
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "lock_creator_fees",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "vault"
+                        },
+                        "name": "LpVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun_migrators",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "creator_authority"
+                    },
+                    "name": "LpFeeCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "object"
+                        },
+                        "name": "UID",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
             }
           ],
           "structs": [
@@ -11028,6 +13665,19 @@
                         "name": "object"
                       },
                       "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "lp_fee_authority",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun_migrators",
+                        "name": "vault"
+                      },
+                      "name": "LpFeeAuthority",
                       "type_arguments": []
                     }
                   }
@@ -11123,7 +13773,59 @@
               ]
             }
           ],
-          "enums": [],
+          "enums": [
+            {
+              "name": "LpFeeAuthority",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "variants": [
+                {
+                  "name": "Unassigned",
+                  "fields": []
+                },
+                {
+                  "name": "Cap",
+                  "fields": [
+                    {
+                      "name": "pos0",
+                      "type": {
+                        "Datatype": {
+                          "module": {
+                            "address": "sui",
+                            "name": "object"
+                          },
+                          "name": "ID",
+                          "type_arguments": []
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "Custodian",
+                  "fields": [
+                    {
+                      "name": "pos0",
+                      "type": {
+                        "Datatype": {
+                          "module": {
+                            "address": "sui",
+                            "name": "object"
+                          },
+                          "name": "ID",
+                          "type_arguments": []
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "events": []
         },
         "venue_config": {

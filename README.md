@@ -128,7 +128,11 @@ The event reducers require Sui checkpoint, transaction digest, and event index
 metadata. Stable replay identity uses transaction digest plus event index;
 checkpoint remains ordering metadata. Transaction effects provide package
 publication and returned-coin recipient facts. Object ownership reads provide
-the current `CreatorCap` owner. Blast events do not provide these native facts.
+the current `CurveFeeCap`, `BlastMetadataCap`, and `LpFeeCap` owners. Blast
+events do not provide these native facts. Events do record which capability ID
+each launch and LP vault currently honors (`curveFeeAuthority`,
+`blastMetadataCapId`, `lpFeeAuthority`), including administrator reassignments
+and permanent custodian locks.
 
 ## Vesting
 
@@ -226,7 +230,11 @@ recipient. The backend binds provider logins to that account by immutable
 provider subject ID; mutable handles such as `@name` are display metadata only.
 Use `encodeCreatorClaimMessage` for the bytes signed by the creator-claim key,
 then wrap its Ed25519 signature with `encodeCreatorClaimAttestation` before
-passing it as `accountAttestation` to `claimCreatorCap`.
+passing it as `accountAttestation` to `claimCreatorCaps`. The claim returns a
+`CurveFeeCap` for bonding-curve creator fees and a `BlastMetadataCap` for the
+`setName`, `setDescription`, and `setIconUrl` launch metadata builders.
+Post-migration creator LP fees use a separate administrator-issued `LpFeeCap`
+(`MigratorTransactions.issueLpFeeCap`, then `claimCreatorFees`).
 
 Browser builds initialize `@mysten/move-bytecode-template` automatically. If a
 bundler cannot locate its WASM asset, call `initializeMemeTemplate` once with

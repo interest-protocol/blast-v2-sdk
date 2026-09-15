@@ -7,7 +7,7 @@ This is an unpublished contract integration; supply verified deployment IDs.
 
 ## Enrollment option
 
-After the existing creator-cap claim, choose whether to keep creator rewards or
+After the creator capability claim, choose whether to keep creator rewards or
 enroll in holder rewards. The optional branch can be part of the same transaction:
 
 ```ts
@@ -18,24 +18,32 @@ const calls = new DistributorCalls({
   packageVersion: distributorVersionId,
 });
 const pair = { memeType, quoteType };
-// creatorCap may be an existing object ID or the earlier claim's transaction result.
+// curveFeeCap may be an existing object ID or the earlier claim's transaction result.
 if (holderRewardsEnabled) {
   const [distributor, publisher] = tx.add(
-    calls.enroll({ ...pair, creatorCap, launch: launchId }),
+    calls.enroll({
+      ...pair,
+      curveFeeCap,
+      launch: launchId,
+      packageVersion: launchpadVersionId,
+    }),
   );
   tx.add(calls.share({ ...pair, distributor: distributor! }));
   tx.transferObjects([publisher!], publisherMultisigAddress);
 } else {
-  tx.transferObjects([creatorCap], creatorAddress);
+  tx.transferObjects([curveFeeCap], creatorAddress);
 }
 ```
 
-For an existing ID, pass `tx.object(creatorCapId)` as `creatorCap` in this example.
-The metadata capability stays on its existing path. Neither existing package
-needs an upgrade. Opt-in seals the fee capability in the distributor; there is
-no opt-out extraction function. The creator cap retains its original object ID.
-`getDistributorCreatorCap(client, distributorId, originalPackageId, launchpadOriginalPackageId)`
-resolves the child for UI/explorer custody evidence. `getDistributor` and
+For an existing ID, pass `tx.object(curveFeeCapId)` as `curveFeeCap` in this
+example. The Blast metadata capability stays on its existing path. Enrollment
+destroys the `CurveFeeCap` and binds the launch's curve creator fees to the
+distributor object permanently; no fee capability survives, so there is no
+opt-out and no administrator reassignment. After migration, the holder of the
+vault's administrator-issued `LpFeeCap` can bind creator LP fees the same way with
+`calls.lockLpFees({ ...pair, distributor, lpVault, migratorsVersion, lpFeeCap })`.
+`getLaunch(...).curveFeeAuthority` and `getLpVault(...).lpFeeAuthority` expose the
+bound custodian ID for UI/explorer custody evidence. `getDistributor` and
 `getRewardRound` read the funds and claim bitmap.
 
 ## Operator configuration
@@ -54,18 +62,20 @@ Create a JSON config outside the public artifacts:
   "distributorId": "0xDISTRIBUTOR",
   "publisherCapId": "0xPUBLISHER_CAP",
   "packageVersionId": "0xCORE_VERSION_OBJECT",
+  "migratorsVersionId": "0xMIGRATORS_VERSION_OBJECT",
   "lpVaultId": "0xVERIFIED_MIGRATION_VAULT",
   "sender": "0xPUBLISHER_MULTISIG",
   "excludedAddresses": []
 }
 ```
 
-`lpVaultId`, `packageVersionId`, `publisherCapId`, and `sender` are needed only for
+`lpVaultId`, `packageVersionId`, `migratorsVersionId`, `publisherCapId`, and `sender` are needed only for
 the relevant commands. `packageId` selects callable bytecode;
 `originalPackageId` remains the first package ID across compatible upgrades for
 object types and dynamic-field lookup. `distributorVersionId` is the singleton
 created at distributor publication; `packageVersionId` is the separate core
-version object used for curve collection. The provider must serve checkpoints back to coin-package creation
+version object used for curve collection, and `migratorsVersionId` is the
+migrators version object used for LP collection. The provider must serve checkpoints back to coin-package creation
 and the distributor's initial shared object version. The operator checks genesis,
 checkpoint ordering/digest continuity, transaction completeness, timestamps and
 nonnegative balances. It trusts the provider's derived balance changes; it does
@@ -175,7 +185,8 @@ tx.add(calls.setPaused({ adminCap: adminCapId, paused: true }));
 ```
 
 `getDistributorVersion` and operator `inspect` expose canonical version and
-pause state. All reward mutations check
+pause state; `inspect` also reports the launch's curve-fee authority and whether
+it is bound to this distributor. All reward mutations check
 these on chain; indexing can continue during a pause.
 
 Pause stops enrollment, fee collection, publishing, and payouts. An admin resumes
@@ -186,9 +197,9 @@ version; the admin then calls `migrate` using the new callable `packageId`.
 Migration preserves pause and rejects rollback or repetition.
 Dependency-only relinks can retain the operational generation. Test relinked curve
 collection before an upstream core cutover. A fresh independent publication cannot
-access the old package's creator caps or round balances.
+access the old package's bound creator fees or round balances.
 
-Current cap custody is verifiable, but the upgrade owner can change its rules.
+Current fee custody is verifiable, but the upgrade owner can change its rules.
 The admin can keep payouts paused. This integration has no live deployment
 addresses and still requires a real compatible-upgrade rehearsal and live venue
 verification before release.

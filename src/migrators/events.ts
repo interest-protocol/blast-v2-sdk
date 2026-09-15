@@ -18,7 +18,8 @@ type MigratorEventFieldDescriptor =
   | "u64"
   | "u128"
   | "u16"
-  | "u32";
+  | "u32"
+  | "optionId";
 
 export const migratorEventSpecs = {
   AftermathMigrationCompleted: {
@@ -60,6 +61,21 @@ export const migratorEventSpecs = {
     claimant: "address",
     meme_amount: "u64",
     quote_amount: "u64",
+  },
+  LpFeeCapIssued: {
+    vault_id: "id",
+    meme: "typeName",
+    quote: "typeName",
+    revoked_lp_fee_cap_id: "optionId",
+    lp_fee_cap_id: "id",
+    recipient: "address",
+  },
+  LpFeesLocked: {
+    vault_id: "id",
+    meme: "typeName",
+    quote: "typeName",
+    lp_fee_cap_id: "id",
+    custodian_id: "id",
   },
   LpFeesCollected: {
     vault_id: "id",
@@ -132,7 +148,9 @@ type DescriptorOutput<Descriptor extends MigratorEventFieldDescriptor> =
     ? bigint
     : Descriptor extends "u16" | "u32"
       ? number
-      : string;
+      : Descriptor extends "optionId"
+        ? string | null
+        : string;
 
 export type MigratorEventPayloads = {
   [Kind in MigratorEventKind]: {
@@ -168,6 +186,7 @@ const MIGRATOR_EVENT_FIELD_BCS: Record<
   u128: U128Bcs as BcsType<unknown, unknown>,
   u16: bcs.u16() as BcsType<unknown, unknown>,
   u32: bcs.u32() as BcsType<unknown, unknown>,
+  optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown, unknown>,
 };
 
 type MigratorEventBcsMap = {

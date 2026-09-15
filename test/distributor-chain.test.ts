@@ -10,7 +10,6 @@ import {
   decodeRewardRound,
   distributorBcs,
   distributorVersionBcs,
-  getDistributorCreatorCap,
   rewardIsClaimed,
   rewardRoundBcs,
 } from "../src/distributor/state.ts";
@@ -133,7 +132,12 @@ test("calls compose enrollment and preserve publisher-cap delivery as a separate
   });
   const tx = new Transaction();
   const enrolled = tx.add(
-    calls.enroll({ ...pair, creatorCap: "0x11", launch: "0x10" }),
+    calls.enroll({
+      ...pair,
+      curveFeeCap: "0x11",
+      launch: "0x10",
+      packageVersion: "0x66",
+    }),
   );
   const distributor = enrolled[0]!;
   const publisher = enrolled[1]!;
@@ -142,6 +146,14 @@ test("calls compose enrollment and preserve publisher-cap delivery as a separate
   const data = tx.getData();
   assert.equal(data.commands[0]?.MoveCall?.module, "distributor");
   assert.equal(data.commands[0]?.MoveCall?.function, "new");
+  assert.deepEqual(
+    data.commands[0]?.MoveCall?.arguments.map((argument) =>
+      argument.$kind === "Input"
+        ? data.inputs[argument.Input]?.UnresolvedObject?.objectId
+        : argument.$kind,
+    ),
+    [addr("0x77"), addr("0x11"), addr("0x10"), addr("0x66")],
+  );
   assert.equal(data.commands[1]?.MoveCall?.function, "share");
   assert.equal(data.commands[2]?.$kind, "TransferObjects");
 });
@@ -185,61 +197,20 @@ test("publication and claims carry the immutable allocation and expose no withdr
   );
 });
 
-test("creator cap lookup uses Move's unit-struct dummy boolean BCS", async () => {
-  const content = distributorBcs
-    .serialize({
-      id: uid("0xd"),
-      launch: { bytes: addr("0x10") },
-      meme: { value: 0n },
-      quote: { value: 0n },
-      next_round: 0n,
-      last_checkpoint: null,
-    })
-    .toBytes();
-  const cap = {
-    objectId: addr("0x11"),
-    type: `${addr("0x42")}::creator_authority::CreatorCap<${MEME}>`,
-  };
-  const client = {
-    core: {
-      getObject: async () => ({
-        object: {
-          objectId: addr("0xd"),
-          type: `${addr("0x99")}::distributor::Distributor<${MEME},${QUOTE}>`,
-          content,
-          owner: { $kind: "Shared", Shared: { initialSharedVersion: "1" } },
-        },
-      }),
-      getDynamicObjectField: async (input: {
-        parentId: string;
-        name: { type: string; bcs: Uint8Array };
-      }) => {
-        assert.equal(input.parentId, addr("0xd"));
-        assert.equal(
-          input.name.type,
-          `${addr("0x99")}::distributor::CreatorCapKey`,
-        );
-        assert.deepEqual(input.name.bcs, Uint8Array.of(0));
-        return { object: cap };
-      },
-    },
-  };
-  const result = await getDistributorCreatorCap(
-    client as unknown as Parameters<typeof getDistributorCreatorCap>[0],
-    "0xd",
-    "0x99",
-    "0x42",
-  );
-  assert.equal(result.objectId, cap.objectId);
-});
-
 test("all reward transitions use the shared version and admin controls take the admin cap", () => {
   const calls = new DistributorCalls({
     packageId: "0x100",
     packageVersion: "0x77",
   });
   const tx = new Transaction();
-  tx.add(calls.enroll({ ...pair, creatorCap: "0x11", launch: "0x10" }));
+  tx.add(
+    calls.enroll({
+      ...pair,
+      curveFeeCap: "0x11",
+      launch: "0x10",
+      packageVersion: "0x66",
+    }),
+  );
   tx.add(
     calls.collectCurveFees({
       ...pair,
@@ -248,7 +219,14 @@ test("all reward transitions use the shared version and admin controls take the 
       packageVersion: "0x66",
     }),
   );
-  tx.add(calls.collectLpFees({ ...pair, distributor: "0xd", lpVault: "0x13" }));
+  tx.add(
+    calls.collectLpFees({
+      ...pair,
+      distributor: "0xd",
+      lpVault: "0x13",
+      migratorsVersion: "0x14",
+    }),
+  );
   const manifest = buildRewardManifest({
     distributorId: "0xd",
     number: 0n,
@@ -266,6 +244,15 @@ test("all reward transitions use the shared version and admin controls take the 
   );
   tx.add(calls.setPaused({ adminCap: "0x41", paused: true }));
   tx.add(calls.migrate({ adminCap: "0x41" }));
+  tx.add(
+    calls.lockLpFees({
+      ...pair,
+      distributor: "0xd",
+      lpVault: "0x13",
+      migratorsVersion: "0x14",
+      lpFeeCap: "0x15",
+    }),
+  );
   const data = tx.getData();
   const inputIndex = (id: string) =>
     data.inputs.findIndex(
@@ -281,6 +268,7 @@ test("all reward transitions use the shared version and admin controls take the 
     [4, 1],
     [5, 0],
     [6, 0],
+    [7, 1],
   ]) {
     const call = data.commands[i!]!.MoveCall!;
     assert.equal(call.package, addr("0x100"));
@@ -299,6 +287,24 @@ test("all reward transitions use the shared version and admin controls take the 
     assert(adminCap.$kind === "Input");
     assert.equal(adminCap.Input, inputIndex("0x41"));
   }
+  const objectArguments = (index: number) =>
+    data.commands[index]?.MoveCall?.arguments.map((argument) =>
+      argument.$kind === "Input" ? argument.Input : -1,
+    );
+  assert.deepEqual(
+    objectArguments(2),
+    ["0xd", "0x100", "0x13", "0x14"].map((id) =>
+      id === "0x100" ? controlIndex : inputIndex(id),
+    ),
+  );
+  assert.equal(data.commands[7]?.MoveCall?.function, "lock_lp_fees");
+  assert.deepEqual(objectArguments(7), [
+    inputIndex("0xd"),
+    controlIndex,
+    inputIndex("0x13"),
+    inputIndex("0x14"),
+    inputIndex("0x15"),
+  ]);
 });
 
 test("version reads use the original type origin and expose pause without trusting the callable package ID", () => {

@@ -25,6 +25,7 @@ function serializeVault(id = objectId): Uint8Array {
     .serialize({
       id: uid(id),
       pool_id: { bytes: poolId },
+      lp_fee_authority: { Cap: { bytes: "0xe" } },
       protocol_meme_residual: balance(5n),
       protocol_quote_residual: balance(6n),
       fee_ledger: {
@@ -51,6 +52,10 @@ test("decodes LP-vault identity, pool, types, residuals, and atomic fee totals",
 
   assert.equal(vault.objectId.endsWith("0c"), true);
   assert.equal(vault.poolId.endsWith("0d"), true);
+  assert.deepEqual(vault.lpFeeAuthority, {
+    kind: "cap",
+    capId: "0x000000000000000000000000000000000000000000000000000000000000000e",
+  });
   assert.equal(vault.memeType.endsWith("0a::meme::MEME"), true);
   assert.equal(vault.quoteType.endsWith("02::sui::SUI"), true);
   assert.deepEqual(

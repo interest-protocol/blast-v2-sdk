@@ -39,6 +39,16 @@ export type MigrationTypes = LaunchTypes & {
   migrationWitnessType: string;
 };
 
+/**
+ * Inputs shared by the launch metadata setters. `launch` is read immutably by
+ * Move; pass `mutable: true` only when the same PTB also mutates the launch.
+ */
+export type MemeMetadataUpdate = LaunchTypes & {
+  launch: SharedObjectReference;
+  blastMetadataCap: TransactionObjectInput;
+  currency: SharedObjectReference<true>;
+};
+
 type NormalizedDeployment = Required<LaunchpadDeployment>;
 
 export class LaunchpadCalls {
@@ -148,7 +158,7 @@ export class LaunchpadCalls {
       });
   }
 
-  claimCreatorCap(
+  claimCreatorCaps(
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
       accountAttestation?: Uint8Array | null;
@@ -157,7 +167,7 @@ export class LaunchpadCalls {
     const types = normalizeLaunchTypes(options);
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::launch::claim_creator_cap`,
+        target: `${this.deployment.packageId}::launch::claim_creator_caps`,
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "launch", options.launch, true),
@@ -187,7 +197,7 @@ export class LaunchpadCalls {
   claimCreatorFees(
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
-      creatorCap: TransactionObjectInput;
+      curveFeeCap: TransactionObjectInput;
     },
   ) {
     const types = normalizeLaunchTypes(options);
@@ -203,9 +213,54 @@ export class LaunchpadCalls {
             this.deployment.packageVersion,
             false,
           ),
-          tx.object(options.creatorCap),
+          tx.object(options.curveFeeCap),
         ],
       });
+  }
+
+  setName(options: MemeMetadataUpdate & { name: string }) {
+    return this.#setMemeMetadata("set_name", options, options.name);
+  }
+
+  setDescription(options: MemeMetadataUpdate & { description: string }) {
+    return this.#setMemeMetadata(
+      "set_description",
+      options,
+      options.description,
+    );
+  }
+
+  setIconUrl(options: MemeMetadataUpdate & { iconUrl: string }) {
+    return this.#setMemeMetadata("set_icon_url", options, options.iconUrl);
+  }
+
+  #setMemeMetadata(
+    functionName: "set_name" | "set_description" | "set_icon_url",
+    options: MemeMetadataUpdate,
+    value: string,
+  ) {
+    const types = normalizeLaunchTypes(options);
+    if (typeof value !== "string") {
+      throw new TypeError(`${functionName} value must be a string`);
+    }
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::${functionName}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, options.launch.mutable),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.packageVersion,
+            false,
+          ),
+          tx.object(options.blastMetadataCap),
+          sharedObject(tx, "currency", options.currency, true),
+          tx.pure.string(value),
+        ],
+      });
+    };
   }
 
   signIn(options: { adminCap: TransactionObjectInput }) {
@@ -397,7 +452,7 @@ export class LaunchpadTransactions {
     return tx;
   }
 
-  claimCreatorCap(
+  claimCreatorCaps(
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
       recipient: string;
@@ -405,11 +460,11 @@ export class LaunchpadTransactions {
     },
   ): Transaction {
     const tx = new Transaction();
-    const claimResult = tx.add(this.call.claimCreatorCap(options));
-    const creatorCap = claimResult[0]!;
-    const metadataCap = claimResult[1]!;
+    const claimResult = tx.add(this.call.claimCreatorCaps(options));
+    const curveFeeCap = claimResult[0]!;
+    const blastMetadataCap = claimResult[1]!;
     tx.transferObjects(
-      [creatorCap, metadataCap],
+      [curveFeeCap, blastMetadataCap],
       normalizeSuiAddress(options.recipient),
     );
     return tx;
@@ -418,7 +473,7 @@ export class LaunchpadTransactions {
   claimCreatorFees(
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
-      creatorCapId: string;
+      curveFeeCapId: string;
       recipient: string;
     },
   ): Transaction {
@@ -426,7 +481,7 @@ export class LaunchpadTransactions {
     const claimResult = tx.add(
       this.call.claimCreatorFees({
         ...options,
-        creatorCap: options.creatorCapId,
+        curveFeeCap: options.curveFeeCapId,
       }),
     );
     const memeCoin = claimResult[0]!;
@@ -434,6 +489,54 @@ export class LaunchpadTransactions {
     tx.transferObjects(
       [memeCoin, quoteCoin],
       normalizeSuiAddress(options.recipient),
+    );
+    return tx;
+  }
+
+  setName(
+    options: Omit<MemeMetadataUpdate, "blastMetadataCap"> & {
+      blastMetadataCapId: string;
+      name: string;
+    },
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(
+      this.call.setName({
+        ...options,
+        blastMetadataCap: options.blastMetadataCapId,
+      }),
+    );
+    return tx;
+  }
+
+  setDescription(
+    options: Omit<MemeMetadataUpdate, "blastMetadataCap"> & {
+      blastMetadataCapId: string;
+      description: string;
+    },
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(
+      this.call.setDescription({
+        ...options,
+        blastMetadataCap: options.blastMetadataCapId,
+      }),
+    );
+    return tx;
+  }
+
+  setIconUrl(
+    options: Omit<MemeMetadataUpdate, "blastMetadataCap"> & {
+      blastMetadataCapId: string;
+      iconUrl: string;
+    },
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(
+      this.call.setIconUrl({
+        ...options,
+        blastMetadataCap: options.blastMetadataCapId,
+      }),
     );
     return tx;
   }

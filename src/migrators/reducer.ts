@@ -5,6 +5,7 @@ import {
   createLaunchpadEventProjection,
   reduceLaunchpadEvent,
 } from "../launchpad/reducer.ts";
+import type { CreatorFeeAuthority } from "../launchpad/state.ts";
 import type { NativeTransactionPosition } from "../lib/events.ts";
 import { normalizeNativeTransactionPosition } from "../lib/events.ts";
 import { requireU64 } from "../lib/integers.ts";
@@ -59,6 +60,8 @@ export type LpVaultEventProjection = {
   venueType: string;
   memeType: string;
   quoteType: string;
+  /** Live creator LP-fee authority, from cap issuance and locks. */
+  lpFeeAuthority: CreatorFeeAuthority;
   protocolMemeFees: bigint;
   creatorMemeFees: bigint;
   protocolQuoteFees: bigint;
@@ -193,6 +196,7 @@ export function reduceMigratorEvent(
             venueType: payload.venue,
             memeType: payload.meme,
             quoteType: payload.quote,
+            lpFeeAuthority: { kind: "unassigned" },
             protocolMemeFees: 0n,
             creatorMemeFees: 0n,
             protocolQuoteFees: 0n,
@@ -280,6 +284,23 @@ export function reduceMigratorEvent(
         creatorQuoteFees:
           vault.creatorQuoteFees + payload.creator_quote_fee_delta,
         principalLiquidity: payload.principal_liquidity,
+      }));
+    }
+    case "LpFeeCapIssued": {
+      const payload = event.payload;
+      return updateVault(next, payload.vault_id, (vault) => ({
+        ...vault,
+        lpFeeAuthority: { kind: "cap", capId: payload.lp_fee_cap_id },
+      }));
+    }
+    case "LpFeesLocked": {
+      const payload = event.payload;
+      return updateVault(next, payload.vault_id, (vault) => ({
+        ...vault,
+        lpFeeAuthority: {
+          kind: "custodian",
+          custodianId: payload.custodian_id,
+        },
       }));
     }
     case "CreatorFeesClaimed": {

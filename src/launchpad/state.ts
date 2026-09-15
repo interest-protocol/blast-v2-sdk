@@ -7,7 +7,7 @@ import {
   parseStructTag,
 } from "@mysten/sui/utils";
 
-import { suiBalanceBcs, suiUidBcs } from "../lib/bcs.ts";
+import { suiBalanceBcs, suiIdBcs, suiUidBcs } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
 import type { CurveState } from "./curve.ts";
 import type { SharedObjectReference } from "./transactions.ts";
@@ -30,6 +30,12 @@ const CreatorAuthorityBcs = bcs.struct("CreatorAuthority", {
   recipient: CreatorRecipientBcs,
 });
 const MetadataCapBcs = bcs.struct("MetadataCap", { id: suiUidBcs });
+/** BCS layout shared by launch `CurveFeeAuthority` and vault `LpFeeAuthority`. */
+export const creatorFeeAuthorityBcs = bcs.enum("CreatorFeeAuthority", {
+  Unassigned: null,
+  Cap: suiIdBcs,
+  Custodian: suiIdBcs,
+});
 const FeeLedgerBcs = bcs.struct("FeeLedger", {
   protocol_meme: suiBalanceBcs,
   creator_meme: suiBalanceBcs,
@@ -54,8 +60,10 @@ export const launchBcs = bcs.struct("Launch", {
   protocol_meme_graduation_fee: suiBalanceBcs,
   meme_liquidity_provision: suiBalanceBcs,
   fee_ledger: FeeLedgerBcs,
-  metadata_cap: bcs.option(MetadataCapBcs),
+  metadata_cap: MetadataCapBcs,
   creator_authority: bcs.option(CreatorAuthorityBcs),
+  curve_fee_authority: creatorFeeAuthorityBcs,
+  blast_metadata_cap_id: bcs.option(suiIdBcs),
 });
 
 export type LaunchLifecycle = "Live" | "MigrationReady" | "Migrated";
@@ -64,6 +72,15 @@ export type CreatorRecipient =
   | { kind: "address"; address: string }
   | { kind: "account"; accountCommitment: Uint8Array }
   | null;
+
+/**
+ * Who may drain creator fees: nobody yet, the live capability object, or the
+ * custodian object the fees are permanently bound to.
+ */
+export type CreatorFeeAuthority =
+  | { kind: "unassigned" }
+  | { kind: "cap"; capId: string }
+  | { kind: "custodian"; custodianId: string };
 
 export type LaunchState = CurveState &
   SharedObjectReference<true> & {
@@ -80,8 +97,10 @@ export type LaunchState = CurveState &
     creatorMemeTradeFees: bigint;
     protocolQuoteTradeFees: bigint;
     creatorQuoteTradeFees: bigint;
-    metadataCapId: string | null;
+    metadataCapId: string;
     creatorRecipient: CreatorRecipient;
+    curveFeeAuthority: CreatorFeeAuthority;
+    blastMetadataCapId: string | null;
   };
 
 export type LaunchObject = SharedObjectReference<true> & {
@@ -125,9 +144,7 @@ export function decodeLaunchObject(
 
   const memeType = normalizeTypeParameter(tag.typeParams[0]);
   const quoteType = normalizeTypeParameter(tag.typeParams[1]);
-  const metadataCapId = parsed.metadata_cap
-    ? normalizeSuiObjectId(parsed.metadata_cap.id.id.bytes)
-    : null;
+  const metadataCapId = normalizeSuiObjectId(parsed.metadata_cap.id.id.bytes);
 
   return {
     objectId,
@@ -160,6 +177,10 @@ export function decodeLaunchObject(
     creatorQuoteTradeFees: toBigInt(parsed.fee_ledger.creator_quote.value),
     metadataCapId,
     creatorRecipient: decodeCreatorRecipient(parsed.creator_authority),
+    curveFeeAuthority: decodeCreatorFeeAuthority(parsed.curve_fee_authority),
+    blastMetadataCapId: parsed.blast_metadata_cap_id
+      ? normalizeSuiObjectId(parsed.blast_metadata_cap_id.bytes)
+      : null,
   };
 }
 
@@ -188,6 +209,22 @@ export async function getLaunch(
     },
     originalPackageId,
   );
+}
+
+/** Decodes a launch `CurveFeeAuthority` or vault `LpFeeAuthority` value. */
+export function decodeCreatorFeeAuthority(
+  authority: ReturnType<typeof creatorFeeAuthorityBcs.parse>,
+): CreatorFeeAuthority {
+  if (authority.$kind === "Cap") {
+    return { kind: "cap", capId: normalizeSuiObjectId(authority.Cap.bytes) };
+  }
+  if (authority.$kind === "Custodian") {
+    return {
+      kind: "custodian",
+      custodianId: normalizeSuiObjectId(authority.Custodian.bytes),
+    };
+  }
+  return { kind: "unassigned" };
 }
 
 function decodeCreatorRecipient(

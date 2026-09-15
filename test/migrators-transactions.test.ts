@@ -41,6 +41,7 @@ const deployment: MigratorsDeployment = {
     lpFeePolicy: shared("0x40", "18", false),
     protocolAuthority: shared("0x5", "13", false),
   },
+  migratorsVersion: shared("0x61", "15", false),
   venueConfig: shared("0x60", "14", false),
 };
 const types = {
@@ -55,10 +56,15 @@ test("exposes composable creator and protocol LP-fee calls", () => {
     calls.claimCreatorFees({
       ...types,
       vault: shared("0xc", "20", true),
-      creatorCap: "0xd",
+      lpFeeCap: "0xd",
     }),
   );
   assert.deepEqual(moveFunctions(creatorTx), ["vault::claim_creator_fees"]);
+  assert.deepEqual(moveArgumentKinds(creatorTx, 0), [
+    "shared:0xc",
+    "shared:0x61",
+    "object:0xd",
+  ]);
 
   const protocolTx = new Transaction();
   const witness = protocolTx.add(calls.signIn({ adminCap: "0xe" }));
@@ -73,6 +79,34 @@ test("exposes composable creator and protocol LP-fee calls", () => {
     "acl::sign_in",
     "vault::claim_protocol_fees",
   ]);
+  assert.deepEqual(moveArgumentKinds(protocolTx, 1), [
+    "shared:0xc",
+    "shared:0x61",
+    "Result",
+  ]);
+});
+
+test("signs in and issues a revocable LP-fee cap to a recipient", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const tx = sdk.issueLpFeeCap({
+    ...types,
+    vault: shared("0xc", "20", true),
+    adminCapId: "0xe",
+    recipient: "0xf",
+  });
+
+  assert.deepEqual(moveFunctions(tx), [
+    "acl::sign_in",
+    "vault::issue_lp_fee_cap",
+  ]);
+  assert.deepEqual(moveArgumentKinds(tx, 1), [
+    "shared:0xc",
+    "shared:0x61",
+    "shared:0x2",
+    "Result",
+    "pure",
+  ]);
+  assert.equal(tx.getData().commands.length, 2);
 });
 
 test("routes both creator LP-fee coins to the requested recipient", () => {
@@ -80,7 +114,7 @@ test("routes both creator LP-fee coins to the requested recipient", () => {
   const tx = sdk.claimCreatorFees({
     ...types,
     vault: shared("0xc", "20", true),
-    creatorCapId: "0xd",
+    lpFeeCapId: "0xd",
     recipient: "0xf",
   });
 
@@ -119,8 +153,16 @@ test("signs in and pins one validated Aftermath policy", () => {
     "acl::sign_in",
     "aftermath::set_policy",
   ]);
-  assert.deepEqual(sharedMutability(tx), [false, false, true]);
-  assertSharedArgumentIds(tx, ["0x5", "0x2", "0x60"]);
+  assert.deepEqual(sharedMutability(tx), [false, false, true, false]);
+  assertSharedArgumentIds(tx, ["0x5", "0x2", "0x60", "0x61"]);
+  assert.deepEqual(moveArgumentKinds(tx, 1), [
+    "shared:0x60",
+    "shared:0x61",
+    "Result",
+    "pure",
+    "pure",
+    "pure",
+  ]);
   assert.equal(pureInputCount(tx), 3);
   assert.throws(
     () =>
@@ -170,6 +212,7 @@ test("routes both Aftermath canonical orientations with a fresh LP cap", () => {
       true,
       false,
       false,
+      false,
       true,
       true,
       false,
@@ -177,12 +220,13 @@ test("routes both Aftermath canonical orientations with a fresh LP cap", () => {
     assertSharedArgumentIds(tx, [
       "0x10",
       "0x2",
+      "0x61",
       "0x60",
       "0x11",
       "0x12",
       "0x14",
     ]);
-    assertOwnedArgumentId(tx, 0, 5, "0x13");
+    assertOwnedArgumentId(tx, 0, 6, "0x13");
     assert.equal(tx.getData().commands.length, 1);
   }
 });
@@ -203,9 +247,16 @@ test("signs in and updates one existing Aftermath DAO fee", () => {
     "acl::sign_in",
     "aftermath::update_dao_fee",
   ]);
-  assert.deepEqual(sharedMutability(tx), [false, false, true, true, false]);
-  assertSharedArgumentIds(tx, ["0x5", "0x2", "0x10", "0x11", "0x12"]);
-  assert.deepEqual(moveCalls(tx)[1]?.arguments[3], {
+  assert.deepEqual(sharedMutability(tx), [
+    false,
+    false,
+    true,
+    false,
+    true,
+    false,
+  ]);
+  assertSharedArgumentIds(tx, ["0x5", "0x2", "0x10", "0x61", "0x11", "0x12"]);
+  assert.deepEqual(moveCalls(tx)[1]?.arguments[4], {
     Result: 0,
     $kind: "Result",
   });
@@ -235,8 +286,8 @@ test("batches both Aftermath DAO fee coin types through one vault call", () => {
   });
 
   assert.deepEqual(moveFunctions(tx), ["aftermath::accrue_dao_fees"]);
-  assert.deepEqual(sharedMutability(tx), [true, false]);
-  assertSharedArgumentIds(tx, ["0x10", "0x40"]);
+  assert.deepEqual(sharedMutability(tx), [true, false, false]);
+  assertSharedArgumentIds(tx, ["0x10", "0x61", "0x40"]);
   assert.deepEqual(moveVectorLengths(tx), [2, 1]);
   assert.equal(receivingInputCount(tx), 3);
 });
@@ -319,6 +370,7 @@ test("builds the complete Bluefin migration with frozen mutability", () => {
     true,
     false,
     false,
+    false,
     true,
     false,
     true,
@@ -327,6 +379,7 @@ test("builds the complete Bluefin migration with frozen mutability", () => {
   assertSharedArgumentIds(tx, [
     "0x10",
     "0x2",
+    "0x61",
     "0x60",
     "0x11",
     "0x12",
@@ -345,8 +398,15 @@ test("builds Bluefin LP-fee collection without unhandled results", () => {
   });
 
   assert.deepEqual(moveFunctions(tx), ["bluefin::collect_fees"]);
-  assert.deepEqual(sharedMutability(tx), [true, false, false, true, false]);
-  assertSharedArgumentIds(tx, ["0x20", "0x40", "0x21", "0x22", "0x6"]);
+  assert.deepEqual(sharedMutability(tx), [
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+  ]);
+  assertSharedArgumentIds(tx, ["0x20", "0x61", "0x40", "0x21", "0x22", "0x6"]);
   assert.equal(tx.getData().commands.length, 1);
 });
 
@@ -375,6 +435,7 @@ test("routes both MMT migration orientations with frozen shared inputs", () => {
       true,
       false,
       false,
+      false,
       true,
       true,
       false,
@@ -383,6 +444,7 @@ test("routes both MMT migration orientations with frozen shared inputs", () => {
     assertSharedArgumentIds(tx, [
       "0x10",
       "0x2",
+      "0x61",
       "0x60",
       "0x11",
       "0x12",
@@ -405,8 +467,22 @@ test("routes both MMT collection orientations without unhandled results", () => 
     });
 
     assert.deepEqual(moveFunctions(tx), [`mmt::collect_fees_meme_${memeSide}`]);
-    assert.deepEqual(sharedMutability(tx), [true, false, true, false, false]);
-    assertSharedArgumentIds(tx, ["0x20", "0x40", "0x21", "0x22", "0x6"]);
+    assert.deepEqual(sharedMutability(tx), [
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+    ]);
+    assertSharedArgumentIds(tx, [
+      "0x20",
+      "0x61",
+      "0x40",
+      "0x21",
+      "0x22",
+      "0x6",
+    ]);
     assert.equal(tx.getData().commands.length, 1);
   }
 });
@@ -439,6 +515,7 @@ test("routes all four Cetus migration combinations", () => {
         true,
         false,
         false,
+        false,
         true,
         false,
         true,
@@ -447,6 +524,7 @@ test("routes all four Cetus migration combinations", () => {
       assertSharedArgumentIds(tx, [
         "0x10",
         "0x2",
+        "0x61",
         "0x60",
         "0x11",
         "0x12",
@@ -473,8 +551,8 @@ test("routes both Cetus LP-fee collection orientations", () => {
     assert.deepEqual(moveFunctions(tx), [
       `cetus::collect_fees_meme_${memeSide}`,
     ]);
-    assert.deepEqual(sharedMutability(tx), [true, false, false, true]);
-    assertSharedArgumentIds(tx, ["0x20", "0x40", "0x21", "0x22"]);
+    assert.deepEqual(sharedMutability(tx), [true, false, false, false, true]);
+    assertSharedArgumentIds(tx, ["0x20", "0x61", "0x40", "0x21", "0x22"]);
     assert.equal(tx.getData().commands.length, 1);
   }
 });
@@ -521,8 +599,8 @@ test("routes all four Turbos migrations with a third fee type", () => {
       assert.deepEqual(
         sharedMutability(tx),
         poolKind === "new"
-          ? [true, false, false, true, true, false, true, false, false]
-          : [true, false, false, true, true, true, false, false],
+          ? [true, false, false, false, true, true, false, true, false, false]
+          : [true, false, false, false, true, true, true, false, false],
       );
       assertSharedArgumentIds(
         tx,
@@ -530,6 +608,7 @@ test("routes all four Turbos migrations with a third fee type", () => {
           ? [
               "0x10",
               "0x2",
+              "0x61",
               "0x60",
               "0x11",
               "0x14",
@@ -538,7 +617,17 @@ test("routes all four Turbos migrations with a third fee type", () => {
               "0x6",
               "0x17",
             ]
-          : ["0x10", "0x2", "0x60", "0x11", "0x14", "0x16", "0x6", "0x17"],
+          : [
+              "0x10",
+              "0x2",
+              "0x61",
+              "0x60",
+              "0x11",
+              "0x14",
+              "0x16",
+              "0x6",
+              "0x17",
+            ],
       );
       assert.equal(pureInputCount(tx), 1);
       assert.equal(tx.getData().commands.length, 1);
@@ -568,6 +657,7 @@ test("routes both Turbos collection orientations and validates deadline", () => 
     assert.deepEqual(sharedMutability(tx), [
       true,
       false,
+      false,
       true,
       true,
       false,
@@ -575,6 +665,7 @@ test("routes both Turbos collection orientations and validates deadline", () => 
     ]);
     assertSharedArgumentIds(tx, [
       "0x20",
+      "0x61",
       "0x40",
       "0x21",
       "0x22",
@@ -618,6 +709,24 @@ function assertOwnedArgumentId(
     input.UnresolvedObject.objectId,
     `0x${objectId.replace(/^0x/, "").padStart(64, "0")}`,
   );
+}
+
+function moveArgumentKinds(tx: Transaction, callIndex: number): string[] {
+  const data = tx.getData();
+  const call = moveCalls(tx)[callIndex];
+  assert.ok(call);
+  return call.arguments.map((argument) => {
+    if (argument.$kind !== "Input") return argument.$kind;
+    const input = data.inputs[argument.Input];
+    if (input?.$kind === "Pure") return "pure";
+    if (input?.$kind === "UnresolvedObject") {
+      return `object:0x${BigInt(input.UnresolvedObject.objectId).toString(16)}`;
+    }
+    if (input?.$kind === "Object" && input.Object.$kind === "SharedObject") {
+      return `shared:0x${BigInt(input.Object.SharedObject.objectId).toString(16)}`;
+    }
+    return String(input?.$kind);
+  });
 }
 
 function transferObjectCount(tx: Transaction): number {

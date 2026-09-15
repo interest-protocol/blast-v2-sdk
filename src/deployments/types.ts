@@ -39,6 +39,7 @@ export type BlastSharedObjects = Readonly<
     blastSuiProtocolAuthority?: SharedObjectIdentity;
     blastSuiPackageAdmin?: SharedObjectIdentity;
     blastSuiVault?: SharedObjectIdentity;
+    migratorsPackageVersion?: SharedObjectIdentity;
     venueConfig?: SharedObjectIdentity;
     packageAdmin?: SharedObjectIdentity;
   }

@@ -24,26 +24,11 @@ const packages: LaunchpadEventPackageIdentity = {
   originalPackageId: "0x122",
 };
 
-// LP-fee policy events exist in the Move source but not yet in the frozen ABI
-// artifact. Drop this list when `npm run check:abi:write` refreshes it.
-const eventsPendingAbiRefresh = {
-  LpProtocolFeeShareChanged: { pos0: "u64" },
-  ProjectLpProtocolFeeShareCleared: { pos0: "typeName" },
-  ProjectLpProtocolFeeShareSet: {
-    meme: "typeName",
-    protocol_fee_share_bps: "u64",
-  },
-};
-
 test("decodes and idempotently reduces every frozen launchpad event", () => {
   const frozenSpecs = readFrozenLaunchpadEventSpecs();
-  for (const kind of Object.keys(eventsPendingAbiRefresh)) {
-    assert.equal(Object.hasOwn(frozenSpecs, kind), false);
-  }
-  const expectedSpecs = { ...frozenSpecs, ...eventsPendingAbiRefresh };
-  assert.deepEqual(launchpadEventSpecs, expectedSpecs);
-  const kinds = Object.keys(expectedSpecs) as LaunchpadEventKind[];
-  assert.equal(kinds.length, 21);
+  assert.deepEqual(launchpadEventSpecs, frozenSpecs);
+  const kinds = Object.keys(frozenSpecs) as LaunchpadEventKind[];
+  assert.equal(kinds.length, 25);
 
   let projection = createLaunchpadEventProjection();
   for (const [eventIndex, kind] of orderedForReplay(kinds).entries()) {
@@ -174,9 +159,11 @@ test("replays lifecycle, reserves, and fee deltas from ordered events", () => {
 test("replays creator claims and signer changes", () => {
   const beforeRevocation = [
     decoded(
-      "CreatorCapClaimed",
+      "CreatorCapsClaimed",
       {
-        pos0: "0xa::meme::MEME",
+        meme: "0xa::meme::MEME",
+        curve_fee_cap_id: "0x20",
+        metadata_cap_id: "0x21",
       },
       30,
     ),
@@ -204,9 +191,95 @@ test("replays creator claims and signer changes", () => {
     {
       memeType: normalizedType("0xa::meme::MEME"),
       claimant: normalizeSuiObjectId("0xd"),
+      curveFeeCapId: normalizeSuiObjectId("0x20"),
+      metadataCapId: normalizeSuiObjectId("0x21"),
     },
   );
   assert.equal(projection.administration.creatorClaimSignerPublicKey, null);
+});
+
+test("replays creator capability claims, reassignments, locks, and metadata", () => {
+  const created = [
+    decoded("LaunchTicketCreated", { ticket_id: "0xb" }, 0),
+    decoded("LaunchCreated", { launch_id: "0xc", ticket_id: "0xb" }, 1),
+  ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
+  const launchId = normalizeSuiObjectId("0xc");
+  assert.deepEqual(created.launches[launchId]?.curveFeeAuthority, {
+    kind: "unassigned",
+  });
+  assert.equal(created.launches[launchId]?.blastMetadataCapId, null);
+  assert.equal(created.launches[launchId]?.memeMetadata, null);
+
+  const claimed = reduceLaunchpadEvent(
+    created,
+    decoded(
+      "CreatorCapsClaimed",
+      {
+        meme: "0xa::meme::MEME",
+        curve_fee_cap_id: "0x20",
+        metadata_cap_id: "0x21",
+      },
+      2,
+    ),
+  );
+  assert.deepEqual(claimed.launches[launchId]?.curveFeeAuthority, {
+    kind: "cap",
+    capId: normalizeSuiObjectId("0x20"),
+  });
+  assert.equal(
+    claimed.launches[launchId]?.blastMetadataCapId,
+    normalizeSuiObjectId("0x21"),
+  );
+
+  const projection = [
+    decoded(
+      "CurveFeeCapReassigned",
+      {
+        launch_id: "0xc",
+        revoked_curve_fee_cap_id: "0x20",
+        curve_fee_cap_id: "0x30",
+        recipient: "0xe",
+      },
+      3,
+    ),
+    decoded(
+      "MetadataCapReassigned",
+      {
+        launch_id: "0xc",
+        revoked_metadata_cap_id: null,
+        metadata_cap_id: "0x31",
+        recipient: "0xe",
+      },
+      4,
+    ),
+    decoded(
+      "MemeMetadataUpdated",
+      {
+        launch_id: "0xc",
+        name: "Dog Coin",
+        description: "Good dog",
+        icon_url: "https://example.com/dog.png",
+      },
+      5,
+    ),
+    decoded(
+      "CreatorFeesLocked",
+      { launch_id: "0xc", curve_fee_cap_id: "0x30", custodian_id: "0x40" },
+      6,
+    ),
+  ].reduce(reduceLaunchpadEvent, claimed);
+  const launch = projection.launches[launchId];
+
+  assert.deepEqual(launch?.curveFeeAuthority, {
+    kind: "custodian",
+    custodianId: normalizeSuiObjectId("0x40"),
+  });
+  assert.equal(launch?.blastMetadataCapId, normalizeSuiObjectId("0x31"));
+  assert.deepEqual(launch?.memeMetadata, {
+    name: "Dog Coin",
+    description: "Good dog",
+    iconUrl: "https://example.com/dog.png",
+  });
 });
 
 test("replays LP-fee protocol share defaults and project overrides", () => {
@@ -366,15 +439,23 @@ function abiDescriptor(type: unknown): string {
     throw new TypeError("unsupported ABI datatype field");
   if (datatype.name === "ID") return "id";
   if (datatype.name === "TypeName") return "typeName";
+  if (datatype.name === "String") return "string";
   if (datatype.name !== "Option" || !Array.isArray(datatype.type_arguments)) {
     throw new TypeError("unsupported ABI event datatype");
   }
-  const argument = datatype.type_arguments[0];
+  return optionDescriptor(datatype.type_arguments[0]);
+}
+
+function optionDescriptor(argument: unknown): string {
   if (!isRecord(argument)) throw new TypeError("invalid ABI Option argument");
   const inner = argument.argument;
   if (inner === "address") return "optionAddress";
   if (inner === "u64") return "optionU64";
-  if (isRecord(inner) && inner.vector === "u8") return "optionBytes";
+  if (!isRecord(inner)) throw new TypeError("unsupported ABI Option field");
+  if (inner.vector === "u8") return "optionBytes";
+  if (isRecord(inner.Datatype) && inner.Datatype.name === "ID") {
+    return "optionId";
+  }
   throw new TypeError("unsupported ABI Option event field");
 }
 
@@ -437,7 +518,10 @@ function sampleValue(descriptor: string): unknown {
       return false;
     case "bytes":
       return new Uint8Array([1]);
+    case "string":
+      return "meme";
     case "optionAddress":
+    case "optionId":
     case "optionBytes":
     case "optionU64":
       return null;

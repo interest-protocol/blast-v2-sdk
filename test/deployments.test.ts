@@ -41,6 +41,7 @@ const deployment = defineBlastDeployment({
     blastSuiPackageVersion: { objectId: "0x8", initialSharedVersion: "16" },
     blastSuiVault: { objectId: "0x9", initialSharedVersion: "17" },
     packageAdmin: { objectId: "0x6", initialSharedVersion: "14" },
+    migratorsPackageVersion: { objectId: "0xa", initialSharedVersion: "19" },
     venueConfig: { objectId: "0x7", initialSharedVersion: "15" },
   },
 });
@@ -194,6 +195,12 @@ test("derives migrator package and shared-object references", () => {
     originalPackageId:
       "0x0000000000000000000000000000000000000000000000000000000000000322",
     launchpad: launchpadDeployment(deployment),
+    migratorsVersion: {
+      objectId:
+        "0x000000000000000000000000000000000000000000000000000000000000000a",
+      initialSharedVersion: "19",
+      mutable: false,
+    },
     venueConfig: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000007",
@@ -204,6 +211,8 @@ test("derives migrator package and shared-object references", () => {
 });
 
 test("requires migrator deployment constants only when requested", () => {
+  const { migratorsPackageVersion, venueConfig } = deployment.sharedObjects;
+  assert.ok(migratorsPackageVersion && venueConfig);
   assert.throws(
     () =>
       migratorsDeployment({
@@ -222,6 +231,22 @@ test("requires migrator deployment constants only when requested", () => {
           runtimeConfig: deployment.sharedObjects.runtimeConfig,
           lpFeePolicy: deployment.sharedObjects.lpFeePolicy,
           protocolAuthority: deployment.sharedObjects.protocolAuthority,
+          venueConfig,
+        },
+      }),
+    /sharedObjects\.migratorsPackageVersion is required/,
+  );
+  assert.throws(
+    () =>
+      migratorsDeployment({
+        ...deployment,
+        sharedObjects: {
+          packageVersion: deployment.sharedObjects.packageVersion,
+          launchConfig: deployment.sharedObjects.launchConfig,
+          runtimeConfig: deployment.sharedObjects.runtimeConfig,
+          lpFeePolicy: deployment.sharedObjects.lpFeePolicy,
+          protocolAuthority: deployment.sharedObjects.protocolAuthority,
+          migratorsPackageVersion,
         },
       }),
     /sharedObjects\.venueConfig is required/,

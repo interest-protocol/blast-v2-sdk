@@ -34,7 +34,7 @@ const migratorPackages: MigratorEventPackageIdentity = {
 test("decodes and idempotently reduces every frozen migrator event", () => {
   assert.deepEqual(migratorEventSpecs, readFrozenMigratorEventSpecs());
   const kinds = Object.keys(migratorEventSpecs) as MigratorEventKind[];
-  assert.equal(kinds.length, 9);
+  assert.equal(kinds.length, 11);
 
   let projection = createLaunchpadProductProjection();
   for (const [eventIndex, kind] of kinds.entries()) {
@@ -285,6 +285,57 @@ test("replays Aftermath policy and locked weighted-pool migration facts", () => 
   assert.equal(vault.protocolQuoteResidual, 0n);
 });
 
+test("replays LP-fee cap issuance, reissuance, and custodian locks", () => {
+  const vaultId = normalizeSuiObjectId("0xd");
+  const created = reduceLaunchpadProductInput(
+    createLaunchpadProductProjection(),
+    migratorDecoded("VaultCreated", { vault_id: "0xd" }, 0),
+  );
+  assert.deepEqual(created.migrators.vaults[vaultId]?.lpFeeAuthority, {
+    kind: "unassigned",
+  });
+
+  const issued = [
+    migratorDecoded(
+      "LpFeeCapIssued",
+      {
+        vault_id: "0xd",
+        revoked_lp_fee_cap_id: null,
+        lp_fee_cap_id: "0x20",
+        recipient: "0xe",
+      },
+      1,
+    ),
+    migratorDecoded(
+      "LpFeeCapIssued",
+      {
+        vault_id: "0xd",
+        revoked_lp_fee_cap_id: "0x20",
+        lp_fee_cap_id: "0x21",
+        recipient: "0xf",
+      },
+      2,
+    ),
+  ].reduce(reduceLaunchpadProductInput, created);
+  assert.deepEqual(issued.migrators.vaults[vaultId]?.lpFeeAuthority, {
+    kind: "cap",
+    capId: normalizeSuiObjectId("0x21"),
+  });
+
+  const locked = reduceLaunchpadProductInput(
+    issued,
+    migratorDecoded(
+      "LpFeesLocked",
+      { vault_id: "0xd", lp_fee_cap_id: "0x21", custodian_id: "0x30" },
+      3,
+    ),
+  );
+  assert.deepEqual(locked.migrators.vaults[vaultId]?.lpFeeAuthority, {
+    kind: "custodian",
+    custodianId: normalizeSuiObjectId("0x30"),
+  });
+});
+
 test("requires migrator event positions and current/original identities", () => {
   const valid = migratorSuiEvent("VaultCreated", {}, 0);
   assert.throws(
@@ -482,6 +533,7 @@ function sampleValue(descriptor: string): unknown {
       return new Uint8Array([1]);
     case "optionAddress":
     case "optionBytes":
+    case "optionId":
     case "optionU64":
       return null;
     default:
@@ -536,6 +588,18 @@ function abiDescriptor(type: unknown): string {
   if (!isRecord(datatype)) throw new TypeError("unsupported ABI datatype");
   if (datatype.name === "ID") return "id";
   if (datatype.name === "TypeName") return "typeName";
+  const argument = Array.isArray(datatype.type_arguments)
+    ? datatype.type_arguments[0]
+    : undefined;
+  if (
+    datatype.name === "Option" &&
+    isRecord(argument) &&
+    isRecord(argument.argument) &&
+    isRecord(argument.argument.Datatype) &&
+    argument.argument.Datatype.name === "ID"
+  ) {
+    return "optionId";
+  }
   throw new TypeError("unsupported ABI event datatype");
 }
 

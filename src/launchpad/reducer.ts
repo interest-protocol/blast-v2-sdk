@@ -1,5 +1,6 @@
 import type { DecodedLaunchpadEvent, LaunchpadEventKind } from "./events.ts";
 import { launchpadEventId, launchpadEventSpecs } from "./events.ts";
+import type { CreatorFeeAuthority } from "./state.ts";
 
 export type LaunchMigrationProjection = {
   memeAmount: bigint;
@@ -37,6 +38,18 @@ export type LaunchEventProjection = {
   protocolMemeGraduationFeeBps: bigint;
   memeLiquidityProvisionBps: bigint;
   migration: LaunchMigrationProjection | null;
+  /** Live bonding-curve creator-fee authority, from cap claims, reassignments, and locks. */
+  curveFeeAuthority: CreatorFeeAuthority;
+  /** Live Blast metadata capability, from cap claims and reassignments. */
+  blastMetadataCapId: string | null;
+  /** Coin metadata after the most recent launch metadata update, if any. */
+  memeMetadata: LaunchMemeMetadataProjection | null;
+};
+
+export type LaunchMemeMetadataProjection = {
+  name: string;
+  description: string;
+  iconUrl: string;
 };
 
 export type LaunchTicketEventProjection = {
@@ -77,6 +90,8 @@ export type LaunchpadAdministrationProjection = {
       {
         memeType: string;
         claimant: string;
+        curveFeeCapId: string;
+        metadataCapId: string;
       }
     >
   >;
@@ -192,6 +207,9 @@ export function reduceLaunchpadEvent(
               payload.protocol_meme_graduation_fee_bps,
             memeLiquidityProvisionBps: payload.meme_liquidity_provision_bps,
             migration: null,
+            curveFeeAuthority: { kind: "unassigned" },
+            blastMetadataCapId: null,
+            memeMetadata: null,
           },
         },
       };
@@ -361,18 +379,60 @@ export function reduceLaunchpadEvent(
       delete migrationWitnesses[event.payload.pos0];
       return updateConfig(next, { ...state.config, migrationWitnesses });
     }
-    case "CreatorCapClaimed": {
+    case "CreatorCapsClaimed": {
       const payload = event.payload;
-      return updateAdministration(next, {
+      const claimed = updateLaunchesByMeme(next, payload.meme, (launch) => ({
+        ...launch,
+        curveFeeAuthority: { kind: "cap", capId: payload.curve_fee_cap_id },
+        blastMetadataCapId: payload.metadata_cap_id,
+      }));
+      return updateAdministration(claimed, {
         ...state.administration,
         creatorCapClaims: {
           ...state.administration.creatorCapClaims,
-          [payload.pos0]: {
-            memeType: payload.pos0,
+          [payload.meme]: {
+            memeType: payload.meme,
             claimant: event.sender,
+            curveFeeCapId: payload.curve_fee_cap_id,
+            metadataCapId: payload.metadata_cap_id,
           },
         },
       });
+    }
+    case "CurveFeeCapReassigned": {
+      const payload = event.payload;
+      return updateLaunch(next, payload.launch_id, (launch) => ({
+        ...launch,
+        curveFeeAuthority: { kind: "cap", capId: payload.curve_fee_cap_id },
+      }));
+    }
+    case "MetadataCapReassigned": {
+      const payload = event.payload;
+      return updateLaunch(next, payload.launch_id, (launch) => ({
+        ...launch,
+        blastMetadataCapId: payload.metadata_cap_id,
+      }));
+    }
+    case "CreatorFeesLocked": {
+      const payload = event.payload;
+      return updateLaunch(next, payload.launch_id, (launch) => ({
+        ...launch,
+        curveFeeAuthority: {
+          kind: "custodian",
+          custodianId: payload.custodian_id,
+        },
+      }));
+    }
+    case "MemeMetadataUpdated": {
+      const payload = event.payload;
+      return updateLaunch(next, payload.launch_id, (launch) => ({
+        ...launch,
+        memeMetadata: {
+          name: payload.name,
+          description: payload.description,
+          iconUrl: payload.icon_url,
+        },
+      }));
     }
     case "CreatorClaimSignerSet":
       return updateAdministration(next, {
@@ -398,6 +458,20 @@ function updateLaunch(
     ...state,
     launches: { ...state.launches, [launchId]: update(launch) },
   };
+}
+
+function updateLaunchesByMeme(
+  state: LaunchpadEventProjection,
+  memeType: string,
+  update: (launch: LaunchEventProjection) => LaunchEventProjection,
+): LaunchpadEventProjection {
+  const matches = Object.values(state.launches).filter(
+    (launch) => launch.memeType === memeType,
+  );
+  if (matches.length === 0) return state;
+  const launches = { ...state.launches };
+  for (const launch of matches) launches[launch.launchId] = update(launch);
+  return { ...state, launches };
 }
 
 function updateConfig(

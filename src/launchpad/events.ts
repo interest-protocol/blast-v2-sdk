@@ -20,8 +20,10 @@ type EventFieldDescriptor =
   | "u8"
   | "bool"
   | "bytes"
+  | "string"
   | "optionAddress"
   | "optionBytes"
+  | "optionId"
   | "optionU64";
 
 export const launchpadEventSpecs = {
@@ -36,7 +38,22 @@ export const launchpadEventSpecs = {
     meme_reserve: "u64",
     real_quote_reserve: "u64",
   },
-  CreatorCapClaimed: { pos0: "typeName" },
+  CreatorCapsClaimed: {
+    meme: "typeName",
+    curve_fee_cap_id: "id",
+    metadata_cap_id: "id",
+  },
+  CreatorFeesLocked: {
+    launch_id: "id",
+    curve_fee_cap_id: "id",
+    custodian_id: "id",
+  },
+  CurveFeeCapReassigned: {
+    launch_id: "id",
+    revoked_curve_fee_cap_id: "optionId",
+    curve_fee_cap_id: "id",
+    recipient: "address",
+  },
   CreatorFeesClaimed: {
     launch_id: "id",
     meme_amount: "u64",
@@ -87,6 +104,18 @@ export const launchpadEventSpecs = {
     total_supply_after: "u64",
     protocol_meme_graduation_fee: "u64",
     protocol_quote_migration_fee: "u64",
+  },
+  MemeMetadataUpdated: {
+    launch_id: "id",
+    name: "string",
+    description: "string",
+    icon_url: "string",
+  },
+  MetadataCapReassigned: {
+    launch_id: "id",
+    revoked_metadata_cap_id: "optionId",
+    metadata_cap_id: "id",
+    recipient: "address",
   },
   MigrationWitnessAllowed: { pos0: "typeName" },
   MigrationWitnessDisallowed: { pos0: "typeName" },
@@ -144,7 +173,7 @@ type DescriptorOutput<Descriptor extends EventFieldDescriptor> =
           ? Descriptor extends "optionBytes"
             ? Uint8Array | null
             : Uint8Array
-          : Descriptor extends "optionAddress"
+          : Descriptor extends "optionAddress" | "optionId"
             ? string | null
             : string;
 
@@ -180,8 +209,10 @@ const EVENT_FIELD_BCS: Record<
   u8: bcs.u8() as BcsType<unknown, unknown>,
   bool: bcs.bool() as BcsType<unknown, unknown>,
   bytes: BytesBcs as BcsType<unknown, unknown>,
+  string: bcs.string() as BcsType<unknown, unknown>,
   optionAddress: bcs.option(AddressBcs) as BcsType<unknown, unknown>,
   optionBytes: bcs.option(BytesBcs) as BcsType<unknown, unknown>,
+  optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown, unknown>,
   optionU64: bcs.option(U64Bcs) as BcsType<unknown, unknown>,
 };
 

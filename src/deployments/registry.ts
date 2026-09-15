@@ -137,6 +137,10 @@ export function migratorsDeployment(
   if (!packageReference) {
     throw new TypeError("packages.migrators is required");
   }
+  const migratorsVersion = deployment.sharedObjects.migratorsPackageVersion;
+  if (!migratorsVersion) {
+    throw new TypeError("sharedObjects.migratorsPackageVersion is required");
+  }
   const venueConfig = deployment.sharedObjects.venueConfig;
   if (!venueConfig) {
     throw new TypeError("sharedObjects.venueConfig is required");
@@ -145,6 +149,7 @@ export function migratorsDeployment(
     packageId: packageReference.packageId,
     originalPackageId: packageReference.originalPackageId,
     launchpad: launchpadDeployment(deployment),
+    migratorsVersion: sharedObjectReference(migratorsVersion, false),
     venueConfig: sharedObjectReference(venueConfig, false),
   };
 }

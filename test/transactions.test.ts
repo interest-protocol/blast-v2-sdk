@@ -130,29 +130,83 @@ test("constructs a sell and routes the returned Quote coin", () => {
   assert.equal(tx.getData().commands.at(-1)?.$kind, "TransferObjects");
 });
 
-test("routes both creator-cap claim results", () => {
+test("routes both creator capability claim results", () => {
   const sdk = new LaunchpadTransactions(deployment);
-  const tx = sdk.claimCreatorCap({
+  const tx = sdk.claimCreatorCaps({
     ...types,
     launch: shared("0xc", "20", true),
     recipient: "0xd",
   });
 
-  assert.deepEqual(moveFunctions(tx), ["launch::claim_creator_cap"]);
+  assert.deepEqual(moveFunctions(tx), ["launch::claim_creator_caps"]);
+  assert.deepEqual(
+    sharedInputs(tx),
+    [
+      shared("0xc", "20", true),
+      shared("0x2", "10", false),
+      shared("0x4", "12", false),
+      shared(SUI_CLOCK_OBJECT_ID, 1, false),
+    ].map(normalizedShared),
+  );
+  assert.deepEqual(moveArgumentKinds(tx, 0), [
+    "shared:0xc",
+    "shared:0x2",
+    "shared:0x4",
+    "pure",
+    `shared:${SUI_CLOCK_OBJECT_ID}`,
+  ]);
   assert.equal(transferObjectCount(tx), 2);
 });
 
-test("routes both creator launch-fee coins", () => {
+test("claims creator launch fees with the live curve-fee cap", () => {
   const sdk = new LaunchpadTransactions(deployment);
   const tx = sdk.claimCreatorFees({
     ...types,
     launch: shared("0xc", "20", true),
-    creatorCapId: "0xe",
+    curveFeeCapId: "0xe",
     recipient: "0xd",
   });
 
   assert.deepEqual(moveFunctions(tx), ["launch::claim_creator_fees"]);
+  assert.deepEqual(moveArgumentKinds(tx, 0), [
+    "shared:0xc",
+    "shared:0x2",
+    "object:0xe",
+  ]);
   assert.equal(transferObjectCount(tx), 2);
+});
+
+test("updates coin metadata through the live Blast metadata cap", () => {
+  const sdk = new LaunchpadTransactions(deployment);
+  const base = {
+    ...types,
+    launch: shared("0xc", "20", false),
+    blastMetadataCapId: "0xe",
+    currency: shared("0xf", "21", true),
+  };
+
+  for (const [functionName, tx] of [
+    ["set_name", sdk.setName({ ...base, name: "Dog" })],
+    ["set_description", sdk.setDescription({ ...base, description: "Good" })],
+    ["set_icon_url", sdk.setIconUrl({ ...base, iconUrl: "https://x.y/z" })],
+  ] as const) {
+    assert.deepEqual(moveFunctions(tx), [`launch::${functionName}`]);
+    assert.deepEqual(moveArgumentKinds(tx, 0), [
+      "shared:0xc",
+      "shared:0x2",
+      "object:0xe",
+      "shared:0xf",
+      "pure",
+    ]);
+    assert.deepEqual(
+      sharedInputs(tx),
+      [
+        shared("0xc", "20", false),
+        shared("0x2", "10", false),
+        shared("0xf", "21", true),
+      ].map(normalizedShared),
+    );
+  }
 });
 
 test("composes admin sign-in with a protocol fee claim", () => {
@@ -179,7 +233,7 @@ test("uses a fully qualified immutable Clock reference", () => {
   const calls = new LaunchpadCalls(deployment);
   const tx = new Transaction();
   tx.add(
-    calls.claimCreatorCap({
+    calls.claimCreatorCaps({
       ...types,
       launch: shared("0xc", "20", true),
       accountAttestation: null,
@@ -280,6 +334,29 @@ function normalizedShared<const Mutable extends boolean>(
     ...reference,
     objectId: normalizeSuiObjectId(reference.objectId),
   };
+}
+
+function moveArgumentKinds(tx: Transaction, commandIndex: number): string[] {
+  const data = tx.getData();
+  const command = data.commands[commandIndex];
+  assert.ok(command?.$kind === "MoveCall");
+  return command.MoveCall.arguments.map((argument) => {
+    if (argument.$kind !== "Input") return argument.$kind;
+    const input = data.inputs[argument.Input];
+    if (input?.$kind === "Pure") return "pure";
+    if (input?.$kind === "UnresolvedObject") {
+      return `object:${shortId(input.UnresolvedObject.objectId)}`;
+    }
+    if (input?.$kind === "Object" && input.Object.$kind === "SharedObject") {
+      const objectId = input.Object.SharedObject.objectId;
+      return `shared:${objectId === SUI_CLOCK_OBJECT_ID ? objectId : shortId(objectId)}`;
+    }
+    return String(input?.$kind);
+  });
+}
+
+function shortId(objectId: string): string {
+  return `0x${BigInt(objectId).toString(16)}`;
 }
 
 function transferObjectCount(tx: Transaction): number {

@@ -1,6 +1,5 @@
 import type {
   Transaction,
-  TransactionArgument,
   TransactionObjectInput,
   TransactionResult,
 } from "@mysten/sui/transactions";
@@ -15,7 +14,7 @@ import {
 
 export type DistributorPair = { memeType: string; quoteType: string };
 
-/** Calls compose with existing launch creation, creator claims and venue collectors. */
+/** Calls compose with existing launch creation, creator cap claims and venue collectors. */
 export class DistributorCalls {
   readonly packageId: string;
   readonly packageVersion: TransactionObjectInput;
@@ -54,10 +53,13 @@ export class DistributorCalls {
     };
   }
 
+  /** Destroys the curve-fee cap and binds the launch's creator fees to the new distributor. */
   enroll(
     options: DistributorPair & {
-      creatorCap: TransactionObjectInput;
+      curveFeeCap: TransactionObjectInput;
       launch: TransactionObjectInput;
+      /** Launchpad `PackageVersion`. */
+      packageVersion: TransactionObjectInput;
     },
   ) {
     const types = pairTypes(options);
@@ -67,8 +69,9 @@ export class DistributorCalls {
         typeArguments: types,
         arguments: [
           tx.object(this.packageVersion),
-          tx.object(options.creatorCap),
+          tx.object(options.curveFeeCap),
           tx.object(options.launch),
+          tx.object(options.packageVersion),
         ],
       });
       return result;
@@ -112,6 +115,8 @@ export class DistributorCalls {
     options: DistributorPair & {
       distributor: TransactionObjectInput;
       lpVault: TransactionObjectInput;
+      /** Migrators `PackageVersion`. */
+      migratorsVersion: TransactionObjectInput;
     },
   ) {
     const types = pairTypes(options);
@@ -123,6 +128,33 @@ export class DistributorCalls {
           tx.object(options.distributor),
           tx.object(this.packageVersion),
           tx.object(options.lpVault),
+          tx.object(options.migratorsVersion),
+        ],
+      });
+    };
+  }
+
+  /** Destroys the vault's live LP-fee cap and binds its creator LP fees to the distributor. */
+  lockLpFees(
+    options: DistributorPair & {
+      distributor: TransactionObjectInput;
+      lpVault: TransactionObjectInput;
+      /** Migrators `PackageVersion`. */
+      migratorsVersion: TransactionObjectInput;
+      lpFeeCap: TransactionObjectInput;
+    },
+  ) {
+    const types = pairTypes(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.packageId}::distributor::lock_lp_fees`,
+        typeArguments: types,
+        arguments: [
+          tx.object(options.distributor),
+          tx.object(this.packageVersion),
+          tx.object(options.lpVault),
+          tx.object(options.migratorsVersion),
+          tx.object(options.lpFeeCap),
         ],
       });
     };

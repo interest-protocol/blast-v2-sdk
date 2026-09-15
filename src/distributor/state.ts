@@ -160,34 +160,6 @@ export async function getRewardRound(
   );
 }
 
-/** Resolves the actual child object through the framework's dynamic-object-field API. */
-export async function getDistributorCreatorCap(
-  client: ClientWithCoreApi,
-  distributorId: string,
-  originalPackageId: string,
-  launchpadOriginalPackageId: string,
-) {
-  const distributor = await getDistributor(
-    client,
-    distributorId,
-    originalPackageId,
-  );
-  const { object } = await client.core.getDynamicObjectField({
-    parentId: distributor.objectId,
-    name: {
-      type: `${rewardAddress(originalPackageId)}::distributor::CreatorCapKey`,
-      // Move unit structs serialize their dummy_field: bool.
-      bcs: Uint8Array.of(0),
-    },
-  });
-  const expected = normalizeStructTag(
-    `${rewardAddress(launchpadOriginalPackageId)}::creator_authority::CreatorCap<${distributor.memeType}>`,
-  );
-  if (normalizeStructTag(object.type) !== expected)
-    throw new Error("unexpected creator capability type");
-  return object;
-}
-
 async function readShared(
   client: ClientWithCoreApi,
   objectId: string,

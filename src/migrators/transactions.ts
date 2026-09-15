@@ -24,6 +24,8 @@ export type MigratorsDeployment = {
   packageId: string;
   originalPackageId?: string;
   launchpad: LaunchpadDeployment;
+  /** Migrators `package_version::PackageVersion` checked by every protected entry. */
+  migratorsVersion: SharedObjectReference<false>;
   venueConfig: SharedObjectReference<false>;
 };
 
@@ -66,6 +68,11 @@ export class MigratorCalls {
         deployment.originalPackageId ?? packageId,
       ),
       launchpad: this.#launchpad.deployment,
+      migratorsVersion: normalizeSharedObjectReference(
+        "migratorsVersion",
+        deployment.migratorsVersion,
+        false,
+      ),
       venueConfig: normalizeSharedObjectReference(
         "venueConfig",
         deployment.venueConfig,
@@ -84,10 +91,48 @@ export class MigratorCalls {
     return this.#launchpad.signIn(options);
   }
 
+  #migratorsVersion(tx: Transaction): TransactionObjectArgument {
+    return sharedObject(
+      tx,
+      "migratorsVersion",
+      this.deployment.migratorsVersion,
+      false,
+    );
+  }
+
+  issueLpFeeCap(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      recipient: string;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const recipient = normalizeSuiAddress(options.recipient);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::vault::issue_lp_fee_cap`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          sharedObject(
+            tx,
+            "packageVersion",
+            this.deployment.launchpad.packageVersion,
+            false,
+          ),
+          tx.object(options.adminWitness),
+          tx.pure.address(recipient),
+        ],
+      });
+    };
+  }
+
   claimCreatorFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
-      creatorCap: TransactionObjectInput;
+      lpFeeCap: TransactionObjectInput;
     },
   ) {
     const types = normalizeLaunchTypes(options);
@@ -97,7 +142,8 @@ export class MigratorCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
-          tx.object(options.creatorCap),
+          this.#migratorsVersion(tx),
+          tx.object(options.lpFeeCap),
         ],
       });
   }
@@ -115,6 +161,7 @@ export class MigratorCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
           tx.object(options.adminWitness),
         ],
       });
@@ -137,6 +184,7 @@ export class MigratorCalls {
             { ...this.deployment.venueConfig, mutable: true },
             true,
           ),
+          this.#migratorsVersion(tx),
           tx.object(options.adminWitness),
           tx.pure.u64(policy.memeWeight),
           tx.pure.u64(policy.quoteWeight),
@@ -171,6 +219,7 @@ export class MigratorCalls {
             this.deployment.launchpad.packageVersion,
             false,
           ),
+          this.#migratorsVersion(tx),
           sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "poolRegistry", options.poolRegistry, true),
@@ -199,6 +248,7 @@ export class MigratorCalls {
         typeArguments: [lpType, types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
           sharedObject(tx, "daoFeePool", options.daoFeePool, true),
           sharedObject(tx, "daoFeeVersion", options.daoFeeVersion, false),
           tx.object(options.adminWitness),
@@ -236,6 +286,7 @@ export class MigratorCalls {
         typeArguments: [lpType, types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
           sharedObject(
             tx,
             "lpFeePolicy",
@@ -270,6 +321,7 @@ export class MigratorCalls {
             this.deployment.launchpad.packageVersion,
             false,
           ),
+          this.#migratorsVersion(tx),
           sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "quoteCurrency", options.quoteCurrency, false),
@@ -293,6 +345,7 @@ export class MigratorCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
           sharedObject(
             tx,
             "lpFeePolicy",
@@ -329,6 +382,7 @@ export class MigratorCalls {
             this.deployment.launchpad.packageVersion,
             false,
           ),
+          this.#migratorsVersion(tx),
           sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "mmtGlobalConfig", options.mmtGlobalConfig, true),
@@ -354,6 +408,7 @@ export class MigratorCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
           sharedObject(
             tx,
             "lpFeePolicy",
@@ -391,6 +446,7 @@ export class MigratorCalls {
             this.deployment.launchpad.packageVersion,
             false,
           ),
+          this.#migratorsVersion(tx),
           sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
@@ -418,6 +474,7 @@ export class MigratorCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
           sharedObject(
             tx,
             "lpFeePolicy",
@@ -456,6 +513,7 @@ export class MigratorCalls {
           this.deployment.launchpad.packageVersion,
           false,
         ),
+        this.#migratorsVersion(tx),
         sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
         sharedObject(tx, "memeCurrency", options.memeCurrency, true),
       ];
@@ -502,6 +560,7 @@ export class MigratorCalls {
         typeArguments: [types.memeType, types.quoteType, feeType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
           sharedObject(
             tx,
             "lpFeePolicy",
@@ -525,10 +584,25 @@ export class MigratorTransactions {
     this.call = new MigratorCalls(deployment);
   }
 
+  issueLpFeeCap(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      adminCapId: string;
+      recipient: string;
+    },
+  ): Transaction {
+    const tx = new Transaction();
+    const adminWitness = tx.add(
+      this.call.signIn({ adminCap: options.adminCapId }),
+    );
+    tx.add(this.call.issueLpFeeCap({ ...options, adminWitness }));
+    return tx;
+  }
+
   claimCreatorFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
-      creatorCapId: string;
+      lpFeeCapId: string;
       recipient: string;
     },
   ): Transaction {
@@ -536,7 +610,7 @@ export class MigratorTransactions {
     const result = tx.add(
       this.call.claimCreatorFees({
         ...options,
-        creatorCap: options.creatorCapId,
+        lpFeeCap: options.lpFeeCapId,
       }),
     );
     tx.transferObjects(

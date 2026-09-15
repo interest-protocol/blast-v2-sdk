@@ -16,26 +16,12 @@ import { requireBasisPoints, requireU64 } from "../lib/integers.ts";
 type BlastSuiEventFieldDescriptor =
   | "id"
   | "address"
-  | "bool"
   | "u64"
-  | "u8"
-  | "bytes"
   | "basisPoints"
   | "typeName"
   | "vaultCustody";
 
 export const blastSuiEventSpecs = {
-  AdminDestroyed: {
-    admin_cap_id: "id",
-    was_active: "bool",
-  },
-  AdminGranted: {
-    admin_cap_id: "id",
-    recipient: "address",
-  },
-  AdminRevoked: {
-    admin_cap_id: "id",
-  },
   BlastSuiDepositCancelled: {
     receipt_id: "id",
     vault_id: "id",
@@ -92,48 +78,9 @@ export const blastSuiEventSpecs = {
     capability_id: "id",
     capability_type: "typeName",
   },
-  PackageAdminCreated: {
-    package_admin_id: "id",
-    publisher_id: "id",
-    upgrade_cap_id: "id",
-    package_id: "id",
-    package_version: "u64",
-    policy: "u8",
-  },
-  PackageVersionAdvanced: {
-    previous_version: "u64",
-    new_version: "u64",
-  },
   RedeemFeeChanged: {
     old_redeem_fee_bps: "basisPoints",
     new_redeem_fee_bps: "basisPoints",
-  },
-  SuperAdminTransferCancelled: {
-    recipient: "address",
-  },
-  SuperAdminTransferStarted: {
-    recipient: "address",
-    execute_after_ms: "u64",
-  },
-  SuperAdminTransferred: {
-    previous_super_admin_cap_id: "id",
-    new_super_admin_cap_id: "id",
-    recipient: "address",
-  },
-  UpgradeAuthorized: {
-    package_id: "id",
-    package_version: "u64",
-    policy: "u8",
-    digest: "bytes",
-  },
-  UpgradeCommitted: {
-    new_package_id: "id",
-    previous_version: "u64",
-    new_version: "u64",
-  },
-  UpgradePolicyRestricted: {
-    previous_policy: "u8",
-    new_policy: "u8",
   },
   VaultCreated: {
     vault_id: "id",
@@ -181,15 +128,9 @@ type DescriptorOutput<Descriptor extends BlastSuiEventFieldDescriptor> =
     ? bigint
     : Descriptor extends "basisPoints"
       ? BasisPoints
-      : Descriptor extends "u8"
-        ? number
-        : Descriptor extends "bool"
-          ? boolean
-          : Descriptor extends "bytes"
-            ? Uint8Array
-            : Descriptor extends "vaultCustody"
-              ? VaultCustodyEvent
-              : string;
+      : Descriptor extends "vaultCustody"
+        ? VaultCustodyEvent
+        : string;
 
 type DescriptorInput<Descriptor extends BlastSuiEventFieldDescriptor> =
   Descriptor extends "basisPoints" ? bigint : DescriptorOutput<Descriptor>;
@@ -228,10 +169,6 @@ const AddressBcs = bcs.Address.transform({
   input: (value: string) => normalizeSuiAddress(value),
   output: (value) => normalizeSuiAddress(value),
 });
-const BytesBcs = bcs.vector(bcs.u8()).transform({
-  input: (value: Uint8Array) => Array.from(value),
-  output: (value) => Uint8Array.from(value),
-});
 
 export const poolCustodyEventBcs = bcs.struct("PoolCustody", {
   liquid_sui: U64Bcs,
@@ -260,10 +197,7 @@ const BLAST_SUI_EVENT_FIELD_BCS: Record<
 > = {
   id: suiObjectIdBcs as BcsType<unknown, unknown>,
   address: AddressBcs as BcsType<unknown, unknown>,
-  bool: bcs.bool() as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,
-  u8: bcs.u8() as BcsType<unknown, unknown>,
-  bytes: BytesBcs as BcsType<unknown, unknown>,
   basisPoints: BasisPointsBcs as BcsType<unknown, unknown>,
   typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
   vaultCustody: vaultCustodyEventBcs as BcsType<unknown, unknown>,

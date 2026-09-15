@@ -82,13 +82,6 @@ export type BlastSuiTotalsProjection = {
 };
 
 export type BlastSuiAdministrationProjection = {
-  pendingSuperAdminTransfer: {
-    recipient: string;
-    executeAfterMs: bigint;
-  } | null;
-  activeSuperAdminCapId: string | null;
-  activeAdminCapIds: Readonly<Record<string, true>>;
-  packageVersion: bigint | null;
   packageCapabilities: Readonly<
     Record<
       string,
@@ -98,35 +91,6 @@ export type BlastSuiAdministrationProjection = {
       }
     >
   >;
-  packageAdmin: {
-    packageAdminId: string;
-    publisherId: string;
-    upgradeCapId: string;
-    packageId: string;
-    packageVersion: bigint;
-    policy: number;
-  } | null;
-  pendingUpgrade: {
-    packageId: string;
-    packageVersion: bigint;
-    policy: number;
-    digest: Uint8Array;
-  } | null;
-  lastUpgradeAuthorization: {
-    packageId: string;
-    packageVersion: bigint;
-    policy: number;
-    digest: Uint8Array;
-  } | null;
-  lastUpgradePolicyRestriction: {
-    previousPolicy: number;
-    newPolicy: number;
-  } | null;
-  lastUpgradeCommit: {
-    packageId: string;
-    previousVersion: bigint;
-    newVersion: bigint;
-  } | null;
 };
 
 type DepositReceiptOwner = {
@@ -189,16 +153,7 @@ export function createBlastSuiProjection(): BlastSuiProjection {
       sweptYieldSui: 0n,
     },
     administration: {
-      pendingSuperAdminTransfer: null,
-      activeSuperAdminCapId: null,
-      activeAdminCapIds: {},
-      packageVersion: null,
       packageCapabilities: {},
-      packageAdmin: null,
-      pendingUpgrade: null,
-      lastUpgradeAuthorization: null,
-      lastUpgradePolicyRestriction: null,
-      lastUpgradeCommit: null,
     },
     native: {
       appliedFactIds: {},
@@ -343,54 +298,6 @@ function reduceBlastSuiEvent(
       }));
     case "NativeStakeUnwound":
       return updateVault(next, (vault) => ({ ...vault, unwindOnly: true }));
-    case "SuperAdminTransferStarted":
-      return updateAdministration(next, {
-        ...state.administration,
-        pendingSuperAdminTransfer: {
-          recipient: event.payload.recipient,
-          executeAfterMs: event.payload.execute_after_ms,
-        },
-      });
-    case "SuperAdminTransferCancelled":
-      return updateAdministration(next, {
-        ...state.administration,
-        pendingSuperAdminTransfer: null,
-      });
-    case "SuperAdminTransferred":
-      return updateAdministration(next, {
-        ...state.administration,
-        pendingSuperAdminTransfer: null,
-        activeSuperAdminCapId: event.payload.new_super_admin_cap_id,
-      });
-    case "PackageVersionAdvanced":
-      return updateAdministration(next, {
-        ...state.administration,
-        packageVersion: event.payload.new_version,
-      });
-    case "AdminGranted":
-      return updateAdministration(next, {
-        ...state.administration,
-        activeAdminCapIds: {
-          ...state.administration.activeAdminCapIds,
-          [event.payload.admin_cap_id]: true,
-        },
-      });
-    case "AdminRevoked": {
-      const activeAdminCapIds = { ...state.administration.activeAdminCapIds };
-      delete activeAdminCapIds[event.payload.admin_cap_id];
-      return updateAdministration(next, {
-        ...state.administration,
-        activeAdminCapIds,
-      });
-    }
-    case "AdminDestroyed": {
-      const activeAdminCapIds = { ...state.administration.activeAdminCapIds };
-      delete activeAdminCapIds[event.payload.admin_cap_id];
-      return updateAdministration(next, {
-        ...state.administration,
-        activeAdminCapIds,
-      });
-    }
     case "PackageCapabilityAdded":
       return updateAdministration(next, {
         ...state.administration,
@@ -400,74 +307,6 @@ function reduceBlastSuiEvent(
             packageAdminId: event.payload.package_admin_id,
             capabilityId: event.payload.capability_id,
           },
-        },
-      });
-    case "PackageAdminCreated": {
-      const payload = event.payload;
-      return updateAdministration(next, {
-        ...state.administration,
-        packageVersion: payload.package_version,
-        packageAdmin: {
-          packageAdminId: payload.package_admin_id,
-          publisherId: payload.publisher_id,
-          upgradeCapId: payload.upgrade_cap_id,
-          packageId: payload.package_id,
-          packageVersion: payload.package_version,
-          policy: payload.policy,
-        },
-      });
-    }
-    case "UpgradeAuthorized": {
-      const packageAdmin = state.administration.packageAdmin;
-      if (packageAdmin === null) {
-        throw new RangeError(
-          "upgrade authorization requires discovered package administration",
-        );
-      }
-      const authorization = {
-        packageId: packageAdmin.packageId,
-        packageVersion: packageAdmin.packageVersion,
-        policy: packageAdmin.policy,
-        digest: event.payload.digest,
-      };
-      return updateAdministration(next, {
-        ...state.administration,
-        pendingUpgrade: authorization,
-        lastUpgradeAuthorization: authorization,
-      });
-    }
-    case "UpgradePolicyRestricted":
-      return updateAdministration(next, {
-        ...state.administration,
-        packageAdmin:
-          state.administration.packageAdmin === null
-            ? null
-            : {
-                ...state.administration.packageAdmin,
-                policy: event.payload.new_policy,
-              },
-        lastUpgradePolicyRestriction: {
-          previousPolicy: event.payload.previous_policy,
-          newPolicy: event.payload.new_policy,
-        },
-      });
-    case "UpgradeCommitted":
-      return updateAdministration(next, {
-        ...state.administration,
-        packageVersion: event.payload.new_version,
-        packageAdmin:
-          state.administration.packageAdmin === null
-            ? null
-            : {
-                ...state.administration.packageAdmin,
-                packageId: event.payload.new_package_id,
-                packageVersion: event.payload.new_version,
-              },
-        pendingUpgrade: null,
-        lastUpgradeCommit: {
-          packageId: event.payload.new_package_id,
-          previousVersion: event.payload.previous_version,
-          newVersion: event.payload.new_version,
         },
       });
   }

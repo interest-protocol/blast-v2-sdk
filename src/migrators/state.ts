@@ -8,6 +8,11 @@ import {
   parseStructTag,
 } from "@mysten/sui/utils";
 
+import type { CreatorFeeAuthority } from "../launchpad/state.ts";
+import {
+  creatorFeeAuthorityBcs,
+  decodeCreatorFeeAuthority,
+} from "../launchpad/state.ts";
 import { suiBalanceBcs, suiIdBcs, suiUidBcs } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
@@ -32,6 +37,7 @@ export const AFTERMATH_BASE_SWAP_IN_FEE = 100_000_000_000_000n;
 export const lpVaultBcs = bcs.struct("LpVault", {
   id: suiUidBcs,
   pool_id: suiIdBcs,
+  lp_fee_authority: creatorFeeAuthorityBcs,
   protocol_meme_residual: suiBalanceBcs,
   protocol_quote_residual: suiBalanceBcs,
   fee_ledger: FeeLedgerBcs,
@@ -95,6 +101,7 @@ export type LpVaultState = SharedObjectReference<true> & {
   memeType: string;
   quoteType: string;
   poolId: string;
+  lpFeeAuthority: CreatorFeeAuthority;
   protocolMemeFees: bigint;
   creatorMemeFees: bigint;
   protocolQuoteFees: bigint;
@@ -156,6 +163,7 @@ export function decodeLpVaultObject(
     memeType: normalizeTypeParameter(tag.typeParams[0]!),
     quoteType: normalizeTypeParameter(tag.typeParams[1]!),
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
+    lpFeeAuthority: decodeCreatorFeeAuthority(parsed.lp_fee_authority),
     protocolMemeFees: BigInt(parsed.fee_ledger.protocol_meme.value),
     creatorMemeFees: BigInt(parsed.fee_ledger.creator_meme.value),
     protocolQuoteFees: BigInt(parsed.fee_ledger.protocol_quote.value),

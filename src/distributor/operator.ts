@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { Transaction } from "@mysten/sui/transactions";
+import { getLaunch } from "../launchpad/state.ts";
 import type { RewardManifest } from "./allocations.ts";
 import {
   allocateHolderRewards,
@@ -29,7 +30,6 @@ import {
 import type { DistributorState } from "./state.ts";
 import {
   getDistributor,
-  getDistributorCreatorCap,
   getDistributorVersion,
   getRewardRound,
 } from "./state.ts";
@@ -48,6 +48,7 @@ type OperatorConfig = {
   distributorId: string;
   publisherCapId?: string;
   packageVersionId?: string;
+  migratorsVersionId?: string;
   lpVaultId?: string;
   sender?: string;
   excludedAddresses?: string[];
@@ -254,12 +255,12 @@ async function readConfirmedRound(
 }
 async function inspectDistributor(context: OperatorContext): Promise<void> {
   const { client, distributor, config, output } = context;
-  const cap = await getDistributorCreatorCap(
+  const launch = await getLaunch(
     client,
-    distributor.objectId,
-    config.originalPackageId,
+    distributor.launchId,
     config.launchpadOriginalPackageId,
   );
+  const { curveFeeAuthority } = launch;
   const version = await getDistributorVersion(
     client,
     config.distributorVersionId,
@@ -270,8 +271,10 @@ async function inspectDistributor(context: OperatorContext): Promise<void> {
     paused: version.paused,
     distributorId: distributor.objectId,
     launchId: distributor.launchId,
-    creatorCapId: cap.objectId,
-    creatorCapOwner: cap.owner,
+    curveFeeAuthority,
+    curveFeesBoundToDistributor:
+      curveFeeAuthority.kind === "custodian" &&
+      curveFeeAuthority.custodianId === distributor.objectId,
     memeType: distributor.memeType,
     quoteType: distributor.quoteType,
     memeAmount: distributor.memeAmount,
@@ -299,11 +302,14 @@ async function collectFees(context: OperatorContext): Promise<void> {
       throw new Error(
         "lpVaultId required; verify it against the launch migration event",
       );
+    if (!config.migratorsVersionId)
+      throw new Error("migratorsVersionId required");
     tx.add(
       calls.collectLpFees({
         ...pair,
         distributor: distributor.objectId,
         lpVault: config.lpVaultId,
+        migratorsVersion: config.migratorsVersionId,
       }),
     );
   }

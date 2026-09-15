@@ -59,15 +59,6 @@ type BlastSuiEventPayloadInput<Kind extends BlastSuiEventKind> = Parameters<
 
 const fixtures = [
   {
-    kind: "AdminDestroyed",
-    payload: { admin_cap_id: "0x20", was_active: false },
-  },
-  {
-    kind: "AdminGranted",
-    payload: { admin_cap_id: "0x21", recipient: "0x22" },
-  },
-  { kind: "AdminRevoked", payload: { admin_cap_id: "0x23" } },
-  {
     kind: "BlastSuiDepositCancelled",
     payload: {
       receipt_id: "0x1",
@@ -132,60 +123,8 @@ const fixtures = [
     },
   },
   {
-    kind: "PackageAdminCreated",
-    payload: {
-      package_admin_id: "0x8",
-      publisher_id: "0x9",
-      upgrade_cap_id: "0xa",
-      package_id: "0xb",
-      package_version: 119n,
-      policy: 1,
-    },
-  },
-  {
-    kind: "PackageVersionAdvanced",
-    payload: { previous_version: 120n, new_version: 121n },
-  },
-  {
     kind: "RedeemFeeChanged",
     payload: { old_redeem_fee_bps: 30n, new_redeem_fee_bps: 40n },
-  },
-  {
-    kind: "SuperAdminTransferCancelled",
-    payload: { recipient: "0xc" },
-  },
-  {
-    kind: "SuperAdminTransferStarted",
-    payload: { recipient: "0xd", execute_after_ms: 122n },
-  },
-  {
-    kind: "SuperAdminTransferred",
-    payload: {
-      previous_super_admin_cap_id: "0xe",
-      new_super_admin_cap_id: "0xf",
-      recipient: "0x10",
-    },
-  },
-  {
-    kind: "UpgradeAuthorized",
-    payload: {
-      package_id: "0x11",
-      package_version: 123n,
-      policy: 1,
-      digest: new Uint8Array([1, 2, 3]),
-    },
-  },
-  {
-    kind: "UpgradeCommitted",
-    payload: {
-      new_package_id: "0x12",
-      previous_version: 124n,
-      new_version: 125n,
-    },
-  },
-  {
-    kind: "UpgradePolicyRestricted",
-    payload: { previous_policy: 1, new_policy: 2 },
   },
   {
     kind: "VaultCreated",
@@ -212,9 +151,6 @@ const fixtures = [
 
 test("matches the complete frozen blast_sui event inventory", () => {
   const expectedNames = [
-    "AdminDestroyed",
-    "AdminGranted",
-    "AdminRevoked",
     "BlastSuiDepositCancelled",
     "BlastSuiDepositClaimed",
     "BlastSuiDepositRequested",
@@ -225,21 +161,13 @@ test("matches the complete frozen blast_sui event inventory", () => {
     "FunYieldSwept",
     "NativeStakeUnwound",
     "PackageCapabilityAdded",
-    "PackageAdminCreated",
-    "PackageVersionAdvanced",
     "RedeemFeeChanged",
-    "SuperAdminTransferCancelled",
-    "SuperAdminTransferStarted",
-    "SuperAdminTransferred",
-    "UpgradeAuthorized",
-    "UpgradeCommitted",
-    "UpgradePolicyRestricted",
     "VaultCreated",
     "VaultSynced",
   ];
 
   assert.deepEqual(Object.keys(blastSuiEventSpecs), expectedNames);
-  assert.equal(fixtures.length, 24);
+  assert.equal(fixtures.length, 13);
   assert.deepEqual(normalizedSpecFields(), frozenEventFields());
 });
 

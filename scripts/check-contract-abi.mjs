@@ -273,6 +273,14 @@ function classifyMemeTemplateFunction(moduleName, functionName) {
 }
 
 function classifyMigratorFunction(moduleName, functionName) {
+  if (
+    moduleName === "vault" &&
+    (functionName === "lock_creator_fees" ||
+      functionName === "claim_custodied_creator_fees" ||
+      functionName === "assert_lp_fee_cap")
+  ) {
+    return "move-composition";
+  }
   if (moduleName === "vault") return "builder";
   if (moduleName === "package_admin") return "intentional-admin-exclusion";
   if (moduleName === "package_version") return "move-composition";
@@ -299,9 +307,12 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
     "launch::share",
     "launch::buy",
     "launch::sell",
-    "launch::claim_creator_cap",
+    "launch::claim_creator_caps",
     "launch::claim_creator_fees",
     "launch::claim_protocol_fees",
+    "launch::set_name",
+    "launch::set_description",
+    "launch::set_icon_url",
   ]);
   if (builders.has(key)) return "builder";
   if (
@@ -312,27 +323,35 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
     return "compositional";
   }
   if (key === "launch_ticket::new") return "template-builder";
-  if (moduleName === "creator_authority") return "template-internal";
-  if (moduleName === "fees") return "move-composition";
-  if (moduleName === "bps" || key === "lp_fee_policy::protocol_fee_share") {
-    return "move-composition";
+  if (key === "creator_authority::new_lp_fee_cap") {
+    return "intentional-admin-exclusion";
   }
-  if (
-    moduleName === "launchpad_domain" &&
-    functionName === "package_admin_role"
-  ) {
+  if (moduleName === "creator_authority" && functionName.startsWith("new_")) {
+    return "template-internal";
+  }
+  if (isLaunchpadMoveComposition(moduleName, functionName, key)) {
     return "move-composition";
   }
   if (isIntentionalAdminExclusion(moduleName, functionName, key)) {
     return "intentional-admin-exclusion";
   }
-  if (
-    key === "runtime_config::protocol_fee_share_bps" ||
-    key === "launch::assert_migrated"
-  ) {
-    return "move-composition";
-  }
   throw new Error(`unclassified function ${packageName}::${key}`);
+}
+
+function isLaunchpadMoveComposition(moduleName, functionName, key) {
+  return (
+    moduleName === "fees" ||
+    moduleName === "bps" ||
+    (moduleName === "creator_authority" &&
+      functionName.startsWith("destroy_")) ||
+    (moduleName === "launchpad_domain" && functionName.endsWith("_role")) ||
+    key === "lp_fee_policy::protocol_fee_share" ||
+    key === "runtime_config::protocol_fee_share_bps" ||
+    key === "launch::assert_migrated" ||
+    key === "launch::assert_curve_fee_cap" ||
+    key === "launch::lock_creator_fees" ||
+    key === "launch::claim_custodied_creator_fees"
+  );
 }
 
 function isIntentionalAdminExclusion(moduleName, functionName, key) {
@@ -343,7 +362,9 @@ function isIntentionalAdminExclusion(moduleName, functionName, key) {
     (moduleName === "runtime_config" && functionName.startsWith("set_")) ||
     (moduleName === "lp_fee_policy" &&
       (functionName.startsWith("set_") || functionName.startsWith("clear_"))) ||
-    key === "runtime_config::revoke_creator_claim_signer"
+    key === "runtime_config::revoke_creator_claim_signer" ||
+    key === "launch::reassign_curve_fee_cap" ||
+    key === "launch::reassign_metadata_cap"
   );
 }
 
@@ -382,21 +403,16 @@ const blastSuiBuilders = new Set([
   "vault::sync",
 ]);
 const blastSuiAdminExclusions = new Set([
-  "acl::accept_super_admin_transfer",
-  "acl::begin_super_admin_transfer",
-  "acl::cancel_super_admin_transfer",
-  "acl::destroy_admin_cap",
-  "acl::destroy_retired_super_admin_cap",
-  "acl::grant_admin",
-  "acl::keep",
-  "acl::revoke_admin",
-  "acl::sign_in",
   "package_admin::add_capability",
-  "package_admin::activate_package_version",
   "package_admin::authorize_upgrade",
-  "package_admin::commit_upgrade",
+  "package_admin::commit_upgrade_and_advance",
+  "package_admin::make_immutable",
   "package_admin::restrict_to_additive",
   "vault::set_redeem_fee",
+]);
+const blastSuiMoveComposition = new Set([
+  "blast_sui_domain::package_admin_role",
+  "package_admin::has_upgrade_cap",
 ]);
 
 function classifyBlastSuiFunction(moduleName, functionName) {
@@ -408,6 +424,7 @@ function classifyBlastSuiFunction(moduleName, functionName) {
   if (blastSuiAdminExclusions.has(key)) {
     return "intentional-admin-exclusion";
   }
+  if (blastSuiMoveComposition.has(key)) return "move-composition";
   throw new Error(`unclassified function blast_sui::${key}`);
 }
 
@@ -427,18 +444,7 @@ const directEventNames = new Set([
   "VestingClosed",
 ]);
 const blastSuiEventNames = new Set([
-  "AdminDestroyed",
-  "AdminGranted",
-  "AdminRevoked",
-  "SuperAdminTransferStarted",
-  "SuperAdminTransferCancelled",
-  "SuperAdminTransferred",
-  "PackageVersionAdvanced",
   "PackageCapabilityAdded",
-  "PackageAdminCreated",
-  "UpgradeAuthorized",
-  "UpgradeCommitted",
-  "UpgradePolicyRestricted",
   "VaultCreated",
   "FunSuiMinted",
   "FunSuiRedeemed",
