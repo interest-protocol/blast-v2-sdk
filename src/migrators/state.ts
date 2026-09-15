@@ -36,7 +36,7 @@ export const lpFeeAuthorityBcs = bcs.enum("LpFeeAuthority", {
 });
 
 /**
- * Who may drain creator LP fees: the migration-born pending right (claimable
+ * Who may claim creator LP fees: the migration-born pending right (claimable
  * once by the launch's live `CurveFeeCap` holder or bindable by its fee
  * custodian), the live `LpFeeCap`, or the custodian the fees are bound to.
  */

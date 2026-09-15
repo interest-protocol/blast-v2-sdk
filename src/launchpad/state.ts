@@ -74,7 +74,7 @@ export type CreatorRecipient =
   | null;
 
 /**
- * Who may drain creator fees: nobody yet, the live capability object, or the
+ * Who may claim creator fees: nobody yet, the live capability object, or the
  * custodian object the fees are permanently bound to.
  */
 export type CreatorFeeAuthority =
