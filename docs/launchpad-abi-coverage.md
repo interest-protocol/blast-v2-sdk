@@ -45,7 +45,6 @@ original package ID. The deployment model stores both IDs.
 | `launch_ticket::new` | Compiled Meme template and `LaunchpadTransactions.publishMeme` | `test/template.test.ts`, `test/transactions.test.ts` | The template initializer constructs the ticket; publication effects identify the transferred ticket. |
 | `creator_authority::new_address`, `creator_authority::new_account` | Compiled Meme template | `test/template.test.ts` | Template-internal constructors, not standalone product calls. |
 | `fees::new`, `accrue`, `has_protocol_fees`, `claim_creator_fees`, `claim_protocol_fees` | Launch/vault builders, object decoders, and reducers | state, transaction, and replay tests | Move-composition surface over `Balance` values and witnesses, not standalone client operations. |
-| `runtime_config::protocol_fee_share_bps` | Launchpad and migrator projections | launchpad and migrator event tests | Move-composition getter; clients reconstruct the value from canonical object state or events. |
 | Bluefin `migrate`, `collect_fees` | `migrateBluefin`, `collectBluefinFees` | `test/migrators-transactions.test.ts` | Both production routes complete. |
 | MMT `migrate_meme_x`, `migrate_meme_y`, `collect_fees_meme_x`, `collect_fees_meme_y` | `migrateMmt`, `collectMmtFees` with `memeSide` | `test/migrators-transactions.test.ts` | All four routes complete. |
 | Cetus four `migrate_{new,existing}_meme_{a,b}` calls and two collection calls | `migrateCetus`, `collectCetusFees` with pool route and `memeSide` | `test/migrators-transactions.test.ts` | All six routes complete. |

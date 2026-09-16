@@ -2155,54 +2155,6 @@
               "returns": []
             },
             {
-              "name": "assert_migrated",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
               "name": "buy",
               "sdk": "builder",
               "entry": false,
@@ -6096,32 +6048,6 @@
         },
         "runtime_config": {
           "functions": [
-            {
-              "name": "protocol_fee_share_bps",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
             {
               "name": "revoke_creator_claim_signer",
               "sdk": "intentional-admin-exclusion",
