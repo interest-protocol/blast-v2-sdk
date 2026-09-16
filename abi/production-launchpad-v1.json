@@ -13764,34 +13764,6 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
                           "address": "blast_admin",
                           "name": "acl"
                         },

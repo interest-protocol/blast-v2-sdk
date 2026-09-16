@@ -91,7 +91,6 @@ test("signs in and issues a revocable LP-fee cap to a recipient", () => {
   const tx = sdk.issueLpFeeCap({
     ...types,
     vault: shared("0xc", "20", true),
-    launch: shared("0x10", "30", false),
     adminCapId: "0xe",
     recipient: "0xf",
   });
@@ -103,7 +102,6 @@ test("signs in and issues a revocable LP-fee cap to a recipient", () => {
   assert.deepEqual(moveArgumentKinds(tx, 1), [
     "shared:0xc",
     "shared:0x61",
-    "shared:0x10",
     "Result",
     "pure",
   ]);
