@@ -14,7 +14,8 @@
       "contracts ADR 0068: compact the LP-fee principal snapshot before release",
       "contracts ADR 0069: consolidate launch graduation and move migration math into migrators",
       "contracts ADR 0079: remove redundant launch event totals and history",
-      "contracts ADR 0080: make creator recipients provider-independent"
+      "contracts ADR 0080: make creator recipients provider-independent",
+      "contracts ADR 0085: name every explorer-visible type after Blast"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -22,11 +23,86 @@
     "launchpad": {
       "address": "blast_fun",
       "modules": {
-        "blast": {
+        "blast_events": {
           "functions": [],
           "structs": [
             {
-              "name": "BLAST",
+              "name": "Event",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "T",
+                  "phantom": false,
+                  "constraints": [
+                    "Copy",
+                    "Drop"
+                  ]
+                }
+              ],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "pos0",
+                  "type": {
+                    "NamedTypeParameter": "T"
+                  }
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "blast_fun": {
+          "functions": [],
+          "structs": [
+            {
+              "name": "BLAST_FUN",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "blast_fun_domain": {
+          "functions": [
+            {
+              "name": "creator_admin_role",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
+              "name": "package_admin_role",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [],
+              "returns": [
+                "u64"
+              ]
+            }
+          ],
+          "structs": [
+            {
+              "name": "BLAST_FUN_DOMAIN",
               "abilities": [
                 "Drop"
               ],
@@ -1467,39 +1543,6 @@
             }
           ]
         },
-        "events_wrapper": {
-          "functions": [],
-          "structs": [
-            {
-              "name": "Event",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [
-                {
-                  "name": "T",
-                  "phantom": false,
-                  "constraints": [
-                    "Copy",
-                    "Drop"
-                  ]
-                }
-              ],
-              "positional": true,
-              "fields": [
-                {
-                  "name": "pos0",
-                  "type": {
-                    "NamedTypeParameter": "T"
-                  }
-                }
-              ]
-            }
-          ],
-          "enums": [],
-          "events": []
-        },
         "fees": {
           "functions": [
             {
@@ -1758,9 +1801,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -2794,9 +2837,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -3326,9 +3369,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -3434,9 +3477,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -4630,9 +4673,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -4704,9 +4747,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -4782,9 +4825,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -4856,9 +4899,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -4924,9 +4967,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -5022,9 +5065,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -5455,48 +5498,6 @@
           "enums": [],
           "events": []
         },
-        "launchpad_domain": {
-          "functions": [
-            {
-              "name": "creator_admin_role",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "package_admin_role",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [],
-              "returns": [
-                "u64"
-              ]
-            }
-          ],
-          "structs": [
-            {
-              "name": "LAUNCHPAD_DOMAIN",
-              "abilities": [
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": true,
-              "fields": [
-                {
-                  "name": "dummy_field",
-                  "type": "bool"
-                }
-              ]
-            }
-          ],
-          "enums": [],
-          "events": []
-        },
         "package_admin": {
           "functions": [
             {
@@ -5551,9 +5552,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -5633,9 +5634,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -5737,9 +5738,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -5805,9 +5806,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -5873,9 +5874,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -5971,9 +5972,9 @@
                             "Datatype": {
                               "module": {
                                 "address": "blast_fun",
-                                "name": "blast"
+                                "name": "blast_fun"
                               },
-                              "name": "BLAST",
+                              "name": "BLAST_FUN",
                               "type_arguments": []
                             }
                           },
@@ -6028,9 +6029,9 @@
                             "Datatype": {
                               "module": {
                                 "address": "blast_fun",
-                                "name": "blast"
+                                "name": "blast_fun"
                               },
-                              "name": "BLAST",
+                              "name": "BLAST_FUN",
                               "type_arguments": []
                             }
                           },
@@ -6100,9 +6101,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -6168,9 +6169,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -6239,9 +6240,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -6912,9 +6913,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -7049,9 +7050,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -7199,6 +7200,1105 @@
               ],
               "typeParameters": [],
               "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "blast_events": {
+          "functions": [],
+          "structs": [],
+          "enums": [],
+          "events": [
+            {
+              "name": "AftermathDaoFeeUpdated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "dao_fee_pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "old_dao_fee_bps",
+                  "type": "u16"
+                },
+                {
+                  "name": "new_dao_fee_bps",
+                  "type": "u16"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "AftermathMigrationCompleted",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "launch_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "inner_pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "dao_fee_pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "venue",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "lp",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "locked_lp_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "meme_weight",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote_weight",
+                  "type": "u64"
+                },
+                {
+                  "name": "flatness",
+                  "type": "u64"
+                },
+                {
+                  "name": "swap_in_fee",
+                  "type": "u64"
+                },
+                {
+                  "name": "dao_fee_bps",
+                  "type": "u16"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "AftermathPolicyUpdated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "old_meme_weight",
+                  "type": "u64"
+                },
+                {
+                  "name": "old_quote_weight",
+                  "type": "u64"
+                },
+                {
+                  "name": "old_dao_fee_bps",
+                  "type": "u16"
+                },
+                {
+                  "name": "new_meme_weight",
+                  "type": "u64"
+                },
+                {
+                  "name": "new_quote_weight",
+                  "type": "u64"
+                },
+                {
+                  "name": "new_dao_fee_bps",
+                  "type": "u16"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "CreatorFeesClaimed",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "claimant",
+                  "type": "address"
+                },
+                {
+                  "name": "meme_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote_amount",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "LpFeeCapClaimed",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "lp_fee_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "claimant",
+                  "type": "address"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "LpFeeCapIssued",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "revoked_lp_fee_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "lp_fee_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "recipient",
+                  "type": "address"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "LpFeesCollected",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "position_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "venue",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "collector",
+                  "type": "address"
+                },
+                {
+                  "name": "gross_meme_fee",
+                  "type": "u64"
+                },
+                {
+                  "name": "gross_quote_fee",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_fee_share_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_meme_fee_delta",
+                  "type": "u64"
+                },
+                {
+                  "name": "creator_meme_fee_delta",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_quote_fee_delta",
+                  "type": "u64"
+                },
+                {
+                  "name": "creator_quote_fee_delta",
+                  "type": "u64"
+                },
+                {
+                  "name": "principal_liquidity",
+                  "type": "u128"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "LpFeesLocked",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "lp_fee_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "custodian",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "LpProtocolFeeShareChanged",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "pos0",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "MigrationCompleted",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "launch_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "venue",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "source_meme_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "source_quote_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "used_meme_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "used_quote_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "residual_meme_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "residual_quote_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "sqrt_price_x64",
+                  "type": "u128"
+                },
+                {
+                  "name": "lower_tick_bits",
+                  "type": "u32"
+                },
+                {
+                  "name": "upper_tick_bits",
+                  "type": "u32"
+                },
+                {
+                  "name": "tick_spacing",
+                  "type": "u32"
+                },
+                {
+                  "name": "fee_rate",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "ProjectLpProtocolFeeShareCleared",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "pos0",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "ProjectLpProtocolFeeShareSet",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "protocol_fee_share_bps",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "ProtocolFeesClaimed",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "claimant",
+                  "type": "address"
+                },
+                {
+                  "name": "meme_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote_amount",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "VaultCreated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "position_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "venue",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "VenueTierUpdated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "venue",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "old_tick_spacing",
+                  "type": "u32"
+                },
+                {
+                  "name": "new_tick_spacing",
+                  "type": "u32"
+                },
+                {
+                  "name": "old_fee_rate",
+                  "type": "u64"
+                },
+                {
+                  "name": "new_fee_rate",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            }
+          ]
+        },
+        "blast_fun_migrators": {
+          "functions": [],
+          "structs": [
+            {
+              "name": "BLAST_FUN_MIGRATORS",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
               "fields": [
                 {
                   "name": "dummy_field",
@@ -7597,9 +8697,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -8701,9 +9801,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -8752,1084 +9852,6 @@
           ],
           "enums": [],
           "events": []
-        },
-        "events": {
-          "functions": [],
-          "structs": [],
-          "enums": [],
-          "events": [
-            {
-              "name": "AftermathDaoFeeUpdated",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "dao_fee_pool_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "old_dao_fee_bps",
-                  "type": "u16"
-                },
-                {
-                  "name": "new_dao_fee_bps",
-                  "type": "u16"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "AftermathMigrationCompleted",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "launch_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "inner_pool_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "dao_fee_pool_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "venue",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "lp",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "meme_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "locked_lp_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "meme_weight",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_weight",
-                  "type": "u64"
-                },
-                {
-                  "name": "flatness",
-                  "type": "u64"
-                },
-                {
-                  "name": "swap_in_fee",
-                  "type": "u64"
-                },
-                {
-                  "name": "dao_fee_bps",
-                  "type": "u16"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "AftermathPolicyUpdated",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "old_meme_weight",
-                  "type": "u64"
-                },
-                {
-                  "name": "old_quote_weight",
-                  "type": "u64"
-                },
-                {
-                  "name": "old_dao_fee_bps",
-                  "type": "u16"
-                },
-                {
-                  "name": "new_meme_weight",
-                  "type": "u64"
-                },
-                {
-                  "name": "new_quote_weight",
-                  "type": "u64"
-                },
-                {
-                  "name": "new_dao_fee_bps",
-                  "type": "u16"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "CreatorFeesClaimed",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "claimant",
-                  "type": "address"
-                },
-                {
-                  "name": "meme_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_amount",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "LpFeeCapClaimed",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "lp_fee_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "claimant",
-                  "type": "address"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "LpFeeCapIssued",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "revoked_lp_fee_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "option"
-                      },
-                      "name": "Option",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "sui",
-                                "name": "object"
-                              },
-                              "name": "ID",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": false
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
-                  "name": "lp_fee_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "recipient",
-                  "type": "address"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "LpFeesCollected",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "pool_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "position_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "venue",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "collector",
-                  "type": "address"
-                },
-                {
-                  "name": "gross_meme_fee",
-                  "type": "u64"
-                },
-                {
-                  "name": "gross_quote_fee",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_fee_share_bps",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_meme_fee_delta",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_meme_fee_delta",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_quote_fee_delta",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_quote_fee_delta",
-                  "type": "u64"
-                },
-                {
-                  "name": "principal_liquidity",
-                  "type": "u128"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "LpFeesLocked",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "lp_fee_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "option"
-                      },
-                      "name": "Option",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "sui",
-                                "name": "object"
-                              },
-                              "name": "ID",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": false
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
-                  "name": "custodian",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "LpProtocolFeeShareChanged",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": true,
-              "fields": [
-                {
-                  "name": "pos0",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "MigrationCompleted",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "launch_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "pool_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "venue",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "source_meme_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "source_quote_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "used_meme_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "used_quote_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "residual_meme_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "residual_quote_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "sqrt_price_x64",
-                  "type": "u128"
-                },
-                {
-                  "name": "lower_tick_bits",
-                  "type": "u32"
-                },
-                {
-                  "name": "upper_tick_bits",
-                  "type": "u32"
-                },
-                {
-                  "name": "tick_spacing",
-                  "type": "u32"
-                },
-                {
-                  "name": "fee_rate",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "ProjectLpProtocolFeeShareCleared",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": true,
-              "fields": [
-                {
-                  "name": "pos0",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "ProjectLpProtocolFeeShareSet",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "protocol_fee_share_bps",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "ProtocolFeesClaimed",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "claimant",
-                  "type": "address"
-                },
-                {
-                  "name": "meme_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_amount",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "VaultCreated",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "pool_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "position_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "venue",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "VenueTierUpdated",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "venue",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "old_tick_spacing",
-                  "type": "u32"
-                },
-                {
-                  "name": "new_tick_spacing",
-                  "type": "u32"
-                },
-                {
-                  "name": "old_fee_rate",
-                  "type": "u64"
-                },
-                {
-                  "name": "new_fee_rate",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            }
-          ]
         },
         "lp_fee_authority": {
           "functions": [
@@ -10018,9 +10040,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -10133,9 +10155,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -10211,9 +10233,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -11031,9 +11053,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -11137,9 +11159,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -11219,9 +11241,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -11323,9 +11345,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -11391,9 +11413,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -11459,9 +11481,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -11557,9 +11579,9 @@
                             "Datatype": {
                               "module": {
                                 "address": "blast_fun_migrators",
-                                "name": "package_marker"
+                                "name": "blast_fun_migrators"
                               },
-                              "name": "PACKAGE_MARKER",
+                              "name": "BLAST_FUN_MIGRATORS",
                               "type_arguments": []
                             }
                           },
@@ -11568,27 +11590,6 @@
                       ]
                     }
                   }
-                }
-              ]
-            }
-          ],
-          "enums": [],
-          "events": []
-        },
-        "package_marker": {
-          "functions": [],
-          "structs": [
-            {
-              "name": "PACKAGE_MARKER",
-              "abilities": [
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "dummy_field",
-                  "type": "bool"
                 }
               ]
             }
@@ -11660,9 +11661,9 @@
                             "Datatype": {
                               "module": {
                                 "address": "blast_fun_migrators",
-                                "name": "package_marker"
+                                "name": "blast_fun_migrators"
                               },
-                              "name": "PACKAGE_MARKER",
+                              "name": "BLAST_FUN_MIGRATORS",
                               "type_arguments": []
                             }
                           },
@@ -12954,9 +12955,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -13558,9 +13559,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },
@@ -13700,9 +13701,9 @@
                               "Datatype": {
                                 "module": {
                                   "address": "blast_fun",
-                                  "name": "launchpad_domain"
+                                  "name": "blast_fun_domain"
                                 },
-                                "name": "LAUNCHPAD_DOMAIN",
+                                "name": "BLAST_FUN_DOMAIN",
                                 "type_arguments": []
                               }
                             },

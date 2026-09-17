@@ -205,7 +205,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
         return {
           object: {
             ...base,
-            type: `${originalPackageId}::distributor::Distributor<${memeType},${quoteType}>`,
+            type: `${originalPackageId}::blast_fun_distributor::Distributor<${memeType},${quoteType}>`,
             content: distributorBcs
               .serialize({
                 id: uid(distributorId),
@@ -223,7 +223,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
       return {
         object: {
           ...base,
-          type: `${originalPackageId}::distributor::Round<${memeType},${quoteType}>`,
+          type: `${originalPackageId}::blast_fun_distributor::Round<${memeType},${quoteType}>`,
           content: rewardRoundBcs
             .serialize({
               id: uid(roundId),

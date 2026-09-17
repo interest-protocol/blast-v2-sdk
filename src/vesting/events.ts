@@ -11,6 +11,7 @@ import { moveTypeNameBcs, suiObjectIdBcs } from "../lib/bcs.ts";
 import type { SuiEventPosition } from "../lib/events.ts";
 import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
 import { requireU64 } from "../lib/integers.ts";
+import { vestingKindOfModule } from "./modules.ts";
 
 type VestingEventFieldDescriptor =
   | "id"
@@ -213,17 +214,17 @@ export function decodeVestingEvent(
   ) {
     throw new TypeError("vesting event has an unexpected event package");
   }
-  if (!isVestingEventModule(tag.module)) {
+  const module = vestingKindOfModule(tag.module);
+  if (module === undefined) {
     throw new TypeError("unsupported vesting event module");
   }
-  if (!Object.hasOwn(vestingEventSpecs[tag.module], tag.name)) {
+  if (!Object.hasOwn(vestingEventSpecs[module], tag.name)) {
     throw new TypeError("unsupported vesting event name");
   }
   if (event.module !== tag.module) {
     throw new TypeError("vesting event has an unexpected emitter module");
   }
 
-  const module = tag.module;
   const name = tag.name as VestingEventName;
   return {
     source: "vesting",
@@ -239,8 +240,4 @@ export function decodeVestingEvent(
 
 export function vestingEventId(event: DecodedVestingEvent): string {
   return suiEventId(event.position);
-}
-
-function isVestingEventModule(value: string): value is VestingEventModule {
-  return value === "linear" || value === "checkpoints";
 }

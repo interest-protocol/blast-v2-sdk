@@ -261,7 +261,7 @@ export function decodeLaunchpadEvent(
   if (normalizeSuiObjectId(event.packageId) !== currentPackageId) {
     throw new TypeError("launchpad event has an unexpected emitter package");
   }
-  if (event.module !== "events_wrapper") {
+  if (event.module !== "blast_events") {
     throw new TypeError("launchpad event has an unexpected emitter module");
   }
 
@@ -269,7 +269,7 @@ export function decodeLaunchpadEvent(
   const envelope = parseStructTag(event.eventType);
   if (
     envelope.address !== originalPackageId ||
-    envelope.module !== "events_wrapper" ||
+    envelope.module !== "blast_events" ||
     envelope.name !== "Event" ||
     envelope.typeParams.length !== 1
   ) {

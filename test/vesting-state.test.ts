@@ -27,7 +27,7 @@ test("decodes linear custody and derives its original total", () => {
     objectId,
     initialSharedVersion: "7",
     mutable: true,
-    type: `0x1::linear::Vesting<${coinType}>`,
+    type: `0x1::blast_fun_linear_vesting::Vesting<${coinType}>`,
     content: linearVestingBcs
       .serialize({
         id: uid(objectId),
@@ -69,7 +69,7 @@ test("decodes the inline checkpoint vector", () => {
     objectId,
     initialSharedVersion: "8",
     mutable: true,
-    type: `0x1::checkpoints::Vesting<${coinType}>`,
+    type: `0x1::blast_fun_checkpoint_vesting::Vesting<${coinType}>`,
     content: checkpointVestingBcs
       .serialize({
         id: uid(objectId),
@@ -138,7 +138,7 @@ test("rejects an object with a mismatched UID or package", () => {
         objectId,
         initialSharedVersion: "7",
         mutable: true,
-        type: `0x1::linear::Vesting<${coinType}>`,
+        type: `0x1::blast_fun_linear_vesting::Vesting<${coinType}>`,
         content,
       }),
     /mismatched UID/,
@@ -150,7 +150,7 @@ test("rejects an object with a mismatched UID or package", () => {
           objectId: "0xf",
           initialSharedVersion: "7",
           mutable: true,
-          type: `0x1::linear::Vesting<${coinType}>`,
+          type: `0x1::blast_fun_linear_vesting::Vesting<${coinType}>`,
           content,
         },
         "0x9",

@@ -11,7 +11,8 @@
       "contracts ADR 0059: remove sender and unchanged state from event payloads",
       "contracts ADR 0060: retain both currency metadata caps and the receipt-display cap in PackageAdmin custody",
       "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody",
-      "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody"
+      "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody",
+      "contracts ADR 0085: name every explorer-visible type after Blast"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -19,20 +20,32 @@
     "blastSui": {
       "address": "blast_sui",
       "modules": {
-        "blast": {
+        "blast_events": {
           "functions": [],
           "structs": [
             {
-              "name": "BLAST",
+              "name": "Event",
               "abilities": [
+                "Copy",
                 "Drop"
               ],
-              "typeParameters": [],
+              "typeParameters": [
+                {
+                  "name": "T",
+                  "phantom": false,
+                  "constraints": [
+                    "Copy",
+                    "Drop"
+                  ]
+                }
+              ],
               "positional": true,
               "fields": [
                 {
-                  "name": "dummy_field",
-                  "type": "bool"
+                  "name": "pos0",
+                  "type": {
+                    "NamedTypeParameter": "T"
+                  }
                 }
               ]
             }
@@ -82,6 +95,27 @@
               ],
               "typeParameters": [],
               "positional": false,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "blast_sui_package": {
+          "functions": [],
+          "structs": [
+            {
+              "name": "BLAST_SUI_PACKAGE",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
               "fields": [
                 {
                   "name": "dummy_field",
@@ -1097,39 +1131,6 @@
             }
           ]
         },
-        "events_wrapper": {
-          "functions": [],
-          "structs": [
-            {
-              "name": "Event",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [
-                {
-                  "name": "T",
-                  "phantom": false,
-                  "constraints": [
-                    "Copy",
-                    "Drop"
-                  ]
-                }
-              ],
-              "positional": true,
-              "fields": [
-                {
-                  "name": "pos0",
-                  "type": {
-                    "NamedTypeParameter": "T"
-                  }
-                }
-              ]
-            }
-          ],
-          "enums": [],
-          "events": []
-        },
         "fun_sui": {
           "functions": [],
           "structs": [
@@ -1695,9 +1696,9 @@
                             "Datatype": {
                               "module": {
                                 "address": "blast_sui",
-                                "name": "blast"
+                                "name": "blast_sui_package"
                               },
-                              "name": "BLAST",
+                              "name": "BLAST_SUI_PACKAGE",
                               "type_arguments": []
                             }
                           },
@@ -1752,9 +1753,9 @@
                             "Datatype": {
                               "module": {
                                 "address": "blast_sui",
-                                "name": "blast"
+                                "name": "blast_sui_package"
                               },
-                              "name": "BLAST",
+                              "name": "BLAST_SUI_PACKAGE",
                               "type_arguments": []
                             }
                           },

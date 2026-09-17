@@ -11,6 +11,7 @@ import {
 import { suiBalanceBcs, suiUidBcs } from "../lib/bcs.ts";
 import { normalizePositiveU64, requireU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
+import { vestingKindOfModule } from "./modules.ts";
 import type { LinearSchedule, VestingCheckpoint } from "./schedules.ts";
 import {
   checkpointVestedAt,
@@ -24,13 +25,13 @@ export const clockBcs = bcs.struct("Clock", {
   timestamp_ms: bcs.u64(),
 });
 
-/** BCS layout of `blast_fun_vesting::checkpoints::Checkpoint`. */
+/** BCS layout of `blast_fun_vesting::blast_fun_checkpoint_vesting::Checkpoint`. */
 export const checkpointBcs = bcs.struct("Checkpoint", {
   timestamp_ms: bcs.u64(),
   cumulative_amount: bcs.u64(),
 });
 
-/** BCS layout of `blast_fun_vesting::linear::Vesting<CoinType>`. */
+/** BCS layout of `blast_fun_vesting::blast_fun_linear_vesting::Vesting<CoinType>`. */
 export const linearVestingBcs = bcs.struct("LinearVesting", {
   id: suiUidBcs,
   balance: suiBalanceBcs,
@@ -43,7 +44,7 @@ export const linearVestingBcs = bcs.struct("LinearVesting", {
   released: bcs.u64(),
 });
 
-/** BCS layout of `blast_fun_vesting::checkpoints::Vesting<CoinType>`. */
+/** BCS layout of `blast_fun_vesting::blast_fun_checkpoint_vesting::Vesting<CoinType>`. */
 export const checkpointVestingBcs = bcs.struct("CheckpointVesting", {
   id: suiUidBcs,
   balance: suiBalanceBcs,
@@ -88,10 +89,8 @@ export function decodeVestingObject(
   originalPackageId?: string,
 ): VestingState {
   const tag = parseStructTag(object.type);
-  if (
-    (tag.module !== "linear" && tag.module !== "checkpoints") ||
-    tag.name !== "Vesting"
-  ) {
+  const kind = vestingKindOfModule(tag.module);
+  if (kind === undefined || tag.name !== "Vesting") {
     throw new TypeError(`object ${object.objectId} is not a vesting position`);
   }
   if (tag.typeParams.length !== 1) {
@@ -119,7 +118,7 @@ export function decodeVestingObject(
   );
   const coinType = normalizeTypeParameter(tag.typeParams[0]);
 
-  if (tag.module === "linear") {
+  if (kind === "linear") {
     const parsed = linearVestingBcs.parse(object.content);
     assertUid(objectId, parsed.id.id.bytes);
     const balance = BigInt(parsed.balance.value);

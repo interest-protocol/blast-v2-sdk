@@ -77,7 +77,7 @@ test("distributor decoding binds object ID and package and reads unallocated fun
     .toBytes();
   const object = {
     objectId: addr("0xd"),
-    type: `${addr("0x99")}::distributor::Distributor<${MEME},${QUOTE}>`,
+    type: `${addr("0x99")}::blast_fun_distributor::Distributor<${MEME},${QUOTE}>`,
     content,
     initialSharedVersion: "1",
     mutable: true as const,
@@ -112,7 +112,7 @@ test("round bitmap decodes claims across word boundaries", () => {
   const round = decodeRewardRound(
     {
       objectId: addr("0xc"),
-      type: `${addr("0x99")}::distributor::Round<${MEME},${QUOTE}>`,
+      type: `${addr("0x99")}::blast_fun_distributor::Round<${MEME},${QUOTE}>`,
       content,
       initialSharedVersion: "1",
       mutable: true,
@@ -144,7 +144,7 @@ test("calls compose enrollment and preserve publisher-cap delivery as a separate
   tx.add(calls.share({ ...pair, distributor }));
   tx.transferObjects([publisher], "0xa");
   const data = tx.getData();
-  assert.equal(data.commands[0]?.MoveCall?.module, "distributor");
+  assert.equal(data.commands[0]?.MoveCall?.module, "blast_fun_distributor");
   assert.equal(data.commands[0]?.MoveCall?.function, "new");
   assert.deepEqual(
     data.commands[0]?.MoveCall?.arguments.map((argument) =>
@@ -292,7 +292,7 @@ test("all reward transitions use the shared version and admin controls take the 
     [6, "migrate"],
   ] as const) {
     const call = data.commands[i]!.MoveCall!;
-    assert.equal(call.module, "distributor");
+    assert.equal(call.module, "blast_fun_distributor");
     assert.equal(call.function, fn);
     const adminCap = call.arguments[1]!;
     assert(adminCap.$kind === "Input");
@@ -330,7 +330,7 @@ test("all reward transitions use the shared version and admin controls take the 
 test("version reads use the original type origin and expose pause without trusting the callable package ID", () => {
   const object = {
     objectId: addr("0x77"),
-    type: `${addr("0x99")}::distributor::Version`,
+    type: `${addr("0x99")}::blast_fun_distributor::Version`,
     content: distributorVersionBcs
       .serialize({ id: uid("0x77"), version: 2n, paused: true })
       .toBytes(),

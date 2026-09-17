@@ -37,8 +37,8 @@ test("builds an atomic linear irrevocable create and share transaction", () => {
   });
 
   assert.deepEqual(moveFunctions(tx), [
-    "linear::new_irrevocable",
-    "linear::share",
+    "blast_fun_linear_vesting::new_irrevocable",
+    "blast_fun_linear_vesting::share",
   ]);
   assertClockIsImmutable(tx);
   assertLastArgumentIsClock(tx, moveCalls(tx)[0]!);
@@ -59,12 +59,12 @@ test("builds a checkpoint schedule and routes its cancel cap", () => {
   });
 
   assert.deepEqual(moveFunctions(tx), [
-    "checkpoints::new_schedule",
-    "checkpoints::add",
-    "checkpoints::add",
-    "checkpoints::add",
-    "checkpoints::new_cancelable",
-    "checkpoints::share",
+    "blast_fun_checkpoint_vesting::new_schedule",
+    "blast_fun_checkpoint_vesting::add",
+    "blast_fun_checkpoint_vesting::add",
+    "blast_fun_checkpoint_vesting::add",
+    "blast_fun_checkpoint_vesting::new_cancelable",
+    "blast_fun_checkpoint_vesting::share",
   ]);
   assert.equal(tx.getData().commands.at(-1)?.$kind, "TransferObjects");
   assertClockIsImmutable(tx);
@@ -79,13 +79,15 @@ test("uses decoded position metadata for claim, cancel, and close", () => {
     ...shared("0xc", "20", true),
   };
 
-  assert.deepEqual(moveFunctions(sdk.claim(position)), ["checkpoints::claim"]);
+  assert.deepEqual(moveFunctions(sdk.claim(position)), [
+    "blast_fun_checkpoint_vesting::claim",
+  ]);
   assert.deepEqual(
     moveFunctions(sdk.cancel({ ...position, cancelCapId: "0xd" })),
-    ["checkpoints::cancel"],
+    ["blast_fun_checkpoint_vesting::cancel"],
   );
   assert.deepEqual(moveFunctions(sdk.closeIrrevocable(position)), [
-    "checkpoints::close_irrevocable",
+    "blast_fun_checkpoint_vesting::close_irrevocable",
   ]);
   assert.deepEqual(sharedInputs(sdk.claim(position)), [
     normalizedShared(shared("0xc", "20", true)),

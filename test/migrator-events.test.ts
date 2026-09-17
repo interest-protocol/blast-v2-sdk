@@ -523,9 +523,9 @@ function launchpadDecoded(
   return decodeLaunchpadEvent(
     {
       packageId: launchpadPackages.packageId,
-      module: "events_wrapper",
+      module: "blast_events",
       sender: "0xa",
-      eventType: `${original}::events_wrapper::Event<${original}::events::${kind}>`,
+      eventType: `${original}::blast_events::Event<${original}::events::${kind}>`,
       bcs: encode(kind, launchpadEventSpecs, launchpadEventBcs, overrides),
       json: null,
       checkpoint: "9",
@@ -631,7 +631,7 @@ function readFrozenMigratorEventSpecs(): Record<
     packages: {
       migrators: {
         modules: {
-          events: {
+          blast_events: {
             events: Array<{
               name: string;
               fields: Array<{ name: string; type: unknown }>;
@@ -642,7 +642,7 @@ function readFrozenMigratorEventSpecs(): Record<
     };
   };
   return Object.fromEntries(
-    artifact.packages.migrators.modules.events.events.map((event) => [
+    artifact.packages.migrators.modules.blast_events.events.map((event) => [
       event.name,
       Object.fromEntries(
         event.fields.map((field) => [field.name, abiDescriptor(field.type)]),

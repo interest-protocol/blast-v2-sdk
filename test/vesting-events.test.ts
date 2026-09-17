@@ -20,6 +20,7 @@ import {
   vestingEventId,
   vestingEventSpecs,
 } from "../src/vesting/events.ts";
+import { vestingModule } from "../src/vesting/modules.ts";
 
 const packages: VestingEventPackageIdentity = {
   packageId: "0x123",
@@ -180,13 +181,20 @@ test("requires current emitter and original direct-event type identities", () =>
     /unexpected emitter package/,
   );
   assert.throws(
-    () => decodeVestingEvent({ ...valid, module: "checkpoints" }, packages),
+    () =>
+      decodeVestingEvent(
+        { ...valid, module: vestingModule("checkpoints") },
+        packages,
+      ),
     /unexpected emitter module/,
   );
   assert.throws(
     () =>
       decodeVestingEvent(
-        { ...valid, eventType: "0x999::linear::VestingClosed" },
+        {
+          ...valid,
+          eventType: "0x999::blast_fun_linear_vesting::VestingClosed",
+        },
         packages,
       ),
     /unexpected event package/,
@@ -202,7 +210,7 @@ test("requires current emitter and original direct-event type identities", () =>
   assert.throws(
     () =>
       decodeVestingEvent(
-        { ...valid, eventType: "0x122::linear::Unknown" },
+        { ...valid, eventType: "0x122::blast_fun_linear_vesting::Unknown" },
         packages,
       ),
     /unsupported vesting event/,
@@ -210,7 +218,10 @@ test("requires current emitter and original direct-event type identities", () =>
   assert.throws(
     () =>
       decodeVestingEvent(
-        { ...valid, eventType: "0x122::linear::VestingClosed<u8>" },
+        {
+          ...valid,
+          eventType: "0x122::blast_fun_linear_vesting::VestingClosed<u8>",
+        },
         packages,
       ),
     /unexpected event package/,
@@ -280,9 +291,9 @@ function suiEvent(
   const original = normalizeSuiAddress(packages.originalPackageId);
   return {
     packageId: packages.packageId,
-    module,
+    module: vestingModule(module),
     sender: "0x9",
-    eventType: `${original}::${module}::${name}`,
+    eventType: `${original}::${vestingModule(module)}::${name}`,
     bcs: (vestingEventBcs[module][name] as BcsType<unknown, object>)
       .serialize(payload)
       .toBytes(),
@@ -330,7 +341,8 @@ function frozenEventFields(): Record<string, readonly (readonly string[])[]> {
   };
   return Object.fromEntries(
     modules.flatMap((module) => {
-      const frozenModule = artifact.packages.vesting.modules[module];
+      const frozenModule =
+        artifact.packages.vesting.modules[vestingModule(module)];
       if (!frozenModule) throw new TypeError(`missing frozen ${module} module`);
       return frozenModule.events.map((event) => [
         `${module}.${event.name}`,

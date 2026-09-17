@@ -252,7 +252,7 @@ export function decodeBlastSuiEvent(
   if (normalizeSuiObjectId(event.packageId) !== currentPackageId) {
     throw new TypeError("blast Sui event has an unexpected emitter package");
   }
-  if (event.module !== "events_wrapper") {
+  if (event.module !== "blast_events") {
     throw new TypeError("blast Sui event has an unexpected emitter module");
   }
 
@@ -260,7 +260,7 @@ export function decodeBlastSuiEvent(
   const envelope = parseStructTag(event.eventType);
   if (
     envelope.address !== originalPackageId ||
-    envelope.module !== "events_wrapper" ||
+    envelope.module !== "blast_events" ||
     envelope.name !== "Event" ||
     envelope.typeParams.length !== 1
   ) {

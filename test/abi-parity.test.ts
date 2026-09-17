@@ -108,7 +108,7 @@ test("freezes every production package and event", () => {
   assert.equal(countEvents(launchpad, "migrators"), expectedEvents.migrators);
   assert.equal(countEvents(vesting, "vesting"), expectedEvents.vesting);
   assert.equal(countEvents(blastSui, "blastSui"), expectedEvents.blastSui);
-  const eventWrapper = blastSui.packages.blastSui?.modules.events_wrapper;
+  const eventWrapper = blastSui.packages.blastSui?.modules.blast_events;
   assert.ok(eventWrapper);
   assert.ok(eventWrapper.structs.some(({ name }) => name === "Event"));
 

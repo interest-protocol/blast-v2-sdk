@@ -48,7 +48,7 @@ export function decodeDistributorVersion(
   originalPackageId: string,
 ) {
   const expected = normalizeStructTag(
-    `${rewardAddress(originalPackageId)}::distributor::Version`,
+    `${rewardAddress(originalPackageId)}::blast_fun_distributor::Version`,
   );
   if (normalizeStructTag(object.type) !== expected || object.mutable !== true)
     throw new Error("invalid distributor version type");
@@ -187,7 +187,7 @@ function assertObjectType(
   if (normalizeSuiAddress(tag.address) !== rewardAddress(packageId))
     throw new Error("unexpected distributor package");
   if (
-    tag.module !== "distributor" ||
+    tag.module !== "blast_fun_distributor" ||
     tag.name !== name ||
     tag.typeParams.length !== 2 ||
     object.mutable !== true

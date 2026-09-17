@@ -30,7 +30,7 @@ export class DistributorCalls {
   setPaused(options: { adminCap: TransactionObjectInput; paused: boolean }) {
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.packageId}::distributor::set_paused`,
+        target: `${this.packageId}::blast_fun_distributor::set_paused`,
         arguments: [
           tx.object(this.packageVersion),
           tx.object(options.adminCap),
@@ -44,7 +44,7 @@ export class DistributorCalls {
   migrate(options: { adminCap: TransactionObjectInput }) {
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.packageId}::distributor::migrate`,
+        target: `${this.packageId}::blast_fun_distributor::migrate`,
         arguments: [
           tx.object(this.packageVersion),
           tx.object(options.adminCap),
@@ -65,7 +65,7 @@ export class DistributorCalls {
     const types = pairTypes(options);
     return (tx: Transaction): TransactionResult => {
       const result = tx.moveCall({
-        target: `${this.packageId}::distributor::new`,
+        target: `${this.packageId}::blast_fun_distributor::new`,
         typeArguments: types,
         arguments: [
           tx.object(this.packageVersion),
@@ -82,7 +82,7 @@ export class DistributorCalls {
     const types = pairTypes(options);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.packageId}::distributor::share`,
+        target: `${this.packageId}::blast_fun_distributor::share`,
         typeArguments: types,
         arguments: [tx.object(options.distributor)],
       });
@@ -99,7 +99,7 @@ export class DistributorCalls {
     const types = pairTypes(options);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.packageId}::distributor::collect_curve_fees`,
+        target: `${this.packageId}::blast_fun_distributor::collect_curve_fees`,
         typeArguments: types,
         arguments: [
           tx.object(options.distributor),
@@ -122,7 +122,7 @@ export class DistributorCalls {
     const types = pairTypes(options);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.packageId}::distributor::collect_lp_fees`,
+        target: `${this.packageId}::blast_fun_distributor::collect_lp_fees`,
         typeArguments: types,
         arguments: [
           tx.object(options.distributor),
@@ -198,7 +198,7 @@ export class DistributorCalls {
     const manifest = validateRewardManifest(options.manifest);
     return (tx: Transaction) =>
       tx.moveCall({
-        target: `${this.packageId}::distributor::publish_round`,
+        target: `${this.packageId}::blast_fun_distributor::publish_round`,
         typeArguments: types,
         arguments: [
           tx.object(manifest.distributorId),
@@ -220,7 +220,7 @@ export class DistributorCalls {
     const types = pairTypes(options);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.packageId}::distributor::share_round`,
+        target: `${this.packageId}::blast_fun_distributor::share_round`,
         typeArguments: types,
         arguments: [tx.object(options.round)],
       });
@@ -246,7 +246,7 @@ export class DistributorCalls {
     );
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.packageId}::distributor::claim`,
+        target: `${this.packageId}::blast_fun_distributor::claim`,
         typeArguments: types,
         arguments: [
           tx.object(options.round),

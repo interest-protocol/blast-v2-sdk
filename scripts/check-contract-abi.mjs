@@ -29,11 +29,15 @@ const artifactDeclarations = [
       "contracts ADR 0069: consolidate launch graduation and move migration math into migrators",
       "contracts ADR 0079: remove redundant launch event totals and history",
       "contracts ADR 0080: make creator recipients provider-independent",
+      "contracts ADR 0085: name every explorer-visible type after Blast",
     ],
   },
   {
     path: "production-vesting-v1.json",
     packages: [["vesting", "vesting", "blast_fun_vesting"]],
+    approvedAbiAmendments: [
+      "contracts ADR 0085: name every explorer-visible type after Blast",
+    ],
   },
   {
     path: "production-blast-sui-v1.json",
@@ -43,6 +47,7 @@ const artifactDeclarations = [
       "contracts ADR 0060: retain both currency metadata caps and the receipt-display cap in PackageAdmin custody",
       "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody",
       "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody",
+      "contracts ADR 0085: name every explorer-visible type after Blast",
     ],
   },
 ];
@@ -350,7 +355,7 @@ function isLaunchpadMoveComposition(moduleName, functionName, key) {
     moduleName === "bps" ||
     (moduleName === "creator_authority" &&
       functionName.startsWith("destroy_")) ||
-    (moduleName === "launchpad_domain" && functionName.endsWith("_role")) ||
+    (moduleName === "blast_fun_domain" && functionName.endsWith("_role")) ||
     key === "runtime_config::protocol_fee_share_bps" ||
     key === "launch::assert_migrated" ||
     key === "launch::assert_curve_fee_cap" ||
@@ -374,20 +379,20 @@ function isIntentionalAdminExclusion(moduleName, functionName, key) {
 }
 
 const vestingBuilders = new Set([
-  "checkpoints::new_schedule",
-  "checkpoints::add",
-  "checkpoints::new_irrevocable",
-  "checkpoints::new_cancelable",
-  "checkpoints::share",
-  "checkpoints::claim",
-  "checkpoints::cancel",
-  "checkpoints::close_irrevocable",
-  "linear::new_irrevocable",
-  "linear::new_cancelable",
-  "linear::share",
-  "linear::claim",
-  "linear::cancel",
-  "linear::close_irrevocable",
+  "blast_fun_checkpoint_vesting::new_schedule",
+  "blast_fun_checkpoint_vesting::add",
+  "blast_fun_checkpoint_vesting::new_irrevocable",
+  "blast_fun_checkpoint_vesting::new_cancelable",
+  "blast_fun_checkpoint_vesting::share",
+  "blast_fun_checkpoint_vesting::claim",
+  "blast_fun_checkpoint_vesting::cancel",
+  "blast_fun_checkpoint_vesting::close_irrevocable",
+  "blast_fun_linear_vesting::new_irrevocable",
+  "blast_fun_linear_vesting::new_cancelable",
+  "blast_fun_linear_vesting::share",
+  "blast_fun_linear_vesting::claim",
+  "blast_fun_linear_vesting::cancel",
+  "blast_fun_linear_vesting::close_irrevocable",
 ]);
 
 function classifyVestingFunction(moduleName, functionName) {
@@ -469,6 +474,9 @@ function isEventStruct(packageName, moduleName, structName) {
     return blastSuiEventNames.has(structName);
   }
   if (moduleName === "events") return true;
+  if (packageName === "blast_fun_migrators" && moduleName === "blast_events") {
+    return true;
+  }
   return (
     packageName === "blast_fun_vesting" && directEventNames.has(structName)
   );

@@ -292,7 +292,7 @@ test("requires current emitter and original wrapper/payload identities", () => {
       decodeBlastSuiEvent(
         {
           ...valid,
-          eventType: `${normalizeSuiObjectId(packages.originalPackageId)}::events_wrapper::Event<${normalizeSuiObjectId(packages.originalPackageId)}::wrong_events::VaultSynced>`,
+          eventType: `${normalizeSuiObjectId(packages.originalPackageId)}::blast_events::Event<${normalizeSuiObjectId(packages.originalPackageId)}::wrong_events::VaultSynced>`,
         },
         packages,
       ),
@@ -422,7 +422,7 @@ function suiEvent<Kind extends BlastSuiEventKind>(
   >;
   return {
     packageId: packages.packageId,
-    module: "events_wrapper",
+    module: "blast_events",
     sender: "0x16",
     eventType: wrappedType(
       kind,
@@ -442,7 +442,7 @@ function wrappedType(
   wrapperAddress: string,
   payloadAddress: string,
 ): string {
-  return `${normalizeSuiObjectId(wrapperAddress)}::events_wrapper::Event<${normalizeSuiObjectId(payloadAddress)}::events::${kind}>`;
+  return `${normalizeSuiObjectId(wrapperAddress)}::blast_events::Event<${normalizeSuiObjectId(payloadAddress)}::events::${kind}>`;
 }
 
 function normalizePayload<Kind extends BlastSuiEventKind>(

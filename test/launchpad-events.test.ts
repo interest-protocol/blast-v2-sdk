@@ -301,8 +301,7 @@ test("requires native event position and current/original package identities", (
       decodeLaunchpadEvent(
         {
           ...valid,
-          eventType:
-            "0x999::events_wrapper::Event<0x999::events::LaunchCreated>",
+          eventType: "0x999::blast_events::Event<0x999::events::LaunchCreated>",
         },
         packages,
       ),
@@ -422,9 +421,9 @@ function suiEvent(
   const original = normalizeSuiObjectId(packages.originalPackageId);
   return {
     packageId: packages.packageId,
-    module: "events_wrapper",
+    module: "blast_events",
     sender: "0xd",
-    eventType: `${original}::events_wrapper::Event<${original}::events::${kind}>`,
+    eventType: `${original}::blast_events::Event<${original}::events::${kind}>`,
     bcs: encodePayload(kind, overrides),
     json: null,
     checkpoint: "9",

@@ -12,6 +12,8 @@ import {
   normalizeSharedObjectReference,
   normalizeSuiPackageReference,
 } from "../lib/sui.ts";
+import type { VestingKind } from "./modules.ts";
+import { vestingModule } from "./modules.ts";
 import type { LinearSchedule, VestingCheckpoint } from "./schedules.ts";
 import {
   linearEndMs,
@@ -25,8 +27,6 @@ export type VestingDeployment = {
   packageId: string;
   originalPackageId?: string;
 };
-
-export type VestingKind = "linear" | "checkpoints";
 
 export type VestingPosition = SharedObjectReference<true> & {
   kind: VestingKind;
@@ -70,7 +70,7 @@ export class VestingCalls {
     validateLinearArguments(options.schedule);
     return (tx: Transaction): TransactionObjectArgument =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::linear::new_irrevocable`,
+        target: `${this.deployment.packageId}::${vestingModule("linear")}::new_irrevocable`,
         typeArguments: [coinType],
         arguments: [
           tx.object(options.funds),
@@ -97,7 +97,7 @@ export class VestingCalls {
     validateLinearArguments(options.schedule);
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::linear::new_cancelable`,
+        target: `${this.deployment.packageId}::${vestingModule("linear")}::new_cancelable`,
         typeArguments: [coinType],
         arguments: [
           tx.object(options.funds),
@@ -119,7 +119,7 @@ export class VestingCalls {
   newCheckpointSchedule() {
     return (tx: Transaction): TransactionObjectArgument =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::checkpoints::new_schedule`,
+        target: `${this.deployment.packageId}::${vestingModule("checkpoints")}::new_schedule`,
       });
   }
 
@@ -134,7 +134,7 @@ export class VestingCalls {
     );
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::checkpoints::add`,
+        target: `${this.deployment.packageId}::${vestingModule("checkpoints")}::add`,
         arguments: [
           tx.object(options.schedule),
           tx.pure.u64(options.checkpoint.timestampMs),
@@ -153,7 +153,7 @@ export class VestingCalls {
     const coinType = normalizeStructTag(options.coinType);
     return (tx: Transaction): TransactionObjectArgument =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::checkpoints::new_irrevocable`,
+        target: `${this.deployment.packageId}::${vestingModule("checkpoints")}::new_irrevocable`,
         typeArguments: [coinType],
         arguments: [
           tx.object(options.funds),
@@ -176,7 +176,7 @@ export class VestingCalls {
     const coinType = normalizeStructTag(options.coinType);
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::checkpoints::new_cancelable`,
+        target: `${this.deployment.packageId}::${vestingModule("checkpoints")}::new_cancelable`,
         typeArguments: [coinType],
         arguments: [
           tx.object(options.funds),
@@ -201,7 +201,7 @@ export class VestingCalls {
     const coinType = normalizeStructTag(options.coinType);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::${kind}::share`,
+        target: `${this.deployment.packageId}::${vestingModule(kind)}::share`,
         typeArguments: [coinType],
         arguments: [tx.object(options.vesting)],
       });
@@ -212,7 +212,7 @@ export class VestingCalls {
     const position = normalizePosition(options);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::${position.kind}::claim`,
+        target: `${this.deployment.packageId}::${vestingModule(position.kind)}::claim`,
         typeArguments: [position.coinType],
         arguments: [sharedObject(tx, "vesting", position), tx.object.clock()],
       });
@@ -223,7 +223,7 @@ export class VestingCalls {
     const position = normalizePosition(options);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::${position.kind}::cancel`,
+        target: `${this.deployment.packageId}::${vestingModule(position.kind)}::cancel`,
         typeArguments: [position.coinType],
         arguments: [
           sharedObject(tx, "vesting", position),
@@ -238,7 +238,7 @@ export class VestingCalls {
     const position = normalizePosition(options);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::${position.kind}::close_irrevocable`,
+        target: `${this.deployment.packageId}::${vestingModule(position.kind)}::close_irrevocable`,
         typeArguments: [position.coinType],
         arguments: [sharedObject(tx, "vesting", position), tx.object.clock()],
       });
