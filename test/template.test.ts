@@ -13,12 +13,15 @@ import {
 import {
   buildMemePackageBytecode,
   deriveMemeTemplateIdentifiers,
+  memeAtomicSupply,
 } from "../src/launchpad/template.ts";
 import { LaunchpadTransactions } from "../src/launchpad/transactions.ts";
 
 const blastPackageId = normalizeSuiObjectId("0xb1a57");
 const latestBlastPackageId = normalizeSuiObjectId("0xb1a58");
+const adminPackageId = normalizeSuiObjectId("0xad");
 const options = {
+  decimals: 6,
   symbol: "DOG COIN",
   name: "Dog Coin",
   description: "A good dog",
@@ -28,12 +31,13 @@ const options = {
   creatorRecipient: { kind: "address", address: "0xc" } as const,
 };
 
-test("locks the embedded artifact to the eight source constants", async () => {
+test("locks the embedded artifact to the nine source constants", async () => {
   const creatorRecipientBytes = Uint8Array.from(
     { length: 32 },
     (_, index) => index,
   );
   const defaults = {
+    decimals: 9,
     symbol: "MEME",
     name: "Blast Meme",
     description: "A Meme launched on Blast",
@@ -49,7 +53,7 @@ test("locks the embedded artifact to the eight source constants", async () => {
 
   assert.equal(
     createHash("sha256").update(bytecode).digest("hex"),
-    "e35e26dcf39354bcf3a7be6d9c9d33e670846b7d50a046ad06c564467b777b74",
+    "7a0303c62ce622ed2f0eb17de1ac4a8d0d8852ee859d4cdca3fdc2711b265da8",
   );
   assert.deepEqual(get_constants(bytecode), [
     {
@@ -82,6 +86,10 @@ test("locks the embedded artifact to the eight source constants", async () => {
     {
       type_: "Bool",
       value_bcs: Array.from(bcs.bool().serialize(true).toBytes()),
+    },
+    {
+      type_: "U8",
+      value_bcs: Array.from(bcs.u8().serialize(defaults.decimals).toBytes()),
     },
     {
       type_: "Bool",
@@ -161,6 +169,10 @@ test("patches identifiers, constants, and the Blast dependency", async () => {
       value_bcs: Array.from(bcs.bool().serialize(false).toBytes()),
     },
     {
+      type_: "U8",
+      value_bcs: Array.from(bcs.u8().serialize(options.decimals).toBytes()),
+    },
+    {
       type_: "Bool",
       value_bcs: Array.from(bcs.bool().serialize(options.burnable).toBytes()),
     },
@@ -196,7 +208,7 @@ test("patches a 32-byte account commitment in the same compiled template", async
     type_: "Bool",
     value_bcs: Array.from(bcs.bool().serialize(true).toBytes()),
   });
-  assert.deepEqual(constants[6], {
+  assert.deepEqual(constants[7], {
     type_: "Bool",
     value_bcs: Array.from(bcs.bool().serialize(false).toBytes()),
   });
@@ -231,10 +243,11 @@ test("keeps constant fields independent when values match placeholders", async (
   }
 });
 
-test("publishes against 0x1, 0x2, and Blast, then makes the package immutable", async () => {
+test("publishes against 0x1, 0x2, blast_admin, and Blast, then makes the package immutable", async () => {
   const tx = new LaunchpadTransactions({
     packageId: latestBlastPackageId,
     originalPackageId: blastPackageId,
+    adminPackageId,
     packageVersion: {
       objectId: "0x3",
       initialSharedVersion: "10",
@@ -265,6 +278,7 @@ test("publishes against 0x1, 0x2, and Blast, then makes the package immutable", 
     assert.deepEqual(commands[0].Publish.dependencies, [
       MOVE_STDLIB_ADDRESS,
       SUI_FRAMEWORK_ADDRESS,
+      adminPackageId,
       latestBlastPackageId,
     ]);
     const publishedModule = Buffer.from(
@@ -289,6 +303,13 @@ test("publishes against 0x1, 0x2, and Blast, then makes the package immutable", 
     ]);
   }
 });
+test("mirrors the one-billion-token atomic supply at each precision", () => {
+  assert.equal(memeAtomicSupply(6), 1_000_000_000_000_000n);
+  assert.equal(memeAtomicSupply(9), 1_000_000_000_000_000_000n);
+  assert.equal(memeAtomicSupply(10), 10_000_000_000_000_000_000n);
+  assert.throws(() => memeAtomicSupply(11), /u64/);
+});
+
 test("rejects invalid policy, dependency, and identifier inputs", async () => {
   await assert.rejects(
     buildMemePackageBytecode(
@@ -323,6 +344,21 @@ test("rejects invalid policy, dependency, and identifier inputs", async () => {
   await assert.rejects(
     buildMemePackageBytecode(options, "0x2"),
     /deployed Blast package/,
+  );
+  await assert.rejects(
+    buildMemePackageBytecode({ ...options, decimals: 11 }, blastPackageId),
+    /Meme atomic supply must be a u64/,
+  );
+  await assert.rejects(
+    buildMemePackageBytecode({ ...options, decimals: 1.5 }, blastPackageId),
+    /decimals must be a u8/,
+  );
+  await assert.rejects(
+    buildMemePackageBytecode(
+      { ...options, symbol: "A".repeat(33) },
+      blastPackageId,
+    ),
+    /must not exceed 32 bytes/,
   );
   await assert.rejects(
     buildMemePackageBytecode({ ...options, symbol: "BAD!" }, blastPackageId),

@@ -6,13 +6,13 @@ import {
   allocateHolderRewards,
   buildRewardManifest,
   verifyRewardProof,
-} from "../src/distributor/allocations.ts";
+} from "../src/holder-rewards/allocations.ts";
 import {
   applyHolderCheckpoint,
   createHolderLedger,
   holderWeights,
   resetHolderWeights,
-} from "../src/distributor/holders.ts";
+} from "../src/holder-rewards/holders.ts";
 
 const ALICE = normalizeSuiAddress("0xa");
 const BOB = normalizeSuiAddress("0xb");
@@ -37,7 +37,7 @@ test("published contract vector is reproduced byte for byte", () => {
     ),
   );
   const actual = buildRewardManifest({
-    distributorId: "0xd",
+    vaultId: "0xd",
     number: 0n,
     startCheckpoint: 10n,
     endCheckpoint: 20n,
@@ -86,9 +86,9 @@ test("zero eligible holders never grant historical funds to a made-up recipient"
   });
 });
 
-test("odd-sized tree verifies all leaves and binds recipient, amount, distributor and round", () => {
+test("odd-sized tree verifies all leaves and binds recipient, amount, vault and round", () => {
   const manifest = buildRewardManifest({
-    distributorId: "0xd",
+    vaultId: "0xd",
     number: 0n,
     startCheckpoint: 10n,
     endCheckpoint: 20n,
@@ -108,7 +108,7 @@ test("odd-sized tree verifies all leaves and binds recipient, amount, distributo
     );
     assert.equal(
       verifyRewardProof(
-        { ...manifest, distributorId: normalizeSuiAddress("0xe") },
+        { ...manifest, vaultId: normalizeSuiAddress("0xe") },
         allocation,
       ),
       false,
@@ -120,7 +120,7 @@ test("odd-sized tree verifies all leaves and binds recipient, amount, distributo
 
 test("a manifest rejects duplicate beneficiaries and zero allocations", () => {
   const options = {
-    distributorId: "0xd",
+    vaultId: "0xd",
     number: 0n,
     startCheckpoint: 0n,
     endCheckpoint: 1n,
@@ -257,7 +257,7 @@ test("holder ordering and manifest commitments do not depend on host collation",
     expected,
   );
   const manifest = buildRewardManifest({
-    distributorId: "0xd",
+    vaultId: "0xd",
     number: 0n,
     startCheckpoint: 0n,
     endCheckpoint: 1n,

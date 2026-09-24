@@ -16,6 +16,8 @@ export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
 export type BlastPackages = Readonly<
   Record<string, SuiPackageReference> & {
     launchpad: SuiPackageReference;
+    /** Published `blast_admin` package (`acl::sign_in`, Meme publish dependency). */
+    admin: SuiPackageReference;
     blastSui?: SuiPackageReference;
     migrators?: SuiPackageReference;
     vesting?: SuiPackageReference;

@@ -5,7 +5,7 @@ import type {
 import type { BuyPreview, SellPreview } from "./curve.ts";
 import { previewBuy, previewSell } from "./curve.ts";
 import type { LaunchState } from "./state.ts";
-import { getLaunch } from "./state.ts";
+import { getLaunch, getProtectedPurchases } from "./state.ts";
 import type { LaunchpadDeployment } from "./transactions.ts";
 import { LaunchpadCalls, LaunchpadTransactions } from "./transactions.ts";
 
@@ -24,6 +24,19 @@ export class LaunchpadClient {
     return getLaunch(
       this.#client,
       objectId,
+      this.call.deployment.originalPackageId,
+    );
+  }
+
+  /** Gross Meme `sender` bought while protected; compare with `protection.cumulativeAtomicLimit`. */
+  async getProtectedPurchases(
+    launchId: string,
+    sender: string,
+  ): Promise<bigint> {
+    return getProtectedPurchases(
+      this.#client,
+      launchId,
+      sender,
       this.call.deployment.originalPackageId,
     );
   }

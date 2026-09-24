@@ -19,6 +19,10 @@ const deployment = defineBlastDeployment({
       packageId: "0x123",
       originalPackageId: "0x122",
     },
+    admin: {
+      packageId: "0x111",
+      originalPackageId: "0x111",
+    },
     blastSui: {
       packageId: "0x423",
       originalPackageId: "0x422",
@@ -65,6 +69,8 @@ test("derives call-specific launchpad shared references", () => {
       "0x0000000000000000000000000000000000000000000000000000000000000123",
     originalPackageId:
       "0x0000000000000000000000000000000000000000000000000000000000000122",
+    adminPackageId:
+      "0x0000000000000000000000000000000000000000000000000000000000000111",
     packageVersion: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000002",
@@ -122,6 +128,18 @@ test("derives current-package blast Sui call references", () => {
   });
 });
 
+test("requires the published blast_admin package", () => {
+  const { admin: _admin, ...withoutAdmin } = deployment.packages;
+  assert.throws(
+    () =>
+      defineBlastDeployment({
+        ...deployment,
+        packages: withoutAdmin as typeof deployment.packages,
+      }),
+    /packages\.admin is required/,
+  );
+});
+
 test("requires blast Sui deployment constants only when requested", () => {
   const {
     blastSuiPackageVersion: _blastSuiPackageVersion,
@@ -132,7 +150,10 @@ test("requires blast Sui deployment constants only when requested", () => {
   assert.doesNotThrow(() =>
     defineBlastDeployment({
       ...deployment,
-      packages: { launchpad: deployment.packages.launchpad },
+      packages: {
+        launchpad: deployment.packages.launchpad,
+        admin: deployment.packages.admin,
+      },
       sharedObjects: {
         packageVersion: deployment.sharedObjects.packageVersion,
         launchConfig: deployment.sharedObjects.launchConfig,
@@ -145,7 +166,10 @@ test("requires blast Sui deployment constants only when requested", () => {
     () =>
       blastSuiDeployment({
         ...deployment,
-        packages: { launchpad: deployment.packages.launchpad },
+        packages: {
+          launchpad: deployment.packages.launchpad,
+          admin: deployment.packages.admin,
+        },
       }),
     /packages\.blastSui is required/,
   );
@@ -213,7 +237,10 @@ test("requires migrator deployment constants only when requested", () => {
     () =>
       migratorsDeployment({
         ...deployment,
-        packages: { launchpad: deployment.packages.launchpad },
+        packages: {
+          launchpad: deployment.packages.launchpad,
+          admin: deployment.packages.admin,
+        },
       }),
     /packages\.migrators is required/,
   );

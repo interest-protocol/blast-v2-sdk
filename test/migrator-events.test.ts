@@ -4,7 +4,7 @@ import test from "node:test";
 
 import type { BcsType } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
+import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import type { LaunchpadEventKind } from "../src/launchpad/events.ts";
 import {
   decodeLaunchpadEvent,
@@ -25,16 +25,29 @@ import {
   reduceLaunchpadProductInput,
 } from "../src/migrators/reducer.ts";
 
-const launchpadPackages = { packageId: "0x123", originalPackageId: "0x122" };
+const launchpadPackages = { originalPackageId: "0x122" };
 const migratorPackages: MigratorEventPackageIdentity = {
-  packageId: "0x321",
   originalPackageId: "0x320",
+};
+const sampleSplit = {
+  creatorBps: 10_000n,
+  autoLpBps: 0n,
+  rewardsBps: 0n,
+  recipients: [],
+};
+const samplePlan = {
+  channels: [{ channelId: 1n, role: "Liquidity", destination: "0xa" }],
+  meme: [
+    { channelId: 0n, bps: 8_000n },
+    { channelId: 1n, bps: 2_000n },
+  ],
+  quote: [{ channelId: 1n, bps: 10_000n }],
 };
 
 test("decodes and idempotently reduces every frozen migrator event", () => {
   assert.deepEqual(migratorEventSpecs, readFrozenMigratorEventSpecs());
   const kinds = Object.keys(migratorEventSpecs) as MigratorEventKind[];
-  assert.equal(kinds.length, 15);
+  assert.equal(kinds.length, 12);
 
   let projection = createLaunchpadProductProjection();
   for (const [eventIndex, kind] of kinds.entries()) {
@@ -50,384 +63,274 @@ test("decodes and idempotently reduces every frozen migrator event", () => {
   }
 });
 
-test("replays the launch-to-vault lifecycle and LP-fee snapshots", () => {
-  const inputs = [
-    launchpadDecoded(
-      "LaunchTicketCreated",
+test("replays vault custody, collections, auto-LP, split updates, and claims", () => {
+  const split = {
+    creatorBps: 5_000n,
+    autoLpBps: 2_000n,
+    rewardsBps: 2_000n,
+    recipients: [
       {
-        ticket_id: "0xb",
-        initial_supply: 1_000n,
+        destination: normalizeSuiObjectId("0xf"),
+        bps: 1_000n,
       },
-      0,
-    ),
+    ],
+  };
+  const nextSplit = { ...split, creatorBps: 6_000n, autoLpBps: 1_000n };
+  const inputs = [
+    launchpadDecoded("LaunchTicketCreated", { ticket_id: "0xb" }, 0),
     launchpadDecoded(
       "LaunchCreated",
-      {
-        launch_id: "0xc",
-        ticket_id: "0xb",
-        meme_reserve: 800n,
-      },
+      { launch_id: "0xc", ticket_id: "0xb", quote: "0x2::sui::SUI" },
       1,
-    ),
-    launchpadDecoded(
-      "Migrated",
-      {
-        launch_id: "0xc",
-        migration_meme: 200n,
-        migration_quote: 190n,
-        disposed_meme: 610n,
-      },
-      2,
     ),
     migratorDecoded(
       "VaultCreated",
       {
-        vault_id: "0xd",
-        pool_id: "0xe",
-        position_id: "0xf",
+        vault_id: "0x40",
+        pool_id: "0x41",
+        position_id: "0x42",
         venue: "0x320::cetus::Venue",
+        meme: "0xa::meme::MEME",
+        quote: "0x2::sui::SUI",
+        fee_split: split,
       },
+      2,
+    ),
+    launchpadDecoded(
+      "Migrated",
+      { launch_id: "0xc", residual_meme: 3n, residual_quote: 4n },
       3,
     ),
     migratorDecoded(
-      "MigrationCompleted",
+      "FeesCollected",
       {
-        launch_id: "0xc",
-        vault_id: "0xd",
-        pool_id: "0xe",
-        venue: "0x320::cetus::Venue",
-        source_meme_amount: 200n,
-        source_quote_amount: 190n,
-        used_meme_amount: 199n,
-        used_quote_amount: 189n,
-        residual_meme_amount: 1n,
-        residual_quote_amount: 1n,
-        sqrt_price_x64: 100n,
-        tick_spacing: 260,
-        fee_rate: 40_000n,
+        vault_id: "0x40",
+        generation: 0n,
+        gross_meme: 110n,
+        gross_quote: 220n,
+        protocol_meme: 10n,
+        protocol_quote: 20n,
+        creator_meme: 50n,
+        creator_quote: 100n,
+        auto_lp_meme: 20n,
+        auto_lp_quote: 40n,
+        rewards_meme: 20n,
+        rewards_quote: 40n,
+        recipient_meme: [10n],
+        recipient_quote: [20n],
       },
       4,
     ),
     migratorDecoded(
-      "LpFeesCollected",
-      {
-        vault_id: "0xd",
-        pool_id: "0xe",
-        position_id: "0xf",
-        venue: "0x320::cetus::Venue",
-        protocol_meme_fee_delta: 11n,
-        creator_meme_fee_delta: 12n,
-        protocol_quote_fee_delta: 13n,
-        creator_quote_fee_delta: 14n,
-        principal_liquidity: 1_000n,
-      },
+      "AutoLpPositionOpened",
+      { vault_id: "0x40", position_id: "0x43" },
       5,
     ),
     migratorDecoded(
-      "LpFeesCollected",
+      "AutoLiquidityAdded",
       {
-        vault_id: "0xd",
-        pool_id: "0xe",
-        position_id: "0xf",
-        venue: "0x320::cetus::Venue",
-        protocol_meme_fee_delta: 2n,
-        creator_meme_fee_delta: 3n,
-        protocol_quote_fee_delta: 4n,
-        creator_quote_fee_delta: 5n,
-        principal_liquidity: 1_000n,
+        vault_id: "0x40",
+        meme_amount: 18n,
+        quote_amount: 40n,
+        meme_pending: 2n,
+        quote_pending: 0n,
       },
       6,
     ),
     migratorDecoded(
-      "CreatorFeesClaimed",
+      "FeeSplitChanged",
       {
-        vault_id: "0xd",
+        vault_id: "0x40",
+        old_generation: 0n,
+        new_generation: 1n,
+        old_fee_split: split,
+        new_fee_split: nextSplit,
       },
       7,
     ),
     migratorDecoded(
-      "ProtocolFeesClaimed",
-      {
-        vault_id: "0xd",
-      },
+      "CreatorFeesClaimed",
+      { vault_id: "0x40", meme_amount: 50n, quote_amount: 100n },
       8,
+    ),
+    migratorDecoded(
+      "RoundPublished",
+      {
+        vault_id: "0x40",
+        round_id: "0x50",
+        number: 0n,
+        start_checkpoint: 10n,
+        end_checkpoint: 20n,
+        root: new Uint8Array(32).fill(1),
+        manifest_digest: new Uint8Array(32).fill(2),
+        leaf_count: 2n,
+        meme_amount: 15n,
+        quote_amount: 30n,
+        meme_unallocated: 5n,
+        quote_unallocated: 10n,
+      },
+      9,
+    ),
+    migratorDecoded(
+      "RewardPaid",
+      {
+        round_id: "0x50",
+        index: 1n,
+        beneficiary: "0xa",
+        meme_amount: 5n,
+        quote_amount: 10n,
+        meme_remaining: 10n,
+        quote_remaining: 20n,
+      },
+      10,
+    ),
+    migratorDecoded(
+      "ProtocolFeesClaimed",
+      { vault_id: "0x40", meme_amount: 3n, quote_amount: 4n },
+      11,
     ),
   ];
 
-  const beforeCreatorClaim = inputs
-    .slice(0, -2)
-    .reduce(reduceLaunchpadProductInput, createLaunchpadProductProjection());
-  const accruedVault =
-    beforeCreatorClaim.migrators.vaults[normalizeSuiObjectId("0xd")];
-  assert.equal(accruedVault?.protocolMemeFees, 13n);
-  assert.equal(accruedVault?.creatorMemeFees, 15n);
-  assert.equal(accruedVault?.protocolQuoteFees, 17n);
-  assert.equal(accruedVault?.creatorQuoteFees, 19n);
-
-  const beforeProtocolClaim = inputs
-    .slice(0, -1)
-    .reduce(reduceLaunchpadProductInput, createLaunchpadProductProjection());
-  const beforeClaimVault =
-    beforeProtocolClaim.migrators.vaults[normalizeSuiObjectId("0xd")];
-  assert.equal(beforeClaimVault?.protocolMemeFees, 13n);
-  assert.equal(beforeClaimVault?.creatorMemeFees, 0n);
-  assert.equal(beforeClaimVault?.protocolQuoteFees, 17n);
-  assert.equal(beforeClaimVault?.creatorQuoteFees, 0n);
-  assert.equal(beforeClaimVault?.protocolMemeResidual, 1n);
-  assert.equal(beforeClaimVault?.protocolQuoteResidual, 1n);
-
-  const projection = reduceLaunchpadProductInput(
-    beforeProtocolClaim,
-    inputs.at(-1)!,
+  const states = inputs.map((_, index) =>
+    inputs
+      .slice(0, index + 1)
+      .reduce(reduceLaunchpadProductInput, createLaunchpadProductProjection()),
   );
-  const launch = projection.launchpad.launches[normalizeSuiObjectId("0xc")];
-  const vault = projection.migrators.vaults[normalizeSuiObjectId("0xd")];
+  const vaultId = normalizeSuiObjectId("0x40");
+  const migrated = states[3]?.migrators.vaults[vaultId];
+  assert.equal(migrated?.launchId, normalizeSuiObjectId("0xc"));
+  assert.equal(migrated?.protocolMemeResidual, 3n);
+  assert.equal(migrated?.protocolQuoteResidual, 4n);
+  const collected = states[4]?.migrators.vaults[vaultId];
+  assert.equal(collected?.creatorMeme, 50n);
+  assert.equal(collected?.autoLpQuote, 40n);
+  assert.equal(collected?.protocolMemePaid, 10n);
 
-  assert.equal(launch?.lifecycle, "Migrated");
-  assert.equal(launch?.memeReserve, 0n);
-  assert.equal(launch?.realQuoteReserve, 0n);
+  const vault = states.at(-1)?.migrators.vaults[vaultId];
   assert.ok(vault);
-  assert.equal(vault.launchId, normalizeSuiObjectId("0xc"));
-  assert.equal(vault.poolId, normalizeSuiObjectId("0xe"));
-  assert.equal(vault.positionId, normalizeSuiObjectId("0xf"));
-  assert.equal(vault.protocolMemeFees, 0n);
-  assert.equal(vault.creatorMemeFees, 0n);
-  assert.equal(vault.protocolQuoteFees, 0n);
-  assert.equal(vault.creatorQuoteFees, 0n);
+  assert.equal(vault.autoLpPositionId, normalizeSuiObjectId("0x43"));
+  assert.equal(vault.autoLpMeme, 2n);
+  assert.equal(vault.autoLpQuote, 0n);
+  assert.equal(vault.generation, 1n);
+  assert.deepEqual(vault.feeSplit, nextSplit);
+  assert.equal(vault.creatorMeme, 0n);
+  assert.equal(vault.creatorQuote, 0n);
+  assert.equal(vault.rewardsMeme, 5n);
+  assert.equal(vault.rewardsQuote, 10n);
+  assert.equal(vault.nextRound, 1n);
+  assert.equal(vault.lastCheckpoint, 20n);
   assert.equal(vault.protocolMemeResidual, 0n);
   assert.equal(vault.protocolQuoteResidual, 0n);
-  assert.equal(vault.migration?.residualMemeAmount, 1n);
-  assert.equal(vault.migration?.residualQuoteAmount, 1n);
-  assert.equal(vault.principalLiquidity, 1_000n);
+  const round = states.at(-1)?.migrators.rounds[normalizeSuiObjectId("0x50")];
+  assert.equal(round?.memeRemaining, 10n);
+  assert.equal(round?.quoteRemaining, 20n);
+  assert.deepEqual(round?.paidIndexes, { "1": true });
+  assert.equal(round?.root, "01".repeat(32));
 });
 
-test("replays Aftermath policy and locked weighted-pool migration facts", () => {
-  const inputs = [
+test("replays LP-fee policy defaults, coin pairs, destination, and Cetus reservations", () => {
+  const meme = normalizedType("0xa::meme::MEME");
+  const projection = [
     migratorDecoded(
-      "AftermathPolicyUpdated",
+      "LpFeePolicyChanged",
       {
-        old_meme_weight: 500_000_000_000_000_000n,
-        old_quote_weight: 500_000_000_000_000_000n,
-        old_dao_fee_bps: 200,
-        new_meme_weight: 600_000_000_000_000_000n,
-        new_quote_weight: 400_000_000_000_000_000n,
-        new_dao_fee_bps: 300,
+        meme: null,
+        old_meme_bps: 0n,
+        old_quote_bps: 0n,
+        new_meme_bps: 1_000n,
+        new_quote_bps: 2_000n,
       },
       0,
     ),
     migratorDecoded(
-      "VaultCreated",
+      "LpFeePolicyChanged",
       {
-        vault_id: "0xd",
-        pool_id: "0xe",
-        position_id: "0xf",
-        venue: "0x320::aftermath::Venue",
         meme: "0xa::meme::MEME",
-        quote: "0x2::sui::SUI",
+        old_meme_bps: null,
+        old_quote_bps: null,
+        new_meme_bps: 500n,
+        new_quote_bps: 600n,
       },
       1,
     ),
     migratorDecoded(
-      "AftermathMigrationCompleted",
+      "LpFeePolicyChanged",
       {
-        launch_id: "0xc",
-        vault_id: "0xd",
-        inner_pool_id: "0x10",
-        dao_fee_pool_id: "0xe",
-        venue: "0x320::aftermath::Venue",
-        lp: "0x30::af_lp::AF_LP",
-        meme: "0xa::meme::MEME",
-        quote: "0x2::sui::SUI",
-        meme_amount: 200n,
-        quote_amount: 190n,
-        locked_lp_amount: 180n,
-        meme_weight: 600_000_000_000_000_000n,
-        quote_weight: 400_000_000_000_000_000n,
-        flatness: 0n,
-        swap_in_fee: 100_000_000_000_000n,
-        dao_fee_bps: 300,
+        meme: "0xb::meme::MEME",
+        old_meme_bps: null,
+        old_quote_bps: null,
+        new_meme_bps: 1n,
+        new_quote_bps: 1n,
       },
       2,
     ),
     migratorDecoded(
-      "AftermathDaoFeeUpdated",
+      "LpFeePolicyChanged",
       {
-        vault_id: "0xd",
-        dao_fee_pool_id: "0xe",
-        old_dao_fee_bps: 300,
-        new_dao_fee_bps: 350,
+        meme: "0xb::meme::MEME",
+        old_meme_bps: 1n,
+        old_quote_bps: 1n,
+        new_meme_bps: null,
+        new_quote_bps: null,
       },
       3,
     ),
-  ];
-
-  const projection = inputs.reduce(
-    reduceLaunchpadProductInput,
-    createLaunchpadProductProjection(),
-  );
-  const vault = projection.migrators.vaults[normalizeSuiObjectId("0xd")];
-
-  assert.deepEqual(projection.migrators.aftermathPolicy, {
-    memeWeight: 600_000_000_000_000_000n,
-    quoteWeight: 400_000_000_000_000_000n,
-    daoFeeBps: 300,
-    source: "override",
-  });
-  assert.ok(vault?.migration?.kind === "aftermath");
-  assert.equal(vault.migration.lockedLpAmount, 180n);
-  assert.equal(vault.migration.memeWeight, 600_000_000_000_000_000n);
-  assert.equal(vault.migration.quoteWeight, 400_000_000_000_000_000n);
-  assert.equal(vault.migration.innerPoolId, normalizeSuiObjectId("0x10"));
-  assert.equal(vault.migration.daoFeePoolId, normalizeSuiObjectId("0xe"));
-  assert.equal(vault.migration.swapInFee, 100_000_000_000_000n);
-  assert.equal(vault.migration.daoFeeBps, 350);
-  assert.equal(vault.protocolMemeResidual, 0n);
-  assert.equal(vault.protocolQuoteResidual, 0n);
-});
-
-test("replays migration-born LP-fee claims, reissuance, and custodian locks", () => {
-  const vaultId = normalizeSuiObjectId("0xd");
-  const created = reduceLaunchpadProductInput(
-    createLaunchpadProductProjection(),
-    migratorDecoded("VaultCreated", { vault_id: "0xd" }, 0),
-  );
-  assert.deepEqual(created.migrators.vaults[vaultId]?.lpFeeAuthority, {
-    kind: "pending",
-  });
-
-  const claimed = reduceLaunchpadProductInput(
-    created,
     migratorDecoded(
-      "LpFeeCapClaimed",
-      { vault_id: "0xd", lp_fee_cap_id: "0x20", claimant: "0xe" },
-      1,
-    ),
-  );
-  assert.deepEqual(claimed.migrators.vaults[vaultId]?.lpFeeAuthority, {
-    kind: "cap",
-    capId: normalizeSuiObjectId("0x20"),
-  });
-
-  const reissued = reduceLaunchpadProductInput(
-    claimed,
-    migratorDecoded(
-      "LpFeeCapIssued",
-      {
-        vault_id: "0xd",
-        revoked_lp_fee_cap_id: "0x20",
-        lp_fee_cap_id: "0x21",
-        recipient: "0xf",
-      },
-      2,
-    ),
-  );
-  assert.deepEqual(reissued.migrators.vaults[vaultId]?.lpFeeAuthority, {
-    kind: "cap",
-    capId: normalizeSuiObjectId("0x21"),
-  });
-
-  const locked = reduceLaunchpadProductInput(
-    reissued,
-    migratorDecoded(
-      "LpFeesLocked",
-      {
-        vault_id: "0xd",
-        lp_fee_cap_id: "0x21",
-        custodian: "0xd15::distributor::Witness",
-      },
-      3,
-    ),
-  );
-  assert.deepEqual(locked.migrators.vaults[vaultId]?.lpFeeAuthority, {
-    kind: "custodian",
-    custodianType: normalizeStructTag("0xd15::distributor::Witness"),
-  });
-
-  const pendingLocked = reduceLaunchpadProductInput(
-    created,
-    migratorDecoded(
-      "LpFeesLocked",
-      {
-        vault_id: "0xd",
-        lp_fee_cap_id: null,
-        custodian: "0xa11::auto_lp::Witness",
-      },
+      "LpFeeDestinationChanged",
+      { old_destination: "0x1", new_destination: "0xb1a57" },
       4,
     ),
-  );
-  assert.deepEqual(pendingLocked.migrators.vaults[vaultId]?.lpFeeAuthority, {
-    kind: "custodian",
-    custodianType: normalizeStructTag("0xa11::auto_lp::Witness"),
-  });
-});
-
-test("replays LP-fee protocol share defaults and project overrides", () => {
-  const pinned = [
-    migratorDecoded("LpProtocolFeeShareChanged", { pos0: 3_000n }, 40),
     migratorDecoded(
-      "ProjectLpProtocolFeeShareSet",
-      { meme: "0xa::meme::MEME", protocol_fee_share_bps: 2_500n },
-      41,
-    ),
-    migratorDecoded(
-      "ProjectLpProtocolFeeShareSet",
-      { meme: "0xb::partner::PARTNER", protocol_fee_share_bps: 1_000n },
-      42,
+      "CetusPoolReserved",
+      {
+        meme: "0xa::meme::MEME",
+        quote: "0x2::sui::SUI",
+        pool_creation_cap_id: "0x60",
+        tick_spacing: 200,
+      },
+      5,
     ),
   ].reduce(reduceLaunchpadProductInput, createLaunchpadProductProjection());
 
-  assert.equal(pinned.migrators.lpFeePolicy.protocolFeeShareBps, 3_000n);
-  assert.deepEqual(pinned.migrators.lpFeePolicy.projectProtocolFeeShareBps, {
-    [normalizedType("0xa::meme::MEME")]: 2_500n,
-    [normalizedType("0xb::partner::PARTNER")]: 1_000n,
+  assert.deepEqual(projection.migrators.lpFeePolicy, {
+    defaultShares: { memeBps: 1_000n, quoteBps: 2_000n },
+    coinShares: { [meme]: { memeBps: 500n, quoteBps: 600n } },
+    protocolDestination: normalizeSuiObjectId("0xb1a57"),
   });
-
-  const projection = [
-    migratorDecoded(
-      "ProjectLpProtocolFeeShareSet",
-      { meme: "0xa::meme::MEME", protocol_fee_share_bps: 5_000n },
-      43,
-    ),
-    migratorDecoded(
-      "ProjectLpProtocolFeeShareCleared",
-      { pos0: "0xa::meme::MEME" },
-      44,
-    ),
-    migratorDecoded("LpProtocolFeeShareChanged", { pos0: 4_000n }, 45),
-  ].reduce(reduceLaunchpadProductInput, pinned);
-
-  assert.equal(projection.migrators.lpFeePolicy.protocolFeeShareBps, 4_000n);
-  assert.deepEqual(
-    projection.migrators.lpFeePolicy.projectProtocolFeeShareBps,
-    { [normalizedType("0xb::partner::PARTNER")]: 1_000n },
-  );
-  assert.equal(projection.launchpad.config.protocolFeeShareBps, null);
-  assert.equal(
-    projection.migrators.eventCounts.ProjectLpProtocolFeeShareSet,
-    3,
-  );
-  assert.equal(
-    projection.migrators.eventCounts.ProjectLpProtocolFeeShareCleared,
-    1,
-  );
-  assert.equal(projection.migrators.eventCounts.LpProtocolFeeShareChanged, 2);
+  assert.deepEqual(projection.migrators.cetusPoolReservations[meme], {
+    memeType: meme,
+    quoteType: normalizedType("0x2::sui::SUI"),
+    poolCreationCapId: normalizeSuiObjectId("0x60"),
+    tickSpacing: 200,
+  });
 });
 
-test("requires migrator event positions and current/original identities", () => {
+test("authenticates migrator events by their blast_events type", () => {
   const valid = migratorSuiEvent("VaultCreated", {}, 0);
   assert.throws(
     () => decodeMigratorEvent({ ...valid, checkpoint: null }, migratorPackages),
     /checkpoint metadata/,
   );
-  assert.throws(
-    () =>
-      decodeMigratorEvent({ ...valid, packageId: "0x999" }, migratorPackages),
-    /unexpected emitter package/,
+  assert.equal(
+    decodeMigratorEvent({ ...valid, packageId: "0x999" }, migratorPackages)
+      .kind,
+    "VaultCreated",
   );
   assert.throws(
     () =>
       decodeMigratorEvent(
-        { ...valid, eventType: "0x999::events::VaultCreated" },
+        { ...valid, eventType: "0x999::blast_events::VaultCreated" },
+        migratorPackages,
+      ),
+    /unexpected event package/,
+  );
+  assert.throws(
+    () =>
+      decodeMigratorEvent(
+        {
+          ...valid,
+          eventType: `${normalizeSuiObjectId("0x320")}::events::VaultCreated`,
+        },
         migratorPackages,
       ),
     /unexpected event package/,
@@ -522,8 +425,8 @@ function launchpadDecoded(
   const original = normalizeSuiObjectId(launchpadPackages.originalPackageId);
   return decodeLaunchpadEvent(
     {
-      packageId: launchpadPackages.packageId,
-      module: "blast_events",
+      packageId: "0x321",
+      module: "cetus",
       sender: "0xa",
       eventType: `${original}::blast_events::Event<${original}::events::${kind}>`,
       bcs: encode(kind, launchpadEventSpecs, launchpadEventBcs, overrides),
@@ -554,10 +457,10 @@ function migratorSuiEvent(
 ): SuiClientTypes.EventEntry {
   const original = normalizeSuiObjectId(migratorPackages.originalPackageId);
   return {
-    packageId: migratorPackages.packageId,
-    module: "events",
+    packageId: "0x321",
+    module: "cetus",
     sender: "0xa",
-    eventType: `${original}::events::${kind}`,
+    eventType: `${original}::blast_events::${kind}`,
     bcs: encode(kind, migratorEventSpecs, migratorEventBcs, overrides),
     json: null,
     checkpoint: "9",
@@ -601,17 +504,25 @@ function sampleValue(descriptor: string): unknown {
     case "u128":
       return 1n;
     case "u8":
-    case "u16":
     case "u32":
       return 1;
     case "bool":
       return false;
     case "bytes":
       return new Uint8Array([1]);
+    case "string":
+      return "meme";
+    case "u64Vector":
+      return [1n];
+    case "feeSplit":
+      return sampleSplit;
+    case "allocationPlan":
+      return samplePlan;
     case "optionAddress":
     case "optionBytes":
     case "optionId":
     case "optionU64":
+    case "optionTypeName":
       return null;
     default:
       throw new TypeError(`unknown descriptor: ${descriptor}`);
@@ -651,33 +562,36 @@ function readFrozenMigratorEventSpecs(): Record<
   );
 }
 
+const SCALAR_DESCRIPTORS = ["u64", "u128", "u32", "u8", "bool", "address"];
+const DATATYPE_DESCRIPTORS: Record<string, string> = {
+  ID: "id",
+  TypeName: "typeName",
+  FeeSplit: "feeSplit",
+};
+
 function abiDescriptor(type: unknown): string {
-  if (
-    ["u64", "u128", "u32", "u16", "u8", "bool", "address"].includes(
-      String(type),
-    )
-  ) {
-    return String(type);
-  }
+  if (SCALAR_DESCRIPTORS.includes(String(type))) return String(type);
   if (!isRecord(type)) throw new TypeError("unsupported ABI event field");
   if (type.vector === "u8") return "bytes";
+  if (type.vector === "u64") return "u64Vector";
   const datatype = type.Datatype;
   if (!isRecord(datatype)) throw new TypeError("unsupported ABI datatype");
-  if (datatype.name === "ID") return "id";
-  if (datatype.name === "TypeName") return "typeName";
-  const argument = Array.isArray(datatype.type_arguments)
-    ? datatype.type_arguments[0]
-    : undefined;
-  if (
-    datatype.name === "Option" &&
-    isRecord(argument) &&
-    isRecord(argument.argument) &&
-    isRecord(argument.argument.Datatype) &&
-    argument.argument.Datatype.name === "ID"
-  ) {
-    return "optionId";
-  }
-  throw new TypeError("unsupported ABI event datatype");
+  const name = String(datatype.name);
+  if (name === "Option") return optionDescriptor(datatype.type_arguments);
+  const descriptor = DATATYPE_DESCRIPTORS[name];
+  if (!descriptor) throw new TypeError("unsupported ABI event datatype");
+  return descriptor;
+}
+
+function optionDescriptor(typeArguments: unknown): string {
+  const argument = Array.isArray(typeArguments) ? typeArguments[0] : undefined;
+  const inner = isRecord(argument) ? argument.argument : undefined;
+  if (inner === "u64") return "optionU64";
+  const name =
+    isRecord(inner) && isRecord(inner.Datatype) ? inner.Datatype.name : null;
+  if (name === "ID") return "optionId";
+  if (name === "TypeName") return "optionTypeName";
+  throw new TypeError("unsupported ABI Option event field");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

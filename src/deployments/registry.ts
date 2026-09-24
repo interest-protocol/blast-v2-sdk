@@ -43,6 +43,9 @@ export function defineBlastDeployment(
   if (!deployment.packages.launchpad) {
     throw new TypeError("packages.launchpad is required");
   }
+  if (!deployment.packages.admin) {
+    throw new TypeError("packages.admin is required");
+  }
   for (const name of REQUIRED_SHARED_OBJECTS) {
     if (!deployment.sharedObjects[name]) {
       throw new TypeError(`sharedObjects.${name} is required`);
@@ -84,6 +87,7 @@ export function launchpadDeployment(
   return {
     packageId: packageReference.packageId,
     originalPackageId: packageReference.originalPackageId,
+    adminPackageId: deployment.packages.admin.packageId,
     packageVersion: sharedObjectReference(objects.packageVersion, false),
     launchConfig: sharedObjectReference(objects.launchConfig, false),
     runtimeConfig: sharedObjectReference(objects.runtimeConfig, false),

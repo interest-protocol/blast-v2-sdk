@@ -13,8 +13,13 @@ import {
   SUI_FRAMEWORK_ADDRESS,
 } from "@mysten/sui/utils";
 
-import { requireBasisPoints } from "../lib/integers.ts";
+import { requireBasisPoints, requireU64 } from "../lib/integers.ts";
 import { MAX_SELL_BURN_BPS } from "./curve.ts";
+
+/** Exact whole-token supply of every generated Meme. */
+export const MEME_TOTAL_SUPPLY_WHOLE_TOKENS = 1_000_000_000n;
+/** Longest Meme symbol, in UTF-8 bytes, that launch finalization accepts. */
+export const MAX_MEME_SYMBOL_BYTES = 32;
 
 const ZERO_ADDRESS = normalizeSuiObjectId("0x0");
 const SYSTEM_ADDRESSES = new Set([
@@ -23,11 +28,11 @@ const SYSTEM_ADDRESSES = new Set([
   SUI_FRAMEWORK_ADDRESS,
 ]);
 
-// Built from contracts/sui/meme_template/sources/meme.move with
-// Sui CLI 1.77.2-51d177ad7d65. SHA-256:
-// e35e26dcf39354bcf3a7be6d9c9d33e670846b7d50a046ad06c564467b777b74
+// Built from contracts/sui/meme_template/sources/meme.move at contracts commit
+// 97be709 with Sui CLI 1.77.2-51d177ad7d65, `blast_fun` bound to 0xda74. SHA-256:
+// 7a0303c62ce622ed2f0eb17de1ac4a8d0d8852ee859d4cdca3fdc2711b265da8
 const TEMPLATE_BYTECODE_BASE64 =
-  "oRzrCwcAAAUKAQAOAg4WAyQqBE4EBVJAB5IB0AEI4gKAAQbiA4QBCuYEBQzrBEMACwMGAwoBEQIFAhICEwACAgABAAYAAgEMAQABAwMHAAYEAgAACQABAAENAwQAAQ4FBAACDAgJAQIDFAMGAAQIAwUABQ8MAQEMBhAKBQADBwYLAggABwgEAAIIAQgBAQoCAQgBAQUBCAMBCAAJCQAIAwgDCAMIAwgBAQMHCAQBCwIBCQABBggEAQsCAQgAAgkABRBDcmVhdG9yUmVjaXBpZW50DExhdW5jaFRpY2tldARNRU1FBlN0cmluZwlUeENvbnRleHQHYWRkcmVzcxFjcmVhdG9yX2F1dGhvcml0eQtkdW1teV9maWVsZApmcm9tX2J5dGVzBGluaXQNbGF1bmNoX3RpY2tldARtZW1lA25ldwtuZXdfYWNjb3VudAtuZXdfYWRkcmVzcw9wdWJsaWNfdHJhbnNmZXIGc2VuZGVyBnN0cmluZwh0cmFuc2Zlcgp0eF9jb250ZXh0BHV0ZjgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADadAoCBQRNRU1FCgILCkJsYXN0IE1lbWUKAhkYQSBNZW1lIGxhdW5jaGVkIG9uIEJsYXN0CgIbGmh0dHBzOi8vYmxhc3QuZnVuL21lbWUucG5nCgIhIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fAQEBAQEAAwgAAAAAAAAAAAACAQcBAAAAAAIfBwUEBgcEEQEMAgUKBwQRBRECDAILAgwDCwAHABEEBwERBAcCEQQHAxEECwMHBgcHCgE4AAsBLhEHOAECAAA=";
+  "oRzrCwcAAAUKAQAOAg4WAyQqBE4EBVJBB5MB0AEI4wKAAQbjA4cBCuoEBQzvBEUACwMGAwoBEQIFAhICEwACAgABAAYAAgEMAQABAwMHAAYEAgAACQABAAENAwQAAQ4FBAACDAgJAQIDFAMGAAQIAwUABQ8MAQEMBhAKBQADBwYLAggABwgEAAIIAQgBAQoCAQgBAQUBCAMBCAAKCQACCAMIAwgDCAMIAQEDBwgEAQsCAQkAAQYIBAELAgEIAAIJAAUQQ3JlYXRvclJlY2lwaWVudAxMYXVuY2hUaWNrZXQETUVNRQZTdHJpbmcJVHhDb250ZXh0B2FkZHJlc3MRY3JlYXRvcl9hdXRob3JpdHkLZHVtbXlfZmllbGQKZnJvbV9ieXRlcwRpbml0DWxhdW5jaF90aWNrZXQEbWVtZQNuZXcLbmV3X2FjY291bnQLbmV3X2FkZHJlc3MPcHVibGljX3RyYW5zZmVyBnNlbmRlcgZzdHJpbmcIdHJhbnNmZXIKdHhfY29udGV4dAR1dGY4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2nQKAgUETUVNRQoCCwpCbGFzdCBNZW1lCgIZGEEgTWVtZSBsYXVuY2hlZCBvbiBCbGFzdAoCGxpodHRwczovL2JsYXN0LmZ1bi9tZW1lLnBuZwoCISAAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHwEBAQIBCQEBAAMIAAAAAAAAAAAAAgEHAQAAAAACIAcFBAYHBBEBDAIFCgcEEQURAgwCCwIMAwsABwYHABEEBwERBAcCEQQHAxEECwMHBwcICgE4AAsBLhEHOAECAAA=";
 
 const DEFAULT_CREATOR_RECIPIENT_BYTES = fromHex(
   "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
@@ -43,6 +48,7 @@ const defaults = {
     .serialize(Array.from(DEFAULT_CREATOR_RECIPIENT_BYTES))
     .toBytes(),
   creatorIsAccount: bcs.bool().serialize(true).toBytes(),
+  decimals: bcs.u8().serialize(9).toBytes(),
   burnable: bcs.bool().serialize(false).toBytes(),
   sellBurnBps: bcs.u64().serialize(0n).toBytes(),
 } as const;
@@ -61,6 +67,8 @@ type CompiledModule = Record<string, unknown> & {
 };
 
 export type MemeTemplateOptions = {
+  /** Decimal precision; launch intake admits only `LaunchConfig`-allowed values. */
+  decimals: number;
   symbol: string;
   name: string;
   description: string;
@@ -109,7 +117,8 @@ export function initializeMemeTemplate(
  * Builds the one-module Meme package used by the launch intake.
  *
  * Its initializer creates the selected address or Blast account recipient, calls
- * `blast_fun::launch_ticket::new`, and transfers the ticket to the publisher.
+ * `blast_fun::launch_ticket::new` at the selected decimals, and transfers the
+ * ticket to the publisher, who starts the launch with it through an adapter.
  */
 export async function buildMemePackageBytecode(
   options: MemeTemplateOptions,
@@ -168,6 +177,12 @@ export async function buildMemePackageBytecode(
       replacement: bcs.bool().serialize(creatorRecipient.isAccount).toBytes(),
     },
     {
+      name: "decimals",
+      type: "U8",
+      expected: defaults.decimals,
+      replacement: bcs.u8().serialize(metadata.decimals).toBytes(),
+    },
+    {
       name: "burnable",
       type: "Bool",
       expected: defaults.burnable,
@@ -187,6 +202,21 @@ export async function buildMemePackageBytecode(
   });
   assertTemplateWiring(bytecode, dependency, identifiers);
   return bytecode;
+}
+
+/**
+ * Mirrors `launch_ticket::atomic_supply`: one billion whole tokens at
+ * `decimals`. A precision whose supply exceeds `u64` aborts in Move and throws
+ * here.
+ */
+export function memeAtomicSupply(decimals: number): bigint {
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) {
+    throw new RangeError("decimals must be a u8");
+  }
+  return requireU64(
+    "Meme atomic supply",
+    MEME_TOTAL_SUPPLY_WHOLE_TOKENS * 10n ** BigInt(decimals),
+  );
 }
 
 /** Derives the type identifiers using the same transformation as Blast V1. */
@@ -227,8 +257,17 @@ function validateOptions(options: MemeTemplateOptions) {
     throw new RangeError("sellBurnBps exceeds 5,000");
   }
 
+  const symbol = requireNonEmptyString("symbol", options.symbol);
+  if (new TextEncoder().encode(symbol).length > MAX_MEME_SYMBOL_BYTES) {
+    throw new RangeError(
+      `symbol must not exceed ${MAX_MEME_SYMBOL_BYTES} bytes; launch finalization rejects it`,
+    );
+  }
+  memeAtomicSupply(options.decimals);
+
   return {
-    symbol: requireNonEmptyString("symbol", options.symbol),
+    decimals: options.decimals,
+    symbol,
     name: requireNonEmptyString("name", options.name),
     description: requireString("description", options.description),
     iconUrl: requireString("iconUrl", options.iconUrl),

@@ -12,6 +12,7 @@ test("registers the typed launchpad client extension", () => {
   }).$extend(
     blastLaunchpad({
       packageId: "0x123",
+      adminPackageId: "0x111",
       packageVersion: {
         objectId: "0x2",
         initialSharedVersion: "10",

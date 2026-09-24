@@ -6,26 +6,27 @@ import test from "node:test";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { fromHex, normalizeSuiAddress } from "@mysten/sui/utils";
-import type { RewardManifest } from "../src/distributor/allocations.ts";
-import { buildRewardManifest } from "../src/distributor/allocations.ts";
-import type { HolderLedger } from "../src/distributor/holders.ts";
+import type { RewardManifest } from "../src/holder-rewards/allocations.ts";
+import { buildRewardManifest } from "../src/holder-rewards/allocations.ts";
+import type { HolderLedger } from "../src/holder-rewards/holders.ts";
 import {
   createHolderLedger,
   holderWeights,
-} from "../src/distributor/holders.ts";
+} from "../src/holder-rewards/holders.ts";
 import {
   assertRewardRoundMatchesManifest,
   pendingRewardAllocations,
-} from "../src/distributor/keeper.ts";
+} from "../src/holder-rewards/keeper.ts";
 import {
-  runDistributorOperator,
+  runHolderRewardsOperator,
   withOperatorLock,
   writeOperatorJson,
-} from "../src/distributor/operator.ts";
-import { distributorBcs, rewardRoundBcs } from "../src/distributor/state.ts";
+} from "../src/holder-rewards/operator.ts";
+import { rewardRoundBcs } from "../src/holder-rewards/state.ts";
+import { lpVaultBcs } from "../src/migrators/state.ts";
 
 const manifest = buildRewardManifest({
-  distributorId: "0xd",
+  vaultId: "0xd",
   number: 0n,
   startCheckpoint: 1n,
   endCheckpoint: 2n,
@@ -35,7 +36,7 @@ const manifest = buildRewardManifest({
   ],
 });
 const round = {
-  distributorId: manifest.distributorId,
+  vaultId: manifest.vaultId,
   number: 0n,
   startCheckpoint: 1n,
   endCheckpoint: 2n,
@@ -65,7 +66,7 @@ test("keeper resumes only unpaid leaves and rejects manifests for another round"
 });
 
 test("operator writes complete atomic state and refuses a concurrent writer", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "blast-distributor-"));
+  const dir = await mkdtemp(join(tmpdir(), "blast-holder-rewards-"));
   try {
     await withOperatorLock(dir, async () => {
       await assert.rejects(() => withOperatorLock(dir, async () => {}), /lock/);
@@ -84,17 +85,22 @@ test("operator writes complete atomic state and refuses a concurrent writer", as
 });
 
 test("CLI resumes checkpoint batches and publishes, advances and relays the same accounting interval", async (t) => {
-  const dir = await mkdtemp(join(tmpdir(), "blast-distributor-flow-"));
+  const dir = await mkdtemp(join(tmpdir(), "blast-holder-rewards-flow-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const address = normalizeSuiAddress;
   const memeType = `${address("0x42")}::meme::MEME`;
   const quoteType = `${address("0x2")}::sui::SUI`;
   const alice = address("0xa");
   const bob = address("0xb");
-  const distributorId = address("0xd");
+  const vaultId = address("0xd");
   const roundId = address("0xc");
   const originalPackageId = address("0x99");
   const packageId = address("0x100");
+  const shared = (objectId: string, mutable: boolean) => ({
+    objectId: address(objectId),
+    initialSharedVersion: "1",
+    mutable,
+  });
   const uid = (id: string) => ({ id: { bytes: address(id) } });
   const configPath = join(dir, "config.json");
   const statePath = join(dir, "state.json");
@@ -103,7 +109,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
   const readJson = async (path: string) =>
     JSON.parse(await readFile(path, "utf8"));
   const run = (command: string, ...args: string[]) =>
-    runDistributorOperator([
+    runHolderRewardsOperator([
       command,
       "--config",
       configPath,
@@ -115,17 +121,28 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
     grpcUrl: "http://127.0.0.1:0",
     network: "localnet",
     chainId: "test-genesis",
-    packageId,
-    originalPackageId,
-    distributorVersionId: address("0x90"),
-    launchpadOriginalPackageId: address("0x41"),
-    distributorId,
-    publisherCapId: address("0x91"),
+    deployment: {
+      packageId,
+      originalPackageId,
+      launchpad: {
+        packageId: address("0x41"),
+        adminPackageId: address("0xad"),
+        packageVersion: shared("0x42", false),
+        launchConfig: shared("0x43", false),
+        runtimeConfig: shared("0x44", false),
+        protocolAuthority: shared("0x45", false),
+      },
+      migratorsVersion: shared("0x90", false),
+      lpFeePolicy: shared("0x91", false),
+      venueConfig: shared("0x92", false),
+    },
+    vaultId,
+    adminCapId: address("0x93"),
     sender: alice,
   });
   await writeOperatorJson(statePath, {
     chainId: "test-genesis",
-    distributorId,
+    vaultId,
     activationCheckpoint: "0",
     ledger: createHolderLedger(memeType, 0n),
   });
@@ -201,17 +218,30 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
         objectId: request.objectId,
         owner: { $kind: "Shared", Shared: { initialSharedVersion: "1" } },
       };
-      if (request.objectId === distributorId)
+      if (request.objectId === vaultId)
         return {
           object: {
             ...base,
-            type: `${originalPackageId}::blast_fun_distributor::Distributor<${memeType},${quoteType}>`,
-            content: distributorBcs
+            type: `${originalPackageId}::vault::LpVault<${memeType},${quoteType}>`,
+            content: lpVaultBcs
               .serialize({
-                id: uid(distributorId),
-                launch: { bytes: address("0x10") },
-                meme: { value: published ? 0n : 2020n },
-                quote: { value: published ? 0n : 4040n },
+                id: uid(vaultId),
+                pool_id: { bytes: address("0x10") },
+                protocol_meme_residual: { value: 0n },
+                protocol_quote_residual: { value: 0n },
+                generation: 0n,
+                fee_split: {
+                  creatorBps: 0n,
+                  autoLpBps: 0n,
+                  rewardsBps: 10_000n,
+                  recipients: [],
+                },
+                creator_meme: { value: 0n },
+                creator_quote: { value: 0n },
+                auto_lp_meme: { value: 0n },
+                auto_lp_quote: { value: 0n },
+                rewards_meme: { value: published ? 0n : 2020n },
+                rewards_quote: { value: published ? 0n : 4040n },
                 next_round: published ? 1n : 0n,
                 last_checkpoint: published ? 101n : null,
               })
@@ -223,11 +253,11 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
       return {
         object: {
           ...base,
-          type: `${originalPackageId}::blast_fun_distributor::Round<${memeType},${quoteType}>`,
+          type: `${originalPackageId}::blast_holder_rewards::Round<${memeType},${quoteType}>`,
           content: rewardRoundBcs
             .serialize({
               id: uid(roundId),
-              distributor: { bytes: distributorId },
+              vault: { bytes: vaultId },
               number: 0n,
               start_checkpoint: 0n,
               end_checkpoint: 101n,
@@ -307,9 +337,9 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
   );
   assert.deepEqual(
     publishTx.getData().commands.map((command) => command.MoveCall?.function),
-    ["publish_round", "share_round"],
+    ["sign_in", "publish_round"],
   );
-  assert.equal(publishTx.getData().commands[0]?.MoveCall?.package, packageId);
+  assert.equal(publishTx.getData().commands[1]?.MoveCall?.package, packageId);
   published = prepared;
   await run("advance", "--round", roundId);
   await assert.rejects(() => readFile(pendingPath), { code: "ENOENT" });

@@ -30,6 +30,8 @@ const artifactDeclarations = [
       "contracts ADR 0079: remove redundant launch event totals and history",
       "contracts ADR 0080: make creator recipients provider-independent",
       "contracts ADR 0085: name every explorer-visible type after Blast",
+      "contracts ADR 0088: reusable launch accounting, allocation plans, protected public buys, and atomic migration",
+      "contracts ADR 0089: start launches in the migration adapter and move every post-migration fee path into the migrators package",
     ],
   },
   {
@@ -277,102 +279,113 @@ function classifyMemeTemplateFunction(moduleName, functionName) {
   );
 }
 
+const migratorBuilders = new Set([
+  "bluefin::new",
+  "bluefin::migrate",
+  "bluefin::collect_fees",
+  "bluefin::settle_and_update_fee_split",
+  "cetus::new",
+  "cetus::migrate_meme_a",
+  "cetus::migrate_meme_b",
+  "cetus::collect_fees_meme_a",
+  "cetus::collect_fees_meme_b",
+  "cetus::settle_and_update_fee_split_meme_a",
+  "cetus::settle_and_update_fee_split_meme_b",
+  "vault::claim_creator_fees",
+  "vault::claim_protocol_fees",
+  "blast_holder_rewards::publish_round",
+  "blast_holder_rewards::claim",
+  "lp_fee_policy::set_default_shares",
+  "lp_fee_policy::set_coin_shares",
+  "lp_fee_policy::clear_coin_shares",
+  "lp_fee_policy::set_protocol_destination",
+]);
+
 function classifyMigratorFunction(moduleName, functionName) {
+  const key = `${moduleName}::${functionName}`;
+  if (migratorBuilders.has(key)) return "builder";
+  if (moduleName === "package_admin") return "intentional-admin-exclusion";
   if (
-    (moduleName === "vault" &&
-      (functionName === "lock_creator_fees" ||
-        functionName === "lock_pending_creator_fees" ||
-        functionName === "claim_custodied_creator_fees" ||
-        functionName === "assert_lp_fee_cap")) ||
-    moduleName === "lp_fee_authority" ||
-    (moduleName === "lp_fee_policy" && functionName === "protocol_fee_share")
+    moduleName === "package_version" ||
+    moduleName === "vault" ||
+    moduleName === "lp_fee_policy"
   ) {
     return "move-composition";
   }
-  if (moduleName === "vault") return "builder";
-  if (
-    moduleName === "package_admin" ||
-    (moduleName === "lp_fee_policy" &&
-      (functionName.startsWith("set_") || functionName.startsWith("clear_")))
-  ) {
-    return "intentional-admin-exclusion";
-  }
-  if (moduleName === "package_version") return "move-composition";
-  if (functionName === "set_tier" || functionName === "set_policy") {
-    return "intentional-admin-exclusion";
-  }
-  if (
-    functionName.startsWith("migrate") ||
-    functionName.startsWith("collect_fees") ||
-    functionName.startsWith("accrue_") ||
-    functionName === "update_dao_fee"
-  ) {
-    return "builder";
-  }
-  throw new Error(
-    `unclassified function blast_fun_migrators::${moduleName}::${functionName}`,
-  );
+  throw new Error(`unclassified function blast_fun_migrators::${key}`);
 }
+
+const launchpadBuilders = new Set([
+  "launch::finalize",
+  "launch::share",
+  "launch::buy",
+  "launch::sell",
+  "launch::pre_share_buy",
+  "launch::set_graduation_target",
+  "launch::set_allocation_plan",
+  "launch::set_lp_fee_split",
+  "launch::set_protection",
+  "launch::claim_creator_caps",
+  "launch::claim_creator_fees",
+  "launch::claim_protocol_fees",
+  "launch::set_name",
+  "launch::set_description",
+  "launch::set_icon_url",
+]);
+const launchpadCompositional = new Set([
+  "allocation::new",
+  "allocation::channel",
+  "allocation::weight",
+  "allocation::liquidity_role",
+  "allocation::protocol_role",
+  "allocation::external_role",
+  "allocation::route",
+  "allocation::fee_split",
+  "bps::new",
+]);
+const launchpadAdapterComposition = new Set([
+  "launch::new",
+  "launch::treasury_cap_mut",
+  "launch::begin_migration",
+  "launch::complete_migration",
+]);
 
 function classifyLaunchpadFunction(packageName, moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
-  const builders = new Set([
-    "launch::new",
-    "launch::share",
-    "launch::buy",
-    "launch::sell",
-    "launch::claim_creator_caps",
-    "launch::claim_creator_fees",
-    "launch::claim_protocol_fees",
-    "launch::set_name",
-    "launch::set_description",
-    "launch::set_icon_url",
-  ]);
-  if (builders.has(key)) return "builder";
-  if (
-    key === "launch::migrate" ||
-    key === "launch::redeem_migration" ||
-    key === "acl::sign_in"
-  ) {
-    return "compositional";
-  }
+  if (launchpadBuilders.has(key)) return "builder";
+  if (launchpadCompositional.has(key)) return "compositional";
+  if (launchpadAdapterComposition.has(key)) return "adapter-composition";
   if (key === "launch_ticket::new") return "template-builder";
   if (moduleName === "creator_authority" && functionName.startsWith("new_")) {
     return "template-internal";
   }
-  if (isLaunchpadMoveComposition(moduleName, functionName, key)) {
-    return "move-composition";
-  }
-  if (isIntentionalAdminExclusion(moduleName, functionName, key)) {
+  if (isIntentionalAdminExclusion(moduleName, key)) {
     return "intentional-admin-exclusion";
+  }
+  if (isLaunchpadMoveComposition(moduleName, functionName)) {
+    return "move-composition";
   }
   throw new Error(`unclassified function ${packageName}::${key}`);
 }
 
-function isLaunchpadMoveComposition(moduleName, functionName, key) {
+/** Getters, witness-bound fee-ledger internals, and exact math the SDK mirrors off chain. */
+function isLaunchpadMoveComposition(moduleName, functionName) {
   return (
     moduleName === "fees" ||
     moduleName === "bps" ||
+    moduleName === "allocation" ||
+    moduleName === "launch" ||
     (moduleName === "creator_authority" &&
       functionName.startsWith("destroy_")) ||
-    (moduleName === "blast_fun_domain" && functionName.endsWith("_role")) ||
-    key === "runtime_config::protocol_fee_share_bps" ||
-    key === "launch::assert_migrated" ||
-    key === "launch::assert_curve_fee_cap" ||
-    key === "launch::assert_fee_custodian" ||
-    key === "launch::has_fee_custodian" ||
-    key === "launch::lock_creator_fees" ||
-    key === "launch::claim_custodied_creator_fees"
+    (moduleName === "blast_fun_domain" && functionName.endsWith("_role"))
   );
 }
 
-function isIntentionalAdminExclusion(moduleName, functionName, key) {
+function isIntentionalAdminExclusion(moduleName, key) {
   return (
-    moduleName === "acl" ||
     moduleName === "launch_config" ||
     moduleName === "package_admin" ||
-    (moduleName === "runtime_config" && functionName.startsWith("set_")) ||
-    key === "runtime_config::revoke_creator_claim_signer" ||
+    moduleName === "runtime_config" ||
     key === "launch::reassign_curve_fee_cap" ||
     key === "launch::reassign_metadata_cap"
   );

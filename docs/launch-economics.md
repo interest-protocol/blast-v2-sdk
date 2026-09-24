@@ -7,11 +7,12 @@ second source of truth for launch execution.
 
 The contract owns:
 
-- immutable `virtual_quote` and `migration_quote_target` snapshots;
-- protocol Meme graduation fee, curve inventory, and pool provision balances;
-- Quote migration-fee balance partitioning;
+- immutable `virtual_quote` and creator-selected `graduation_target`
+  snapshots;
+- the immutable allocation plan and its apportionment of the Meme supply at
+  finalization and of terminal Quote at migration;
 - exact conservation and lifecycle enforcement; and
-- the eventual terminal-buy cap and asset migration.
+- the terminal-buy cap and atomic migration.
 
 The SDK owns:
 
@@ -27,31 +28,33 @@ The SDK result is informative. Contract balances and events remain authoritative
 All inputs are integer atomic units:
 
 ```text
-S = initial Meme supply
-C = initial curve Meme inventory
-L = Meme reserved for DEX liquidity
+S = atomic Meme supply (one billion whole tokens at the Meme's decimals)
 V = virtual Quote reserve
-T = real-Quote migration target
-F = Quote migration-fee basis points
+T = graduation target (real Quote reserve when trading closes)
+C = apportion_meme(plan, S)[curve channel 0]
+L = apportion_meme(plan, S)[Liquidity channel]
+N = apportion_quote(plan, T)[Liquidity channel]
 
 R = ceil(C * V / (V + T))
 B = C - R
-M = ceil(T * F / 10_000)
-N = T - M
 
 opening valuation        = floor(S * V       / C)
 curve terminal valuation = floor(S * (V + T) / R)
 DEX opening valuation    = floor(S * N       / L)
 ```
 
-`R` is terminal curve Meme, `B` is Meme released by the curve, `M` is protocol
-Quote revenue, and `N` is Quote available for the destination pool.
+`R` is terminal curve Meme, `B` is Meme released by the curve, `N` is Quote
+handed to the destination pool, and `T - N` is Quote paid to the plan's other
+channels. Apportionment gives the Protocol channel its ceiling, every other
+entry its floor, and the residue one atom each by descending remainder, ties by
+ascending channel ID; `allocation.ts` mirrors it exactly.
 
 For a Meme/SUI launch, Quote values are MIST. UI formatting divides by SUI's
 decimal scale; no USD price or oracle is involved.
 
-## Important execution note
+## Execution note
 
-The future stateful launch contract must still cap the final net-Quote input at
-`T`. Otherwise a terminal trade can overshoot and the actual balance outcome can
-differ from the SDK's exact-target preview.
+The launch caps the final buy so the real Quote reserve equals `T` exactly, and
+finalization rejects a target whose liquidity Quote share rounds to zero. The
+DEX figure is best effort: the venue may return part of the handoff as a
+residual, which the LP vault keeps for the protocol.

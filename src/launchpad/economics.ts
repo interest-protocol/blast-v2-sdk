@@ -1,24 +1,32 @@
+import { mulDivUp, requirePositiveU64 } from "../lib/integers.ts";
+import type { AllocationPlan } from "./allocation.ts";
 import {
-  BASIS_POINTS_DENOMINATOR,
-  mulDivUp,
-  requireBasisPoints,
-  requirePositiveU64,
-} from "../lib/integers.ts";
+  allocationAmountFor,
+  apportionMeme,
+  apportionQuote,
+  liquidityChannelId,
+  normalizeAllocationPlan,
+} from "./allocation.ts";
 
 export type LaunchEconomicsInput = {
-  initialMemeSupply: bigint;
-  curveMemeInventory: bigint;
-  poolMemeProvision: bigint;
+  /** One billion whole tokens at the Meme's decimals. */
+  atomicSupply: bigint;
+  allocationPlan: AllocationPlan;
   virtualQuote: bigint;
-  migrationQuoteTarget: bigint;
-  protocolQuoteMigrationFeeBps: bigint;
+  graduationTarget: bigint;
 };
 
 export type LaunchEconomics = {
+  /** Meme table entry for channel zero: the curve reserve at finalization. */
+  curveMeme: bigint;
+  /** Meme the Liquidity channel hands to the adapter at migration. */
+  liquidityMeme: bigint;
+  /** Quote the Liquidity channel hands to the adapter at the graduation target. */
+  liquidityQuote: bigint;
+  /** Terminal Quote paid to every non-liquidity channel. */
+  allocatedQuote: bigint;
   terminalCurveMeme: bigint;
   curveMemeReleased: bigint;
-  protocolQuoteMigrationFee: bigint;
-  netQuote: bigint;
   openingValuation: bigint;
   curveTerminalValuation: bigint;
   dexOpeningValuation: bigint;
@@ -27,59 +35,52 @@ export type LaunchEconomics = {
 /**
  * Derives launch economics in Meme and Quote atomic units.
  *
- * Terminal Meme and the protocol Quote fee round up. Implied total-supply
- * valuations round down. For a Meme/SUI launch, valuation outputs are MIST.
+ * Plan amounts mirror `allocation::apportion_meme` and `apportion_quote` at the
+ * atomic supply and at the graduation target, which is exactly the real Quote
+ * reserve when trading closes. Terminal curve Meme rounds up; implied
+ * total-supply valuations round down. For a Meme/SUI launch, valuations are MIST.
  */
 export function deriveLaunchEconomics(
   input: LaunchEconomicsInput,
 ): LaunchEconomics {
-  const {
-    initialMemeSupply,
-    curveMemeInventory,
-    poolMemeProvision,
-    virtualQuote,
-    migrationQuoteTarget,
-    protocolQuoteMigrationFeeBps,
-  } = input;
-
-  requirePositiveU64("initialMemeSupply", initialMemeSupply);
-  requirePositiveU64("curveMemeInventory", curveMemeInventory);
-  requirePositiveU64("poolMemeProvision", poolMemeProvision);
-  requirePositiveU64("virtualQuote", virtualQuote);
-  requirePositiveU64("migrationQuoteTarget", migrationQuoteTarget);
-
-  if (curveMemeInventory + poolMemeProvision > initialMemeSupply) {
-    throw new RangeError(
-      "curveMemeInventory + poolMemeProvision cannot exceed initialMemeSupply",
-    );
-  }
-  requireBasisPoints(
-    "protocolQuoteMigrationFeeBps",
-    protocolQuoteMigrationFeeBps,
+  const atomicSupply = requirePositiveU64("atomicSupply", input.atomicSupply);
+  const virtualQuote = requirePositiveU64("virtualQuote", input.virtualQuote);
+  const graduationTarget = requirePositiveU64(
+    "graduationTarget",
+    input.graduationTarget,
   );
+  const plan = normalizeAllocationPlan(input.allocationPlan);
+  const liquidity = liquidityChannelId(plan);
+  const memeAmounts = apportionMeme(plan, atomicSupply);
+  const quoteAmounts = apportionQuote(plan, graduationTarget);
+  const curveMeme = allocationAmountFor(plan.meme, memeAmounts, 0n);
+  const liquidityMeme = allocationAmountFor(plan.meme, memeAmounts, liquidity);
+  const liquidityQuote = allocationAmountFor(
+    plan.quote,
+    quoteAmounts,
+    liquidity,
+  );
+  requirePositiveU64("curveMeme", curveMeme);
+  requirePositiveU64("liquidityMeme", liquidityMeme);
+  requirePositiveU64("liquidityQuote", liquidityQuote);
 
-  const effectiveTerminalQuote = virtualQuote + migrationQuoteTarget;
+  const effectiveTerminalQuote = virtualQuote + graduationTarget;
   const terminalCurveMeme = mulDivUp(
-    curveMemeInventory,
+    curveMeme,
     virtualQuote,
     effectiveTerminalQuote,
   );
-  const curveMemeReleased = curveMemeInventory - terminalCurveMeme;
-  const protocolQuoteMigrationFee = mulDivUp(
-    migrationQuoteTarget,
-    protocolQuoteMigrationFeeBps,
-    BASIS_POINTS_DENOMINATOR,
-  );
-  const netQuote = migrationQuoteTarget - protocolQuoteMigrationFee;
 
   return {
+    curveMeme,
+    liquidityMeme,
+    liquidityQuote,
+    allocatedQuote: graduationTarget - liquidityQuote,
     terminalCurveMeme,
-    curveMemeReleased,
-    protocolQuoteMigrationFee,
-    netQuote,
-    openingValuation: (initialMemeSupply * virtualQuote) / curveMemeInventory,
+    curveMemeReleased: curveMeme - terminalCurveMeme,
+    openingValuation: (atomicSupply * virtualQuote) / curveMeme,
     curveTerminalValuation:
-      (initialMemeSupply * effectiveTerminalQuote) / terminalCurveMeme,
-    dexOpeningValuation: (initialMemeSupply * netQuote) / poolMemeProvision,
+      (atomicSupply * effectiveTerminalQuote) / terminalCurveMeme,
+    dexOpeningValuation: (atomicSupply * liquidityQuote) / liquidityMeme,
   };
 }

@@ -1,3 +1,4 @@
+export * from "./allocation.ts";
 export * from "./client.ts";
 export * from "./creator-claim.ts";
 export * from "./curve.ts";

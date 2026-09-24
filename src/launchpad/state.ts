@@ -1,5 +1,6 @@
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { ObjectError } from "@mysten/sui/client";
 import {
   normalizeStructTag,
   normalizeSuiAddress,
@@ -14,17 +15,15 @@ import {
   suiUidBcs,
 } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
+import type { AllocationPlan, FeeSplit } from "./allocation.ts";
+import { allocationPlanBcs, bpsBcs, feeSplitBcs } from "./allocation.ts";
 import type { CurveState } from "./curve.ts";
 import type { SharedObjectReference } from "./transactions.ts";
 
-const BpsBcs = bcs.struct("Bps", { value: bcs.u64() });
-const AsciiStringBcs = bcs.struct("AsciiString", {
-  bytes: bcs.vector(bcs.u8()),
-});
-const TypeNameBcs = bcs.struct("TypeName", { name: AsciiStringBcs });
 const LifecycleBcs = bcs.enum("Lifecycle", {
   Live: null,
   MigrationReady: null,
+  Migrating: null,
   Migrated: null,
 });
 const CreatorRecipientBcs = bcs.enum("CreatorRecipient", {
@@ -35,12 +34,6 @@ const CreatorAuthorityBcs = bcs.struct("CreatorAuthority", {
   recipient: CreatorRecipientBcs,
 });
 const MetadataCapBcs = bcs.struct("MetadataCap", { id: suiUidBcs });
-/** BCS layout of `blast_fun::launch::CurveFeeAuthority`. */
-export const creatorFeeAuthorityBcs = bcs.enum("CreatorFeeAuthority", {
-  Unassigned: null,
-  Cap: suiIdBcs,
-  Custodian: moveTypeNameBcs,
-});
 const FeeLedgerBcs = bcs.struct("FeeLedger", {
   protocol_meme: suiBalanceBcs,
   creator_meme: suiBalanceBcs,
@@ -52,59 +45,88 @@ const FeeLedgerBcs = bcs.struct("FeeLedger", {
 export const launchBcs = bcs.struct("Launch", {
   id: suiUidBcs,
   lifecycle: LifecycleBcs,
-  sell_burn_bps: BpsBcs,
+  public_start_ms: bcs.option(bcs.u64()),
+  protection_end_ms: bcs.option(bcs.u64()),
+  pre_share_buy_completed: bcs.bool(),
+  protection_window_ms: bcs.u64(),
+  cumulative_sender_bps: bpsBcs,
+  cumulative_atomic_limit: bcs.u64(),
+  per_transaction_bps: bpsBcs,
+  per_transaction_atomic_limit: bcs.u64(),
+  sell_burn_bps: bpsBcs,
   virtual_quote: bcs.u64(),
-  migration_quote_target: bcs.u64(),
-  quote_fee_bps: BpsBcs,
-  meme_fee_bps: BpsBcs,
-  protocol_quote_migration_fee_bps: BpsBcs,
-  migration_witness: TypeNameBcs,
+  graduation_target: bcs.u64(),
+  quote_fee_bps: bpsBcs,
+  meme_fee_bps: bpsBcs,
+  migration_witness: moveTypeNameBcs,
+  pool_tick_spacing: bcs.u32(),
+  pool_fee_rate: bcs.u64(),
+  lp_fee_split: feeSplitBcs,
+  atomic_supply: bcs.u64(),
   meme_reserve: suiBalanceBcs,
   real_quote_reserve: suiBalanceBcs,
   pending_burn: suiBalanceBcs,
-  protocol_meme_graduation_fee: suiBalanceBcs,
-  meme_liquidity_provision: suiBalanceBcs,
+  allocation_plan: allocationPlanBcs,
+  allocated_meme: suiBalanceBcs,
   fee_ledger: FeeLedgerBcs,
   metadata_cap: MetadataCapBcs,
   creator_authority: bcs.option(CreatorAuthorityBcs),
-  curve_fee_authority: creatorFeeAuthorityBcs,
+  curve_fee_cap_id: bcs.option(suiIdBcs),
   blast_metadata_cap_id: bcs.option(suiIdBcs),
 });
 
-export type LaunchLifecycle = "Live" | "MigrationReady" | "Migrated";
+/** `Migrating` exists only inside a migration transaction; reads never observe it. */
+export type LaunchLifecycle =
+  | "Live"
+  | "MigrationReady"
+  | "Migrating"
+  | "Migrated";
 
 export type CreatorRecipient =
   | { kind: "address"; address: string }
   | { kind: "account"; accountCommitment: Uint8Array }
   | null;
 
-/**
- * Who may claim creator fees: nobody yet, the live capability object, or the
- * custodian module whose witness type the fees are permanently bound to.
- */
-export type CreatorFeeAuthority =
-  | { kind: "unassigned" }
-  | { kind: "cap"; capId: string }
-  | { kind: "custodian"; custodianType: string };
+/** Public curve-purchase protection, fixed at launch finalization. */
+export type LaunchProtection = {
+  windowMs: bigint;
+  cumulativeSenderBps: bigint;
+  cumulativeAtomicLimit: bigint;
+  perTransactionBps: bigint;
+  perTransactionAtomicLimit: bigint;
+};
 
 export type LaunchState = CurveState &
   SharedObjectReference<true> & {
     memeType: string;
     quoteType: string;
     lifecycle: LaunchLifecycle;
+    /** Public opening time; null only before the key-only launch is shared. */
+    publicStartMs: bigint | null;
+    /** First millisecond public purchases are no longer protected. */
+    protectionEndMs: bigint | null;
+    preShareBuyCompleted: boolean;
+    protection: LaunchProtection;
     sellBurnBps: bigint;
-    protocolQuoteMigrationFeeBps: bigint;
     migrationWitnessType: string;
+    /** Creator-chosen `(tick_spacing, fee_rate)` in the bound venue's native units. */
+    poolTickSpacing: number;
+    poolFeeRate: bigint;
+    /** Creator LP-fee split the adapter installs at migration; never changes on the launch. */
+    lpFeeSplit: FeeSplit;
+    atomicSupply: bigint;
     pendingBurn: bigint;
-    protocolMemeGraduationFee: bigint;
-    memeLiquidityProvision: bigint;
+    allocationPlan: AllocationPlan;
+    /** Pooled non-curve Meme allocations paid out when migration completes. */
+    allocatedMeme: bigint;
     protocolMemeTradeFees: bigint;
     creatorMemeTradeFees: bigint;
     protocolQuoteTradeFees: bigint;
     creatorQuoteTradeFees: bigint;
     metadataCapId: string;
     creatorRecipient: CreatorRecipient;
-    curveFeeAuthority: CreatorFeeAuthority;
+    /** The `CurveFeeCap` the launch honors; null until claimed or reassigned. */
+    curveFeeCapId: string | null;
     blastMetadataCapId: string | null;
   };
 
@@ -147,45 +169,46 @@ export function decodeLaunchObject(
     throw new TypeError(`launch ${object.objectId} has a mismatched UID`);
   }
 
-  const memeType = normalizeTypeParameter(tag.typeParams[0]);
-  const quoteType = normalizeTypeParameter(tag.typeParams[1]);
-  const metadataCapId = normalizeSuiObjectId(parsed.metadata_cap.id.id.bytes);
-
   return {
     objectId,
     initialSharedVersion,
     mutable: true,
-    memeType,
-    quoteType,
+    memeType: normalizeTypeParameter(tag.typeParams[0]),
+    quoteType: normalizeTypeParameter(tag.typeParams[1]),
     lifecycle: parsed.lifecycle.$kind,
-    sellBurnBps: toBigInt(parsed.sell_burn_bps.value),
-    virtualQuote: toBigInt(parsed.virtual_quote),
-    migrationQuoteTarget: toBigInt(parsed.migration_quote_target),
-    quoteFeeBps: toBigInt(parsed.quote_fee_bps.value),
-    memeFeeBps: toBigInt(parsed.meme_fee_bps.value),
-    protocolQuoteMigrationFeeBps: toBigInt(
-      parsed.protocol_quote_migration_fee_bps.value,
-    ),
-    migrationWitnessType: normalizeStructTag(
-      decodeTypeName(parsed.migration_witness.name.bytes),
-    ),
-    memeReserve: toBigInt(parsed.meme_reserve.value),
-    realQuoteReserve: toBigInt(parsed.real_quote_reserve.value),
-    pendingBurn: toBigInt(parsed.pending_burn.value),
-    protocolMemeGraduationFee: toBigInt(
-      parsed.protocol_meme_graduation_fee.value,
-    ),
-    memeLiquidityProvision: toBigInt(parsed.meme_liquidity_provision.value),
-    protocolMemeTradeFees: toBigInt(parsed.fee_ledger.protocol_meme.value),
-    creatorMemeTradeFees: toBigInt(parsed.fee_ledger.creator_meme.value),
-    protocolQuoteTradeFees: toBigInt(parsed.fee_ledger.protocol_quote.value),
-    creatorQuoteTradeFees: toBigInt(parsed.fee_ledger.creator_quote.value),
-    metadataCapId,
+    publicStartMs: optionalBigInt(parsed.public_start_ms),
+    protectionEndMs: optionalBigInt(parsed.protection_end_ms),
+    preShareBuyCompleted: parsed.pre_share_buy_completed,
+    protection: {
+      windowMs: BigInt(parsed.protection_window_ms),
+      cumulativeSenderBps: parsed.cumulative_sender_bps,
+      cumulativeAtomicLimit: BigInt(parsed.cumulative_atomic_limit),
+      perTransactionBps: parsed.per_transaction_bps,
+      perTransactionAtomicLimit: BigInt(parsed.per_transaction_atomic_limit),
+    },
+    sellBurnBps: parsed.sell_burn_bps,
+    virtualQuote: BigInt(parsed.virtual_quote),
+    graduationTarget: BigInt(parsed.graduation_target),
+    quoteFeeBps: parsed.quote_fee_bps,
+    memeFeeBps: parsed.meme_fee_bps,
+    migrationWitnessType: parsed.migration_witness,
+    poolTickSpacing: parsed.pool_tick_spacing,
+    poolFeeRate: BigInt(parsed.pool_fee_rate),
+    lpFeeSplit: parsed.lp_fee_split,
+    atomicSupply: BigInt(parsed.atomic_supply),
+    memeReserve: BigInt(parsed.meme_reserve.value),
+    realQuoteReserve: BigInt(parsed.real_quote_reserve.value),
+    pendingBurn: BigInt(parsed.pending_burn.value),
+    allocationPlan: parsed.allocation_plan,
+    allocatedMeme: BigInt(parsed.allocated_meme.value),
+    protocolMemeTradeFees: BigInt(parsed.fee_ledger.protocol_meme.value),
+    creatorMemeTradeFees: BigInt(parsed.fee_ledger.creator_meme.value),
+    protocolQuoteTradeFees: BigInt(parsed.fee_ledger.protocol_quote.value),
+    creatorQuoteTradeFees: BigInt(parsed.fee_ledger.creator_quote.value),
+    metadataCapId: normalizeSuiObjectId(parsed.metadata_cap.id.id.bytes),
     creatorRecipient: decodeCreatorRecipient(parsed.creator_authority),
-    curveFeeAuthority: decodeCreatorFeeAuthority(parsed.curve_fee_authority),
-    blastMetadataCapId: parsed.blast_metadata_cap_id
-      ? normalizeSuiObjectId(parsed.blast_metadata_cap_id.bytes)
-      : null,
+    curveFeeCapId: optionalId(parsed.curve_fee_cap_id),
+    blastMetadataCapId: optionalId(parsed.blast_metadata_cap_id),
   };
 }
 
@@ -216,17 +239,29 @@ export async function getLaunch(
   );
 }
 
-/** Decodes a launch `CurveFeeAuthority` value. */
-export function decodeCreatorFeeAuthority(
-  authority: ReturnType<typeof creatorFeeAuthorityBcs.parse>,
-): CreatorFeeAuthority {
-  if (authority.$kind === "Cap") {
-    return { kind: "cap", capId: normalizeSuiObjectId(authority.Cap.bytes) };
+/**
+ * Reads the gross Meme `sender` bought from the curve while the launch was
+ * protected (`launch::protected_purchases`); zero before the first purchase.
+ */
+export async function getProtectedPurchases(
+  client: ClientWithCoreApi,
+  launchId: string,
+  sender: string,
+  originalPackageId: string,
+): Promise<bigint> {
+  try {
+    const { dynamicField } = await client.core.getDynamicField({
+      parentId: normalizeSuiObjectId(launchId),
+      name: {
+        type: `${normalizeSuiAddress(originalPackageId)}::launch::ProtectedPurchasesKey`,
+        bcs: bcs.Address.serialize(normalizeSuiAddress(sender)).toBytes(),
+      },
+    });
+    return BigInt(bcs.u64().parse(dynamicField.value.bcs));
+  } catch (error) {
+    if (error instanceof ObjectError && error.reason === "notFound") return 0n;
+    throw error;
   }
-  if (authority.$kind === "Custodian") {
-    return { kind: "custodian", custodianType: authority.Custodian };
-  }
-  return { kind: "unassigned" };
 }
 
 function decodeCreatorRecipient(
@@ -252,11 +287,10 @@ function normalizeTypeParameter(
   return typeof type === "string" ? type : normalizeStructTag(type);
 }
 
-function toBigInt(value: string): bigint {
-  return BigInt(value);
+function optionalBigInt(value: string | null): bigint | null {
+  return value === null ? null : BigInt(value);
 }
-function decodeTypeName(bytes: readonly number[]): string {
-  return new TextDecoder("ascii", { fatal: true }).decode(
-    Uint8Array.from(bytes),
-  );
+
+function optionalId(value: { bytes: string } | null): string | null {
+  return value === null ? null : normalizeSuiObjectId(value.bytes);
 }

@@ -2,13 +2,10 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
-import type {
-  AftermathPolicy,
-  LpVaultState,
-  TieredMigratorVenue,
-  VenueTier,
-} from "./state.ts";
-import { getAftermathPolicy, getLpVault, getVenueTier } from "./state.ts";
+import type { RewardRoundState } from "../holder-rewards/state.ts";
+import { getRewardRound } from "../holder-rewards/state.ts";
+import type { LpFeePolicyState, LpFeeShares, LpVaultState } from "./state.ts";
+import { getLpFeePolicy, getLpFeeShares, getLpVault } from "./state.ts";
 import type { MigratorsDeployment } from "./transactions.ts";
 import { MigratorCalls, MigratorTransactions } from "./transactions.ts";
 
@@ -31,19 +28,25 @@ export class MigratorsClient {
     );
   }
 
-  async getVenueTier(venue: TieredMigratorVenue): Promise<VenueTier> {
-    return getVenueTier(
+  async getLpFeePolicy(): Promise<LpFeePolicyState> {
+    return getLpFeePolicy(
       this.#client,
-      this.call.deployment.venueConfig.objectId,
-      venue,
+      this.call.deployment.lpFeePolicy.objectId,
       this.call.deployment.originalPackageId,
     );
   }
 
-  async getAftermathPolicy(): Promise<AftermathPolicy> {
-    return getAftermathPolicy(
+  /** Blast's live LP-fee shares for `memeType`: its own pair, else the defaults. */
+  async getLpFeeShares(
+    memeType: string,
+  ): Promise<LpFeeShares & { source: "coin" | "default" }> {
+    return getLpFeeShares(this.#client, await this.getLpFeePolicy(), memeType);
+  }
+
+  async getHolderRewardRound(objectId: string): Promise<RewardRoundState> {
+    return getRewardRound(
       this.#client,
-      this.call.deployment.venueConfig.objectId,
+      objectId,
       this.call.deployment.originalPackageId,
     );
   }
