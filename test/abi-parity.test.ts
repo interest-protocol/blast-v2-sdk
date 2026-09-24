@@ -17,7 +17,6 @@ const contractsManifest = join(contractsDirectory, "sui/launchpad/Move.toml");
 const expectedEvents = {
   launchpad: 20,
   migrators: 12,
-  vesting: 8,
   blastSui: 13,
 };
 
@@ -94,7 +93,6 @@ test("rejects a Sui CLI version that differs from the frozen artifacts", () => {
 
 test("freezes every production package and event", () => {
   const launchpad = readArtifact("production-launchpad-v1.json");
-  const vesting = readArtifact("production-vesting-v1.json");
   const blastSui = readArtifact("production-blast-sui-v1.json");
 
   assert.deepEqual(Object.keys(launchpad.packages).sort(), [
@@ -102,17 +100,15 @@ test("freezes every production package and event", () => {
     "memeTemplate",
     "migrators",
   ]);
-  assert.deepEqual(Object.keys(vesting.packages), ["vesting"]);
   assert.deepEqual(Object.keys(blastSui.packages), ["blastSui"]);
   assert.equal(countEvents(launchpad, "launchpad"), expectedEvents.launchpad);
   assert.equal(countEvents(launchpad, "migrators"), expectedEvents.migrators);
-  assert.equal(countEvents(vesting, "vesting"), expectedEvents.vesting);
   assert.equal(countEvents(blastSui, "blastSui"), expectedEvents.blastSui);
   const eventWrapper = blastSui.packages.blastSui?.modules.blast_events;
   assert.ok(eventWrapper);
   assert.ok(eventWrapper.structs.some(({ name }) => name === "Event"));
 
-  for (const artifact of [launchpad, vesting, blastSui]) {
+  for (const artifact of [launchpad, blastSui]) {
     assertEveryOperationIsClassified(artifact);
   }
 });

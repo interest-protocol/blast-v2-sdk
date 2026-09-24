@@ -11,8 +11,7 @@
     "./holder-rewards": "./src/holder-rewards/index.ts",
     "./launchpad": "./src/launchpad/index.ts",
     "./launchpad/template": "./src/launchpad/template.ts",
-    "./migrators": "./src/migrators/index.ts",
-    "./vesting": "./src/vesting/index.ts"
+    "./migrators": "./src/migrators/index.ts"
   },
   "engines": {
     "node": ">=22.18"

@@ -3,15 +3,14 @@
 ## Baseline
 
 The frozen production ABI uses contracts commit
-`a5ed34ad49c6c001af2db5b9cbcb206075704412`. The three parity artifacts are:
+`a5ed34ad49c6c001af2db5b9cbcb206075704412`. The two parity artifacts are:
 
 - `abi/production-launchpad-v1.json` for `launchpad`, `meme_template`, and the
   migrators package (Cetus and Bluefin adapters, LP vault, LP-fee policy, and
-  holder rewards);
-- `abi/production-vesting-v1.json` for `vesting`; and
+  holder rewards); and
 - `abi/production-blast-sui-v1.json` for `blast_sui`.
 
-All three artifacts record Sui CLI `1.77.2-51d177ad7d65`. The checker verifies
+Both artifacts record Sui CLI `1.77.2-51d177ad7d65`. The checker verifies
 the installed `sui --version` against those artifact values before it runs a
 Move summary. The contracts working tree differed from the ABI commit when the
 artifacts were frozen. The only
@@ -57,20 +56,6 @@ The SDK provides `sqrtPriceX64` and `autoLpFixedSide` as exact preview mirrors
 of the package-only `migration_math` functions; `test/migration-math.test.ts`
 verifies them against the contract vectors.
 
-### Vesting
-
-| Frozen contract surface | SDK implementation | Verification | Status or reason |
-| --- | --- | --- | --- |
-| `linear::new_irrevocable`, `linear::share` | `VestingCalls.newLinearIrrevocable`, `share`; `VestingTransactions.createLinearIrrevocable` | `test/vesting-transactions.test.ts` | Funds, constructs, and shares one linear position atomically. |
-| `linear::new_cancelable`, `linear::share` | `VestingCalls.newLinearCancelable`, `share`; `VestingTransactions.createLinearCancelable` | `test/vesting-transactions.test.ts` | Shares the position and transfers the returned cancellation cap to the explicit recipient. |
-| `linear::claim` | `VestingCalls.claim`; `VestingTransactions.claim` | `test/vesting-transactions.test.ts` | Complete permissionless product builder using an immutable native `Clock`. |
-| `linear::cancel` | `VestingCalls.cancel`; `VestingTransactions.cancel` | `test/vesting-transactions.test.ts` | Complete cancellation-cap builder. |
-| `linear::close_irrevocable` | `VestingCalls.closeIrrevocable`; `VestingTransactions.closeIrrevocable` | `test/vesting-transactions.test.ts` | Complete terminal irrevocable-close builder. |
-| `checkpoints::new_schedule`, `checkpoints::add` | `VestingCalls.newCheckpointSchedule`, `addCheckpoint` | `test/vesting-transactions.test.ts`, `test/vesting-schedules.test.ts` | Intentionally composed inside checkpoint creation so the checkpoint schedule value cannot escape incomplete. |
-| `checkpoints::new_irrevocable`, `checkpoints::share` | `VestingCalls.newCheckpointIrrevocable`, `share`; `VestingTransactions.createCheckpointIrrevocable` | `test/vesting-transactions.test.ts` | Builds the complete bounded schedule, funds, constructs, and shares one position atomically. |
-| `checkpoints::new_cancelable`, `checkpoints::share` | `VestingCalls.newCheckpointCancelable`, `share`; `VestingTransactions.createCheckpointCancelable` | `test/vesting-transactions.test.ts` | Shares the position and transfers the returned cancellation cap to the explicit recipient. |
-| `checkpoints::claim`, `checkpoints::cancel`, `checkpoints::close_irrevocable` | `VestingCalls` and `VestingTransactions` lifecycle methods | `test/vesting-transactions.test.ts` | Complete product builders using decoded shared-object metadata. |
-
 ### Blast SUI product operations
 
 | Frozen contract surface | SDK implementation | Returned-object routing | Verification |
@@ -106,9 +91,6 @@ recipient, and request-result-to-`keep` routing for every returned object.
 | `VenueConfig` (Cetus `PoolCreationCap` custody) | `migratorsDeployment`; mutable in `cetus::new`, immutable at migration | `test/deployments.test.ts`, `test/migrators-transactions.test.ts` |
 | Launchpad, `blast_admin`, and migrators package and shared-object identities | `launchpadDeployment`, `migratorsDeployment` | `test/deployments.test.ts` |
 | Venue `Witness` | `MigratorCalls.migrationWitnessType` | original-package witness type |
-| `linear::Vesting<Coin>` and `checkpoints::Vesting<Coin>` shared mutable objects | `linearVestingBcs`, `checkpointVestingBcs`, `decodeVestingObject`, `getVesting` | `test/vesting-state.test.ts`, `test/vesting-client.test.ts` |
-| Checkpoint schedule contents and native `Clock` | `getCheckpointPage`, `getAllCheckpoints`, `getCurrentTimestampMs` | `test/vesting-state.test.ts`, `test/vesting-client.test.ts` |
-| Vesting package identity | `vestingDeployment`; current package targets and original object/event identity | `test/deployments.test.ts`, vesting transaction/state/event tests |
 | Blast SUI `vault::Vault` shared mutable object | `blastSuiVaultBcs`, `decodeBlastSuiVaultObject`, `getBlastSuiVault`, `BlastSuiClient.getVault` | `test/blast-sui-state.test.ts` pins independent literal BCS bytes to the contracts baseline and Sui revision; `test/blast-sui-client.test.ts` reuses that golden. |
 | `deposit_receipt::BlastSuiDepositReceipt` address-owned object | `blastSuiDepositReceiptBcs`, `decodeBlastSuiDepositReceiptObject`, `getBlastSuiDepositReceipt`, `BlastSuiClient.getDepositReceipt` | `test/blast-sui-state.test.ts` pins independent literal BCS bytes to the contracts baseline and Sui revision; `test/blast-sui-client.test.ts` reuses that golden. |
 | `fun_sui::FUN_SUI` original-package type | `funSuiType` and transaction coin selection | `test/blast-sui-math.test.ts`, `test/blast-sui-transactions.test.ts` |
@@ -151,10 +133,6 @@ the original package. Sui records the transaction's called package and module on
 each event rather than the emitting module, and adapters emit the launchpad's
 `Migrated` and `MigrationAllocationPaid` from their own migrators entries.
 
-Vesting creation projections derive the funder from the native event sender;
-claim, cancel, and close callers are likewise available as event senders and are
-not duplicated in payload fields.
-
 ### Blast SUI wrapped events
 
 All rows validate the generic `events_wrapper::Event<T>` envelope, current
@@ -184,24 +162,6 @@ same projection instance. Receipt replay rejects duplicate requests, unknown or
 terminal transitions, vault or principal mismatches, and redemption totals that
 do not satisfy `gross = fee + net` before it applies an event.
 
-### Vesting direct events
-
-| Frozen event | Typed decoder and projection effect | Verification |
-| --- | --- | --- |
-| `linear::VestingCreated` | `decodeVestingEvent`; complete linear schedule and active position | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
-| `linear::VestingClaimed` | `decodeVestingEvent`; released total and remaining balance | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
-| `linear::VestingCanceled` | `decodeVestingEvent`; beneficiary/refund conservation and canceled state | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
-| `linear::VestingClosed` | `decodeVestingEvent`; irrevocable terminal state | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
-| `checkpoints::VestingCreated` | `decodeVestingEvent`; checkpoint count and active position, without inventing schedule contents | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
-| `checkpoints::VestingClaimed` | `decodeVestingEvent`; released total and remaining balance | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
-| `checkpoints::VestingCanceled` | `decodeVestingEvent`; beneficiary/refund conservation and canceled state | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
-| `checkpoints::VestingClosed` | `decodeVestingEvent`; irrevocable terminal state | `test/vesting-events.test.ts`, `test/vesting-reducer.test.ts` |
-
-`createVestingProjection` and `reduceVestingInput` enforce monotonic release,
-conservation, active-only transitions, and idempotence by transaction digest
-plus event index for both vesting kinds. Reducer tests execute a valid path for
-each of the eight event kinds.
-
 ### Native facts that events do not prove
 
 | Required fact | Explicit SDK input | Why it is not event-derived | Verification |
@@ -213,9 +173,6 @@ each of the eight event kinds.
 | Current Blast SUI deposit-receipt owner | `BlastSuiNativeFact` kind `depositReceiptOwnership`, `source: "objectOwnership"` | A request event and `deposit_receipt::keep` do not prove current ownership. | `test/blast-sui-reducer.test.ts` |
 | Deleted Blast SUI deposit receipt | `BlastSuiNativeFact` kind `depositReceiptDeleted`, `source: "transactionEffects"` | Claim and cancellation events do not prove native object deletion or its transaction provenance. | `test/blast-sui-reducer.test.ts` |
 | Blast SUI returned coin IDs and recipients | `BlastSuiNativeFact` kind `returnedCoinRecipient`, `source: "transactionEffects"` | Product events do not identify returned coin objects or recipients. | `test/blast-sui-reducer.test.ts` |
-| Current vesting cancellation-cap owner | `VestingNativeFact` kind `cancelCapOwnership`, `source: "objectOwnership"` | Creation records the cap ID, not subsequent ownership. | `test/vesting-reducer.test.ts` |
-| Deleted vesting cancellation cap | `VestingNativeFact` kind `cancelCapDeleted`, `source: "transactionEffects"` | A vesting terminal event does not prove native cap deletion or its transaction provenance. | `test/vesting-reducer.test.ts` |
-| Checkpoint vesting schedule contents | `VestingNativeFact` kind `checkpointSchedule`, `source: "objectRead"` | `checkpoints::VestingCreated` contains only `checkpoint_count`. | `test/vesting-reducer.test.ts` |
 
 Native facts are stored separately from decoded Blast events and are independently
 deduplicated. Reducers do not infer ownership, returned-object routing,
@@ -231,7 +188,6 @@ that fact.
 | Blast SUI `package_admin::{new,share,add_capability,authorize_upgrade,commit_upgrade_and_advance,restrict_to_additive,make_immutable}` and `blast_sui_domain::package_admin_role` | Intentional package-bootstrap/upgrade exclusion. Administration uses `blast_admin::acl` with the `BLAST_SUI_DOMAIN` witness; the Blast SUI package no longer has its own `acl` module or ACL/upgrade events. `PackageCapabilityAdded` remains decoded. |
 | Blast SUI `vault::set_redeem_fee` | Intentional routine-administration exclusion. The live fee is available in vault state and events. |
 | Blast SUI `vault::create` and `deposit_receipt::create_display` | Intentional deployment-bootstrap exclusions. No deployment transaction is built or executed. |
-| Vesting production functions | No excluded product function: all 14 public functions have composable or high-level builders. |
 | Contract changes for SDK convenience | Excluded. This slice changes no Move logic. |
 | Deployment/publish/upgrade/configuration actions and placeholder IDs | Excluded. The registry has no deployment record or placeholder identity. |
 | Indexer process, database, API, backend, frontend wiring, and duplicated API formulas | Excluded. Protocol arithmetic remains in this SDK. |

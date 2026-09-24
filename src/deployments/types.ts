@@ -2,7 +2,6 @@ import type { BlastSuiDeployment } from "../blast-sui/types.ts";
 import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
 import type { SharedObjectIdentity, SuiPackageReference } from "../lib/sui.ts";
 import type { MigratorsDeployment } from "../migrators/transactions.ts";
-import type { VestingDeployment } from "../vesting/transactions.ts";
 
 export const BLAST_NETWORKS = [
   "mainnet",
@@ -20,7 +19,6 @@ export type BlastPackages = Readonly<
     admin: SuiPackageReference;
     blastSui?: SuiPackageReference;
     migrators?: SuiPackageReference;
-    vesting?: SuiPackageReference;
   }
 >;
 
@@ -61,4 +59,3 @@ export type BlastDeploymentRegistry = Readonly<
 export type LaunchpadDeploymentConstants = LaunchpadDeployment;
 export type BlastSuiDeploymentConstants = BlastSuiDeployment;
 export type MigratorsDeploymentConstants = MigratorsDeployment;
-export type VestingDeploymentConstants = VestingDeployment;

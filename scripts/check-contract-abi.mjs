@@ -36,13 +36,6 @@ const artifactDeclarations = [
     ],
   },
   {
-    path: "production-vesting-v1.json",
-    packages: [["vesting", "vesting", "blast_fun_vesting"]],
-    approvedAbiAmendments: [
-      "contracts ADR 0085: name every explorer-visible type after Blast",
-    ],
-  },
-  {
     path: "production-blast-sui-v1.json",
     packages: [["blastSui", "blast_sui", "blast_sui"]],
     approvedAbiAmendments: [
@@ -270,7 +263,6 @@ const functionClassifiers = {
     classifyLaunchpadFunction("blast_fun", moduleName, functionName),
   meme_template: classifyMemeTemplateFunction,
   blast_fun_migrators: classifyMigratorFunction,
-  blast_fun_vesting: classifyVestingFunction,
   blast_sui: classifyBlastSuiFunction,
 };
 
@@ -378,29 +370,6 @@ function isIntentionalAdminExclusion(moduleName, key) {
   );
 }
 
-const vestingBuilders = new Set([
-  "blast_fun_checkpoint_vesting::new_schedule",
-  "blast_fun_checkpoint_vesting::add",
-  "blast_fun_checkpoint_vesting::new_irrevocable",
-  "blast_fun_checkpoint_vesting::new_cancelable",
-  "blast_fun_checkpoint_vesting::share",
-  "blast_fun_checkpoint_vesting::claim",
-  "blast_fun_checkpoint_vesting::cancel",
-  "blast_fun_checkpoint_vesting::close_irrevocable",
-  "blast_fun_linear_vesting::new_irrevocable",
-  "blast_fun_linear_vesting::new_cancelable",
-  "blast_fun_linear_vesting::share",
-  "blast_fun_linear_vesting::claim",
-  "blast_fun_linear_vesting::cancel",
-  "blast_fun_linear_vesting::close_irrevocable",
-]);
-
-function classifyVestingFunction(moduleName, functionName) {
-  const key = `${moduleName}::${functionName}`;
-  if (vestingBuilders.has(key)) return "builder";
-  throw new Error(`unclassified function blast_fun_vesting::${key}`);
-}
-
 const blastSuiBuilders = new Set([
   "vault::mint_fun_sui",
   "vault::redeem_fun_sui",
@@ -447,12 +416,6 @@ function isBlastSuiDeploymentExclusion(key) {
   );
 }
 
-const directEventNames = new Set([
-  "VestingCreated",
-  "VestingClaimed",
-  "VestingCanceled",
-  "VestingClosed",
-]);
 const blastSuiEventNames = new Set([
   "PackageCapabilityAdded",
   "VaultCreated",
@@ -474,12 +437,7 @@ function isEventStruct(packageName, moduleName, structName) {
     return blastSuiEventNames.has(structName);
   }
   if (moduleName === "events") return true;
-  if (packageName === "blast_fun_migrators" && moduleName === "blast_events") {
-    return true;
-  }
-  return (
-    packageName === "blast_fun_vesting" && directEventNames.has(structName)
-  );
+  return packageName === "blast_fun_migrators" && moduleName === "blast_events";
 }
 
 function runClassificationProbe(argumentIndex) {

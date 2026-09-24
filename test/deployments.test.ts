@@ -8,7 +8,6 @@ import {
   getBlastDeployment,
   launchpadDeployment,
   migratorsDeployment,
-  vestingDeployment,
 } from "../src/deployments/index.ts";
 
 const deployment = defineBlastDeployment({
@@ -30,10 +29,6 @@ const deployment = defineBlastDeployment({
     migrators: {
       packageId: "0x323",
       originalPackageId: "0x322",
-    },
-    vesting: {
-      packageId: "0x223",
-      originalPackageId: "0x222",
     },
   },
   sharedObjects: {
@@ -95,15 +90,6 @@ test("derives call-specific launchpad shared references", () => {
       initialSharedVersion: "13",
       mutable: false,
     },
-  });
-});
-
-test("derives the independent vesting package reference", () => {
-  assert.deepEqual(vestingDeployment(deployment), {
-    packageId:
-      "0x0000000000000000000000000000000000000000000000000000000000000223",
-    originalPackageId:
-      "0x0000000000000000000000000000000000000000000000000000000000000222",
   });
 });
 

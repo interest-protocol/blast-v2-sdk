@@ -5,4 +5,3 @@ export * from "./launchpad/index.ts";
 export * from "./lib/integers.ts";
 export * from "./lib/sui.ts";
 export * from "./migrators/index.ts";
-export * from "./vesting/index.ts";
