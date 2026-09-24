@@ -21,6 +21,7 @@ const feeSplit = {
   creatorBps: 5_000n,
   autoLpBps: 2_000n,
   rewardsBps: 2_000n,
+  burnBps: 0n,
   recipients: [
     {
       destination:

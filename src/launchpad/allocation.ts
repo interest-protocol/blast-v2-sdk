@@ -54,12 +54,15 @@ export type FeeSplitRecipient = { destination: string; bps: bigint };
 
 /**
  * Mirrors `blast_fun::allocation::FeeSplit`: the creator's split of every
- * LP-fee collection after Blast's share, recipients in the order given.
+ * LP-fee collection after Blast's share, recipients in the order given. The
+ * burn part's Meme is burned at collection; its Quote waits in the vault for a
+ * buyback admin to swap it for Meme to burn.
  */
 export type FeeSplit = {
   creatorBps: bigint;
   autoLpBps: bigint;
   rewardsBps: bigint;
+  burnBps: bigint;
   recipients: FeeSplitRecipient[];
 };
 
@@ -68,6 +71,7 @@ export type FeeSplitAmounts = {
   creator: bigint;
   autoLp: bigint;
   rewards: bigint;
+  burn: bigint;
   recipients: bigint[];
 };
 
@@ -105,6 +109,7 @@ export const feeSplitBcs = bcs.struct("FeeSplit", {
   creatorBps: bpsBcs,
   autoLpBps: bpsBcs,
   rewardsBps: bpsBcs,
+  burnBps: bpsBcs,
   recipients: bcs.vector(routeBcs),
 });
 
@@ -182,6 +187,7 @@ export function normalizeFeeSplit(split: FeeSplit): FeeSplit {
   const creatorBps = requireBasisPoints("creatorBps", split.creatorBps);
   const autoLpBps = requireBasisPoints("autoLpBps", split.autoLpBps);
   const rewardsBps = requireBasisPoints("rewardsBps", split.rewardsBps);
+  const burnBps = requireBasisPoints("burnBps", split.burnBps);
   const recipients = split.recipients.map((recipient) => ({
     destination: requireDestination("recipient", recipient.destination),
     bps: requireBasisPoints("recipient bps", recipient.bps),
@@ -197,12 +203,12 @@ export function normalizeFeeSplit(split: FeeSplit): FeeSplit {
   }
   const total = recipients.reduce(
     (sum, recipient) => sum + recipient.bps,
-    creatorBps + autoLpBps + rewardsBps,
+    creatorBps + autoLpBps + rewardsBps + burnBps,
   );
   if (total !== BASIS_POINTS_DENOMINATOR) {
     throw new RangeError("fee split must sum to 10,000 basis points");
   }
-  return { creatorBps, autoLpBps, rewardsBps, recipients };
+  return { creatorBps, autoLpBps, rewardsBps, burnBps, recipients };
 }
 
 /**
@@ -248,24 +254,27 @@ export function apportionQuote(
 
 /**
  * Mirrors `allocation::apportion_fee_split`: by largest remainder with no
- * rounded-up part, ties in creator, auto-LP, rewards, then recipient order.
+ * rounded-up part, ties in creator, auto-LP, rewards, burn, then recipient
+ * order.
  * Conserves `total` exactly.
  */
 export function apportionFeeSplit(
   split: FeeSplit,
   total: bigint,
 ): FeeSplitAmounts {
-  const [creator = 0n, autoLp = 0n, rewards = 0n, ...recipients] = apportion(
-    [
-      split.creatorBps,
-      split.autoLpBps,
-      split.rewardsBps,
-      ...split.recipients.map((recipient) => recipient.bps),
-    ],
-    total,
-    null,
-  );
-  return { creator, autoLp, rewards, recipients };
+  const [creator = 0n, autoLp = 0n, rewards = 0n, burn = 0n, ...recipients] =
+    apportion(
+      [
+        split.creatorBps,
+        split.autoLpBps,
+        split.rewardsBps,
+        split.burnBps,
+        ...split.recipients.map((recipient) => recipient.bps),
+      ],
+      total,
+      null,
+    );
+  return { creator, autoLp, rewards, burn, recipients };
 }
 
 export type FeeCollectionPreview = {

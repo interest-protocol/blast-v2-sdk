@@ -257,14 +257,15 @@ export class MigratorCalls {
 
   /**
    * Collects the burned migration position's and the auto-LP position's fees,
-   * pays Blast's live share, splits the rest, and adds the auto-LP share back.
-   * Anyone may call it.
+   * pays Blast's live share, splits the rest, burns the burn share's Meme, and
+   * adds the auto-LP share back. Anyone may call it.
    */
   collectCetusFees(
     options: LaunchTypes &
       CetusObjects & {
         memeSide: CetusMemeSide;
         vault: SharedObjectReference<true>;
+        memeCurrency: SharedObjectReference<true>;
         burnManager: SharedObjectReference<false>;
         pool: SharedObjectReference<true>;
       },
@@ -279,6 +280,7 @@ export class MigratorCalls {
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
           this.#lpFeePolicy(tx),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "burnManager", options.burnManager, false),
           sharedObject(tx, "pool", options.pool, true),
@@ -288,10 +290,11 @@ export class MigratorCalls {
     };
   }
 
-  /** Collects, splits, and adds auto-LP for a Bluefin vault. Anyone may call it. */
+  /** Collects, splits, burns, and adds auto-LP for a Bluefin vault. Anyone may call it. */
   collectBluefinFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
+      memeCurrency: SharedObjectReference<true>;
       bluefinConfig: SharedObjectReference<false>;
       pool: SharedObjectReference<true>;
     },
@@ -305,6 +308,7 @@ export class MigratorCalls {
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
           this.#lpFeePolicy(tx),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
           sharedObject(tx, "pool", options.pool, true),
           tx.object.clock(),
@@ -325,6 +329,7 @@ export class MigratorCalls {
         vault: SharedObjectReference<true>;
         launch: SharedObjectReference;
         curveFeeCap: TransactionObjectInput;
+        memeCurrency: SharedObjectReference<true>;
         burnManager: SharedObjectReference<false>;
         pool: SharedObjectReference<true>;
         feeSplit: FeeSplit;
@@ -343,6 +348,7 @@ export class MigratorCalls {
           this.#lpFeePolicy(tx),
           sharedObject(tx, "launch", options.launch, options.launch.mutable),
           tx.object(options.curveFeeCap),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "burnManager", options.burnManager, false),
           sharedObject(tx, "pool", options.pool, true),
@@ -359,6 +365,7 @@ export class MigratorCalls {
       vault: SharedObjectReference<true>;
       launch: SharedObjectReference;
       curveFeeCap: TransactionObjectInput;
+      memeCurrency: SharedObjectReference<true>;
       bluefinConfig: SharedObjectReference<false>;
       pool: SharedObjectReference<true>;
       feeSplit: FeeSplit;
@@ -376,9 +383,79 @@ export class MigratorCalls {
           this.#lpFeePolicy(tx),
           sharedObject(tx, "launch", options.launch, options.launch.mutable),
           tx.object(options.curveFeeCap),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
           sharedObject(tx, "pool", options.pool, true),
           tx.add(feeSplit),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /**
+   * Swaps the vault's whole burn Quote for Meme in its Cetus pool and burns
+   * it, under a buyback-admin witness. Aborts unless the swap returns at least
+   * `minMemeOut`; set it from an off-chain price, since anyone can move the
+   * pool's price within a transaction. Unspent Quote waits for the next one.
+   */
+  buybackAndBurnCetus(
+    options: LaunchTypes &
+      CetusObjects & {
+        memeSide: CetusMemeSide;
+        vault: SharedObjectReference<true>;
+        adminWitness: TransactionObjectInput;
+        memeCurrency: SharedObjectReference<true>;
+        pool: SharedObjectReference<true>;
+        minMemeOut: bigint;
+      },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const memeSide = normalizeMemeSide(options.memeSide);
+    const minMemeOut = requireU64("minMemeOut", options.minMemeOut);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::cetus::buyback_and_burn_meme_${memeSide}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          tx.object(options.adminWitness),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
+          sharedObject(tx, "pool", options.pool, true),
+          tx.pure.u64(minMemeOut),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /** Bluefin counterpart of `buybackAndBurnCetus`. */
+  buybackAndBurnBluefin(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      memeCurrency: SharedObjectReference<true>;
+      bluefinConfig: SharedObjectReference<false>;
+      pool: SharedObjectReference<true>;
+      minMemeOut: bigint;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const minMemeOut = requireU64("minMemeOut", options.minMemeOut);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::bluefin::buyback_and_burn`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          tx.object(options.adminWitness),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
+          sharedObject(tx, "pool", options.pool, true),
+          tx.pure.u64(minMemeOut),
           tx.object.clock(),
         ],
       });
@@ -820,6 +897,28 @@ export class MigratorTransactions {
   }): Transaction {
     return this.#asAdmin(options.adminCapId, (adminWitness) =>
       this.call.setLpFeeProtocolDestination({ ...options, adminWitness }),
+    );
+  }
+
+  buybackAndBurnCetus(
+    options: Omit<
+      Parameters<MigratorCalls["buybackAndBurnCetus"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+      this.call.buybackAndBurnCetus({ ...options, adminWitness }),
+    );
+  }
+
+  buybackAndBurnBluefin(
+    options: Omit<
+      Parameters<MigratorCalls["buybackAndBurnBluefin"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+      this.call.buybackAndBurnBluefin({ ...options, adminWitness }),
     );
   }
 

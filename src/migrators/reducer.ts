@@ -35,6 +35,8 @@ export type LpVaultEventProjection = {
   autoLpQuote: bigint;
   rewardsMeme: bigint;
   rewardsQuote: bigint;
+  /** Burn-share Quote waiting for a buyback. */
+  burnQuote: bigint;
   /** Protocol migration residuals the venue returned. */
   protocolMemeResidual: bigint;
   protocolQuoteResidual: bigint;
@@ -217,6 +219,7 @@ export function reduceMigratorEvent(
             autoLpQuote: 0n,
             rewardsMeme: 0n,
             rewardsQuote: 0n,
+            burnQuote: 0n,
             protocolMemeResidual: payload.residual_meme,
             protocolQuoteResidual: payload.residual_quote,
             liquidity: payload.liquidity,
@@ -238,6 +241,7 @@ export function reduceMigratorEvent(
         autoLpQuote: vault.autoLpQuote + payload.auto_lp_quote,
         rewardsMeme: vault.rewardsMeme + payload.rewards_meme,
         rewardsQuote: vault.rewardsQuote + payload.rewards_quote,
+        burnQuote: vault.burnQuote + payload.burn_quote,
         protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
         protocolQuotePaid: vault.protocolQuotePaid + payload.protocol_quote,
       }));
@@ -248,6 +252,13 @@ export function reduceMigratorEvent(
         ...vault,
         autoLpMeme: payload.meme_pending,
         autoLpQuote: payload.quote_pending,
+      }));
+    }
+    case "BuybackBurned": {
+      const payload = event.payload;
+      return updateVault(next, payload.vault_id, (vault) => ({
+        ...vault,
+        burnQuote: payload.quote_pending,
       }));
     }
     case "AutoLpPositionOpened": {

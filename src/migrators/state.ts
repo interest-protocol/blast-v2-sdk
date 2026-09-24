@@ -37,6 +37,7 @@ export const lpVaultBcs = bcs.struct("LpVault", {
   auto_lp_quote: suiBalanceBcs,
   rewards_meme: suiBalanceBcs,
   rewards_quote: suiBalanceBcs,
+  burn_quote: suiBalanceBcs,
   next_round: bcs.u64(),
   last_checkpoint: bcs.option(bcs.u64()),
 });
@@ -74,6 +75,8 @@ export type LpVaultState = SharedObjectReference<true> & {
   /** Rewards not yet reserved by a holder-reward round. */
   rewardsMeme: bigint;
   rewardsQuote: bigint;
+  /** Burn-share Quote waiting for a buyback admin to swap it for Meme to burn. */
+  burnQuote: bigint;
   /** Number the next holder-reward round must carry. */
   nextRound: bigint;
   /** Checkpoint the next round must start at; null before the first round. */
@@ -147,6 +150,7 @@ export function decodeLpVaultObject(
     autoLpQuote: BigInt(parsed.auto_lp_quote.value),
     rewardsMeme: BigInt(parsed.rewards_meme.value),
     rewardsQuote: BigInt(parsed.rewards_quote.value),
+    burnQuote: BigInt(parsed.burn_quote.value),
     nextRound: BigInt(parsed.next_round),
     lastCheckpoint:
       parsed.last_checkpoint === null ? null : BigInt(parsed.last_checkpoint),

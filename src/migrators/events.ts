@@ -34,6 +34,12 @@ export const migratorEventSpecs = {
     vault_id: "id",
     position_id: "id",
   },
+  BuybackBurned: {
+    vault_id: "id",
+    quote_spent: "u64",
+    meme_burned: "u64",
+    quote_pending: "u64",
+  },
   CetusPoolReserved: {
     meme: "typeName",
     quote: "typeName",
@@ -66,6 +72,8 @@ export const migratorEventSpecs = {
     auto_lp_quote: "u64",
     rewards_meme: "u64",
     rewards_quote: "u64",
+    burn_meme: "u64",
+    burn_quote: "u64",
     recipient_meme: "u64Vector",
     recipient_quote: "u64Vector",
   },

@@ -24,7 +24,8 @@ const balance = (value: bigint) => ({ value });
 const feeSplit = {
   creatorBps: 6_000n,
   autoLpBps: 2_000n,
-  rewardsBps: 2_000n,
+  rewardsBps: 1_000n,
+  burnBps: 1_000n,
   recipients: [],
 };
 const notFound = () =>
@@ -45,6 +46,7 @@ function serializeVault(id = objectId): Uint8Array {
       auto_lp_quote: balance(4n),
       rewards_meme: balance(7n),
       rewards_quote: balance(8n),
+      burn_quote: balance(9n),
       next_round: 3n,
       last_checkpoint: 99n,
     })
@@ -79,6 +81,7 @@ test("decodes LP-vault custody, split generation, and every balance", () => {
       autoLpQuote: vault.autoLpQuote,
       rewardsMeme: vault.rewardsMeme,
       rewardsQuote: vault.rewardsQuote,
+      burnQuote: vault.burnQuote,
       nextRound: vault.nextRound,
       lastCheckpoint: vault.lastCheckpoint,
     },
@@ -93,6 +96,7 @@ test("decodes LP-vault custody, split generation, and every balance", () => {
       autoLpQuote: 4n,
       rewardsMeme: 7n,
       rewardsQuote: 8n,
+      burnQuote: 9n,
       nextRound: 3n,
       lastCheckpoint: 99n,
     },

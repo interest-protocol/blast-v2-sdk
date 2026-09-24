@@ -33,6 +33,7 @@ const feeSplit = {
   creatorBps: 10_000n,
   autoLpBps: 0n,
   rewardsBps: 0n,
+  burnBps: 0n,
   recipients: [],
 };
 const plan = {
@@ -159,6 +160,7 @@ function vault() {
     auto_lp_quote: balance,
     rewards_meme: balance,
     rewards_quote: balance,
+    burn_quote: balance,
     next_round: 0n,
     last_checkpoint: null,
   };

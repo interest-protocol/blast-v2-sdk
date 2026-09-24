@@ -42,7 +42,8 @@ const types = {
 const lpFeeSplit = {
   creatorBps: 5_000n,
   autoLpBps: 2_000n,
-  rewardsBps: 2_000n,
+  rewardsBps: 1_000n,
+  burnBps: 1_000n,
   recipients: [{ destination: "0xf", bps: 1_000n }],
 };
 const settings = {
@@ -202,6 +203,7 @@ test("collects fees permissionlessly with the live LP-fee policy", () => {
     cetusConfig: cetus.cetusConfig,
     memeSide: "b",
     vault: shared("0xc", "20", true),
+    memeCurrency: shared("0xd", "22", true),
     burnManager: shared("0x72", "32", false),
     pool: shared("0x73", "33", true),
   });
@@ -211,6 +213,7 @@ test("collects fees permissionlessly with the live LP-fee policy", () => {
       "shared-mut:0xc",
       "shared:0x61",
       "shared:0x40",
+      "shared-mut:0xd",
       "shared:0x70",
       "shared:0x72",
       "shared-mut:0x73",
@@ -221,6 +224,7 @@ test("collects fees permissionlessly with the live LP-fee policy", () => {
   const bluefinTx = sdk.collectBluefinFees({
     ...types,
     vault: shared("0xc", "20", true),
+    memeCurrency: shared("0xd", "22", true),
     bluefinConfig: shared("0x80", "40", false),
     pool: shared("0x81", "41", true),
   });
@@ -230,6 +234,7 @@ test("collects fees permissionlessly with the live LP-fee policy", () => {
       "shared-mut:0xc",
       "shared:0x61",
       "shared:0x40",
+      "shared-mut:0xd",
       "shared:0x80",
       "shared-mut:0x81",
       CLOCK,
@@ -246,6 +251,7 @@ test("settles and updates the fee split under the live curve-fee cap", () => {
     vault: shared("0xc", "20", true),
     launch: shared("0x9", "19", false),
     curveFeeCapId: "0xcf",
+    memeCurrency: shared("0xd", "22", true),
     burnManager: shared("0x72", "32", false),
     pool: shared("0x73", "33", true),
     feeSplit: lpFeeSplit,
@@ -257,6 +263,7 @@ test("settles and updates the fee split under the live curve-fee cap", () => {
     "shared:0x40",
     "shared:0x9",
     "object:0xcf",
+    "shared-mut:0xd",
     "shared:0x70",
     "shared:0x72",
     "shared-mut:0x73",
@@ -271,12 +278,80 @@ test("settles and updates the fee split under the live curve-fee cap", () => {
     vault: shared("0xc", "20", true),
     launch: shared("0x9", "19", false),
     curveFeeCapId: "0xcf",
+    memeCurrency: shared("0xd", "22", true),
     bluefinConfig: shared("0x80", "40", false),
     pool: shared("0x81", "41", true),
     feeSplit: lpFeeSplit,
   });
   assert.ok(
     moveFunctions(bluefinTx).includes("bluefin::settle_and_update_fee_split"),
+  );
+});
+
+test("buys back and burns under admin sign-in with a minimum Meme out", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const cetusTx = sdk.buybackAndBurnCetus({
+    ...types,
+    cetusConfig: cetus.cetusConfig,
+    memeSide: "b",
+    vault: shared("0xc", "20", true),
+    adminCapId: "0xad1",
+    memeCurrency: shared("0xd", "22", true),
+    pool: shared("0x73", "33", true),
+    minMemeOut: 5n,
+  });
+  assert.deepEqual(moveFunctions(cetusTx), [
+    "acl::sign_in",
+    "cetus::buyback_and_burn_meme_b",
+  ]);
+  assert.deepEqual(
+    argumentKinds(cetusTx, moveCall(cetusTx, "cetus::buyback_and_burn_meme_b")),
+    [
+      "shared-mut:0xc",
+      "shared:0x61",
+      `Result:${commandIndex(cetusTx, "acl::sign_in")}`,
+      "shared-mut:0xd",
+      "shared:0x70",
+      "shared-mut:0x73",
+      "pure",
+      CLOCK,
+    ],
+  );
+
+  const bluefinTx = sdk.buybackAndBurnBluefin({
+    ...types,
+    vault: shared("0xc", "20", true),
+    adminCapId: "0xad1",
+    memeCurrency: shared("0xd", "22", true),
+    bluefinConfig: shared("0x80", "40", false),
+    pool: shared("0x81", "41", true),
+    minMemeOut: 5n,
+  });
+  assert.deepEqual(
+    argumentKinds(bluefinTx, moveCall(bluefinTx, "bluefin::buyback_and_burn")),
+    [
+      "shared-mut:0xc",
+      "shared:0x61",
+      `Result:${commandIndex(bluefinTx, "acl::sign_in")}`,
+      "shared-mut:0xd",
+      "shared:0x80",
+      "shared-mut:0x81",
+      "pure",
+      CLOCK,
+    ],
+  );
+  assert.throws(
+    () =>
+      sdk.buybackAndBurnBluefin({
+        ...types,
+        vault: shared("0xc", "20", true),
+        adminCapId: "0xad1",
+        memeCurrency: shared("0xd", "22", true),
+        bluefinConfig: shared("0x80", "40", false),
+        pool: shared("0x81", "41", true),
+        minMemeOut: -1n,
+      }),
+    /u64/,
   );
 });
 

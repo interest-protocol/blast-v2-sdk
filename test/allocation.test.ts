@@ -35,9 +35,16 @@ function split(
   creatorBps: bigint,
   autoLpBps: bigint,
   rewardsBps: bigint,
+  burnBps: bigint,
   recipients: FeeSplit["recipients"] = [],
 ): FeeSplit {
-  return normalizeFeeSplit({ creatorBps, autoLpBps, rewardsBps, recipients });
+  return normalizeFeeSplit({
+    creatorBps,
+    autoLpBps,
+    rewardsBps,
+    burnBps,
+    recipients,
+  });
 }
 
 test("rounds Blast's allocation up and the rest by largest remainder", () => {
@@ -146,18 +153,30 @@ test("adds Blast first and checks both sums like allocation::add_protocol", () =
 });
 
 test("matches the Move fee-split apportionment vectors", () => {
-  const quarters = split(2_500n, 2_500n, 2_500n, [
-    { destination: "0xa", bps: 2_500n },
+  const fifths = split(2_000n, 2_000n, 2_000n, 2_000n, [
+    { destination: "0xa", bps: 2_000n },
   ]);
   for (let total = 0n; total < 33n; total++) {
-    assert.deepEqual(apportionFeeSplit(quarters, total), {
-      creator: (total + 3n) / 4n,
-      autoLp: (total + 2n) / 4n,
-      rewards: (total + 1n) / 4n,
-      recipients: [total / 4n],
+    assert.deepEqual(apportionFeeSplit(fifths, total), {
+      creator: (total + 4n) / 5n,
+      autoLp: (total + 3n) / 5n,
+      rewards: (total + 2n) / 5n,
+      burn: (total + 1n) / 5n,
+      recipients: [total / 5n],
     });
   }
-  const routes = split(0n, 0n, 0n, [
+  // Move `a_larger_total_can_pay_a_floored_part_one_unit_less`.
+  const floored = split(4_700n, 4_200n, 0n, 0n, [
+    { destination: "0xa", bps: 1_100n },
+  ]);
+  assert.deepEqual(apportionFeeSplit(floored, 23n), {
+    creator: 11n,
+    autoLp: 10n,
+    rewards: 0n,
+    burn: 0n,
+    recipients: [2n],
+  });
+  const routes = split(0n, 0n, 0n, 0n, [
     { destination: "0x7", bps: 6_000n },
     { destination: "0x3", bps: 1_000n },
     { destination: "0x9", bps: 3_000n },
@@ -172,7 +191,7 @@ test("previews one collection with Blast's share rounded up", () => {
     grossQuote: 0n,
     memeShareBps: 1_000n,
     quoteShareBps: 1_000n,
-    feeSplit: split(0n, 0n, 0n, [
+    feeSplit: split(0n, 0n, 0n, 0n, [
       { destination: "0x3", bps: 5_000n },
       { destination: "0x7", bps: 5_000n },
     ]),
@@ -187,6 +206,7 @@ test("keeps recipient order like the Move constructors and round-trips BCS", () 
     creatorBps: 5_000n,
     autoLpBps: 0n,
     rewardsBps: 0n,
+    burnBps: 0n,
     recipients: [
       { destination: "0xb", bps: 2_500n },
       { destination: "0xa", bps: 0n },
@@ -213,13 +233,14 @@ test("keeps recipient order like the Move constructors and round-trips BCS", () 
 });
 
 test("rejects plans and splits the Move constructors abort on", () => {
-  assert.throws(() => split(2_500n, 2_500n, 2_500n), /sum to 10,000/);
+  assert.throws(() => split(2_500n, 2_500n, 2_500n, 0n), /sum to 10,000/);
   assert.throws(
     () =>
       split(
         0n,
         0n,
         9_983n,
+        0n,
         Array.from({ length: 17 }, (_, index) => ({
           destination: `0x${(index + 1).toString(16)}`,
           bps: 1n,
@@ -229,14 +250,14 @@ test("rejects plans and splits the Move constructors abort on", () => {
   );
   assert.throws(
     () =>
-      split(0n, 0n, 0n, [
+      split(0n, 0n, 0n, 0n, [
         { destination: "0xa", bps: 5_000n },
         { destination: "0xa", bps: 5_000n },
       ]),
     /distinct/,
   );
   assert.throws(
-    () => split(0n, 0n, 0n, [{ destination: "0x0", bps: 10_000n }]),
+    () => split(0n, 0n, 0n, 0n, [{ destination: "0x0", bps: 10_000n }]),
     /nonzero Sui address/,
   );
   assert.throws(

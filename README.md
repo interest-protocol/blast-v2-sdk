@@ -149,6 +149,7 @@ const transaction = client.blastMigrators.tx.createCetusLaunch({
     creatorBps: 5_000n,
     autoLpBps: 2_500n,
     rewardsBps: 2_500n,
+    burnBps: 0n,
     recipients: [],
   },
   protection: {

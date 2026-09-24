@@ -234,6 +234,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
                   creatorBps: 0n,
                   autoLpBps: 0n,
                   rewardsBps: 10_000n,
+                  burnBps: 0n,
                   recipients: [],
                 },
                 creator_meme: { value: 0n },
@@ -242,6 +243,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
                 auto_lp_quote: { value: 0n },
                 rewards_meme: { value: published ? 0n : 2020n },
                 rewards_quote: { value: published ? 0n : 4040n },
+                burn_quote: { value: 0n },
                 next_round: published ? 1n : 0n,
                 last_checkpoint: published ? 101n : null,
               })

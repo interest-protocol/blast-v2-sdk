@@ -33,6 +33,7 @@ const sampleSplit = {
   creatorBps: 10_000n,
   autoLpBps: 0n,
   rewardsBps: 0n,
+  burnBps: 0n,
   recipients: [],
 };
 const samplePlan = {
@@ -45,7 +46,7 @@ const samplePlan = {
 test("decodes and idempotently reduces every frozen migrator event", () => {
   assert.deepEqual(migratorEventSpecs, readFrozenMigratorEventSpecs());
   const kinds = Object.keys(migratorEventSpecs) as MigratorEventKind[];
-  assert.equal(kinds.length, 12);
+  assert.equal(kinds.length, 13);
 
   let projection = createLaunchpadProductProjection();
   for (const [eventIndex, kind] of kinds.entries()) {
@@ -65,7 +66,8 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
   const split = {
     creatorBps: 5_000n,
     autoLpBps: 2_000n,
-    rewardsBps: 2_000n,
+    rewardsBps: 1_000n,
+    burnBps: 1_000n,
     recipients: [
       {
         destination: normalizeSuiObjectId("0xf"),
@@ -111,8 +113,10 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
         creator_quote: 100n,
         auto_lp_meme: 20n,
         auto_lp_quote: 40n,
-        rewards_meme: 20n,
-        rewards_quote: 40n,
+        rewards_meme: 10n,
+        rewards_quote: 20n,
+        burn_meme: 10n,
+        burn_quote: 20n,
         recipient_meme: [10n],
         recipient_quote: [20n],
       },
@@ -186,6 +190,16 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
       { vault_id: "0x40", meme_amount: 3n, quote_amount: 4n },
       11,
     ),
+    migratorDecoded(
+      "BuybackBurned",
+      {
+        vault_id: "0x40",
+        quote_spent: 15n,
+        meme_burned: 7n,
+        quote_pending: 5n,
+      },
+      12,
+    ),
   ];
 
   const states = inputs.map((_, index) =>
@@ -202,6 +216,7 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
   const collected = states[4]?.migrators.vaults[vaultId];
   assert.equal(collected?.creatorMeme, 50n);
   assert.equal(collected?.autoLpQuote, 40n);
+  assert.equal(collected?.burnQuote, 20n);
   assert.equal(collected?.protocolMemePaid, 10n);
 
   const vault = states.at(-1)?.migrators.vaults[vaultId];
@@ -215,6 +230,7 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
   assert.equal(vault.creatorQuote, 0n);
   assert.equal(vault.rewardsMeme, 5n);
   assert.equal(vault.rewardsQuote, 10n);
+  assert.equal(vault.burnQuote, 5n);
   assert.equal(vault.nextRound, 1n);
   assert.equal(vault.lastCheckpoint, 20n);
   assert.equal(vault.protocolMemeResidual, 0n);

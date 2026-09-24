@@ -32,6 +32,7 @@ const sampleSplit = {
   creatorBps: 10_000n,
   autoLpBps: 0n,
   rewardsBps: 0n,
+  burnBps: 0n,
   recipients: [],
 };
 

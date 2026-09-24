@@ -45,6 +45,7 @@ const lpFeeSplit = {
   creatorBps: 5_000n,
   autoLpBps: 2_000n,
   rewardsBps: 2_000n,
+  burnBps: 0n,
   recipients: [{ destination: "0xf", bps: 1_000n }],
 };
 

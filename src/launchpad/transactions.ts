@@ -158,6 +158,7 @@ export class LaunchpadCalls {
           tx.add(this.bps(normalized.creatorBps)),
           tx.add(this.bps(normalized.autoLpBps)),
           tx.add(this.bps(normalized.rewardsBps)),
+          tx.add(this.bps(normalized.burnBps)),
           recipients,
         ],
       });
