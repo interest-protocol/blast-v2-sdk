@@ -633,7 +633,7 @@ export class MigratorTransactions {
 
   /**
    * Starts, configures, finalizes, and shares a Cetus launch atomically, with
-   * an optional owned pre-share purchase routed to its recipient.
+   * an optional purchase on the owned launch, routed to its recipient.
    */
   createCetusLaunch(
     options: CreateLaunchOptions &

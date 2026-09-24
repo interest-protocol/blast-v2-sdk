@@ -33,18 +33,12 @@ const types = {
   quoteType: "0x2::sui::SUI",
 };
 const allocationPlan = {
-  channels: [
-    { channelId: 2n, role: "Liquidity" as const, destination: "0xa" },
-    { channelId: 1n, role: "Protocol" as const, destination: "0xb" },
-  ],
-  meme: [
-    { channelId: 2n, bps: 2_000n },
-    { channelId: 0n, bps: 7_500n },
-    { channelId: 1n, bps: 500n },
-  ],
-  quote: [
-    { channelId: 1n, bps: 500n },
-    { channelId: 2n, bps: 9_500n },
+  curveMemeBps: 7_000n,
+  lpMemeBps: 2_000n,
+  lpQuoteBps: 9_000n,
+  recipients: [
+    { destination: "0xa", memeBps: 300n, quoteBps: 0n },
+    { destination: "0xb", memeBps: 200n, quoteBps: 500n },
   ],
 };
 const lpFeeSplit = {
@@ -95,32 +89,29 @@ test("completes an adapter-started launch: settings, finalize, and share", () =>
   const share = moveCall(tx, "launch::share");
   assert.deepEqual(share.arguments.map(argumentKind(tx)), [
     `Result:${commandIndex(tx, "launch::finalize")}`,
-    "shared:0x2",
     `shared:${SUI_CLOCK_OBJECT_ID}`,
   ]);
 });
 
-test("builds canonical allocation plans and fee splits through their constructors", () => {
+test("builds allocation plans and fee splits through their constructors", () => {
   const calls = new LaunchpadCalls(deployment);
   const tx = new Transaction();
   tx.add(calls.allocationPlan(allocationPlan));
   tx.add(calls.feeSplit(lpFeeSplit));
 
-  const functions = moveFunctions(tx);
-  assert.deepEqual(
-    functions.filter((name) => name === "allocation::channel").length,
-    2,
-  );
-  assert.deepEqual(
-    functions.filter((name) => name.endsWith("_role")),
-    ["allocation::protocol_role", "allocation::liquidity_role"],
-  );
-  assert.equal(
-    functions.filter((name) => name === "allocation::weight").length,
-    5,
-  );
-  assert.ok(functions.includes("allocation::new"));
-  assert.ok(functions.includes("allocation::route"));
+  const functions = moveFunctions(tx).filter((name) => name !== "bps::new");
+  assert.deepEqual(functions, [
+    "allocation::recipient",
+    "allocation::recipient",
+    "allocation::plan",
+    "allocation::route",
+    "allocation::fee_split",
+  ]);
+  const recipient = moveCall(tx, "allocation::recipient");
+  assert.deepEqual(recipient.arguments.map(argumentKind(tx)).slice(1), [
+    `Result:${commandIndex(tx, "allocation::recipient") - 2}`,
+    `Result:${commandIndex(tx, "allocation::recipient") - 1}`,
+  ]);
   assert.equal(functions.at(-1), "allocation::fee_split");
   const vectors = tx
     .getData()
@@ -128,9 +119,7 @@ test("builds canonical allocation plans and fee splits through their constructor
       command.$kind === "MakeMoveVec" ? [command.MakeMoveVec.type] : [],
     );
   assert.deepEqual(vectors, [
-    `${normalizeSuiObjectId("0x123")}::allocation::Channel`,
-    `${normalizeSuiObjectId("0x123")}::allocation::Weight`,
-    `${normalizeSuiObjectId("0x123")}::allocation::Weight`,
+    `${normalizeSuiObjectId("0x123")}::allocation::Recipient`,
     `${normalizeSuiObjectId("0x123")}::allocation::Route`,
   ]);
   assert.throws(
@@ -139,7 +128,7 @@ test("builds canonical allocation plans and fee splits through their constructor
   );
 });
 
-test("runs the one pre-share purchase on the owned launch before sharing", () => {
+test("buys on the owned launch before sharing it", () => {
   const calls = new LaunchpadCalls(deployment);
   const tx = new Transaction();
   const bought = tx.add(
@@ -160,16 +149,17 @@ test("runs the one pre-share purchase on the owned launch before sharing", () =>
   );
   assert.deepEqual(launchCalls.slice(-3), [
     "launch::finalize",
-    "launch::pre_share_buy",
+    "launch::buy",
     "launch::share",
   ]);
-  const buy = moveCall(tx, "launch::pre_share_buy");
+  const buy = moveCall(tx, "launch::buy");
   assert.deepEqual(buy.arguments.map(argumentKind(tx)), [
     `Result:${commandIndex(tx, "launch::finalize")}`,
     "shared:0x2",
     "shared:0x4",
     "object:0x77",
     "pure",
+    `shared:${SUI_CLOCK_OBJECT_ID}`,
   ]);
 });
 

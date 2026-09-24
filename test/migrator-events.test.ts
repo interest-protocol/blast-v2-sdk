@@ -36,12 +36,10 @@ const sampleSplit = {
   recipients: [],
 };
 const samplePlan = {
-  channels: [{ channelId: 1n, role: "Liquidity", destination: "0xa" }],
-  meme: [
-    { channelId: 0n, bps: 8_000n },
-    { channelId: 1n, bps: 2_000n },
-  ],
-  quote: [{ channelId: 1n, bps: 10_000n }],
+  curveMemeBps: 8_000n,
+  lpMemeBps: 2_000n,
+  lpQuoteBps: 10_000n,
+  recipients: [],
 };
 
 test("decodes and idempotently reduces every frozen migrator event", () => {
@@ -83,6 +81,7 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
       { launch_id: "0xc", ticket_id: "0xb", quote: "0x2::sui::SUI" },
       1,
     ),
+    launchpadDecoded("Migrated", { launch_id: "0xc" }, 2),
     migratorDecoded(
       "VaultCreated",
       {
@@ -92,13 +91,11 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
         venue: "0x320::cetus::Venue",
         meme: "0xa::meme::MEME",
         quote: "0x2::sui::SUI",
+        residual_meme: 3n,
+        residual_quote: 4n,
+        liquidity: 5n,
         fee_split: split,
       },
-      2,
-    ),
-    launchpadDecoded(
-      "Migrated",
-      { launch_id: "0xc", residual_meme: 3n, residual_quote: 4n },
       3,
     ),
     migratorDecoded(
@@ -201,6 +198,7 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
   assert.equal(migrated?.launchId, normalizeSuiObjectId("0xc"));
   assert.equal(migrated?.protocolMemeResidual, 3n);
   assert.equal(migrated?.protocolQuoteResidual, 4n);
+  assert.equal(migrated?.liquidity, 5n);
   const collected = states[4]?.migrators.vaults[vaultId];
   assert.equal(collected?.creatorMeme, 50n);
   assert.equal(collected?.autoLpQuote, 40n);
@@ -516,6 +514,8 @@ function sampleValue(descriptor: string): unknown {
       return [1n];
     case "feeSplit":
       return sampleSplit;
+    case "creatorRecipient":
+      return { kind: "address", address: "0xe" };
     case "allocationPlan":
       return samplePlan;
     case "optionAddress":

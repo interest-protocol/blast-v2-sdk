@@ -1,29 +1,31 @@
 import { mulDivUp, requirePositiveU64 } from "../lib/integers.ts";
 import type { AllocationPlan } from "./allocation.ts";
 import {
-  allocationAmountFor,
   apportionMeme,
   apportionQuote,
-  liquidityChannelId,
-  normalizeAllocationPlan,
+  requireCompletePlan,
 } from "./allocation.ts";
 
 export type LaunchEconomicsInput = {
   /** One billion whole tokens at the Meme's decimals. */
   atomicSupply: bigint;
+  /**
+   * The complete plan, Blast's allocation included: a launch's
+   * `allocationPlan`, or a creator plan passed through `addProtocolAllocation`.
+   */
   allocationPlan: AllocationPlan;
   virtualQuote: bigint;
   graduationTarget: bigint;
 };
 
 export type LaunchEconomics = {
-  /** Meme table entry for channel zero: the curve reserve at finalization. */
+  /** The curve reserve at finalization. */
   curveMeme: bigint;
-  /** Meme the Liquidity channel hands to the adapter at migration. */
+  /** Meme handed to the adapter for the pool at migration. */
   liquidityMeme: bigint;
-  /** Quote the Liquidity channel hands to the adapter at the graduation target. */
+  /** Quote handed to the adapter for the pool at the graduation target. */
   liquidityQuote: bigint;
-  /** Terminal Quote paid to every non-liquidity channel. */
+  /** Terminal Quote paid to the plan's recipients, Blast included. */
   allocatedQuote: bigint;
   terminalCurveMeme: bigint;
   curveMemeReleased: bigint;
@@ -49,17 +51,12 @@ export function deriveLaunchEconomics(
     "graduationTarget",
     input.graduationTarget,
   );
-  const plan = normalizeAllocationPlan(input.allocationPlan);
-  const liquidity = liquidityChannelId(plan);
-  const memeAmounts = apportionMeme(plan, atomicSupply);
-  const quoteAmounts = apportionQuote(plan, graduationTarget);
-  const curveMeme = allocationAmountFor(plan.meme, memeAmounts, 0n);
-  const liquidityMeme = allocationAmountFor(plan.meme, memeAmounts, liquidity);
-  const liquidityQuote = allocationAmountFor(
-    plan.quote,
-    quoteAmounts,
-    liquidity,
+  const plan = requireCompletePlan(input.allocationPlan);
+  const { curve: curveMeme, lp: liquidityMeme } = apportionMeme(
+    plan,
+    atomicSupply,
   );
+  const liquidityQuote = apportionQuote(plan, graduationTarget).lp;
   requirePositiveU64("curveMeme", curveMeme);
   requirePositiveU64("liquidityMeme", liquidityMeme);
   requirePositiveU64("liquidityQuote", liquidityQuote);

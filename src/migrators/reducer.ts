@@ -35,9 +35,11 @@ export type LpVaultEventProjection = {
   autoLpQuote: bigint;
   rewardsMeme: bigint;
   rewardsQuote: bigint;
-  /** Protocol migration residuals, from the launch's `Migrated` event. */
+  /** Protocol migration residuals the venue returned. */
   protocolMemeResidual: bigint;
   protocolQuoteResidual: bigint;
+  /** Liquidity of the migration position. */
+  liquidity: bigint;
   nextRound: bigint;
   lastCheckpoint: bigint | null;
   /** Cumulative protocol LP-fee payouts. */
@@ -215,8 +217,9 @@ export function reduceMigratorEvent(
             autoLpQuote: 0n,
             rewardsMeme: 0n,
             rewardsQuote: 0n,
-            protocolMemeResidual: 0n,
-            protocolQuoteResidual: 0n,
+            protocolMemeResidual: payload.residual_meme,
+            protocolQuoteResidual: payload.residual_quote,
+            liquidity: payload.liquidity,
             nextRound: 0n,
             lastCheckpoint: null,
             protocolMemePaid: 0n,
@@ -373,17 +376,16 @@ export function reduceLaunchpadProductInput(
 ): LaunchpadProductProjection {
   if (input.source === "launchpad") {
     const launchpad = reduceLaunchpadEvent(state.launchpad, input);
-    if (launchpad === state.launchpad) return state;
-    if (input.kind !== "Migrated") return { ...state, launchpad };
-    return {
-      ...state,
-      launchpad,
-      migrators: linkMigratedLaunch(state.migrators, launchpad, input.payload),
-    };
+    return launchpad === state.launchpad ? state : { ...state, launchpad };
   }
   if (input.source === "migrators") {
     const migrators = reduceMigratorEvent(state.migrators, input);
-    return migrators === state.migrators ? state : { ...state, migrators };
+    if (migrators === state.migrators) return state;
+    if (input.kind !== "VaultCreated") return { ...state, migrators };
+    return {
+      ...state,
+      migrators: linkVaultLaunch(migrators, state.launchpad, input.payload),
+    };
   }
   const native = reduceNativeFact(state.native, input);
   return native === state.native ? state : { ...state, native };
@@ -434,28 +436,24 @@ function reduceNativeFact(
 }
 
 /**
- * The migration transaction attaches the vault (`VaultCreated`) before the
- * launch completes (`Migrated`). One launch exists per Meme type, so the
- * vault holding that Meme type is the launch's vault.
+ * The migration transaction migrates the launch (`Migrated`) before it
+ * attaches the vault (`VaultCreated`). One launch exists per Meme type, so the
+ * launch of the vault's Meme type is the vault's launch.
  */
-function linkMigratedLaunch(
+function linkVaultLaunch(
   state: MigratorEventProjection,
   launchpad: LaunchpadEventProjection,
-  payload: Extract<DecodedLaunchpadEvent, { kind: "Migrated" }>["payload"],
+  payload: Extract<DecodedMigratorEvent, { kind: "VaultCreated" }>["payload"],
 ): MigratorEventProjection {
-  const launch = launchpad.launches[payload.launch_id];
-  if (!launch) return state;
-  const vault = Object.values(state.vaults).find(
+  const launch = Object.values(launchpad.launches).find(
     (candidate) =>
-      candidate.memeType === launch.memeType &&
-      candidate.quoteType === launch.quoteType,
+      candidate.memeType === payload.meme &&
+      candidate.quoteType === payload.quote,
   );
-  if (!vault) return state;
-  return updateVault(state, vault.vaultId, (current) => ({
+  if (!launch) return state;
+  return updateVault(state, payload.vault_id, (current) => ({
     ...current,
-    launchId: payload.launch_id,
-    protocolMemeResidual: payload.residual_meme,
-    protocolQuoteResidual: payload.residual_quote,
+    launchId: launch.launchId,
   }));
 }
 

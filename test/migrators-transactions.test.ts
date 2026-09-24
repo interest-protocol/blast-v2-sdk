@@ -48,14 +48,10 @@ const lpFeeSplit = {
 const settings = {
   graduationTarget: 3_000n,
   allocationPlan: {
-    channels: [
-      { channelId: 1n, role: "Liquidity" as const, destination: "0xa" },
-    ],
-    meme: [
-      { channelId: 0n, bps: 8_000n },
-      { channelId: 1n, bps: 2_000n },
-    ],
-    quote: [{ channelId: 1n, bps: 10_000n }],
+    curveMemeBps: 8_000n,
+    lpMemeBps: 1_900n,
+    lpQuoteBps: 9_900n,
+    recipients: [],
   },
   lpFeeSplit,
 };
@@ -85,7 +81,7 @@ test("starts, configures, finalizes, and shares a Cetus launch in one PTB", () =
     "launch::set_allocation_plan",
     "launch::set_lp_fee_split",
     "launch::finalize",
-    "launch::pre_share_buy",
+    "launch::buy",
     "launch::share",
   ]);
   const start = moveCall(tx, "cetus::new");

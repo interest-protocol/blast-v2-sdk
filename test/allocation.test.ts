@@ -4,35 +4,31 @@ import test from "node:test";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 import type { AllocationPlan, FeeSplit } from "../src/launchpad/allocation.ts";
 import {
+  addProtocolAllocation,
   allocationPlanBcs,
   apportionFeeSplit,
   apportionMeme,
   apportionQuote,
   feeSplitBcs,
-  liquidityChannelId,
   normalizeAllocationPlan,
   normalizeFeeSplit,
   previewFeeCollection,
+  requireCompletePlan,
 } from "../src/launchpad/allocation.ts";
 
 const U64_MAX = (1n << 64n) - 1n;
 
-/** Mirrors `graduation_tests::plan`: Liquidity is channel 2, Protocol channel 1. */
+/** A finalized plan: Blast first with `protocol` of both assets, then the pool. */
 function plan(protocol: bigint, liquidity: bigint): AllocationPlan {
-  const channels: AllocationPlan["channels"] = [
-    { channelId: 2n, role: "Liquidity", destination: "0x2" },
-  ];
-  const meme = [
-    { channelId: 0n, bps: 10_000n - protocol - liquidity },
-    { channelId: 2n, bps: liquidity },
-  ];
-  const quote = [{ channelId: 2n, bps: 10_000n - protocol }];
-  if (protocol > 0n) {
-    channels.push({ channelId: 1n, role: "Protocol", destination: "0x1" });
-    meme.push({ channelId: 1n, bps: protocol });
-    quote.push({ channelId: 1n, bps: protocol });
-  }
-  return normalizeAllocationPlan({ channels, meme, quote });
+  return addProtocolAllocation(
+    {
+      curveMemeBps: 10_000n - protocol - liquidity,
+      lpMemeBps: liquidity,
+      lpQuoteBps: 10_000n - protocol,
+      recipients: [],
+    },
+    { destination: "0x1", memeBps: protocol, quoteBps: protocol },
+  );
 }
 
 function split(
@@ -44,33 +40,109 @@ function split(
   return normalizeFeeSplit({ creatorBps, autoLpBps, rewardsBps, recipients });
 }
 
-test("matches the Move graduation apportionment vectors", () => {
-  assert.deepEqual(apportionMeme(plan(500n, 2_000n), 1_000_000_000_000_000n), [
-    750_000_000_000_000n,
-    50_000_000_000_000n,
-    200_000_000_000_000n,
-  ]);
-  const protectedPlan = plan(2_000n, 4_000n);
-  assert.deepEqual(apportionMeme(protectedPlan, 1n), [0n, 1n, 0n]);
-  assert.deepEqual(apportionMeme(protectedPlan, 2n), [1n, 1n, 0n]);
-  assert.deepEqual(apportionMeme(protectedPlan, 3n), [1n, 1n, 1n]);
-  assert.deepEqual(apportionQuote(protectedPlan, 1n), [1n, 0n]);
-  assert.deepEqual(apportionMeme(plan(1_429n, 2_857n), 7n), [3n, 2n, 2n]);
-  assert.deepEqual(apportionMeme(plan(1_000n, 4_500n), 11n), [5n, 2n, 4n]);
-  assert.equal(liquidityChannelId(protectedPlan), 2n);
+test("rounds Blast's allocation up and the rest by largest remainder", () => {
+  assert.deepEqual(apportionMeme(plan(500n, 2_000n), 1_000_000_000_000_000n), {
+    curve: 750_000_000_000_000n,
+    lp: 200_000_000_000_000n,
+    recipients: [50_000_000_000_000n],
+  });
+  // Curve 4,000, pool 4,000, Blast 2,000: Blast takes its ceiling first.
+  const tied = plan(2_000n, 4_000n);
+  assert.deepEqual(apportionMeme(tied, 1n), {
+    curve: 0n,
+    lp: 0n,
+    recipients: [1n],
+  });
+  assert.deepEqual(apportionMeme(tied, 2n), {
+    curve: 1n,
+    lp: 0n,
+    recipients: [1n],
+  });
+  assert.deepEqual(apportionMeme(tied, 3n), {
+    curve: 1n,
+    lp: 1n,
+    recipients: [1n],
+  });
+  assert.deepEqual(apportionQuote(tied, 1n), { lp: 0n, recipients: [1n] });
+  // 7 over 5,714 / 2,857 / 1,429: Blast ceil(1.0003) = 2, floors 3 and 1,
+  // and the leftover atom goes to the pool's 9,999 remainder.
+  assert.deepEqual(apportionMeme(plan(1_429n, 2_857n), 7n), {
+    curve: 3n,
+    lp: 2n,
+    recipients: [2n],
+  });
+  // Later recipients are not rounded up.
+  const shared = addProtocolAllocation(
+    {
+      curveMemeBps: 5_000n,
+      lpMemeBps: 4_000n,
+      lpQuoteBps: 9_000n,
+      recipients: [{ destination: "0xc", memeBps: 500n, quoteBps: 500n }],
+    },
+    { destination: "0xb", memeBps: 500n, quoteBps: 500n },
+  );
+  assert.deepEqual(apportionQuote(shared, 1n), {
+    lp: 0n,
+    recipients: [1n, 0n],
+  });
+  assert.deepEqual(apportionQuote(shared, 3n), {
+    lp: 2n,
+    recipients: [1n, 0n],
+  });
 });
 
 test("conserves both assets at the u64 maximum", () => {
   const maximum = plan(1_000n, 8_999n);
-  for (const amounts of [
-    apportionMeme(maximum, U64_MAX),
-    apportionQuote(maximum, U64_MAX),
-  ]) {
-    assert.equal(
-      amounts.reduce((sum, amount) => sum + amount, 0n),
-      U64_MAX,
-    );
-  }
+  const meme = apportionMeme(maximum, U64_MAX);
+  const quote = apportionQuote(maximum, U64_MAX);
+  assert.equal(
+    meme.recipients.reduce((sum, amount) => sum + amount, meme.curve + meme.lp),
+    U64_MAX,
+  );
+  assert.equal(
+    quote.recipients.reduce((sum, amount) => sum + amount, quote.lp),
+    U64_MAX,
+  );
+});
+
+test("adds Blast first and checks both sums like allocation::add_protocol", () => {
+  const creator = normalizeAllocationPlan({
+    curveMemeBps: 7_000n,
+    lpMemeBps: 2_000n,
+    lpQuoteBps: 9_000n,
+    recipients: [{ destination: "0xc", memeBps: 500n, quoteBps: 0n }],
+  });
+  const complete = addProtocolAllocation(creator, {
+    destination: "0xb",
+    memeBps: 500n,
+    quoteBps: 1_000n,
+  });
+  assert.deepEqual(
+    complete.recipients.map(({ destination }) => destination),
+    [normalizeSuiAddress("0xb"), normalizeSuiAddress("0xc")],
+  );
+  assert.deepEqual(requireCompletePlan(complete), complete);
+  assert.throws(
+    () =>
+      addProtocolAllocation(creator, {
+        destination: "0xb",
+        memeBps: 500n,
+        quoteBps: 500n,
+      }),
+    /sum to 10,000/,
+  );
+  assert.throws(
+    () =>
+      normalizeAllocationPlan({
+        ...creator,
+        recipients: Array.from({ length: 16 }, (_, index) => ({
+          destination: `0x${(index + 1).toString(16)}`,
+          memeBps: 0n,
+          quoteBps: 0n,
+        })),
+      }),
+    /at most fifteen/,
+  );
 });
 
 test("matches the Move fee-split apportionment vectors", () => {
@@ -90,8 +162,8 @@ test("matches the Move fee-split apportionment vectors", () => {
     { destination: "0x3", bps: 1_000n },
     { destination: "0x9", bps: 3_000n },
   ]);
-  assert.deepEqual(apportionFeeSplit(routes, 3n).recipients, [0n, 2n, 1n]);
-  assert.deepEqual(apportionFeeSplit(routes, 10n).recipients, [1n, 6n, 3n]);
+  assert.deepEqual(apportionFeeSplit(routes, 3n).recipients, [2n, 0n, 1n]);
+  assert.deepEqual(apportionFeeSplit(routes, 10n).recipients, [6n, 1n, 3n]);
 });
 
 test("previews one collection with Blast's share rounded up", () => {
@@ -110,46 +182,38 @@ test("previews one collection with Blast's share rounded up", () => {
   assert.equal(preview.protocolQuote, 0n);
 });
 
-test("canonicalizes like the Move constructors and round-trips BCS", () => {
+test("keeps recipient order like the Move constructors and round-trips BCS", () => {
   const unordered = normalizeFeeSplit({
     creatorBps: 5_000n,
     autoLpBps: 0n,
     rewardsBps: 0n,
     recipients: [
       { destination: "0xb", bps: 2_500n },
-      { destination: "0xa", bps: 2_500n },
+      { destination: "0xa", bps: 0n },
+      { destination: "0xc", bps: 2_500n },
     ],
   });
   assert.deepEqual(
     unordered.recipients.map(({ destination }) => destination),
-    [normalizeSuiAddress("0xa"), normalizeSuiAddress("0xb")],
+    [
+      normalizeSuiAddress("0xb"),
+      normalizeSuiAddress("0xa"),
+      normalizeSuiAddress("0xc"),
+    ],
   );
   assert.deepEqual(
     feeSplitBcs.parse(feeSplitBcs.serialize(unordered).toBytes()),
     unordered,
   );
-  const reversed = normalizeAllocationPlan({
-    channels: [...plan(500n, 2_000n).channels].reverse(),
-    meme: [...plan(500n, 2_000n).meme].reverse(),
-    quote: [...plan(500n, 2_000n).quote].reverse(),
-  });
-  assert.deepEqual(reversed, plan(500n, 2_000n));
+  const complete = plan(500n, 2_000n);
   assert.deepEqual(
-    allocationPlanBcs.parse(allocationPlanBcs.serialize(reversed).toBytes()),
-    reversed,
+    allocationPlanBcs.parse(allocationPlanBcs.serialize(complete).toBytes()),
+    complete,
   );
 });
 
 test("rejects plans and splits the Move constructors abort on", () => {
   assert.throws(() => split(2_500n, 2_500n, 2_500n), /sum to 10,000/);
-  assert.throws(
-    () =>
-      split(0n, 0n, 0n, [
-        { destination: "0xa", bps: 5_000n },
-        { destination: "0xa", bps: 5_000n },
-      ]),
-    /distinct/,
-  );
   assert.throws(
     () =>
       split(
@@ -165,23 +229,34 @@ test("rejects plans and splits the Move constructors abort on", () => {
   );
   assert.throws(
     () =>
-      normalizeAllocationPlan({
-        channels: [{ channelId: 1n, role: "External", destination: "0x1" }],
-        meme: [
-          { channelId: 0n, bps: 9_000n },
-          { channelId: 1n, bps: 1_000n },
-        ],
-        quote: [{ channelId: 1n, bps: 10_000n }],
-      }),
-    /exactly one Liquidity channel/,
+      split(0n, 0n, 0n, [
+        { destination: "0xa", bps: 5_000n },
+        { destination: "0xa", bps: 5_000n },
+      ]),
+    /distinct/,
+  );
+  assert.throws(
+    () => split(0n, 0n, 0n, [{ destination: "0x0", bps: 10_000n }]),
+    /nonzero Sui address/,
   );
   assert.throws(
     () =>
       normalizeAllocationPlan({
-        channels: [{ channelId: 2n, role: "Liquidity", destination: "0x2" }],
-        meme: [{ channelId: 2n, bps: 10_000n }],
-        quote: [{ channelId: 2n, bps: 10_000n }],
+        curveMemeBps: 0n,
+        lpMemeBps: 10_000n,
+        lpQuoteBps: 10_000n,
+        recipients: [],
       }),
-    /positive curve weight/,
+    /positive shares/,
+  );
+  assert.throws(
+    () =>
+      normalizeAllocationPlan({
+        curveMemeBps: 5_000n,
+        lpMemeBps: 5_000n,
+        lpQuoteBps: 10_000n,
+        recipients: [{ destination: "0x0", memeBps: 0n, quoteBps: 0n }],
+      }),
+    /nonzero Sui address/,
   );
 });

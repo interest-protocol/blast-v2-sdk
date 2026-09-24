@@ -2,15 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AllocationPlan } from "../src/launchpad/allocation.ts";
+import { addProtocolAllocation } from "../src/launchpad/allocation.ts";
 import { deriveLaunchEconomics } from "../src/launchpad/economics.ts";
 
 const liquidityOnly = (curveBps: bigint): AllocationPlan => ({
-  channels: [{ channelId: 1n, role: "Liquidity", destination: "0xa" }],
-  meme: [
-    { channelId: 0n, bps: curveBps },
-    { channelId: 1n, bps: 10_000n - curveBps },
-  ],
-  quote: [{ channelId: 1n, bps: 10_000n }],
+  curveMemeBps: curveBps,
+  lpMemeBps: 10_000n - curveBps,
+  lpQuoteBps: 10_000n,
+  recipients: [],
 });
 
 test("derives the complete worked SUI outcome", () => {
@@ -35,28 +34,22 @@ test("derives the complete worked SUI outcome", () => {
   );
 });
 
-test("pays the Protocol channel its ceiling before the liquidity handoff", () => {
+test("pays Blast its ceiling before the liquidity handoff", () => {
   const economics = deriveLaunchEconomics({
     atomicSupply: 1_000_000_000_000_000_000n,
-    allocationPlan: {
-      channels: [
-        { channelId: 1n, role: "Liquidity", destination: "0xa" },
-        { channelId: 2n, role: "Protocol", destination: "0xb" },
-      ],
-      meme: [
-        { channelId: 0n, bps: 8_000n },
-        { channelId: 1n, bps: 1_999n },
-        { channelId: 2n, bps: 1n },
-      ],
-      quote: [
-        { channelId: 1n, bps: 9_900n },
-        { channelId: 2n, bps: 100n },
-      ],
-    },
+    allocationPlan: addProtocolAllocation(
+      {
+        curveMemeBps: 8_000n,
+        lpMemeBps: 1_999n,
+        lpQuoteBps: 9_900n,
+        recipients: [],
+      },
+      { destination: "0xb", memeBps: 1n, quoteBps: 100n },
+    ),
     virtualQuote: 1_000_000_000_000n,
     graduationTarget: 3_000_000_000_001n,
   });
-  // Protocol Quote = ceil(3_000_000_000_001 * 100 / 10_000) = 30_000_000_001.
+  // Blast Quote = ceil(3_000_000_000_001 * 100 / 10_000) = 30_000_000_001.
   assert.equal(economics.allocatedQuote, 30_000_000_001n);
   assert.equal(economics.liquidityQuote, 2_970_000_000_000n);
   assert.equal(economics.liquidityMeme, 199_900_000_000_000_000n);

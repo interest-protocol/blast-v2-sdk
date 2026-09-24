@@ -1,24 +1,25 @@
-import type { AllocationPlan, FeeSplit } from "./allocation.ts";
-import { allocationAmountFor } from "./allocation.ts";
+import { BASIS_POINTS_DENOMINATOR } from "../lib/integers.ts";
+import type {
+  AllocationMemeAmounts,
+  AllocationPlan,
+  FeeSplit,
+} from "./allocation.ts";
+import { apportionMeme } from "./allocation.ts";
 import type { DecodedLaunchpadEvent, LaunchpadEventKind } from "./events.ts";
 import { launchpadEventId, launchpadEventSpecs } from "./events.ts";
 import type { LaunchProtection } from "./state.ts";
+import { memeAtomicSupply } from "./template.ts";
 
 export type LaunchMigrationProjection = {
-  /** Principal the venue took from the Liquidity channel's handoff. */
-  suppliedMeme: bigint;
-  suppliedQuote: bigint;
-  /** Handoff the venue returned, kept as protocol residuals in the LP vault. */
-  residualMeme: bigint;
-  residualQuote: bigint;
-  liquidity: bigint;
+  /** The pool's share, handed to the adapter. */
+  meme: bigint;
+  quote: bigint;
   disposedMeme: bigint;
   nativeSupplyBurned: boolean;
   totalSupplyAfter: bigint;
 };
 
 export type LaunchAllocationPayment = {
-  channelId: bigint;
   destination: string;
   meme: bigint;
   quote: bigint;
@@ -39,9 +40,10 @@ export type LaunchEventProjection = {
   poolTickSpacing: number;
   poolFeeRate: bigint;
   lpFeeSplit: FeeSplit;
+  /** The finalized plan, Blast's allocation first. */
   allocationPlan: AllocationPlan;
-  /** Meme apportioned at finalization, aligned with `allocationPlan.meme`. */
-  memeAmounts: bigint[];
+  /** Meme apportioned at finalization. */
+  memeAmounts: AllocationMemeAmounts;
   memeReserve: bigint;
   realQuoteReserve: bigint;
   pendingBurn: bigint;
@@ -55,10 +57,9 @@ export type LaunchEventProjection = {
   graduationTarget: bigint;
   quoteFeeBps: bigint;
   memeFeeBps: bigint;
-  protection: LaunchProtection | null;
+  protection: LaunchProtection;
   publicStartMs: bigint | null;
   protectionEndMs: bigint | null;
-  preShareBuyCompleted: boolean;
   migration: LaunchMigrationProjection | null;
   allocationPayments: LaunchAllocationPayment[];
   /** Live `CurveFeeCap`, from cap claims and reassignments. */
@@ -94,7 +95,8 @@ export type LaunchpadConfigProjection = {
     quoteFeeBps: bigint;
     memeFeeBps: bigint;
   } | null;
-  quotes: Readonly<Record<string, { virtualQuote: bigint }>>;
+  /** Admitted Quotes and the virtual reserve each starts from. */
+  virtualQuotes: Readonly<Record<string, bigint>>;
   migrationWitnesses: Readonly<Record<string, true>>;
   /**
    * Admitted Meme precisions. `LaunchConfig` starts with six and nine without
@@ -102,7 +104,6 @@ export type LaunchpadConfigProjection = {
    */
   memeDecimals: Readonly<Record<number, true>>;
   protocolAllocation: {
-    channelId: bigint;
     destination: string;
     memeBps: bigint;
     quoteBps: bigint;
@@ -144,7 +145,7 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
     config: {
       protocolFeeShareBps: null,
       tradeFeeDefaults: null,
-      quotes: {},
+      virtualQuotes: {},
       migrationWitnesses: {},
       memeDecimals: { 6: true, 9: true },
       protocolAllocation: null,
@@ -183,11 +184,17 @@ export function reduceLaunchpadEvent(
             ticketId: payload.ticket_id,
             memeType: payload.meme,
             decimals: payload.decimals,
-            atomicSupply: payload.atomic_supply,
+            atomicSupply: memeAtomicSupply(payload.decimals),
             metadataCapId: payload.metadata_cap_id,
             launcher: event.sender,
-            creatorAddress: payload.creator_address,
-            accountCommitment: payload.account_commitment,
+            creatorAddress:
+              payload.creator.kind === "address"
+                ? payload.creator.address
+                : null,
+            accountCommitment:
+              payload.creator.kind === "account"
+                ? payload.creator.accountCommitment
+                : null,
             burnable: payload.burnable,
             sellBurnBps: payload.sell_burn_bps,
           },
@@ -199,10 +206,9 @@ export function reduceLaunchpadEvent(
       const ticket = state.tickets[payload.ticket_id];
       if (!ticket)
         throw new Error(`unknown launch ticket ${payload.ticket_id}`);
-      const memeReserve = allocationAmountFor(
-        payload.allocation_plan.meme,
-        payload.meme_amounts,
-        0n,
+      const memeAmounts = apportionMeme(
+        payload.allocation_plan,
+        ticket.atomicSupply,
       );
       return {
         ...next,
@@ -217,18 +223,18 @@ export function reduceLaunchpadEvent(
             launcher: ticket.launcher,
             metadataCapId: ticket.metadataCapId,
             lifecycle: "Live",
-            decimals: payload.decimals,
-            atomicSupply: payload.atomic_supply,
+            decimals: ticket.decimals,
+            atomicSupply: ticket.atomicSupply,
             sellBurnBps: ticket.sellBurnBps,
             poolTickSpacing: payload.pool_tick_spacing,
             poolFeeRate: payload.pool_fee_rate,
             lpFeeSplit: payload.lp_fee_split,
             allocationPlan: payload.allocation_plan,
-            memeAmounts: payload.meme_amounts,
-            memeReserve,
+            memeAmounts,
+            memeReserve: memeAmounts.curve,
             realQuoteReserve: 0n,
             pendingBurn: 0n,
-            allocatedMeme: payload.atomic_supply - memeReserve,
+            allocatedMeme: ticket.atomicSupply - memeAmounts.curve,
             protocolMemeFees: 0n,
             creatorMemeFees: 0n,
             protocolQuoteFees: 0n,
@@ -237,10 +243,17 @@ export function reduceLaunchpadEvent(
             graduationTarget: payload.graduation_target,
             quoteFeeBps: payload.quote_fee_bps,
             memeFeeBps: payload.meme_fee_bps,
-            protection: null,
+            protection: {
+              windowMs: payload.protection_window_ms,
+              cumulativeAtomicLimit:
+                (ticket.atomicSupply * payload.cumulative_sender_bps) /
+                BASIS_POINTS_DENOMINATOR,
+              perTransactionAtomicLimit:
+                (ticket.atomicSupply * payload.per_transaction_bps) /
+                BASIS_POINTS_DENOMINATOR,
+            },
             publicStartMs: null,
             protectionEndMs: null,
-            preShareBuyCompleted: false,
             migration: null,
             allocationPayments: [],
             curveFeeCapId: null,
@@ -250,50 +263,24 @@ export function reduceLaunchpadEvent(
         },
       };
     }
-    case "ProtectionConfigured": {
-      const payload = event.payload;
-      return updateLaunch(next, payload.launch_id, (launch) => ({
-        ...launch,
-        protection: {
-          windowMs: payload.window_ms,
-          cumulativeSenderBps: payload.cumulative_sender_bps,
-          cumulativeAtomicLimit: payload.cumulative_atomic_limit,
-          perTransactionBps: payload.per_transaction_bps,
-          perTransactionAtomicLimit: payload.per_transaction_atomic_limit,
-        },
-      }));
-    }
     case "LaunchShared": {
       const payload = event.payload;
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
         publicStartMs: payload.public_start_ms,
-        protectionEndMs:
-          payload.public_start_ms + (launch.protection?.windowMs ?? 0n),
-        preShareBuyCompleted: payload.pre_share_buy_completed,
+        protectionEndMs: payload.public_start_ms + launch.protection.windowMs,
       }));
     }
-    case "Bought":
-    case "PreShareBought": {
+    case "Bought": {
       const payload = event.payload;
-      const memeReserve =
-        event.kind === "Bought"
-          ? event.payload.meme_reserve
-          : event.payload.post_meme_reserve;
-      const realQuoteReserve =
-        event.kind === "Bought"
-          ? event.payload.real_quote_reserve
-          : event.payload.post_real_quote_reserve;
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
         lifecycle:
-          realQuoteReserve >= launch.graduationTarget
+          payload.real_quote_reserve >= launch.graduationTarget
             ? "MigrationReady"
             : launch.lifecycle,
-        preShareBuyCompleted:
-          launch.preShareBuyCompleted || event.kind === "PreShareBought",
-        memeReserve,
-        realQuoteReserve,
+        memeReserve: payload.meme_reserve,
+        realQuoteReserve: payload.real_quote_reserve,
         ...accrueTradeFees(launch, payload),
       }));
     }
@@ -303,7 +290,7 @@ export function reduceLaunchpadEvent(
         ...launch,
         memeReserve: payload.meme_reserve,
         realQuoteReserve: payload.real_quote_reserve,
-        pendingBurn: payload.pending_burn_total,
+        pendingBurn: launch.pendingBurn + payload.pending_burn,
         ...accrueTradeFees(launch, payload),
       }));
     }
@@ -323,11 +310,12 @@ export function reduceLaunchpadEvent(
       const payload = event.payload;
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
+        lifecycle: "Migrated",
         allocatedMeme: launch.allocatedMeme - payload.meme,
+        realQuoteReserve: launch.realQuoteReserve - payload.quote,
         allocationPayments: [
           ...launch.allocationPayments,
           {
-            channelId: payload.channel_id,
             destination: payload.destination,
             meme: payload.meme,
             quote: payload.quote,
@@ -345,11 +333,8 @@ export function reduceLaunchpadEvent(
         pendingBurn: 0n,
         allocatedMeme: 0n,
         migration: {
-          suppliedMeme: payload.supplied_meme,
-          suppliedQuote: payload.supplied_quote,
-          residualMeme: payload.residual_meme,
-          residualQuote: payload.residual_quote,
-          liquidity: payload.liquidity,
+          meme: payload.meme,
+          quote: payload.quote,
           disposedMeme: payload.disposed_meme,
           nativeSupplyBurned: payload.native_supply_burned,
           totalSupplyAfter: payload.total_supply_after,
@@ -369,58 +354,49 @@ export function reduceLaunchpadEvent(
           memeFeeBps: event.payload.meme_fee_bps,
         },
       });
-    case "QuoteAllowed": {
-      const payload = event.payload;
+    case "QuoteSet": {
+      const { quote, virtual_quote } = event.payload;
       return updateConfig(next, {
         ...state.config,
-        quotes: {
-          ...state.config.quotes,
-          [payload.quote]: { virtualQuote: payload.virtual_quote },
-        },
+        virtualQuotes: withEntry(
+          state.config.virtualQuotes,
+          quote,
+          virtual_quote === 0n ? undefined : virtual_quote,
+        ),
       });
     }
-    case "QuoteDisallowed": {
-      const quotes = { ...state.config.quotes };
-      delete quotes[event.payload.pos0];
-      return updateConfig(next, { ...state.config, quotes });
-    }
-    case "MemeDecimalsAllowed":
+    case "MemeDecimalsSet": {
+      const { decimals, allowed } = event.payload;
       return updateConfig(next, {
         ...state.config,
-        memeDecimals: {
-          ...state.config.memeDecimals,
-          [event.payload.pos0]: true,
-        },
+        memeDecimals: withEntry(
+          state.config.memeDecimals,
+          decimals,
+          allowed || undefined,
+        ),
       });
-    case "MemeDecimalsDisallowed": {
-      const memeDecimals = { ...state.config.memeDecimals };
-      delete memeDecimals[event.payload.pos0];
-      return updateConfig(next, { ...state.config, memeDecimals });
     }
-    case "ProtocolAllocationConfigured": {
+    case "ProtocolAllocationSet": {
       const payload = event.payload;
       return updateConfig(next, {
         ...state.config,
         protocolAllocation: {
-          channelId: payload.channel_id,
           destination: payload.destination,
           memeBps: payload.meme_bps,
           quoteBps: payload.quote_bps,
         },
       });
     }
-    case "MigrationWitnessAllowed":
+    case "MigrationWitnessSet": {
+      const { migration_witness, allowed } = event.payload;
       return updateConfig(next, {
         ...state.config,
-        migrationWitnesses: {
-          ...state.config.migrationWitnesses,
-          [event.payload.pos0]: true,
-        },
+        migrationWitnesses: withEntry(
+          state.config.migrationWitnesses,
+          migration_witness,
+          allowed || undefined,
+        ),
       });
-    case "MigrationWitnessDisallowed": {
-      const migrationWitnesses = { ...state.config.migrationWitnesses };
-      delete migrationWitnesses[event.payload.pos0];
-      return updateConfig(next, { ...state.config, migrationWitnesses });
     }
     case "CreatorCapsClaimed": {
       const payload = event.payload;
@@ -470,32 +446,39 @@ export function reduceLaunchpadEvent(
     case "CreatorClaimSignerSet":
       return updateAdministration(next, {
         ...state.administration,
-        creatorClaimSignerPublicKey: event.payload.pos0,
-      });
-    case "CreatorClaimSignerRevoked":
-      return updateAdministration(next, {
-        ...state.administration,
-        creatorClaimSignerPublicKey: null,
+        creatorClaimSignerPublicKey:
+          event.payload.pos0.length === 0 ? null : event.payload.pos0,
       });
   }
 }
 
 function accrueTradeFees(
   launch: LaunchEventProjection,
-  deltas: {
-    protocol_meme_fee_delta: bigint;
-    creator_meme_fee_delta: bigint;
-    protocol_quote_fee_delta: bigint;
-    creator_quote_fee_delta: bigint;
+  fees: {
+    protocol_meme_fee: bigint;
+    creator_meme_fee: bigint;
+    protocol_quote_fee: bigint;
+    creator_quote_fee: bigint;
   },
 ) {
   return {
-    protocolMemeFees: launch.protocolMemeFees + deltas.protocol_meme_fee_delta,
-    creatorMemeFees: launch.creatorMemeFees + deltas.creator_meme_fee_delta,
-    protocolQuoteFees:
-      launch.protocolQuoteFees + deltas.protocol_quote_fee_delta,
-    creatorQuoteFees: launch.creatorQuoteFees + deltas.creator_quote_fee_delta,
+    protocolMemeFees: launch.protocolMemeFees + fees.protocol_meme_fee,
+    creatorMemeFees: launch.creatorMemeFees + fees.creator_meme_fee,
+    protocolQuoteFees: launch.protocolQuoteFees + fees.protocol_quote_fee,
+    creatorQuoteFees: launch.creatorQuoteFees + fees.creator_quote_fee,
   };
+}
+
+/** Copies `record` with `key` set to `value`, or removed when `value` is undefined. */
+function withEntry<Key extends string | number, Value>(
+  record: Readonly<Record<Key, Value>>,
+  key: Key,
+  value: Value | undefined,
+): Record<Key, Value> {
+  const copy = { ...record } as Record<Key, Value>;
+  if (value === undefined) delete copy[key];
+  else copy[key] = value;
+  return copy;
 }
 
 function updateLaunch(

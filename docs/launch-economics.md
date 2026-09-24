@@ -31,9 +31,9 @@ All inputs are integer atomic units:
 S = atomic Meme supply (one billion whole tokens at the Meme's decimals)
 V = virtual Quote reserve
 T = graduation target (real Quote reserve when trading closes)
-C = apportion_meme(plan, S)[curve channel 0]
-L = apportion_meme(plan, S)[Liquidity channel]
-N = apportion_quote(plan, T)[Liquidity channel]
+C = apportion_meme(plan, S).curve
+L = apportion_meme(plan, S).lp
+N = apportion_quote(plan, T).lp
 
 R = ceil(C * V / (V + T))
 B = C - R
@@ -44,10 +44,12 @@ DEX opening valuation    = floor(S * N       / L)
 ```
 
 `R` is terminal curve Meme, `B` is Meme released by the curve, `N` is Quote
-handed to the destination pool, and `T - N` is Quote paid to the plan's other
-channels. Apportionment gives the Protocol channel its ceiling, every other
-entry its floor, and the residue one atom each by descending remainder, ties by
-ascending channel ID; `allocation.ts` mirrors it exactly.
+handed to the destination pool, and `T - N` is Quote paid to the plan's
+recipients, Blast first. `plan` is the complete plan with Blast's allocation
+included. Apportionment gives Blast its ceiling, every other part its floor,
+and the residue one atom each by descending remainder, earlier parts first on
+ties (curve, pool, then recipients in plan order); `allocation.ts` mirrors it
+exactly.
 
 For a Meme/SUI launch, Quote values are MIST. UI formatting divides by SUI's
 decimal scale; no USD price or oracle is involved.

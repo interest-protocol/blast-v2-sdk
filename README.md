@@ -126,7 +126,7 @@ construction atomically:
 2. `set_graduation_target`, `set_allocation_plan`, `set_lp_fee_split`, and the
    optional `set_protection` record the creator's settings.
 3. `launch::finalize` checks every invariant and fixes the supply mode.
-4. An optional owned `pre_share_buy` runs before public opening.
+4. An optional unprotected `buy` runs on the owned launch before public opening.
 5. `launch::share` opens the launch; protection starts now.
 
 ```ts
@@ -141,20 +141,12 @@ const transaction = client.blastMigrators.tx.createCetusLaunch({
   cetusPools, // Cetus Pools, mutable
   tickSpacing: 200,
   graduationTarget: 3_000_000_000_000n,
+  // Blast's allocation (here 500 bps of each asset) is added at finalization.
   allocationPlan: {
-    channels: [
-      { channelId: 1n, role: "Liquidity", destination: lpDestination },
-      { channelId: 2n, role: "Protocol", destination: blastTreasury },
-    ],
-    meme: [
-      { channelId: 0n, bps: 7_500n }, // the curve
-      { channelId: 1n, bps: 2_000n },
-      { channelId: 2n, bps: 500n },
-    ],
-    quote: [
-      { channelId: 1n, bps: 9_500n },
-      { channelId: 2n, bps: 500n },
-    ],
+    curveMemeBps: 7_000n,
+    lpMemeBps: 2_000n,
+    lpQuoteBps: 9_000n,
+    recipients: [{ destination: teamWallet, memeBps: 500n, quoteBps: 500n }],
   },
   lpFeeSplit: {
     creatorBps: 5_000n,
@@ -172,11 +164,14 @@ const transaction = client.blastMigrators.tx.createCetusLaunch({
 ```
 
 `createBluefinLaunch` takes `tickSpacing` and `feeRate` instead of the Cetus
-objects. The SDK canonicalizes the allocation plan and fee split exactly as the
-Move constructors do and rejects shapes they abort on; the Blast protocol
-channel is checked against live `LaunchConfig` policy only on chain.
-`deriveLaunchEconomics`, `apportionMeme`, `apportionQuote`, and
-`apportionFeeSplit` mirror the contract's protected-first exact apportionment.
+objects. The SDK checks the allocation plan and fee split exactly as the Move
+constructors do and rejects shapes they abort on. The creator's plan excludes
+Blast: `launch::finalize` inserts the `LaunchConfig` protocol allocation as the
+first recipient and requires each asset to sum to 10,000 basis points;
+`addProtocolAllocation` previews that step. `deriveLaunchEconomics`,
+`apportionMeme`, `apportionQuote`, and `apportionFeeSplit` mirror the
+contract's exact apportionment: Blast's migration allocation rounds up, every
+other part goes by largest remainder.
 
 ## Migrators
 
@@ -341,7 +336,7 @@ cannot return the ticket to another command in the publish transaction.
 `tx` methods return complete transactions that route all returned coins or
 capabilities. `call` methods return transaction thunks for programmable
 composition; `LaunchpadCalls.completeLaunch` applies the settings, finalize,
-optional pre-share purchase, and share to any adapter's initializer.
+optional purchase before sharing, and share to any adapter's initializer.
 
 All protocol amounts use atomic units. Fee obligations round up to their
 recipient. Curve outputs and valuations round down, so the integer remainder

@@ -7,13 +7,14 @@ import { feeSplitBcs } from "../launchpad/allocation.ts";
 import { moveTypeNameBcs, suiObjectIdBcs } from "../lib/bcs.ts";
 import type { SuiEventPosition } from "../lib/events.ts";
 import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
-import { requireU64 } from "../lib/integers.ts";
+import { requireU64, requireU128 } from "../lib/integers.ts";
 
 type MigratorEventFieldDescriptor =
   | "id"
   | "typeName"
   | "address"
   | "u64"
+  | "u128"
   | "u32"
   | "bytes"
   | "u64Vector"
@@ -117,6 +118,9 @@ export const migratorEventSpecs = {
     venue: "typeName",
     meme: "typeName",
     quote: "typeName",
+    residual_meme: "u64",
+    residual_quote: "u64",
+    liquidity: "u128",
     fee_split: "feeSplit",
   },
 } as const satisfies Record<
@@ -131,6 +135,7 @@ type DescriptorOutputs = {
   typeName: string;
   address: string;
   u64: bigint;
+  u128: bigint;
   u32: number;
   bytes: Uint8Array;
   u64Vector: bigint[];
@@ -152,6 +157,10 @@ const U64Bcs = bcs.u64().transform({
   input: (value: bigint) => requireU64("event u64", value),
   output: (value) => BigInt(value),
 });
+const U128Bcs = bcs.u128().transform({
+  input: (value: bigint) => requireU128("event u128", value),
+  output: (value) => BigInt(value),
+});
 const BytesBcs = bcs.vector(bcs.u8()).transform({
   input: (value: Uint8Array) => Array.from(value),
   output: (value) => Uint8Array.from(value),
@@ -168,6 +177,7 @@ const MIGRATOR_EVENT_FIELD_BCS: Record<
   typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
   address: AddressBcs as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,
+  u128: U128Bcs as BcsType<unknown, unknown>,
   u32: bcs.u32() as BcsType<unknown, unknown>,
   bytes: BytesBcs as BcsType<unknown, unknown>,
   u64Vector: bcs.vector(U64Bcs) as BcsType<unknown, unknown>,

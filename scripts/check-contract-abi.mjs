@@ -32,6 +32,7 @@ const artifactDeclarations = [
       "contracts ADR 0085: name every explorer-visible type after Blast",
       "contracts ADR 0088: reusable launch accounting, allocation plans, protected public buys, and atomic migration",
       "contracts ADR 0089: start launches in the migration adapter and move every post-migration fee path into the migrators package",
+      "contracts ADR 0090: a minimal launchpad surface — trimmed getters, recipient allocation plans, merged config setters and events, renumbered errors, one migration call",
     ],
   },
   {
@@ -305,13 +306,6 @@ function classifyMigratorFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
   if (migratorBuilders.has(key)) return "builder";
   if (moduleName === "package_admin") return "intentional-admin-exclusion";
-  if (
-    moduleName === "package_version" ||
-    moduleName === "vault" ||
-    moduleName === "lp_fee_policy"
-  ) {
-    return "move-composition";
-  }
   throw new Error(`unclassified function blast_fun_migrators::${key}`);
 }
 
@@ -320,7 +314,6 @@ const launchpadBuilders = new Set([
   "launch::share",
   "launch::buy",
   "launch::sell",
-  "launch::pre_share_buy",
   "launch::set_graduation_target",
   "launch::set_allocation_plan",
   "launch::set_lp_fee_split",
@@ -333,12 +326,8 @@ const launchpadBuilders = new Set([
   "launch::set_icon_url",
 ]);
 const launchpadCompositional = new Set([
-  "allocation::new",
-  "allocation::channel",
-  "allocation::weight",
-  "allocation::liquidity_role",
-  "allocation::protocol_role",
-  "allocation::external_role",
+  "allocation::recipient",
+  "allocation::plan",
   "allocation::route",
   "allocation::fee_split",
   "bps::new",
@@ -346,8 +335,7 @@ const launchpadCompositional = new Set([
 const launchpadAdapterComposition = new Set([
   "launch::new",
   "launch::treasury_cap_mut",
-  "launch::begin_migration",
-  "launch::complete_migration",
+  "launch::migrate",
 ]);
 
 function classifyLaunchpadFunction(packageName, moduleName, functionName) {
@@ -368,10 +356,9 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
   throw new Error(`unclassified function ${packageName}::${key}`);
 }
 
-/** Getters, witness-bound fee-ledger internals, and exact math the SDK mirrors off chain. */
+/** Getters and exact math the SDK mirrors off chain. */
 function isLaunchpadMoveComposition(moduleName, functionName) {
   return (
-    moduleName === "fees" ||
     moduleName === "bps" ||
     moduleName === "allocation" ||
     moduleName === "launch" ||

@@ -35,7 +35,12 @@ const feeSplit = {
   rewardsBps: 0n,
   recipients: [],
 };
-const plan = { channels: [], meme: [], quote: [] };
+const plan = {
+  curveMemeBps: 0n,
+  lpMemeBps: 0n,
+  lpQuoteBps: 0n,
+  recipients: [],
+};
 
 /**
  * A BCS struct reads its fields in declaration order, so the keys of a parsed
@@ -108,13 +113,9 @@ function launch() {
   return {
     id: uid("0x1"),
     lifecycle: { Live: true },
-    public_start_ms: null,
     protection_end_ms: null,
-    pre_share_buy_completed: false,
     protection_window_ms: 0n,
-    cumulative_sender_bps: 0n,
     cumulative_atomic_limit: 0n,
-    per_transaction_bps: 0n,
     per_transaction_atomic_limit: 0n,
     sell_burn_bps: 0n,
     virtual_quote: 0n,
@@ -138,7 +139,7 @@ function launch() {
       creator_quote: balance,
     },
     metadata_cap: { id: uid("0x2") },
-    creator_authority: null,
+    creator: null,
     curve_fee_cap_id: null,
     blast_metadata_cap_id: null,
   };

@@ -20,11 +20,7 @@ import {
 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import { normalizeSharedObjectReference } from "../lib/sui.ts";
-import type {
-  AllocationChannelRole,
-  AllocationPlan,
-  FeeSplit,
-} from "./allocation.ts";
+import type { AllocationPlan, FeeSplit } from "./allocation.ts";
 import { normalizeAllocationPlan, normalizeFeeSplit } from "./allocation.ts";
 import type { MemeTemplateOptions } from "./template.ts";
 import { buildMemePackageBytecode } from "./template.ts";
@@ -91,12 +87,6 @@ export type LaunchInitializerInput = LaunchTypes & {
   initializer: TransactionArgument;
 };
 
-const CHANNEL_ROLE_CONSTRUCTORS: Record<AllocationChannelRole, string> = {
-  Liquidity: "liquidity_role",
-  Protocol: "protocol_role",
-  External: "external_role",
-};
-
 export class LaunchpadCalls {
   readonly deployment: NormalizedDeployment;
 
@@ -114,51 +104,39 @@ export class LaunchpadCalls {
       });
   }
 
-  /** Builds a canonical `allocation::AllocationPlan` through its constructors. */
+  /**
+   * Builds the creator's `allocation::AllocationPlan` (Blast excluded) through
+   * `allocation::recipient` and `allocation::plan`.
+   */
   allocationPlan(plan: AllocationPlan) {
     const normalized = normalizeAllocationPlan(plan);
-    const original = this.deployment.originalPackageId;
     return (tx: Transaction): TransactionResult => {
-      const channels = tx.makeMoveVec({
-        type: `${original}::allocation::Channel`,
-        elements: normalized.channels.map((channel) =>
+      const recipients = tx.makeMoveVec({
+        type: `${this.deployment.originalPackageId}::allocation::Recipient`,
+        elements: normalized.recipients.map((recipient) =>
           tx.moveCall({
-            target: `${this.deployment.packageId}::allocation::channel`,
+            target: `${this.deployment.packageId}::allocation::recipient`,
             arguments: [
-              tx.pure.u64(channel.channelId),
-              tx.moveCall({
-                target: `${this.deployment.packageId}::allocation::${CHANNEL_ROLE_CONSTRUCTORS[channel.role]}`,
-              }),
-              tx.pure.address(channel.destination),
+              tx.pure.address(recipient.destination),
+              tx.add(this.bps(recipient.memeBps)),
+              tx.add(this.bps(recipient.quoteBps)),
             ],
           }),
         ),
       });
-      const weights = (table: AllocationPlan["meme"]) =>
-        tx.makeMoveVec({
-          type: `${original}::allocation::Weight`,
-          elements: table.map((weight) =>
-            tx.moveCall({
-              target: `${this.deployment.packageId}::allocation::weight`,
-              arguments: [
-                tx.pure.u64(weight.channelId),
-                tx.add(this.bps(weight.bps)),
-              ],
-            }),
-          ),
-        });
       return tx.moveCall({
-        target: `${this.deployment.packageId}::allocation::new`,
+        target: `${this.deployment.packageId}::allocation::plan`,
         arguments: [
-          channels,
-          weights(normalized.meme),
-          weights(normalized.quote),
+          tx.add(this.bps(normalized.curveMemeBps)),
+          tx.add(this.bps(normalized.lpMemeBps)),
+          tx.add(this.bps(normalized.lpQuoteBps)),
+          recipients,
         ],
       });
     };
   }
 
-  /** Builds a canonical `allocation::FeeSplit` through its constructors. */
+  /** Builds an `allocation::FeeSplit` through `allocation::route` and `allocation::fee_split`. */
   feeSplit(split: FeeSplit) {
     const normalized = normalizeFeeSplit(split);
     return (tx: Transaction): TransactionResult => {
@@ -240,30 +218,6 @@ export class LaunchpadCalls {
       });
   }
 
-  /** The one owned purchase before public opening; it cannot reach the target. */
-  preShareBuy(
-    options: LaunchTypes & {
-      launch: TransactionArgument;
-      quoteCoin: TransactionObjectInput;
-      minMemeOut: bigint;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    requireU64("minMemeOut", options.minMemeOut);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::pre_share_buy`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          options.launch,
-          this.#packageVersion(tx),
-          this.#runtimeConfig(tx),
-          tx.object(options.quoteCoin),
-          tx.pure.u64(options.minMemeOut),
-        ],
-      });
-  }
-
   /** Shares the finalized launch; public time and protection start now. */
   shareLaunch(options: LaunchTypes & { launch: TransactionArgument }) {
     const types = normalizeLaunchTypes(options);
@@ -271,19 +225,17 @@ export class LaunchpadCalls {
       tx.moveCall({
         target: `${this.deployment.packageId}::launch::share`,
         typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          options.launch,
-          this.#packageVersion(tx),
-          tx.object.clock(),
-        ],
+        arguments: [options.launch, tx.object.clock()],
       });
     };
   }
 
   /**
    * Applies the creator's settings to an adapter-started initializer, finalizes
-   * it, runs the optional pre-share purchase, and shares the launch. Returns the
-   * pre-share purchase's `(Coin<Meme>, Coin<Quote>)` result, if any.
+   * it, runs the optional purchase on the owned launch, and shares the launch.
+   * Returns that purchase's `(Coin<Meme>, Coin<Quote>)` result, if any. The
+   * purchase is unprotected and may reach the graduation target, which makes the
+   * launch migration-ready before it is shared.
    */
   completeLaunch(
     options: LaunchInitializerInput &
@@ -305,7 +257,7 @@ export class LaunchpadCalls {
       const launch = tx.add(this.finalizeLaunch(options));
       const bought = options.preShareBuy
         ? tx.add(
-            this.preShareBuy({ ...options, ...options.preShareBuy, launch }),
+            this.#buyCall({ ...options, ...options.preShareBuy }, () => launch),
           )
         : undefined;
       tx.add(this.shareLaunch({ ...options, launch }));
@@ -320,21 +272,9 @@ export class LaunchpadCalls {
       minMemeOut: bigint;
     },
   ) {
-    const types = normalizeLaunchTypes(options);
-    requireU64("minMemeOut", options.minMemeOut);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::buy`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          this.#packageVersion(tx),
-          this.#runtimeConfig(tx),
-          tx.object(options.quoteCoin),
-          tx.pure.u64(options.minMemeOut),
-          tx.object.clock(),
-        ],
-      });
+    return this.#buyCall(options, (tx) =>
+      sharedObject(tx, "launch", options.launch, true),
+    );
   }
 
   sell(
@@ -460,6 +400,30 @@ export class LaunchpadCalls {
           sharedObject(tx, "launch", options.launch, true),
           this.#packageVersion(tx),
           tx.object(options.adminWitness),
+        ],
+      });
+  }
+
+  #buyCall(
+    options: LaunchTypes & {
+      quoteCoin: TransactionObjectInput;
+      minMemeOut: bigint;
+    },
+    launch: (tx: Transaction) => TransactionArgument,
+  ) {
+    const types = normalizeLaunchTypes(options);
+    requireU64("minMemeOut", options.minMemeOut);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::buy`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          launch(tx),
+          this.#packageVersion(tx),
+          this.#runtimeConfig(tx),
+          tx.object(options.quoteCoin),
+          tx.pure.u64(options.minMemeOut),
+          tx.object.clock(),
         ],
       });
   }
@@ -709,7 +673,8 @@ export class LaunchpadTransactions {
 
 /**
  * Completes an adapter-started launch in `tx`: applies the settings, finalizes,
- * runs the optional pre-share purchase and routes its coins, then shares.
+ * runs the optional purchase on the owned launch and routes its coins, then
+ * shares.
  */
 export function addLaunchCompletion(
   tx: Transaction,

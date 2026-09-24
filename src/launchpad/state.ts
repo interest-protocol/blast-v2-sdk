@@ -23,15 +23,12 @@ import type { SharedObjectReference } from "./transactions.ts";
 const LifecycleBcs = bcs.enum("Lifecycle", {
   Live: null,
   MigrationReady: null,
-  Migrating: null,
   Migrated: null,
 });
-const CreatorRecipientBcs = bcs.enum("CreatorRecipient", {
+/** BCS layout of `blast_fun::creator_authority::CreatorRecipient`. */
+export const creatorRecipientBcs = bcs.enum("CreatorRecipient", {
   Address: bcs.Address,
   Account: bcs.vector(bcs.u8()),
-});
-const CreatorAuthorityBcs = bcs.struct("CreatorAuthority", {
-  recipient: CreatorRecipientBcs,
 });
 const MetadataCapBcs = bcs.struct("MetadataCap", { id: suiUidBcs });
 const FeeLedgerBcs = bcs.struct("FeeLedger", {
@@ -45,13 +42,9 @@ const FeeLedgerBcs = bcs.struct("FeeLedger", {
 export const launchBcs = bcs.struct("Launch", {
   id: suiUidBcs,
   lifecycle: LifecycleBcs,
-  public_start_ms: bcs.option(bcs.u64()),
   protection_end_ms: bcs.option(bcs.u64()),
-  pre_share_buy_completed: bcs.bool(),
   protection_window_ms: bcs.u64(),
-  cumulative_sender_bps: bpsBcs,
   cumulative_atomic_limit: bcs.u64(),
-  per_transaction_bps: bpsBcs,
   per_transaction_atomic_limit: bcs.u64(),
   sell_burn_bps: bpsBcs,
   virtual_quote: bcs.u64(),
@@ -70,29 +63,26 @@ export const launchBcs = bcs.struct("Launch", {
   allocated_meme: suiBalanceBcs,
   fee_ledger: FeeLedgerBcs,
   metadata_cap: MetadataCapBcs,
-  creator_authority: bcs.option(CreatorAuthorityBcs),
+  creator: bcs.option(creatorRecipientBcs),
   curve_fee_cap_id: bcs.option(suiIdBcs),
   blast_metadata_cap_id: bcs.option(suiIdBcs),
 });
 
-/** `Migrating` exists only inside a migration transaction; reads never observe it. */
-export type LaunchLifecycle =
-  | "Live"
-  | "MigrationReady"
-  | "Migrating"
-  | "Migrated";
+export type LaunchLifecycle = "Live" | "MigrationReady" | "Migrated";
 
 export type CreatorRecipient =
   | { kind: "address"; address: string }
   | { kind: "account"; accountCommitment: Uint8Array }
   | null;
 
-/** Public curve-purchase protection, fixed at launch finalization. */
+/**
+ * Public curve-purchase protection, fixed at launch finalization. The atomic
+ * limits are the rates applied to the supply, rounded down; a zero
+ * per-transaction limit skips that check.
+ */
 export type LaunchProtection = {
   windowMs: bigint;
-  cumulativeSenderBps: bigint;
   cumulativeAtomicLimit: bigint;
-  perTransactionBps: bigint;
   perTransactionAtomicLimit: bigint;
 };
 
@@ -101,11 +91,11 @@ export type LaunchState = CurveState &
     memeType: string;
     quoteType: string;
     lifecycle: LaunchLifecycle;
-    /** Public opening time; null only before the key-only launch is shared. */
-    publicStartMs: bigint | null;
-    /** First millisecond public purchases are no longer protected. */
+    /**
+     * First millisecond public purchases are no longer protected; null only
+     * before the key-only launch is shared.
+     */
     protectionEndMs: bigint | null;
-    preShareBuyCompleted: boolean;
     protection: LaunchProtection;
     sellBurnBps: bigint;
     migrationWitnessType: string;
@@ -117,7 +107,7 @@ export type LaunchState = CurveState &
     atomicSupply: bigint;
     pendingBurn: bigint;
     allocationPlan: AllocationPlan;
-    /** Pooled non-curve Meme allocations paid out when migration completes. */
+    /** Pooled non-curve Meme allocations paid out when migration begins. */
     allocatedMeme: bigint;
     protocolMemeTradeFees: bigint;
     creatorMemeTradeFees: bigint;
@@ -176,14 +166,10 @@ export function decodeLaunchObject(
     memeType: normalizeTypeParameter(tag.typeParams[0]),
     quoteType: normalizeTypeParameter(tag.typeParams[1]),
     lifecycle: parsed.lifecycle.$kind,
-    publicStartMs: optionalBigInt(parsed.public_start_ms),
     protectionEndMs: optionalBigInt(parsed.protection_end_ms),
-    preShareBuyCompleted: parsed.pre_share_buy_completed,
     protection: {
       windowMs: BigInt(parsed.protection_window_ms),
-      cumulativeSenderBps: parsed.cumulative_sender_bps,
       cumulativeAtomicLimit: BigInt(parsed.cumulative_atomic_limit),
-      perTransactionBps: parsed.per_transaction_bps,
       perTransactionAtomicLimit: BigInt(parsed.per_transaction_atomic_limit),
     },
     sellBurnBps: parsed.sell_burn_bps,
@@ -206,7 +192,7 @@ export function decodeLaunchObject(
     protocolQuoteTradeFees: BigInt(parsed.fee_ledger.protocol_quote.value),
     creatorQuoteTradeFees: BigInt(parsed.fee_ledger.creator_quote.value),
     metadataCapId: normalizeSuiObjectId(parsed.metadata_cap.id.id.bytes),
-    creatorRecipient: decodeCreatorRecipient(parsed.creator_authority),
+    creatorRecipient: decodeCreatorRecipient(parsed.creator),
     curveFeeCapId: optionalId(parsed.curve_fee_cap_id),
     blastMetadataCapId: optionalId(parsed.blast_metadata_cap_id),
   };
@@ -241,7 +227,8 @@ export async function getLaunch(
 
 /**
  * Reads the gross Meme `sender` bought from the curve while the launch was
- * protected (`launch::protected_purchases`); zero before the first purchase.
+ * protected (the `launch::ProtectedPurchasesKey` dynamic field); zero before
+ * the first protected purchase.
  */
 export async function getProtectedPurchases(
   client: ClientWithCoreApi,
@@ -264,19 +251,17 @@ export async function getProtectedPurchases(
   }
 }
 
-function decodeCreatorRecipient(
-  authority: ReturnType<typeof launchBcs.parse>["creator_authority"],
+/** Decodes a `creator_authority::CreatorRecipient`; null once claimed or reassigned. */
+export function decodeCreatorRecipient(
+  recipient: ReturnType<typeof creatorRecipientBcs.parse> | null,
 ): CreatorRecipient {
-  if (!authority) return null;
-  if (authority.recipient.$kind === "Address") {
-    return {
-      kind: "address",
-      address: normalizeSuiAddress(authority.recipient.Address),
-    };
+  if (!recipient) return null;
+  if (recipient.$kind === "Address") {
+    return { kind: "address", address: normalizeSuiAddress(recipient.Address) };
   }
   return {
     kind: "account",
-    accountCommitment: Uint8Array.from(authority.recipient.Account),
+    accountCommitment: Uint8Array.from(recipient.Account),
   };
 }
 

@@ -17,7 +17,8 @@
       "contracts ADR 0080: make creator recipients provider-independent",
       "contracts ADR 0085: name every explorer-visible type after Blast",
       "contracts ADR 0088: reusable launch accounting, allocation plans, protected public buys, and atomic migration",
-      "contracts ADR 0089: start launches in the migration adapter and move every post-migration fee path into the migrators package"
+      "contracts ADR 0089: start launches in the migration adapter and move every post-migration fee path into the migrators package",
+      "contracts ADR 0090: a minimal launchpad surface — trimmed getters, recipient allocation plans, merged config setters and events, renumbered errors, one migration call"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -60,237 +61,6 @@
               ]
             },
             {
-              "name": "auto_lp_bps",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "FeeSplit",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
-              "name": "channel",
-              "sdk": "compositional",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                "u64",
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "allocation"
-                    },
-                    "name": "ChannelRole",
-                    "type_arguments": []
-                  }
-                },
-                "address"
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "allocation"
-                    },
-                    "name": "Channel",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
-              "name": "channel_destination",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "Channel",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "address"
-              ]
-            },
-            {
-              "name": "channel_id",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "Channel",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "channel_role",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "Channel",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "allocation"
-                    },
-                    "name": "ChannelRole",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
-              "name": "channels",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "AllocationPlan",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "vector": {
-                        "Datatype": {
-                          "module": {
-                            "address": "blast_fun",
-                            "name": "allocation"
-                          },
-                          "name": "Channel",
-                          "type_arguments": []
-                        }
-                      }
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "name": "creator_bps",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "FeeSplit",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
               "name": "destination",
               "sdk": "move-composition",
               "entry": false,
@@ -314,25 +84,6 @@
               ],
               "returns": [
                 "address"
-              ]
-            },
-            {
-              "name": "external_role",
-              "sdk": "compositional",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "allocation"
-                    },
-                    "name": "ChannelRole",
-                    "type_arguments": []
-                  }
-                }
               ]
             },
             {
@@ -398,108 +149,39 @@
               ]
             },
             {
-              "name": "liquidity_channel_id",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "AllocationPlan",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "liquidity_role",
+              "name": "plan",
               "sdk": "compositional",
               "entry": false,
               "typeParameters": [],
-              "parameters": [],
-              "returns": [
+              "parameters": [
                 {
                   "Datatype": {
                     "module": {
                       "address": "blast_fun",
-                      "name": "allocation"
+                      "name": "bps"
                     },
-                    "name": "ChannelRole",
+                    "name": "Bps",
                     "type_arguments": []
                   }
-                }
-              ]
-            },
-            {
-              "name": "meme_weights",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
+                },
                 {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "AllocationPlan",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
                 {
-                  "Reference": [
-                    false,
-                    {
-                      "vector": {
-                        "Datatype": {
-                          "module": {
-                            "address": "blast_fun",
-                            "name": "allocation"
-                          },
-                          "name": "Weight",
-                          "type_arguments": []
-                        }
-                      }
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "name": "new",
-              "sdk": "compositional",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "vector": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_fun",
-                        "name": "allocation"
-                      },
-                      "name": "Channel",
-                      "type_arguments": []
-                    }
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
                   }
                 },
                 {
@@ -509,19 +191,7 @@
                         "address": "blast_fun",
                         "name": "allocation"
                       },
-                      "name": "Weight",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "vector": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_fun",
-                        "name": "allocation"
-                      },
-                      "name": "Weight",
+                      "name": "Recipient",
                       "type_arguments": []
                     }
                   }
@@ -541,11 +211,33 @@
               ]
             },
             {
-              "name": "protocol_role",
+              "name": "recipient",
               "sdk": "compositional",
               "entry": false,
               "typeParameters": [],
-              "parameters": [],
+              "parameters": [
+                "address",
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
+              ],
               "returns": [
                 {
                   "Datatype": {
@@ -553,51 +245,9 @@
                       "address": "blast_fun",
                       "name": "allocation"
                     },
-                    "name": "ChannelRole",
+                    "name": "Recipient",
                     "type_arguments": []
                   }
-                }
-              ]
-            },
-            {
-              "name": "quote_weights",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "AllocationPlan",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "vector": {
-                        "Datatype": {
-                          "module": {
-                            "address": "blast_fun",
-                            "name": "allocation"
-                          },
-                          "name": "Weight",
-                          "type_arguments": []
-                        }
-                      }
-                    }
-                  ]
                 }
               ]
             },
@@ -644,41 +294,6 @@
               ]
             },
             {
-              "name": "rewards_bps",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "FeeSplit",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
               "name": "route",
               "sdk": "compositional",
               "entry": false,
@@ -708,115 +323,6 @@
                   }
                 }
               ]
-            },
-            {
-              "name": "route_bps",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "Route",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "weight",
-              "sdk": "compositional",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                "u64",
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "allocation"
-                    },
-                    "name": "Weight",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
-              "name": "weight_bps",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "Weight",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "weight_channel_id",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "Weight",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
             }
           ],
           "structs": [
@@ -831,82 +337,58 @@
               "positional": false,
               "fields": [
                 {
-                  "name": "channels",
-                  "type": {
-                    "vector": {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "Channel",
-                        "type_arguments": []
-                      }
-                    }
-                  }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "vector": {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "Weight",
-                        "type_arguments": []
-                      }
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "vector": {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "Weight",
-                        "type_arguments": []
-                      }
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "Channel",
-              "abilities": [
-                "Copy",
-                "Drop",
-                "Store"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "channel_id",
-                  "type": "u64"
-                },
-                {
-                  "name": "role",
+                  "name": "curve_meme_bps",
                   "type": {
                     "Datatype": {
                       "module": {
                         "address": "blast_fun",
-                        "name": "allocation"
+                        "name": "bps"
                       },
-                      "name": "ChannelRole",
+                      "name": "Bps",
                       "type_arguments": []
                     }
                   }
                 },
                 {
-                  "name": "destination",
-                  "type": "address"
+                  "name": "lp_meme_bps",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun",
+                        "name": "bps"
+                      },
+                      "name": "Bps",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "lp_quote_bps",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun",
+                        "name": "bps"
+                      },
+                      "name": "Bps",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "recipients",
+                  "type": {
+                    "vector": {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "allocation"
+                        },
+                        "name": "Recipient",
+                        "type_arguments": []
+                      }
+                    }
+                  }
                 }
               ]
             },
@@ -977,6 +459,48 @@
               ]
             },
             {
+              "name": "Recipient",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "destination",
+                  "type": "address"
+                },
+                {
+                  "name": "meme_bps",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun",
+                        "name": "bps"
+                      },
+                      "name": "Bps",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote_bps",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun",
+                        "name": "bps"
+                      },
+                      "name": "Bps",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ]
+            },
+            {
               "name": "Route",
               "abilities": [
                 "Copy",
@@ -1004,62 +528,9 @@
                   }
                 }
               ]
-            },
-            {
-              "name": "Weight",
-              "abilities": [
-                "Copy",
-                "Drop",
-                "Store"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "channel_id",
-                  "type": "u64"
-                },
-                {
-                  "name": "bps",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_fun",
-                        "name": "bps"
-                      },
-                      "name": "Bps",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ]
             }
           ],
-          "enums": [
-            {
-              "name": "ChannelRole",
-              "abilities": [
-                "Copy",
-                "Drop",
-                "Store"
-              ],
-              "typeParameters": [],
-              "variants": [
-                {
-                  "name": "Liquidity",
-                  "fields": []
-                },
-                {
-                  "name": "Protocol",
-                  "fields": []
-                },
-                {
-                  "name": "External",
-                  "fields": []
-                }
-              ]
-            }
-          ],
+          "enums": [],
           "events": []
         },
         "blast_events": {
@@ -1119,16 +590,6 @@
         "blast_fun_domain": {
           "functions": [
             {
-              "name": "creator_admin_role",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
               "name": "package_admin_role",
               "sdk": "move-composition",
               "entry": false,
@@ -1180,36 +641,6 @@
               ],
               "returns": [
                 "u64"
-              ]
-            },
-            {
-              "name": "complement",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
               ]
             },
             {
@@ -1425,35 +856,6 @@
               ]
             },
             {
-              "name": "CreatorAuthority",
-              "abilities": [
-                "Store"
-              ],
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": true,
-                  "constraints": []
-                }
-              ],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "recipient",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_fun",
-                        "name": "creator_authority"
-                      },
-                      "name": "CreatorRecipient",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ]
-            },
-            {
               "name": "CreatorClaimMessage",
               "abilities": [
                 "Copy",
@@ -1526,6 +928,7 @@
             {
               "name": "CreatorRecipient",
               "abilities": [
+                "Copy",
                 "Drop",
                 "Store"
               ],
@@ -1604,19 +1007,27 @@
                   "type": "u64"
                 },
                 {
-                  "name": "protocol_meme_fee_delta",
+                  "name": "meme_out_net",
                   "type": "u64"
                 },
                 {
-                  "name": "creator_meme_fee_delta",
+                  "name": "quote_refund",
                   "type": "u64"
                 },
                 {
-                  "name": "protocol_quote_fee_delta",
+                  "name": "protocol_meme_fee",
                   "type": "u64"
                 },
                 {
-                  "name": "creator_quote_fee_delta",
+                  "name": "creator_meme_fee",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_quote_fee",
+                  "type": "u64"
+                },
+                {
+                  "name": "creator_quote_fee",
                   "type": "u64"
                 },
                 {
@@ -1677,22 +1088,6 @@
                       "type_arguments": []
                     }
                   }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "CreatorClaimSignerRevoked",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "dummy_field",
-                  "type": "bool"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -1771,33 +1166,6 @@
                   }
                 },
                 {
-                  "name": "revoked_curve_fee_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "option"
-                      },
-                      "name": "Option",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "sui",
-                                "name": "object"
-                              },
-                              "name": "ID",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": false
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
                   "name": "curve_fee_cap_id",
                   "type": {
                     "Datatype": {
@@ -1851,14 +1219,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "decimals",
-                  "type": "u8"
-                },
-                {
-                  "name": "atomic_supply",
-                  "type": "u64"
                 },
                 {
                   "name": "quote",
@@ -1937,10 +1297,16 @@
                   }
                 },
                 {
-                  "name": "meme_amounts",
-                  "type": {
-                    "vector": "u64"
-                  }
+                  "name": "protection_window_ms",
+                  "type": "u64"
+                },
+                {
+                  "name": "cumulative_sender_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "per_transaction_bps",
+                  "type": "u64"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -1970,10 +1336,6 @@
                 {
                   "name": "public_start_ms",
                   "type": "u64"
-                },
-                {
-                  "name": "pre_share_buy_completed",
-                  "type": "bool"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -2018,10 +1380,6 @@
                   "type": "u8"
                 },
                 {
-                  "name": "atomic_supply",
-                  "type": "u64"
-                },
-                {
                   "name": "metadata_cap_id",
                   "type": {
                     "Datatype": {
@@ -2035,40 +1393,15 @@
                   }
                 },
                 {
-                  "name": "creator_address",
+                  "name": "creator",
                   "type": {
                     "Datatype": {
                       "module": {
-                        "address": "std",
-                        "name": "option"
+                        "address": "blast_fun",
+                        "name": "creator_authority"
                       },
-                      "name": "Option",
-                      "type_arguments": [
-                        {
-                          "argument": "address",
-                          "phantom": false
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
-                  "name": "account_commitment",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "option"
-                      },
-                      "name": "Option",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "vector": "u8"
-                          },
-                          "phantom": false
-                        }
-                      ]
+                      "name": "CreatorRecipient",
+                      "type_arguments": []
                     }
                   }
                 },
@@ -2104,33 +1437,21 @@
               "sdk": "decoder-reducer"
             },
             {
-              "name": "MemeDecimalsAllowed",
+              "name": "MemeDecimalsSet",
               "abilities": [
                 "Copy",
                 "Drop"
               ],
               "typeParameters": [],
-              "positional": true,
+              "positional": false,
               "fields": [
                 {
-                  "name": "pos0",
+                  "name": "decimals",
                   "type": "u8"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "MemeDecimalsDisallowed",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": true,
-              "fields": [
+                },
                 {
-                  "name": "pos0",
-                  "type": "u8"
+                  "name": "allowed",
+                  "type": "bool"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -2222,33 +1543,6 @@
                   }
                 },
                 {
-                  "name": "revoked_metadata_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "option"
-                      },
-                      "name": "Option",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "sui",
-                                "name": "object"
-                              },
-                              "name": "ID",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": false
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
                   "name": "metadata_cap_id",
                   "type": {
                     "Datatype": {
@@ -2291,24 +1585,12 @@
                   }
                 },
                 {
-                  "name": "supplied_meme",
+                  "name": "meme",
                   "type": "u64"
                 },
                 {
-                  "name": "supplied_quote",
+                  "name": "quote",
                   "type": "u64"
-                },
-                {
-                  "name": "residual_meme",
-                  "type": "u64"
-                },
-                {
-                  "name": "residual_quote",
-                  "type": "u64"
-                },
-                {
-                  "name": "liquidity",
-                  "type": "u128"
                 },
                 {
                   "name": "disposed_meme",
@@ -2348,10 +1630,6 @@
                   }
                 },
                 {
-                  "name": "channel_id",
-                  "type": "u64"
-                },
-                {
                   "name": "destination",
                   "type": "address"
                 },
@@ -2367,16 +1645,16 @@
               "sdk": "decoder-reducer"
             },
             {
-              "name": "MigrationWitnessAllowed",
+              "name": "MigrationWitnessSet",
               "abilities": [
                 "Copy",
                 "Drop"
               ],
               "typeParameters": [],
-              "positional": true,
+              "positional": false,
               "fields": [
                 {
-                  "name": "pos0",
+                  "name": "migration_witness",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -2387,37 +1665,16 @@
                       "type_arguments": []
                     }
                   }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "MigrationWitnessDisallowed",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": true,
-              "fields": [
+                },
                 {
-                  "name": "pos0",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
+                  "name": "allowed",
+                  "type": "bool"
                 }
               ],
               "sdk": "decoder-reducer"
             },
             {
-              "name": "PreShareBought",
+              "name": "ProtocolAllocationSet",
               "abilities": [
                 "Copy",
                 "Drop"
@@ -2425,120 +1682,6 @@
               "typeParameters": [],
               "positional": false,
               "fields": [
-                {
-                  "name": "launch_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote_in",
-                  "type": "u64"
-                },
-                {
-                  "name": "meme_out_gross",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_meme_fee_delta",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_meme_fee_delta",
-                  "type": "u64"
-                },
-                {
-                  "name": "protocol_quote_fee_delta",
-                  "type": "u64"
-                },
-                {
-                  "name": "creator_quote_fee_delta",
-                  "type": "u64"
-                },
-                {
-                  "name": "post_meme_reserve",
-                  "type": "u64"
-                },
-                {
-                  "name": "post_real_quote_reserve",
-                  "type": "u64"
-                },
-                {
-                  "name": "meme_out_net",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_refund",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "ProtectionConfigured",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "launch_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "window_ms",
-                  "type": "u64"
-                },
-                {
-                  "name": "cumulative_sender_bps",
-                  "type": "u64"
-                },
-                {
-                  "name": "cumulative_atomic_limit",
-                  "type": "u64"
-                },
-                {
-                  "name": "per_transaction_bps",
-                  "type": "u64"
-                },
-                {
-                  "name": "per_transaction_atomic_limit",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "ProtocolAllocationConfigured",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "channel_id",
-                  "type": "u64"
-                },
                 {
                   "name": "destination",
                   "type": "address"
@@ -2604,7 +1747,7 @@
               "sdk": "decoder-reducer"
             },
             {
-              "name": "QuoteAllowed",
+              "name": "QuoteSet",
               "abilities": [
                 "Copy",
                 "Drop"
@@ -2628,31 +1771,6 @@
                 {
                   "name": "virtual_quote",
                   "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "QuoteDisallowed",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": true,
-              "fields": [
-                {
-                  "name": "pos0",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
                 }
               ],
               "sdk": "decoder-reducer"
@@ -2684,11 +1802,7 @@
                   "type": "u64"
                 },
                 {
-                  "name": "pending_burn_delta",
-                  "type": "u64"
-                },
-                {
-                  "name": "pending_burn_total",
+                  "name": "pending_burn",
                   "type": "u64"
                 },
                 {
@@ -2696,19 +1810,19 @@
                   "type": "u64"
                 },
                 {
-                  "name": "protocol_meme_fee_delta",
+                  "name": "protocol_meme_fee",
                   "type": "u64"
                 },
                 {
-                  "name": "creator_meme_fee_delta",
+                  "name": "creator_meme_fee",
                   "type": "u64"
                 },
                 {
-                  "name": "protocol_quote_fee_delta",
+                  "name": "protocol_quote_fee",
                   "type": "u64"
                 },
                 {
-                  "name": "creator_quote_fee_delta",
+                  "name": "creator_quote_fee",
                   "type": "u64"
                 },
                 {
@@ -2725,423 +1839,7 @@
           ]
         },
         "fees": {
-          "functions": [
-            {
-              "name": "accrue",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "fees"
-                        },
-                        "name": "FeeLedger",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "balance"
-                    },
-                    "name": "Balance",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "balance"
-                    },
-                    "name": "Balance",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
-              ],
-              "returns": [
-                "u64",
-                "u64",
-                "u64",
-                "u64"
-              ]
-            },
-            {
-              "name": "claim_creator_fees",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "fees"
-                        },
-                        "name": "FeeLedger",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "claim_protocol_fees",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "fees"
-                        },
-                        "name": "FeeLedger",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_fun",
-                                  "name": "blast_fun_domain"
-                                },
-                                "name": "BLAST_FUN_DOMAIN",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "has_protocol_fees",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "fees"
-                        },
-                        "name": "FeeLedger",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "bool"
-              ]
-            },
-            {
-              "name": "new",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "fees"
-                    },
-                    "name": "FeeLedger",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      },
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          ],
+          "functions": [],
           "structs": [
             {
               "name": "FeeLedger",
@@ -3251,70 +1949,6 @@
         "launch": {
           "functions": [
             {
-              "name": "allocation_plan",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "allocation"
-                        },
-                        "name": "AllocationPlan",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ]
-            },
-            {
               "name": "assert_curve_fee_cap",
               "sdk": "move-composition",
               "entry": false,
@@ -3383,187 +2017,6 @@
                 }
               ],
               "returns": []
-            },
-            {
-              "name": "atomic_supply",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "begin_migration",
-              "sdk": "adapter-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Witness",
-                  "phantom": false,
-                  "constraints": [
-                    "Drop"
-                  ]
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "NamedTypeParameter": "Witness"
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "balance"
-                    },
-                    "name": "Balance",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "balance"
-                    },
-                    "name": "Balance",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "launch"
-                    },
-                    "name": "Migration",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      },
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
             },
             {
               "name": "buy",
@@ -4164,295 +2617,6 @@
               ]
             },
             {
-              "name": "complete_migration",
-              "sdk": "adapter-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Witness",
-                  "phantom": false,
-                  "constraints": [
-                    "Drop"
-                  ]
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "coin_registry"
-                        },
-                        "name": "Currency",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "launch"
-                    },
-                    "name": "Migration",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      },
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "NamedTypeParameter": "Witness"
-                },
-                "u64",
-                "u64",
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "balance"
-                        },
-                        "name": "Balance",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "balance"
-                        },
-                        "name": "Balance",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "u128",
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "cumulative_atomic_limit",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "cumulative_sender_bps",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
               "name": "finalize",
               "sdk": "builder",
               "entry": false,
@@ -4587,206 +2751,6 @@
               ]
             },
             {
-              "name": "graduation_target",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "is_live",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "bool"
-              ]
-            },
-            {
-              "name": "is_migrated",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "bool"
-              ]
-            },
-            {
-              "name": "is_migration_ready",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "bool"
-              ]
-            },
-            {
               "name": "lp_fee_split",
               "sdk": "move-composition",
               "entry": false,
@@ -4846,8 +2810,8 @@
               ]
             },
             {
-              "name": "meme_reserve",
-              "sdk": "move-composition",
+              "name": "migrate",
+              "sdk": "adapter-composition",
               "entry": false,
               "typeParameters": [
                 {
@@ -4859,12 +2823,19 @@
                   "name": "Quote",
                   "phantom": false,
                   "constraints": []
+                },
+                {
+                  "name": "Witness",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
                 }
               ],
               "parameters": [
                 {
                   "Reference": [
-                    false,
+                    true,
                     {
                       "Datatype": {
                         "module": {
@@ -4889,29 +2860,7 @@
                       }
                     }
                   ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "migration_witness",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
                 },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
                 {
                   "Reference": [
                     false,
@@ -4919,23 +2868,50 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "launch"
+                          "name": "package_version"
                         },
-                        "name": "Launch",
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
                         "type_arguments": [
                           {
                             "argument": {
                               "NamedTypeParameter": "Meme"
                             },
                             "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "NamedTypeParameter": "Witness"
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -4945,11 +2921,35 @@
                 {
                   "Datatype": {
                     "module": {
-                      "address": "std",
-                      "name": "type_name"
+                      "address": "sui",
+                      "name": "balance"
                     },
-                    "name": "TypeName",
-                    "type_arguments": []
+                    "name": "Balance",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "balance"
+                    },
+                    "name": "Balance",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
                   }
                 }
               ]
@@ -5058,115 +3058,6 @@
               ]
             },
             {
-              "name": "per_transaction_atomic_limit",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "per_transaction_bps",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
               "name": "pool_tier",
               "sdk": "move-composition",
               "entry": false,
@@ -5214,481 +3105,6 @@
               ],
               "returns": [
                 "u32",
-                "u64"
-              ]
-            },
-            {
-              "name": "pre_share_buy",
-              "sdk": "builder",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                "u64",
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "pre_share_buy_completed",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "bool"
-              ]
-            },
-            {
-              "name": "protected_purchases",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "address"
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "protection_end_ms",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "std",
-                      "name": "option"
-                    },
-                    "name": "Option",
-                    "type_arguments": [
-                      {
-                        "argument": "u64",
-                        "phantom": false
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "protection_window_ms",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "public_start_ms",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "std",
-                      "name": "option"
-                    },
-                    "name": "Option",
-                    "type_arguments": [
-                      {
-                        "argument": "u64",
-                        "phantom": false
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "real_quote_reserve",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
                 "u64"
               ]
             },
@@ -6668,21 +4084,6 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
                           "address": "sui",
                           "name": "clock"
                         },
@@ -6775,56 +4176,6 @@
                   ]
                 }
               ]
-            },
-            {
-              "name": "virtual_quote",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch"
-                        },
-                        "name": "Launch",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
             }
           ],
           "structs": [
@@ -6874,24 +4225,6 @@
                   }
                 },
                 {
-                  "name": "public_start_ms",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "option"
-                      },
-                      "name": "Option",
-                      "type_arguments": [
-                        {
-                          "argument": "u64",
-                          "phantom": false
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
                   "name": "protection_end_ms",
                   "type": {
                     "Datatype": {
@@ -6910,42 +4243,12 @@
                   }
                 },
                 {
-                  "name": "pre_share_buy_completed",
-                  "type": "bool"
-                },
-                {
                   "name": "protection_window_ms",
                   "type": "u64"
                 },
                 {
-                  "name": "cumulative_sender_bps",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_fun",
-                        "name": "bps"
-                      },
-                      "name": "Bps",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
                   "name": "cumulative_atomic_limit",
                   "type": "u64"
-                },
-                {
-                  "name": "per_transaction_bps",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_fun",
-                        "name": "bps"
-                      },
-                      "name": "Bps",
-                      "type_arguments": []
-                    }
-                  }
                 },
                 {
                   "name": "per_transaction_atomic_limit",
@@ -7176,7 +4479,7 @@
                   }
                 },
                 {
-                  "name": "creator_authority",
+                  "name": "creator",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -7192,15 +4495,8 @@
                                 "address": "blast_fun",
                                 "name": "creator_authority"
                               },
-                              "name": "CreatorAuthority",
-                              "type_arguments": [
-                                {
-                                  "argument": {
-                                    "NamedTypeParameter": "Meme"
-                                  },
-                                  "phantom": true
-                                }
-                              ]
+                              "name": "CreatorRecipient",
+                              "type_arguments": []
                             }
                           },
                           "phantom": false
@@ -7458,33 +4754,6 @@
               ]
             },
             {
-              "name": "Migration",
-              "abilities": [],
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": true,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": true,
-                  "constraints": []
-                }
-              ],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "source_meme",
-                  "type": "u64"
-                },
-                {
-                  "name": "source_quote",
-                  "type": "u64"
-                }
-              ]
-            },
-            {
               "name": "ProtectedPurchasesKey",
               "abilities": [
                 "Copy",
@@ -7520,10 +4789,6 @@
                   "fields": []
                 },
                 {
-                  "name": "Migrating",
-                  "fields": []
-                },
-                {
                   "name": "Migrated",
                   "fields": []
                 }
@@ -7535,7 +4800,7 @@
         "launch_config": {
           "functions": [
             {
-              "name": "allow_meme_decimals",
+              "name": "set_meme_decimals_allowed",
               "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
@@ -7599,12 +4864,13 @@
                     }
                   ]
                 },
-                "u8"
+                "u8",
+                "bool"
               ],
               "returns": []
             },
             {
-              "name": "allow_migration_witness",
+              "name": "set_migration_witness_allowed",
               "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [
@@ -7675,12 +4941,102 @@
                       }
                     }
                   ]
+                },
+                "bool"
+              ],
+              "returns": []
+            },
+            {
+              "name": "set_protocol_allocation",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch_config"
+                        },
+                        "name": "LaunchConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "blast_fun_domain"
+                                },
+                                "name": "BLAST_FUN_DOMAIN",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "address",
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_fun",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
                 }
               ],
               "returns": []
             },
             {
-              "name": "allow_quote",
+              "name": "set_quote",
               "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [
@@ -7751,315 +5107,6 @@
                   ]
                 },
                 "u64"
-              ],
-              "returns": []
-            },
-            {
-              "name": "disallow_meme_decimals",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch_config"
-                        },
-                        "name": "LaunchConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_fun",
-                                  "name": "blast_fun_domain"
-                                },
-                                "name": "BLAST_FUN_DOMAIN",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "u8"
-              ],
-              "returns": []
-            },
-            {
-              "name": "disallow_migration_witness",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "MigrationWitness",
-                  "phantom": false,
-                  "constraints": [
-                    "Drop"
-                  ]
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch_config"
-                        },
-                        "name": "LaunchConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_fun",
-                                  "name": "blast_fun_domain"
-                                },
-                                "name": "BLAST_FUN_DOMAIN",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "disallow_quote",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch_config"
-                        },
-                        "name": "LaunchConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_fun",
-                                  "name": "blast_fun_domain"
-                                },
-                                "name": "BLAST_FUN_DOMAIN",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "set_protocol_allocation",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "launch_config"
-                        },
-                        "name": "LaunchConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_fun",
-                                  "name": "blast_fun_domain"
-                                },
-                                "name": "BLAST_FUN_DOMAIN",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "u64",
-                "address",
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
               ],
               "returns": []
             },
@@ -8193,7 +5240,7 @@
                   }
                 },
                 {
-                  "name": "quotes",
+                  "name": "virtual_quotes",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -8291,60 +5338,15 @@
                             "Datatype": {
                               "module": {
                                 "address": "blast_fun",
-                                "name": "launch_config"
+                                "name": "allocation"
                               },
-                              "name": "ProtocolAllocation",
+                              "name": "Recipient",
                               "type_arguments": []
                             }
                           },
                           "phantom": false
                         }
                       ]
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "ProtocolAllocation",
-              "abilities": [
-                "Drop",
-                "Store"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "channel_id",
-                  "type": "u64"
-                },
-                {
-                  "name": "destination",
-                  "type": "address"
-                },
-                {
-                  "name": "meme_bps",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_fun",
-                        "name": "bps"
-                      },
-                      "name": "Bps",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "quote_bps",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_fun",
-                        "name": "bps"
-                      },
-                      "name": "Bps",
-                      "type_arguments": []
                     }
                   }
                 }
@@ -8553,22 +5555,15 @@
                   }
                 },
                 {
-                  "name": "creator_authority",
+                  "name": "creator",
                   "type": {
                     "Datatype": {
                       "module": {
                         "address": "blast_fun",
                         "name": "creator_authority"
                       },
-                      "name": "CreatorAuthority",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "NamedTypeParameter": "Meme"
-                          },
-                          "phantom": true
-                        }
-                      ]
+                      "name": "CreatorRecipient",
+                      "type_arguments": []
                     }
                   }
                 },
@@ -8760,32 +5755,6 @@
                 }
               ],
               "returns": []
-            },
-            {
-              "name": "has_upgrade_cap",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_admin"
-                        },
-                        "name": "PackageAdmin",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "bool"
-              ]
             },
             {
               "name": "make_immutable",
@@ -9014,74 +5983,6 @@
         },
         "runtime_config": {
           "functions": [
-            {
-              "name": "revoke_creator_claim_signer",
-              "sdk": "intentional-admin-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "runtime_config"
-                        },
-                        "name": "RuntimeConfig",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_fun",
-                                  "name": "blast_fun_domain"
-                                },
-                                "name": "BLAST_FUN_DOMAIN",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
             {
               "name": "set_creator_claim_signer",
               "sdk": "intentional-admin-exclusion",
@@ -10037,6 +6938,18 @@
                       "type_arguments": []
                     }
                   }
+                },
+                {
+                  "name": "residual_meme",
+                  "type": "u64"
+                },
+                {
+                  "name": "residual_quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "liquidity",
+                  "type": "u128"
                 },
                 {
                   "name": "fee_split",
@@ -12498,6 +9411,12 @@
           "enums": [],
           "events": []
         },
+        "constants": {
+          "functions": [],
+          "structs": [],
+          "enums": [],
+          "events": []
+        },
         "lp_fee_policy": {
           "functions": [
             {
@@ -12573,77 +9492,6 @@
                 }
               ],
               "returns": []
-            },
-            {
-              "name": "default_shares",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "lp_fee_policy"
-                        },
-                        "name": "LpFeePolicy",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
-              "name": "protocol_destination",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "lp_fee_policy"
-                        },
-                        "name": "LpFeePolicy",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "address"
-              ]
             },
             {
               "name": "set_coin_shares",
@@ -12895,57 +9743,6 @@
                 "address"
               ],
               "returns": []
-            },
-            {
-              "name": "shares",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "lp_fee_policy"
-                        },
-                        "name": "LpFeePolicy",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
-                }
-              ]
             }
           ],
           "structs": [
@@ -13346,32 +10143,7 @@
           "events": []
         },
         "package_version": {
-          "functions": [
-            {
-              "name": "assert_current",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            }
-          ],
+          "functions": [],
           "structs": [
             {
               "name": "PackageVersion",
@@ -13429,135 +10201,6 @@
         },
         "vault": {
           "functions": [
-            {
-              "name": "auto_lp_balances",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64",
-                "u64"
-              ]
-            },
-            {
-              "name": "auto_lp_position_id",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Venue",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "std",
-                      "name": "option"
-                    },
-                    "name": "Option",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "Datatype": {
-                            "module": {
-                              "address": "sui",
-                              "name": "object"
-                            },
-                            "name": "ID",
-                            "type_arguments": []
-                          }
-                        },
-                        "phantom": false
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
             {
               "name": "claim_creator_fees",
               "sdk": "builder",
@@ -13861,568 +10504,6 @@
                     ]
                   }
                 }
-              ]
-            },
-            {
-              "name": "creator_balances",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64",
-                "u64"
-              ]
-            },
-            {
-              "name": "fee_split",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "allocation"
-                    },
-                    "name": "FeeSplit",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
-              "name": "generation",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "last_checkpoint",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "std",
-                      "name": "option"
-                    },
-                    "name": "Option",
-                    "type_arguments": [
-                      {
-                        "argument": "u64",
-                        "phantom": false
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "next_round",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "pool_id",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "object"
-                    },
-                    "name": "ID",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
-              "name": "position_id",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Venue",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "std",
-                      "name": "option"
-                    },
-                    "name": "Option",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "Datatype": {
-                            "module": {
-                              "address": "sui",
-                              "name": "object"
-                            },
-                            "name": "ID",
-                            "type_arguments": []
-                          }
-                        },
-                        "phantom": false
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "protocol_meme_residual",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "protocol_quote_residual",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64"
-              ]
-            },
-            {
-              "name": "rewards_balances",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun_migrators",
-                          "name": "vault"
-                        },
-                        "name": "LpVault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "u64",
-                "u64"
               ]
             }
           ],

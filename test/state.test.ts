@@ -30,33 +30,27 @@ const feeSplit = {
   ],
 };
 const allocationPlan = {
-  channels: [
+  curveMemeBps: 8_000n,
+  lpMemeBps: 1_900n,
+  lpQuoteBps: 9_900n,
+  recipients: [
     {
-      channelId: 1n,
-      role: "Liquidity" as const,
       destination:
         "0x000000000000000000000000000000000000000000000000000000000000000a",
+      memeBps: 100n,
+      quoteBps: 100n,
     },
   ],
-  meme: [
-    { channelId: 0n, bps: 8_000n },
-    { channelId: 1n, bps: 2_000n },
-  ],
-  quote: [{ channelId: 1n, bps: 10_000n }],
 };
 
 function serializeLaunch(id = objectId): Uint8Array {
   return launchBcs
     .serialize({
       id: uid(id),
-      lifecycle: { Live: true },
-      public_start_ms: "1000",
+      lifecycle: { MigrationReady: true },
       protection_end_ms: "61000",
-      pre_share_buy_completed: true,
       protection_window_ms: 60_000n,
-      cumulative_sender_bps: 100n,
       cumulative_atomic_limit: 10_000n,
-      per_transaction_bps: 50n,
       per_transaction_atomic_limit: 5_000n,
       sell_burn_bps: 100n,
       virtual_quote: 1_000n,
@@ -80,7 +74,7 @@ function serializeLaunch(id = objectId): Uint8Array {
         creator_quote: balance(4n),
       },
       metadata_cap: { id: uid(metadataCapId) },
-      creator_authority: { recipient: { Address: creator } },
+      creator: { Address: creator },
       curve_fee_cap_id: { bytes: "0x12" },
       blast_metadata_cap_id: { bytes: "0x11" },
     })
@@ -106,15 +100,11 @@ test("decodes the complete launch BCS state", () => {
   assert.equal(state.mutable, true);
   assert.equal(state.memeType.endsWith("0a::meme::MEME"), true);
   assert.equal(state.quoteType.endsWith("02::sui::SUI"), true);
-  assert.equal(state.lifecycle, "Live");
-  assert.equal(state.publicStartMs, 1_000n);
+  assert.equal(state.lifecycle, "MigrationReady");
   assert.equal(state.protectionEndMs, 61_000n);
-  assert.equal(state.preShareBuyCompleted, true);
   assert.deepEqual(state.protection, {
     windowMs: 60_000n,
-    cumulativeSenderBps: 100n,
     cumulativeAtomicLimit: 10_000n,
-    perTransactionBps: 50n,
     perTransactionAtomicLimit: 5_000n,
   });
   assert.equal(state.graduationTarget, 3_000n);
