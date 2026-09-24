@@ -1,11 +1,9 @@
 import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import {
-  normalizeSuiAddress,
-  normalizeSuiObjectId,
-  parseStructTag,
-} from "@mysten/sui/utils";
+import { normalizeSuiAddress, parseStructTag } from "@mysten/sui/utils";
+import type { FeeSplit } from "../launchpad/allocation.ts";
+import { feeSplitBcs } from "../launchpad/allocation.ts";
 import { moveTypeNameBcs, suiObjectIdBcs } from "../lib/bcs.ts";
 import type { SuiEventPosition } from "../lib/events.ts";
 import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
@@ -17,114 +15,70 @@ type MigratorEventFieldDescriptor =
   | "address"
   | "u64"
   | "u128"
-  | "u16"
   | "u32"
-  | "optionId";
+  | "bytes"
+  | "u64Vector"
+  | "optionTypeName"
+  | "optionU64"
+  | "feeSplit";
 
 export const migratorEventSpecs = {
-  AftermathMigrationCompleted: {
-    launch_id: "id",
+  AutoLiquidityAdded: {
     vault_id: "id",
-    inner_pool_id: "id",
-    dao_fee_pool_id: "id",
-    venue: "typeName",
-    lp: "typeName",
-    meme: "typeName",
-    quote: "typeName",
     meme_amount: "u64",
     quote_amount: "u64",
-    locked_lp_amount: "u64",
-    meme_weight: "u64",
-    quote_weight: "u64",
-    flatness: "u64",
-    swap_in_fee: "u64",
-    dao_fee_bps: "u16",
+    meme_pending: "u64",
+    quote_pending: "u64",
   },
-  AftermathPolicyUpdated: {
-    old_meme_weight: "u64",
-    old_quote_weight: "u64",
-    old_dao_fee_bps: "u16",
-    new_meme_weight: "u64",
-    new_quote_weight: "u64",
-    new_dao_fee_bps: "u16",
-  },
-  AftermathDaoFeeUpdated: {
+  AutoLpPositionOpened: {
     vault_id: "id",
-    dao_fee_pool_id: "id",
-    old_dao_fee_bps: "u16",
-    new_dao_fee_bps: "u16",
+    position_id: "id",
+  },
+  CetusPoolReserved: {
+    meme: "typeName",
+    quote: "typeName",
+    pool_creation_cap_id: "id",
+    tick_spacing: "u32",
   },
   CreatorFeesClaimed: {
     vault_id: "id",
-    meme: "typeName",
-    quote: "typeName",
-    claimant: "address",
     meme_amount: "u64",
     quote_amount: "u64",
   },
-  LpFeeCapClaimed: {
+  FeeSplitChanged: {
     vault_id: "id",
-    meme: "typeName",
-    quote: "typeName",
-    lp_fee_cap_id: "id",
-    claimant: "address",
+    old_generation: "u64",
+    new_generation: "u64",
+    old_fee_split: "feeSplit",
+    new_fee_split: "feeSplit",
   },
-  LpFeeCapIssued: {
+  FeesCollected: {
     vault_id: "id",
-    meme: "typeName",
-    quote: "typeName",
-    revoked_lp_fee_cap_id: "optionId",
-    lp_fee_cap_id: "id",
-    recipient: "address",
+    generation: "u64",
+    gross_meme: "u64",
+    gross_quote: "u64",
+    protocol_destination: "address",
+    protocol_meme: "u64",
+    protocol_quote: "u64",
+    creator_meme: "u64",
+    creator_quote: "u64",
+    auto_lp_meme: "u64",
+    auto_lp_quote: "u64",
+    rewards_meme: "u64",
+    rewards_quote: "u64",
+    recipient_meme: "u64Vector",
+    recipient_quote: "u64Vector",
   },
-  LpFeesLocked: {
-    vault_id: "id",
-    meme: "typeName",
-    quote: "typeName",
-    lp_fee_cap_id: "optionId",
-    custodian: "typeName",
+  LpFeeDestinationChanged: {
+    old_destination: "address",
+    new_destination: "address",
   },
-  LpProtocolFeeShareChanged: { pos0: "u64" },
-  ProjectLpProtocolFeeShareCleared: { pos0: "typeName" },
-  ProjectLpProtocolFeeShareSet: {
-    meme: "typeName",
-    protocol_fee_share_bps: "u64",
-  },
-  LpFeesCollected: {
-    vault_id: "id",
-    pool_id: "id",
-    position_id: "id",
-    venue: "typeName",
-    meme: "typeName",
-    quote: "typeName",
-    collector: "address",
-    gross_meme_fee: "u64",
-    gross_quote_fee: "u64",
-    protocol_fee_share_bps: "u64",
-    protocol_meme_fee_delta: "u64",
-    creator_meme_fee_delta: "u64",
-    protocol_quote_fee_delta: "u64",
-    creator_quote_fee_delta: "u64",
-    principal_liquidity: "u128",
-  },
-  MigrationCompleted: {
-    launch_id: "id",
-    vault_id: "id",
-    pool_id: "id",
-    venue: "typeName",
-    meme: "typeName",
-    quote: "typeName",
-    source_meme_amount: "u64",
-    source_quote_amount: "u64",
-    used_meme_amount: "u64",
-    used_quote_amount: "u64",
-    residual_meme_amount: "u64",
-    residual_quote_amount: "u64",
-    sqrt_price_x64: "u128",
-    lower_tick_bits: "u32",
-    upper_tick_bits: "u32",
-    tick_spacing: "u32",
-    fee_rate: "u64",
+  LpFeePolicyChanged: {
+    meme: "optionTypeName",
+    old_meme_bps: "optionU64",
+    old_quote_bps: "optionU64",
+    new_meme_bps: "optionU64",
+    new_quote_bps: "optionU64",
   },
   ProtocolFeesClaimed: {
     vault_id: "id",
@@ -134,6 +88,29 @@ export const migratorEventSpecs = {
     meme_amount: "u64",
     quote_amount: "u64",
   },
+  RewardPaid: {
+    round_id: "id",
+    index: "u64",
+    beneficiary: "address",
+    meme_amount: "u64",
+    quote_amount: "u64",
+    meme_remaining: "u64",
+    quote_remaining: "u64",
+  },
+  RoundPublished: {
+    vault_id: "id",
+    round_id: "id",
+    number: "u64",
+    start_checkpoint: "u64",
+    end_checkpoint: "u64",
+    root: "bytes",
+    manifest_digest: "bytes",
+    leaf_count: "u64",
+    meme_amount: "u64",
+    quote_amount: "u64",
+    meme_unallocated: "u64",
+    quote_unallocated: "u64",
+  },
   VaultCreated: {
     vault_id: "id",
     pool_id: "id",
@@ -141,13 +118,10 @@ export const migratorEventSpecs = {
     venue: "typeName",
     meme: "typeName",
     quote: "typeName",
-  },
-  VenueTierUpdated: {
-    venue: "typeName",
-    old_tick_spacing: "u32",
-    new_tick_spacing: "u32",
-    old_fee_rate: "u64",
-    new_fee_rate: "u64",
+    residual_meme: "u64",
+    residual_quote: "u64",
+    liquidity: "u128",
+    fee_split: "feeSplit",
   },
 } as const satisfies Record<
   string,
@@ -156,23 +130,26 @@ export const migratorEventSpecs = {
 
 export type MigratorEventKind = keyof typeof migratorEventSpecs;
 
-type DescriptorOutput<Descriptor extends MigratorEventFieldDescriptor> =
-  Descriptor extends "u64" | "u128"
-    ? bigint
-    : Descriptor extends "u16" | "u32"
-      ? number
-      : Descriptor extends "optionId"
-        ? string | null
-        : string;
+type DescriptorOutputs = {
+  id: string;
+  typeName: string;
+  address: string;
+  u64: bigint;
+  u128: bigint;
+  u32: number;
+  bytes: Uint8Array;
+  u64Vector: bigint[];
+  optionTypeName: string | null;
+  optionU64: bigint | null;
+  feeSplit: FeeSplit;
+};
 
 export type MigratorEventPayloads = {
   [Kind in MigratorEventKind]: {
-    [Field in keyof (typeof migratorEventSpecs)[Kind]]: DescriptorOutput<
-      Extract<
-        (typeof migratorEventSpecs)[Kind][Field],
-        MigratorEventFieldDescriptor
-      >
-    >;
+    [Field in keyof (typeof migratorEventSpecs)[Kind]]: DescriptorOutputs[Extract<
+      (typeof migratorEventSpecs)[Kind][Field],
+      MigratorEventFieldDescriptor
+    >];
   };
 };
 
@@ -183,6 +160,10 @@ const U64Bcs = bcs.u64().transform({
 const U128Bcs = bcs.u128().transform({
   input: (value: bigint) => requireU128("event u128", value),
   output: (value) => BigInt(value),
+});
+const BytesBcs = bcs.vector(bcs.u8()).transform({
+  input: (value: Uint8Array) => Array.from(value),
+  output: (value) => Uint8Array.from(value),
 });
 const AddressBcs = bcs.Address.transform({
   input: (value: string) => normalizeSuiAddress(value),
@@ -197,9 +178,12 @@ const MIGRATOR_EVENT_FIELD_BCS: Record<
   address: AddressBcs as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,
   u128: U128Bcs as BcsType<unknown, unknown>,
-  u16: bcs.u16() as BcsType<unknown, unknown>,
   u32: bcs.u32() as BcsType<unknown, unknown>,
-  optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown, unknown>,
+  bytes: BytesBcs as BcsType<unknown, unknown>,
+  u64Vector: bcs.vector(U64Bcs) as BcsType<unknown, unknown>,
+  optionTypeName: bcs.option(moveTypeNameBcs) as BcsType<unknown, unknown>,
+  optionU64: bcs.option(U64Bcs) as BcsType<unknown, unknown>,
+  feeSplit: feeSplitBcs as BcsType<unknown, unknown>,
 };
 
 type MigratorEventBcsMap = {
@@ -224,14 +208,17 @@ export const migratorEventBcs = Object.fromEntries(
   ]),
 ) as unknown as MigratorEventBcsMap;
 
+/**
+ * Migrator events are authenticated by their type, which names the original
+ * package's `blast_events` module; Sui records only the transaction's called
+ * package and module on each event.
+ */
 export type MigratorEventPackageIdentity = {
-  packageId: string;
   originalPackageId: string;
 };
 
 type DecodedMigratorEventBase = {
   source: "migrators";
-  emitterPackageId: string;
   sender: string;
   position: SuiEventPosition;
 };
@@ -247,19 +234,11 @@ export function decodeMigratorEvent(
   event: SuiClientTypes.EventEntry,
   packages: MigratorEventPackageIdentity,
 ): DecodedMigratorEvent {
-  const currentPackageId = normalizeSuiObjectId(packages.packageId);
-  if (normalizeSuiObjectId(event.packageId) !== currentPackageId) {
-    throw new TypeError("migrator event has an unexpected emitter package");
-  }
-  if (event.module !== "events") {
-    throw new TypeError("migrator event has an unexpected emitter module");
-  }
-
   const originalPackageId = normalizeSuiAddress(packages.originalPackageId);
   const tag = parseStructTag(event.eventType);
   if (
     tag.address !== originalPackageId ||
-    tag.module !== "events" ||
+    tag.module !== "blast_events" ||
     tag.typeParams.length !== 0 ||
     !Object.hasOwn(migratorEventSpecs, tag.name)
   ) {
@@ -270,7 +249,6 @@ export function decodeMigratorEvent(
     source: "migrators",
     kind,
     payload: migratorEventBcs[kind].parse(event.bcs),
-    emitterPackageId: currentPackageId,
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
   } as DecodedMigratorEvent;

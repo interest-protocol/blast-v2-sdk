@@ -2,7 +2,6 @@ import type { BlastSuiDeployment } from "../blast-sui/types.ts";
 import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
 import type { SharedObjectIdentity, SuiPackageReference } from "../lib/sui.ts";
 import type { MigratorsDeployment } from "../migrators/transactions.ts";
-import type { VestingDeployment } from "../vesting/transactions.ts";
 
 export const BLAST_NETWORKS = [
   "mainnet",
@@ -16,9 +15,10 @@ export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
 export type BlastPackages = Readonly<
   Record<string, SuiPackageReference> & {
     launchpad: SuiPackageReference;
+    /** Published `blast_admin` package (`acl::sign_in`, Meme publish dependency). */
+    admin: SuiPackageReference;
     blastSui?: SuiPackageReference;
     migrators?: SuiPackageReference;
-    vesting?: SuiPackageReference;
   }
 >;
 
@@ -59,4 +59,3 @@ export type BlastDeploymentRegistry = Readonly<
 export type LaunchpadDeploymentConstants = LaunchpadDeployment;
 export type BlastSuiDeploymentConstants = BlastSuiDeployment;
 export type MigratorsDeploymentConstants = MigratorsDeployment;
-export type VestingDeploymentConstants = VestingDeployment;

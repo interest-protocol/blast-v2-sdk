@@ -1,4 +1,9 @@
-import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
+import {
+  normalizeSuiAddress,
+  normalizeSuiObjectId,
+  toHex,
+} from "@mysten/sui/utils";
+import type { FeeSplit } from "../launchpad/allocation.ts";
 import type { DecodedLaunchpadEvent } from "../launchpad/events.ts";
 import type { LaunchpadEventProjection } from "../launchpad/reducer.ts";
 import {
@@ -10,83 +15,78 @@ import { normalizeNativeTransactionPosition } from "../lib/events.ts";
 import { requireU64 } from "../lib/integers.ts";
 import type { DecodedMigratorEvent, MigratorEventKind } from "./events.ts";
 import { migratorEventId, migratorEventSpecs } from "./events.ts";
-import type { AftermathPolicy, LpFeeAuthority } from "./state.ts";
-import { AFTERMATH_DEFAULT_POLICY } from "./state.ts";
-
-export type ClmmVaultMigrationProjection = {
-  kind: "clmm";
-  sourceMemeAmount: bigint;
-  sourceQuoteAmount: bigint;
-  usedMemeAmount: bigint;
-  usedQuoteAmount: bigint;
-  residualMemeAmount: bigint;
-  residualQuoteAmount: bigint;
-  sqrtPriceX64: bigint;
-  lowerTickBits: number;
-  upperTickBits: number;
-  tickSpacing: number;
-  feeRate: bigint;
-};
-
-export type AftermathVaultMigrationProjection = {
-  kind: "aftermath";
-  innerPoolId: string;
-  daoFeePoolId: string;
-  sourceMemeAmount: bigint;
-  sourceQuoteAmount: bigint;
-  usedMemeAmount: bigint;
-  usedQuoteAmount: bigint;
-  residualMemeAmount: 0n;
-  residualQuoteAmount: 0n;
-  lpType: string;
-  lockedLpAmount: bigint;
-  memeWeight: bigint;
-  quoteWeight: bigint;
-  flatness: bigint;
-  swapInFee: bigint;
-  daoFeeBps: number;
-};
-
-export type VaultMigrationProjection =
-  | ClmmVaultMigrationProjection
-  | AftermathVaultMigrationProjection;
 
 export type LpVaultEventProjection = {
   vaultId: string;
+  /** The launch this vault completed, linked by Meme type in the product projection. */
   launchId: string | null;
   poolId: string;
   positionId: string;
+  /** Separate full-range position Cetus auto-LP adds to; null until first use. */
+  autoLpPositionId: string | null;
   venueType: string;
   memeType: string;
   quoteType: string;
-  /** Live creator LP-fee authority, from cap claims, issuance, and locks. */
-  lpFeeAuthority: LpFeeAuthority;
-  protocolMemeFees: bigint;
-  creatorMemeFees: bigint;
-  protocolQuoteFees: bigint;
-  creatorQuoteFees: bigint;
+  generation: bigint;
+  feeSplit: FeeSplit;
+  creatorMeme: bigint;
+  creatorQuote: bigint;
+  autoLpMeme: bigint;
+  autoLpQuote: bigint;
+  rewardsMeme: bigint;
+  rewardsQuote: bigint;
+  /** Protocol migration residuals the venue returned. */
   protocolMemeResidual: bigint;
   protocolQuoteResidual: bigint;
-  principalLiquidity: bigint | null;
-  migration: VaultMigrationProjection | null;
+  /** Liquidity of the migration position. */
+  liquidity: bigint;
+  nextRound: bigint;
+  lastCheckpoint: bigint | null;
+  /** Cumulative protocol LP-fee payouts. */
+  protocolMemePaid: bigint;
+  protocolQuotePaid: bigint;
+};
+
+export type HolderRewardRoundProjection = {
+  roundId: string;
+  vaultId: string;
+  number: bigint;
+  startCheckpoint: bigint;
+  endCheckpoint: bigint;
+  root: string;
+  manifestDigest: string;
+  leafCount: bigint;
+  memeRemaining: bigint;
+  quoteRemaining: bigint;
+  paidIndexes: Readonly<Record<string, true>>;
+};
+
+export type LpFeePolicyProjection = {
+  /** Default Meme/Quote shares, once a change is replayed; initialization sets zero/zero. */
+  defaultShares: { memeBps: bigint; quoteBps: bigint };
+  /** Original Meme type keyed pairs that override the defaults. */
+  coinShares: Readonly<Record<string, { memeBps: bigint; quoteBps: bigint }>>;
+  /** Protocol destination once redirected; initialization pays the publisher. */
+  protocolDestination: string | null;
+};
+
+export type CetusPoolReservationProjection = {
+  memeType: string;
+  quoteType: string;
+  poolCreationCapId: string;
+  tickSpacing: number;
 };
 
 export type MigratorEventProjection = {
   appliedEventIds: Readonly<Record<string, true>>;
   eventCounts: Readonly<Record<MigratorEventKind, number>>;
   vaults: Readonly<Record<string, LpVaultEventProjection>>;
-  venueTiers: Readonly<
-    Record<string, { tickSpacing: number; feeRate: bigint }>
-  >;
-  aftermathPolicy: AftermathPolicy;
+  rounds: Readonly<Record<string, HolderRewardRoundProjection>>;
   lpFeePolicy: LpFeePolicyProjection;
-};
-
-export type LpFeePolicyProjection = {
-  /** Migrator-wide LP-fee protocol share, once an update event is replayed. */
-  protocolFeeShareBps: bigint | null;
-  /** Meme-keyed partner-project pins that override the migrator-wide share. */
-  projectProtocolFeeShareBps: Readonly<Record<string, bigint>>;
+  /** Cetus pool-creation reservations, keyed by Meme type. */
+  cetusPoolReservations: Readonly<
+    Record<string, CetusPoolReservationProjection>
+  >;
 };
 
 export type { NativeTransactionPosition } from "../lib/events.ts";
@@ -155,9 +155,13 @@ export function createMigratorEventProjection(): MigratorEventProjection {
       Object.keys(migratorEventSpecs).map((kind) => [kind, 0]),
     ) as Record<MigratorEventKind, number>,
     vaults: {},
-    venueTiers: {},
-    aftermathPolicy: AFTERMATH_DEFAULT_POLICY,
-    lpFeePolicy: { protocolFeeShareBps: null, projectProtocolFeeShareBps: {} },
+    rounds: {},
+    lpFeePolicy: {
+      defaultShares: { memeBps: 0n, quoteBps: 0n },
+      coinShares: {},
+      protocolDestination: null,
+    },
+    cetusPoolReservations: {},
   };
 }
 
@@ -201,213 +205,168 @@ export function reduceMigratorEvent(
             launchId: null,
             poolId: payload.pool_id,
             positionId: payload.position_id,
+            autoLpPositionId: null,
             venueType: payload.venue,
             memeType: payload.meme,
             quoteType: payload.quote,
-            lpFeeAuthority: { kind: "pending" },
-            protocolMemeFees: 0n,
-            creatorMemeFees: 0n,
-            protocolQuoteFees: 0n,
-            creatorQuoteFees: 0n,
-            protocolMemeResidual: 0n,
-            protocolQuoteResidual: 0n,
-            principalLiquidity: null,
-            migration: null,
+            generation: 0n,
+            feeSplit: payload.fee_split,
+            creatorMeme: 0n,
+            creatorQuote: 0n,
+            autoLpMeme: 0n,
+            autoLpQuote: 0n,
+            rewardsMeme: 0n,
+            rewardsQuote: 0n,
+            protocolMemeResidual: payload.residual_meme,
+            protocolQuoteResidual: payload.residual_quote,
+            liquidity: payload.liquidity,
+            nextRound: 0n,
+            lastCheckpoint: null,
+            protocolMemePaid: 0n,
+            protocolQuotePaid: 0n,
           },
         },
       };
     }
-    case "MigrationCompleted": {
+    case "FeesCollected": {
       const payload = event.payload;
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
-        launchId: payload.launch_id,
-        poolId: payload.pool_id,
-        venueType: payload.venue,
-        memeType: payload.meme,
-        quoteType: payload.quote,
-        protocolMemeResidual: payload.residual_meme_amount,
-        protocolQuoteResidual: payload.residual_quote_amount,
-        migration: {
-          kind: "clmm",
-          sourceMemeAmount: payload.source_meme_amount,
-          sourceQuoteAmount: payload.source_quote_amount,
-          usedMemeAmount: payload.used_meme_amount,
-          usedQuoteAmount: payload.used_quote_amount,
-          residualMemeAmount: payload.residual_meme_amount,
-          residualQuoteAmount: payload.residual_quote_amount,
-          sqrtPriceX64: payload.sqrt_price_x64,
-          lowerTickBits: payload.lower_tick_bits,
-          upperTickBits: payload.upper_tick_bits,
-          tickSpacing: payload.tick_spacing,
-          feeRate: payload.fee_rate,
-        },
+        creatorMeme: vault.creatorMeme + payload.creator_meme,
+        creatorQuote: vault.creatorQuote + payload.creator_quote,
+        autoLpMeme: vault.autoLpMeme + payload.auto_lp_meme,
+        autoLpQuote: vault.autoLpQuote + payload.auto_lp_quote,
+        rewardsMeme: vault.rewardsMeme + payload.rewards_meme,
+        rewardsQuote: vault.rewardsQuote + payload.rewards_quote,
+        protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
+        protocolQuotePaid: vault.protocolQuotePaid + payload.protocol_quote,
       }));
     }
-    case "AftermathMigrationCompleted": {
+    case "AutoLiquidityAdded": {
       const payload = event.payload;
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
-        launchId: payload.launch_id,
-        poolId: payload.dao_fee_pool_id,
-        venueType: payload.venue,
-        memeType: payload.meme,
-        quoteType: payload.quote,
-        protocolMemeResidual: 0n,
-        protocolQuoteResidual: 0n,
-        migration: {
-          kind: "aftermath",
-          innerPoolId: payload.inner_pool_id,
-          daoFeePoolId: payload.dao_fee_pool_id,
-          sourceMemeAmount: payload.meme_amount,
-          sourceQuoteAmount: payload.quote_amount,
-          usedMemeAmount: payload.meme_amount,
-          usedQuoteAmount: payload.quote_amount,
-          residualMemeAmount: 0n,
-          residualQuoteAmount: 0n,
-          lpType: payload.lp,
-          lockedLpAmount: payload.locked_lp_amount,
-          memeWeight: payload.meme_weight,
-          quoteWeight: payload.quote_weight,
-          flatness: payload.flatness,
-          swapInFee: payload.swap_in_fee,
-          daoFeeBps: payload.dao_fee_bps,
-        },
+        autoLpMeme: payload.meme_pending,
+        autoLpQuote: payload.quote_pending,
       }));
     }
-    case "LpFeesCollected": {
+    case "AutoLpPositionOpened": {
       const payload = event.payload;
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
-        poolId: payload.pool_id,
-        positionId: payload.position_id,
-        venueType: payload.venue,
-        memeType: payload.meme,
-        quoteType: payload.quote,
-        protocolMemeFees:
-          vault.protocolMemeFees + payload.protocol_meme_fee_delta,
-        creatorMemeFees: vault.creatorMemeFees + payload.creator_meme_fee_delta,
-        protocolQuoteFees:
-          vault.protocolQuoteFees + payload.protocol_quote_fee_delta,
-        creatorQuoteFees:
-          vault.creatorQuoteFees + payload.creator_quote_fee_delta,
-        principalLiquidity: payload.principal_liquidity,
+        autoLpPositionId: payload.position_id,
       }));
     }
-    case "LpFeeCapClaimed": {
+    case "FeeSplitChanged": {
       const payload = event.payload;
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
-        lpFeeAuthority: { kind: "cap", capId: payload.lp_fee_cap_id },
+        generation: payload.new_generation,
+        feeSplit: payload.new_fee_split,
       }));
     }
-    case "LpProtocolFeeShareChanged":
-      return {
-        ...next,
-        lpFeePolicy: {
-          ...state.lpFeePolicy,
-          protocolFeeShareBps: event.payload.pos0,
-        },
-      };
-    case "ProjectLpProtocolFeeShareSet": {
-      const payload = event.payload;
-      return {
-        ...next,
-        lpFeePolicy: {
-          ...state.lpFeePolicy,
-          projectProtocolFeeShareBps: {
-            ...state.lpFeePolicy.projectProtocolFeeShareBps,
-            [payload.meme]: payload.protocol_fee_share_bps,
-          },
-        },
-      };
-    }
-    case "ProjectLpProtocolFeeShareCleared": {
-      const projectProtocolFeeShareBps = {
-        ...state.lpFeePolicy.projectProtocolFeeShareBps,
-      };
-      delete projectProtocolFeeShareBps[event.payload.pos0];
-      return {
-        ...next,
-        lpFeePolicy: { ...state.lpFeePolicy, projectProtocolFeeShareBps },
-      };
-    }
-    case "LpFeeCapIssued": {
-      const payload = event.payload;
-      return updateVault(next, payload.vault_id, (vault) => ({
+    case "CreatorFeesClaimed":
+      return updateVault(next, event.payload.vault_id, (vault) => ({
         ...vault,
-        lpFeeAuthority: { kind: "cap", capId: payload.lp_fee_cap_id },
+        creatorMeme: 0n,
+        creatorQuote: 0n,
       }));
-    }
-    case "LpFeesLocked": {
-      const payload = event.payload;
-      return updateVault(next, payload.vault_id, (vault) => ({
+    case "ProtocolFeesClaimed":
+      return updateVault(next, event.payload.vault_id, (vault) => ({
         ...vault,
-        lpFeeAuthority: {
-          kind: "custodian",
-          custodianType: payload.custodian,
-        },
-      }));
-    }
-    case "CreatorFeesClaimed": {
-      const payload = event.payload;
-      return updateVault(next, payload.vault_id, (vault) => ({
-        ...vault,
-        creatorMemeFees: 0n,
-        creatorQuoteFees: 0n,
-      }));
-    }
-    case "ProtocolFeesClaimed": {
-      const payload = event.payload;
-      return updateVault(next, payload.vault_id, (vault) => ({
-        ...vault,
-        protocolMemeFees: 0n,
-        protocolQuoteFees: 0n,
         protocolMemeResidual: 0n,
         protocolQuoteResidual: 0n,
       }));
-    }
-    case "VenueTierUpdated":
+    case "RoundPublished": {
+      const payload = event.payload;
+      const updated = updateVault(next, payload.vault_id, (vault) => ({
+        ...vault,
+        rewardsMeme: payload.meme_unallocated,
+        rewardsQuote: payload.quote_unallocated,
+        nextRound: payload.number + 1n,
+        lastCheckpoint: payload.end_checkpoint,
+      }));
       return {
-        ...next,
-        venueTiers: {
-          ...state.venueTiers,
-          [event.payload.venue]: {
-            tickSpacing: event.payload.new_tick_spacing,
-            feeRate: event.payload.new_fee_rate,
+        ...updated,
+        rounds: {
+          ...state.rounds,
+          [payload.round_id]: {
+            roundId: payload.round_id,
+            vaultId: payload.vault_id,
+            number: payload.number,
+            startCheckpoint: payload.start_checkpoint,
+            endCheckpoint: payload.end_checkpoint,
+            root: toHex(payload.root),
+            manifestDigest: toHex(payload.manifest_digest),
+            leafCount: payload.leaf_count,
+            memeRemaining: payload.meme_amount,
+            quoteRemaining: payload.quote_amount,
+            paidIndexes: {},
           },
         },
       };
-    case "AftermathPolicyUpdated":
+    }
+    case "RewardPaid": {
+      const payload = event.payload;
+      const round = state.rounds[payload.round_id];
+      if (!round) return next;
       return {
         ...next,
-        aftermathPolicy: {
-          memeWeight: event.payload.new_meme_weight,
-          quoteWeight: event.payload.new_quote_weight,
-          daoFeeBps: event.payload.new_dao_fee_bps,
-          source: "override",
+        rounds: {
+          ...state.rounds,
+          [payload.round_id]: {
+            ...round,
+            memeRemaining: payload.meme_remaining,
+            quoteRemaining: payload.quote_remaining,
+            paidIndexes: {
+              ...round.paidIndexes,
+              [payload.index.toString()]: true,
+            },
+          },
         },
       };
-    case "AftermathDaoFeeUpdated":
-      return updateVault(next, event.payload.vault_id, (vault) => {
-        if (vault.migration?.kind !== "aftermath") {
-          throw new TypeError(
-            `vault ${vault.vaultId} has no Aftermath migration`,
-          );
-        }
-        if (vault.poolId !== event.payload.dao_fee_pool_id) {
-          throw new TypeError(
-            `vault ${vault.vaultId} has an unexpected DAO fee pool`,
-          );
-        }
+    }
+    case "LpFeePolicyChanged": {
+      const payload = event.payload;
+      const pair =
+        payload.new_meme_bps === null || payload.new_quote_bps === null
+          ? null
+          : { memeBps: payload.new_meme_bps, quoteBps: payload.new_quote_bps };
+      if (payload.meme === null) {
+        if (!pair) return next;
         return {
-          ...vault,
-          migration: {
-            ...vault.migration,
-            daoFeeBps: event.payload.new_dao_fee_bps,
-          },
+          ...next,
+          lpFeePolicy: { ...state.lpFeePolicy, defaultShares: pair },
         };
-      });
+      }
+      const coinShares = { ...state.lpFeePolicy.coinShares };
+      if (pair) coinShares[payload.meme] = pair;
+      else delete coinShares[payload.meme];
+      return { ...next, lpFeePolicy: { ...state.lpFeePolicy, coinShares } };
+    }
+    case "LpFeeDestinationChanged":
+      return {
+        ...next,
+        lpFeePolicy: {
+          ...state.lpFeePolicy,
+          protocolDestination: event.payload.new_destination,
+        },
+      };
+    case "CetusPoolReserved": {
+      const payload = event.payload;
+      return {
+        ...next,
+        cetusPoolReservations: {
+          ...state.cetusPoolReservations,
+          [payload.meme]: {
+            memeType: payload.meme,
+            quoteType: payload.quote,
+            poolCreationCapId: payload.pool_creation_cap_id,
+            tickSpacing: payload.tick_spacing,
+          },
+        },
+      };
+    }
   }
 }
 
@@ -421,7 +380,12 @@ export function reduceLaunchpadProductInput(
   }
   if (input.source === "migrators") {
     const migrators = reduceMigratorEvent(state.migrators, input);
-    return migrators === state.migrators ? state : { ...state, migrators };
+    if (migrators === state.migrators) return state;
+    if (input.kind !== "VaultCreated") return { ...state, migrators };
+    return {
+      ...state,
+      migrators: linkVaultLaunch(migrators, state.launchpad, input.payload),
+    };
   }
   const native = reduceNativeFact(state.native, input);
   return native === state.native ? state : { ...state, native };
@@ -469,6 +433,28 @@ function reduceNativeFact(
         },
       };
   }
+}
+
+/**
+ * The migration transaction migrates the launch (`Migrated`) before it
+ * attaches the vault (`VaultCreated`). One launch exists per Meme type, so the
+ * launch of the vault's Meme type is the vault's launch.
+ */
+function linkVaultLaunch(
+  state: MigratorEventProjection,
+  launchpad: LaunchpadEventProjection,
+  payload: Extract<DecodedMigratorEvent, { kind: "VaultCreated" }>["payload"],
+): MigratorEventProjection {
+  const launch = Object.values(launchpad.launches).find(
+    (candidate) =>
+      candidate.memeType === payload.meme &&
+      candidate.quoteType === payload.quote,
+  );
+  if (!launch) return state;
+  return updateVault(state, payload.vault_id, (current) => ({
+    ...current,
+    launchId: launch.launchId,
+  }));
 }
 
 function updateVault(

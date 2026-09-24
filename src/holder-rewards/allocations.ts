@@ -24,7 +24,7 @@ export type RewardProof = {
 };
 export type RewardManifest = {
   version: 1;
-  distributorId: string;
+  vaultId: string;
   number: string;
   startCheckpoint: string;
   endCheckpoint: string;
@@ -36,7 +36,7 @@ export type RewardManifest = {
 };
 
 const leafBcs = bcs.struct("RewardLeaf", {
-  distributor: bcs.Address,
+  vault: bcs.Address,
   number: bcs.u64(),
   index: bcs.u64(),
   beneficiary: bcs.Address,
@@ -44,7 +44,7 @@ const leafBcs = bcs.struct("RewardLeaf", {
   quote: bcs.u64(),
 });
 const manifestBcs = bcs.struct("RewardManifest", {
-  distributor: bcs.Address,
+  vault: bcs.Address,
   number: bcs.u64(),
   start: bcs.u64(),
   end: bcs.u64(),
@@ -52,7 +52,7 @@ const manifestBcs = bcs.struct("RewardManifest", {
 });
 const leafPrefix = new TextEncoder().encode("\x00blast-holder-rewards-v1");
 
-/** Exact atomic-unit allocations, rounded down. Dust stays in distributor custody. */
+/** Exact atomic-unit allocations, rounded down. Dust stays in the vault rewards balance. */
 export function allocateHolderRewards(
   holders: readonly HolderWeight[],
   memeBudget: bigint,
@@ -87,13 +87,13 @@ export function allocateHolderRewards(
 
 /** Builds the public payout list and every positional proof, independent of the signing key. */
 export function buildRewardManifest(options: {
-  distributorId: string;
+  vaultId: string;
   number: bigint;
   startCheckpoint: bigint;
   endCheckpoint: bigint;
   allocations: readonly RewardAllocation[];
 }): RewardManifest {
-  const distributorId = rewardAddress(options.distributorId);
+  const vaultId = rewardAddress(options.vaultId);
   requireU64("number", options.number);
   requireU64("startCheckpoint", options.startCheckpoint);
   requireU64("endCheckpoint", options.endCheckpoint);
@@ -124,7 +124,7 @@ export function buildRewardManifest(options: {
           : 0,
     );
   const leaves = allocations.map((allocation, index) => ({
-    distributor: distributorId,
+    vault: vaultId,
     number: options.number,
     index: BigInt(index),
     beneficiary: allocation.beneficiary,
@@ -153,7 +153,7 @@ export function buildRewardManifest(options: {
   );
   return {
     version: 1,
-    distributorId,
+    vaultId,
     number: options.number.toString(),
     startCheckpoint: options.startCheckpoint.toString(),
     endCheckpoint: options.endCheckpoint.toString(),
@@ -163,7 +163,7 @@ export function buildRewardManifest(options: {
         manifestBcs
           .serialize(
             {
-              distributor: distributorId,
+              vault: vaultId,
               number: options.number,
               start: options.startCheckpoint,
               end: options.endCheckpoint,
@@ -215,7 +215,7 @@ export function verifyRewardProof(
         leafPrefix,
         leafBcs
           .serialize({
-            distributor: rewardAddress(manifest.distributorId),
+            vault: rewardAddress(manifest.vaultId),
             number: requireU64("number", BigInt(manifest.number)),
             index: BigInt(index),
             beneficiary: rewardAddress(allocation.beneficiary),
@@ -243,7 +243,7 @@ export function validateRewardManifest(
 ): RewardManifest {
   if (manifest.version !== 1) throw new Error("unsupported manifest version");
   const expected = buildRewardManifest({
-    distributorId: manifest.distributorId,
+    vaultId: manifest.vaultId,
     number: BigInt(manifest.number),
     startCheckpoint: BigInt(manifest.startCheckpoint),
     endCheckpoint: BigInt(manifest.endCheckpoint),
@@ -254,7 +254,7 @@ export function validateRewardManifest(
     })),
   });
   for (const key of [
-    "distributorId",
+    "vaultId",
     "number",
     "startCheckpoint",
     "endCheckpoint",

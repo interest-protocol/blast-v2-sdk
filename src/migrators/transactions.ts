@@ -1,21 +1,38 @@
 import type {
+  TransactionArgument,
   TransactionObjectArgument,
   TransactionObjectInput,
   TransactionResult,
 } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
 import {
-  isValidTransactionDigest,
   normalizeStructTag,
   normalizeSuiAddress,
   normalizeSuiObjectId,
 } from "@mysten/sui/utils";
+
+import type {
+  RewardManifest,
+  RewardProof,
+} from "../holder-rewards/allocations.ts";
+import {
+  rewardAddress,
+  rewardDigest,
+  validateRewardManifest,
+} from "../holder-rewards/allocations.ts";
+import type { FeeSplit } from "../launchpad/allocation.ts";
 import type {
   LaunchpadDeployment,
+  LaunchSettings,
   LaunchTypes,
+  PreShareBuyInput,
 } from "../launchpad/transactions.ts";
-import { LaunchpadCalls } from "../launchpad/transactions.ts";
-import { normalizePositiveU64, requireU64 } from "../lib/integers.ts";
+import {
+  addLaunchCompletion,
+  LaunchpadCalls,
+  normalizeLaunchTypes,
+} from "../launchpad/transactions.ts";
+import { requireU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import { normalizeSharedObjectReference } from "../lib/sui.ts";
 import type { MigratorVenue } from "./state.ts";
@@ -28,30 +45,34 @@ export type MigratorsDeployment = {
   migratorsVersion: SharedObjectReference<false>;
   /** Migrators `lp_fee_policy::LpFeePolicy` read by every LP-fee collection. */
   lpFeePolicy: SharedObjectReference<false>;
+  /** Migrators `venue_config::VenueConfig`, holding each Meme's Cetus `PoolCreationCap`. */
   venueConfig: SharedObjectReference<false>;
 };
 
-export type CetusMigrationPool =
-  | { kind: "new"; pools: SharedObjectReference<true> }
-  | { kind: "existing"; pool: SharedObjectReference<true> };
+/**
+ * Cetus orders a pool's coin types by type name. `a` means Meme is coin A
+ * (`Pool<Meme, Quote>`); `b` means Quote is coin A (`Pool<Quote, Meme>`).
+ */
+export type CetusMemeSide = "a" | "b";
 
-export type TurbosMigrationPool =
-  | {
-      kind: "new";
-      poolConfig: SharedObjectReference<true>;
-      fee: SharedObjectReference<false>;
-    }
-  | { kind: "existing"; pool: SharedObjectReference<true> };
+/** The Cetus CLMM `config::GlobalConfig` every Cetus route reads. */
+export type CetusObjects = {
+  /** Cetus CLMM `config::GlobalConfig`. */
+  cetusConfig: SharedObjectReference<false>;
+};
 
-/** A fully resolved object reference that Sui can encode as `Receiving<T>`. */
-export type ReceivingCoinReference = Readonly<{
-  objectId: string;
-  version: number | string;
-  digest: string;
-}>;
+/** Settings for starting a launch through an adapter in one transaction. */
+export type CreateLaunchOptions = LaunchTypes &
+  LaunchSettings & {
+    /** The `LaunchTicket<Meme>` the generated package's initializer transferred to its publisher. */
+    ticket: TransactionObjectInput;
+    /** The Meme `Currency<Meme>` in the Coin Registry, fixed at finalization. */
+    memeCurrency: SharedObjectReference<true>;
+    preShareBuy?: PreShareBuyInput;
+  };
 
-/** Maximum Aftermath DAO fee coin objects accepted by one accrual call. */
-export const AFTERMATH_MAX_DAO_FEE_COINS_PER_BATCH = 100;
+/** Maximum Merkle proof depth the holder-reward leaf count (65,536) allows. */
+export const MAX_HOLDER_REWARD_PROOF_DEPTH = 16;
 
 type NormalizedDeployment = Required<Omit<MigratorsDeployment, "launchpad">> & {
   launchpad: LaunchpadDeployment;
@@ -59,17 +80,17 @@ type NormalizedDeployment = Required<Omit<MigratorsDeployment, "launchpad">> & {
 
 export class MigratorCalls {
   readonly deployment: NormalizedDeployment;
-  readonly #launchpad: LaunchpadCalls;
+  readonly launchpad: LaunchpadCalls;
 
   constructor(deployment: MigratorsDeployment) {
     const packageId = normalizeSuiObjectId(deployment.packageId);
-    this.#launchpad = new LaunchpadCalls(deployment.launchpad);
+    this.launchpad = new LaunchpadCalls(deployment.launchpad);
     this.deployment = {
       packageId,
       originalPackageId: normalizeSuiObjectId(
         deployment.originalPackageId ?? packageId,
       ),
-      launchpad: this.#launchpad.deployment,
+      launchpad: this.launchpad.deployment,
       migratorsVersion: normalizeSharedObjectReference(
         "migratorsVersion",
         deployment.migratorsVersion,
@@ -88,6 +109,7 @@ export class MigratorCalls {
     };
   }
 
+  /** The adapter witness type a launch stores as its `migration_witness`. */
   migrationWitnessType(venue: MigratorVenue): string {
     return normalizeStructTag(
       `${this.deployment.originalPackageId}::${venue}::Witness`,
@@ -95,76 +117,283 @@ export class MigratorCalls {
   }
 
   signIn(options: { adminCap: TransactionObjectInput }) {
-    return this.#launchpad.signIn(options);
-  }
-
-  #migratorsVersion(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
-      tx,
-      "migratorsVersion",
-      this.deployment.migratorsVersion,
-      false,
-    );
+    return this.launchpad.signIn(options);
   }
 
   /**
-   * Reissues the vault's `LpFeeCap` under creator-admin authority. Move aborts
-   * unless a creator already claimed the capability: pending LP fees follow the
-   * launch's curve-fee capability and are never reissued.
+   * Starts a Cetus launch at `tickSpacing`: Cetus derives the fee rate, and the
+   * Meme type's single `PoolCreationCap` is minted and reserved for the pair.
+   * Returns the `LaunchInitializer`, which the same PTB must finalize.
    */
-  issueLpFeeCap(
+  newCetusLaunch(
+    options: LaunchTypes &
+      CetusObjects & {
+        ticket: TransactionObjectInput;
+        cetusPools: SharedObjectReference<true>;
+        tickSpacing: number;
+      },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const tickSpacing = requireU32("tickSpacing", options.tickSpacing);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::cetus::new`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          tx.object(options.ticket),
+          this.#migratorsVersion(tx),
+          this.#launchpadVersion(tx),
+          this.#launchConfig(tx),
+          sharedObject(
+            tx,
+            "venueConfig",
+            { ...this.deployment.venueConfig, mutable: true },
+            true,
+          ),
+          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
+          sharedObject(tx, "cetusPools", options.cetusPools, true),
+          tx.pure.u32(tickSpacing),
+        ],
+      });
+  }
+
+  /**
+   * Starts a Bluefin launch at the creator's tier (tick spacing 1-400, fee rate
+   * 1-20,000, Bluefin's own bounds). Returns the `LaunchInitializer`.
+   */
+  newBluefinLaunch(
     options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-      recipient: string;
+      ticket: TransactionObjectInput;
+      tickSpacing: number;
+      feeRate: bigint;
     },
   ) {
     const types = normalizeLaunchTypes(options);
-    const recipient = normalizeSuiAddress(options.recipient);
-    return (tx: Transaction): void => {
+    const tickSpacing = requireU32("tickSpacing", options.tickSpacing);
+    requireU64("feeRate", options.feeRate);
+    return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::vault::issue_lp_fee_cap`,
+        target: `${this.deployment.packageId}::bluefin::new`,
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
-          sharedObject(tx, "vault", options.vault, true),
+          tx.object(options.ticket),
           this.#migratorsVersion(tx),
-          tx.object(options.adminWitness),
-          tx.pure.address(recipient),
+          this.#launchpadVersion(tx),
+          this.#launchConfig(tx),
+          tx.pure.u32(tickSpacing),
+          tx.pure.u64(options.feeRate),
+        ],
+      });
+  }
+
+  /**
+   * Migrates a MigrationReady Cetus launch: creates the pool with the reserved
+   * capability, seeds full-range liquidity, and burns the position through
+   * Cetus LP Burn. Anyone may call it.
+   */
+  migrateCetus(
+    options: LaunchTypes &
+      CetusObjects & {
+        memeSide: CetusMemeSide;
+        launch: SharedObjectReference<true>;
+        memeCurrency: SharedObjectReference<true>;
+        cetusPools: SharedObjectReference<true>;
+        /** Cetus LP Burn `lp_burn::BurnManager`. */
+        burnManager: SharedObjectReference<true>;
+      },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const memeSide = normalizeMemeSide(options.memeSide);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::cetus::migrate_meme_${memeSide}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          this.#migratorsVersion(tx),
+          this.#launchpadVersion(tx),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
+          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
+          sharedObject(tx, "cetusPools", options.cetusPools, true),
+          sharedObject(tx, "burnManager", options.burnManager, true),
+          tx.object.clock(),
         ],
       });
     };
   }
 
   /**
-   * Claims the vault's migration-born `LpFeeCap` once with the launch's live
-   * `CurveFeeCap`. `launch` is read immutably by Move; pass `mutable: true`
-   * only when the same PTB also mutates the launch.
+   * Migrates a MigrationReady Bluefin launch into a new `Pool<Meme, Quote>`.
+   * `creationFee` must be exactly Bluefin's configured SUI pool-creation fee.
    */
-  claimLpFeeCap(
+  migrateBluefin(
     options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      launch: SharedObjectReference;
-      curveFeeCap: TransactionObjectInput;
+      launch: SharedObjectReference<true>;
+      memeCurrency: SharedObjectReference<true>;
+      quoteCurrency: SharedObjectReference<false>;
+      bluefinConfig: SharedObjectReference<true>;
+      creationFee: TransactionObjectInput;
     },
   ) {
     const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): TransactionResult =>
+    return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::vault::claim_lp_fee_cap`,
+        target: `${this.deployment.packageId}::bluefin::migrate`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          this.#migratorsVersion(tx),
+          this.#launchpadVersion(tx),
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          sharedObject(tx, "quoteCurrency", options.quoteCurrency, false),
+          sharedObject(tx, "bluefinConfig", options.bluefinConfig, true),
+          tx.object(options.creationFee),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /**
+   * Collects the burned migration position's and the auto-LP position's fees,
+   * pays Blast's live share, splits the rest, and adds the auto-LP share back.
+   * Anyone may call it.
+   */
+  collectCetusFees(
+    options: LaunchTypes &
+      CetusObjects & {
+        memeSide: CetusMemeSide;
+        vault: SharedObjectReference<true>;
+        burnManager: SharedObjectReference<false>;
+        pool: SharedObjectReference<true>;
+      },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const memeSide = normalizeMemeSide(options.memeSide);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::cetus::collect_fees_meme_${memeSide}`,
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
-          sharedObject(tx, "launch", options.launch, options.launch.mutable),
-          tx.object(options.curveFeeCap),
+          this.#lpFeePolicy(tx),
+          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
+          sharedObject(tx, "burnManager", options.burnManager, false),
+          sharedObject(tx, "pool", options.pool, true),
+          tx.object.clock(),
         ],
       });
+    };
   }
 
+  /** Collects, splits, and adds auto-LP for a Bluefin vault. Anyone may call it. */
+  collectBluefinFees(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      bluefinConfig: SharedObjectReference<false>;
+      pool: SharedObjectReference<true>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::bluefin::collect_fees`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          this.#lpFeePolicy(tx),
+          sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
+          sharedObject(tx, "pool", options.pool, true),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /**
+   * Settles the fees accrued under the current split, then commits `feeSplit`
+   * as the next generation. Only the launch's live `CurveFeeCap` authorizes it.
+   * `launch` is read immutably by Move.
+   */
+  settleAndUpdateCetusFeeSplit(
+    options: LaunchTypes &
+      CetusObjects & {
+        memeSide: CetusMemeSide;
+        vault: SharedObjectReference<true>;
+        launch: SharedObjectReference;
+        curveFeeCap: TransactionObjectInput;
+        burnManager: SharedObjectReference<false>;
+        pool: SharedObjectReference<true>;
+        feeSplit: FeeSplit;
+      },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const memeSide = normalizeMemeSide(options.memeSide);
+    const feeSplit = this.launchpad.feeSplit(options.feeSplit);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::cetus::settle_and_update_fee_split_meme_${memeSide}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          this.#lpFeePolicy(tx),
+          sharedObject(tx, "launch", options.launch, options.launch.mutable),
+          tx.object(options.curveFeeCap),
+          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
+          sharedObject(tx, "burnManager", options.burnManager, false),
+          sharedObject(tx, "pool", options.pool, true),
+          tx.add(feeSplit),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /** Bluefin counterpart of `settleAndUpdateCetusFeeSplit`. */
+  settleAndUpdateBluefinFeeSplit(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      launch: SharedObjectReference;
+      curveFeeCap: TransactionObjectInput;
+      bluefinConfig: SharedObjectReference<false>;
+      pool: SharedObjectReference<true>;
+      feeSplit: FeeSplit;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const feeSplit = this.launchpad.feeSplit(options.feeSplit);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::bluefin::settle_and_update_fee_split`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          this.#lpFeePolicy(tx),
+          sharedObject(tx, "launch", options.launch, options.launch.mutable),
+          tx.object(options.curveFeeCap),
+          sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
+          sharedObject(tx, "pool", options.pool, true),
+          tx.add(feeSplit),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /**
+   * Claims the creator's accrued LP fees with the launch's live `CurveFeeCap`.
+   * `launch` is read immutably by Move.
+   */
   claimCreatorFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
-      lpFeeCap: TransactionObjectInput;
+      launch: SharedObjectReference;
+      curveFeeCap: TransactionObjectInput;
     },
   ) {
     const types = normalizeLaunchTypes(options);
@@ -175,11 +404,13 @@ export class MigratorCalls {
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
-          tx.object(options.lpFeeCap),
+          sharedObject(tx, "launch", options.launch, options.launch.mutable),
+          tx.object(options.curveFeeCap),
         ],
       });
   }
 
+  /** Claims the protocol-owned migration residuals under admin authority. */
   claimProtocolFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
@@ -199,388 +430,197 @@ export class MigratorCalls {
       });
   }
 
-  setAftermathPolicy(options: {
+  /** Changes Blast's default Meme and Quote LP-fee shares for coins without their own pair. */
+  setLpFeeDefaultShares(options: {
     adminWitness: TransactionObjectInput;
-    memeWeight: bigint;
-    quoteWeight: bigint;
-    daoFeeBps: number;
+    memeBps: bigint;
+    quoteBps: bigint;
   }) {
-    const policy = normalizeAftermathPolicy(options);
-    return (tx: Transaction): TransactionResult =>
+    return this.#lpFeePolicyAdmin("set_default_shares", [], options, (tx) => [
+      tx.add(this.launchpad.bps(options.memeBps)),
+      tx.add(this.launchpad.bps(options.quoteBps)),
+    ]);
+  }
+
+  /** Sets Blast's LP-fee shares for one original Meme type. */
+  setLpFeeCoinShares(options: {
+    memeType: string;
+    adminWitness: TransactionObjectInput;
+    memeBps: bigint;
+    quoteBps: bigint;
+  }) {
+    return this.#lpFeePolicyAdmin(
+      "set_coin_shares",
+      [normalizeStructTag(options.memeType)],
+      options,
+      (tx) => [
+        tx.add(this.launchpad.bps(options.memeBps)),
+        tx.add(this.launchpad.bps(options.quoteBps)),
+      ],
+    );
+  }
+
+  /** Removes one Meme type's own pair so its collections use the defaults again. */
+  clearLpFeeCoinShares(options: {
+    memeType: string;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return this.#lpFeePolicyAdmin(
+      "clear_coin_shares",
+      [normalizeStructTag(options.memeType)],
+      options,
+      () => [],
+    );
+  }
+
+  /** Redirects every later protocol LP-fee payout. */
+  setLpFeeProtocolDestination(options: {
+    adminWitness: TransactionObjectInput;
+    destination: string;
+  }) {
+    const destination = normalizeSuiAddress(options.destination);
+    return this.#lpFeePolicyAdmin(
+      "set_protocol_destination",
+      [],
+      options,
+      (tx) => [tx.pure.address(destination)],
+    );
+  }
+
+  /**
+   * Publishes a holder-reward round from a validated manifest, reserving its
+   * budget from the vault's rewards balance, and shares the `Round`.
+   */
+  publishHolderRewardRound(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      manifest: RewardManifest;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const manifest = validateRewardManifest(options.manifest);
+    if (
+      rewardAddress(manifest.vaultId) !== rewardAddress(options.vault.objectId)
+    ) {
+      throw new TypeError("manifest belongs to another vault");
+    }
+    return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::aftermath::set_policy`,
+        target: `${this.deployment.packageId}::blast_holder_rewards::publish_round`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          tx.object(options.adminWitness),
+          tx.pure.u64(manifest.number),
+          tx.pure.u64(manifest.startCheckpoint),
+          tx.pure.u64(manifest.endCheckpoint),
+          tx.pure.vector("u8", rewardDigest(manifest.root)),
+          tx.pure.vector("u8", rewardDigest(manifest.manifestDigest)),
+          tx.pure.u64(manifest.allocations.length),
+          tx.pure.u64(manifest.memeAmount),
+          tx.pure.u64(manifest.quoteAmount),
+        ],
+      });
+    };
+  }
+
+  /** Relays one allocation's proof; the round pays its committed beneficiary. */
+  claimHolderReward(
+    options: LaunchTypes & {
+      round: SharedObjectReference<true>;
+      allocation: RewardProof;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const { allocation } = options;
+    const index = requireU64("index", BigInt(allocation.index));
+    const memeAmount = requireU64("memeAmount", BigInt(allocation.memeAmount));
+    const quoteAmount = requireU64(
+      "quoteAmount",
+      BigInt(allocation.quoteAmount),
+    );
+    const beneficiary = rewardAddress(allocation.beneficiary);
+    if (allocation.proof.length > MAX_HOLDER_REWARD_PROOF_DEPTH) {
+      throw new RangeError(
+        `proof exceeds ${MAX_HOLDER_REWARD_PROOF_DEPTH} siblings`,
+      );
+    }
+    const proof = allocation.proof.map((sibling) =>
+      Array.from(rewardDigest(sibling)),
+    );
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::blast_holder_rewards::claim`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "round", options.round, true),
+          this.#migratorsVersion(tx),
+          tx.pure.u64(index),
+          tx.pure.address(beneficiary),
+          tx.pure.u64(memeAmount),
+          tx.pure.u64(quoteAmount),
+          tx.pure.vector("vector<u8>", proof),
+        ],
+      });
+    };
+  }
+
+  #lpFeePolicyAdmin(
+    functionName: string,
+    typeArguments: string[],
+    options: { adminWitness: TransactionObjectInput },
+    extra: (tx: Transaction) => TransactionArgument[],
+  ) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::${functionName}`,
+        typeArguments,
         arguments: [
           sharedObject(
             tx,
-            "venueConfig",
-            { ...this.deployment.venueConfig, mutable: true },
+            "lpFeePolicy",
+            { ...this.deployment.lpFeePolicy, mutable: true },
             true,
           ),
           this.#migratorsVersion(tx),
           tx.object(options.adminWitness),
-          tx.pure.u64(policy.memeWeight),
-          tx.pure.u64(policy.quoteWeight),
-          tx.pure.u16(policy.daoFeeBps),
+          ...extra(tx),
         ],
       });
+    };
   }
 
-  migrateAftermath(
-    options: LaunchTypes & {
-      lpType: string;
-      memeSide: "first" | "second";
-      launch: SharedObjectReference<true>;
-      memeCurrency: SharedObjectReference<true>;
-      poolRegistry: SharedObjectReference<true>;
-      createPoolCap: TransactionObjectInput;
-      daoFeeVersion: SharedObjectReference<false>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    const lpType = normalizeStructTag(options.lpType);
-    const memeSide = normalizeAftermathMemeSide(options.memeSide);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::aftermath::migrate_meme_${memeSide}`,
-        typeArguments: [lpType, types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          sharedObject(
-            tx,
-            "packageVersion",
-            this.deployment.launchpad.packageVersion,
-            false,
-          ),
-          this.#migratorsVersion(tx),
-          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
-          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          sharedObject(tx, "poolRegistry", options.poolRegistry, true),
-          tx.object(options.createPoolCap),
-          sharedObject(tx, "daoFeeVersion", options.daoFeeVersion, false),
-        ],
-      });
-  }
-
-  updateAftermathDaoFee(
-    options: LaunchTypes & {
-      lpType: string;
-      vault: SharedObjectReference<true>;
-      daoFeePool: SharedObjectReference<true>;
-      daoFeeVersion: SharedObjectReference<false>;
-      adminWitness: TransactionObjectInput;
-      daoFeeBps: number;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    const lpType = normalizeStructTag(options.lpType);
-    const daoFeeBps = normalizeAftermathDaoFeeBps(options.daoFeeBps);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::aftermath::update_dao_fee`,
-        typeArguments: [lpType, types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#migratorsVersion(tx),
-          sharedObject(tx, "daoFeePool", options.daoFeePool, true),
-          sharedObject(tx, "daoFeeVersion", options.daoFeeVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.u16(daoFeeBps),
-        ],
-      });
-  }
-
-  accrueAftermathDaoFees(
-    options: LaunchTypes & {
-      lpType: string;
-      vault: SharedObjectReference<true>;
-      memeFeeCoins: readonly ReceivingCoinReference[];
-      quoteFeeCoins: readonly ReceivingCoinReference[];
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    const lpType = normalizeStructTag(options.lpType);
-    const { memeFeeCoins, quoteFeeCoins } = normalizeAftermathFeeCoinBatches(
-      options.memeFeeCoins,
-      options.quoteFeeCoins,
+  #migratorsVersion(tx: Transaction): TransactionObjectArgument {
+    return sharedObject(
+      tx,
+      "migratorsVersion",
+      this.deployment.migratorsVersion,
+      false,
     );
-    return (tx: Transaction): TransactionResult => {
-      const memeReceivings = tx.makeMoveVec({
-        type: receivingCoinType(types.memeType),
-        elements: memeFeeCoins.map((feeCoin) => tx.receivingRef(feeCoin)),
-      });
-      const quoteReceivings = tx.makeMoveVec({
-        type: receivingCoinType(types.quoteType),
-        elements: quoteFeeCoins.map((feeCoin) => tx.receivingRef(feeCoin)),
-      });
-
-      return tx.moveCall({
-        target: `${this.deployment.packageId}::aftermath::accrue_dao_fees`,
-        typeArguments: [lpType, types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#migratorsVersion(tx),
-          sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false),
-          memeReceivings,
-          quoteReceivings,
-        ],
-      });
-    };
   }
 
-  migrateBluefin(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      memeCurrency: SharedObjectReference<true>;
-      quoteCurrency: SharedObjectReference<false>;
-      bluefinConfig: SharedObjectReference<true>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::bluefin::migrate`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          sharedObject(
-            tx,
-            "packageVersion",
-            this.deployment.launchpad.packageVersion,
-            false,
-          ),
-          this.#migratorsVersion(tx),
-          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
-          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          sharedObject(tx, "quoteCurrency", options.quoteCurrency, false),
-          sharedObject(tx, "bluefinConfig", options.bluefinConfig, true),
-          tx.object.clock(),
-        ],
-      });
+  #launchpadVersion(tx: Transaction): TransactionObjectArgument {
+    return sharedObject(
+      tx,
+      "packageVersion",
+      this.deployment.launchpad.packageVersion,
+      false,
+    );
   }
 
-  collectBluefinFees(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      bluefinConfig: SharedObjectReference<false>;
-      pool: SharedObjectReference<true>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::bluefin::collect_fees`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#migratorsVersion(tx),
-          sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false),
-          sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
-          sharedObject(tx, "pool", options.pool, true),
-          tx.object.clock(),
-        ],
-      });
+  #launchConfig(tx: Transaction): TransactionObjectArgument {
+    return sharedObject(
+      tx,
+      "launchConfig",
+      this.deployment.launchpad.launchConfig,
+      false,
+    );
   }
 
-  migrateMmt(
-    options: LaunchTypes & {
-      memeSide: "x" | "y";
-      launch: SharedObjectReference<true>;
-      memeCurrency: SharedObjectReference<true>;
-      mmtGlobalConfig: SharedObjectReference<true>;
-      mmtVersion: SharedObjectReference<false>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    const memeSide = normalizeMemeSide(options.memeSide);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::mmt::migrate_meme_${memeSide}`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          sharedObject(
-            tx,
-            "packageVersion",
-            this.deployment.launchpad.packageVersion,
-            false,
-          ),
-          this.#migratorsVersion(tx),
-          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
-          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          sharedObject(tx, "mmtGlobalConfig", options.mmtGlobalConfig, true),
-          sharedObject(tx, "mmtVersion", options.mmtVersion, false),
-          tx.object.clock(),
-        ],
-      });
-  }
-
-  collectMmtFees(
-    options: LaunchTypes & {
-      memeSide: "x" | "y";
-      vault: SharedObjectReference<true>;
-      pool: SharedObjectReference<true>;
-      mmtVersion: SharedObjectReference<false>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    const memeSide = normalizeMemeSide(options.memeSide);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::mmt::collect_fees_meme_${memeSide}`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#migratorsVersion(tx),
-          sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false),
-          sharedObject(tx, "pool", options.pool, true),
-          sharedObject(tx, "mmtVersion", options.mmtVersion, false),
-          tx.object.clock(),
-        ],
-      });
-  }
-
-  migrateCetus(
-    options: LaunchTypes & {
-      memeSide: "a" | "b";
-      pool: CetusMigrationPool;
-      launch: SharedObjectReference<true>;
-      memeCurrency: SharedObjectReference<true>;
-      cetusConfig: SharedObjectReference<false>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    const memeSide = normalizeMemeSideAb(options.memeSide);
-    const poolKind = normalizePoolKind(options.pool.kind);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::migrate_${poolKind}_meme_${memeSide}`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          sharedObject(
-            tx,
-            "packageVersion",
-            this.deployment.launchpad.packageVersion,
-            false,
-          ),
-          this.#migratorsVersion(tx),
-          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
-          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
-          options.pool.kind === "new"
-            ? sharedObject(tx, "pools", options.pool.pools, true)
-            : sharedObject(tx, "pool", options.pool.pool, true),
-          tx.object.clock(),
-        ],
-      });
-  }
-
-  collectCetusFees(
-    options: LaunchTypes & {
-      memeSide: "a" | "b";
-      vault: SharedObjectReference<true>;
-      cetusConfig: SharedObjectReference<false>;
-      pool: SharedObjectReference<true>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    const memeSide = normalizeMemeSideAb(options.memeSide);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::collect_fees_meme_${memeSide}`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#migratorsVersion(tx),
-          sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false),
-          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
-          sharedObject(tx, "pool", options.pool, true),
-        ],
-      });
-  }
-
-  migrateTurbos(
-    options: LaunchTypes & {
-      feeType: string;
-      memeSide: "a" | "b";
-      pool: TurbosMigrationPool;
-      launch: SharedObjectReference<true>;
-      memeCurrency: SharedObjectReference<true>;
-      positions: SharedObjectReference<true>;
-      deadline: bigint;
-      versioned: SharedObjectReference<false>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    const feeType = normalizeStructTag(options.feeType);
-    const memeSide = normalizeMemeSideAb(options.memeSide);
-    const poolKind = normalizePoolKind(options.pool.kind);
-    requireU64("deadline", options.deadline);
-    return (tx: Transaction): TransactionResult => {
-      const baseArguments = [
-        sharedObject(tx, "launch", options.launch, true),
-        sharedObject(
-          tx,
-          "packageVersion",
-          this.deployment.launchpad.packageVersion,
-          false,
-        ),
-        this.#migratorsVersion(tx),
-        sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
-        sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-      ];
-      const poolArguments =
-        options.pool.kind === "new"
-          ? [
-              sharedObject(tx, "poolConfig", options.pool.poolConfig, true),
-              sharedObject(tx, "fee", options.pool.fee, false),
-            ]
-          : [sharedObject(tx, "pool", options.pool.pool, true)];
-      return tx.moveCall({
-        target: `${this.deployment.packageId}::turbos::migrate_${poolKind}_meme_${memeSide}`,
-        typeArguments: [types.memeType, types.quoteType, feeType],
-        arguments: [
-          ...baseArguments,
-          ...poolArguments,
-          sharedObject(tx, "positions", options.positions, true),
-          tx.pure.u64(options.deadline),
-          tx.object.clock(),
-          sharedObject(tx, "versioned", options.versioned, false),
-        ],
-      });
-    };
-  }
-
-  collectTurbosFees(
-    options: LaunchTypes & {
-      feeType: string;
-      memeSide: "a" | "b";
-      vault: SharedObjectReference<true>;
-      pool: SharedObjectReference<true>;
-      positions: SharedObjectReference<true>;
-      deadline: bigint;
-      versioned: SharedObjectReference<false>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    const feeType = normalizeStructTag(options.feeType);
-    const memeSide = normalizeMemeSideAb(options.memeSide);
-    requireU64("deadline", options.deadline);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::turbos::collect_fees_meme_${memeSide}`,
-        typeArguments: [types.memeType, types.quoteType, feeType],
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#migratorsVersion(tx),
-          sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false),
-          sharedObject(tx, "pool", options.pool, true),
-          sharedObject(tx, "positions", options.positions, true),
-          tx.pure.u64(options.deadline),
-          tx.object.clock(),
-          sharedObject(tx, "versioned", options.versioned, false),
-        ],
-      });
+  #lpFeePolicy(tx: Transaction): TransactionObjectArgument {
+    return sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false);
   }
 }
 
@@ -591,22 +631,117 @@ export class MigratorTransactions {
     this.call = new MigratorCalls(deployment);
   }
 
-  issueLpFeeCap(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      adminCapId: string;
-      recipient: string;
-    },
+  /**
+   * Starts, configures, finalizes, and shares a Cetus launch atomically, with
+   * an optional purchase on the owned launch, routed to its recipient.
+   */
+  createCetusLaunch(
+    options: CreateLaunchOptions &
+      CetusObjects & {
+        cetusPools: SharedObjectReference<true>;
+        tickSpacing: number;
+      },
   ): Transaction {
     const tx = new Transaction();
-    const adminWitness = tx.add(
-      this.call.signIn({ adminCap: options.adminCapId }),
-    );
-    tx.add(this.call.issueLpFeeCap({ ...options, adminWitness }));
+    const initializer = tx.add(this.call.newCetusLaunch(options));
+    addLaunchCompletion(tx, this.call.launchpad, {
+      ...options,
+      initializer,
+      currency: options.memeCurrency,
+    });
     return tx;
   }
 
-  claimLpFeeCap(
+  /** Bluefin counterpart of `createCetusLaunch`. */
+  createBluefinLaunch(
+    options: CreateLaunchOptions & { tickSpacing: number; feeRate: bigint },
+  ): Transaction {
+    const tx = new Transaction();
+    const initializer = tx.add(this.call.newBluefinLaunch(options));
+    addLaunchCompletion(tx, this.call.launchpad, {
+      ...options,
+      initializer,
+      currency: options.memeCurrency,
+    });
+    return tx;
+  }
+
+  migrateCetus(
+    options: Parameters<MigratorCalls["migrateCetus"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.migrateCetus(options));
+    return tx;
+  }
+
+  /** Pays Bluefin's SUI pool-creation fee from gas as an exact-balance coin. */
+  migrateBluefin(
+    options: Omit<
+      Parameters<MigratorCalls["migrateBluefin"]>[0],
+      "creationFee"
+    > & {
+      creationFee: bigint;
+    },
+  ): Transaction {
+    requireU64("creationFee", options.creationFee);
+    const tx = new Transaction();
+    const creationFee = tx.coin({
+      type: "0x2::sui::SUI",
+      balance: options.creationFee,
+    });
+    tx.add(this.call.migrateBluefin({ ...options, creationFee }));
+    return tx;
+  }
+
+  collectCetusFees(
+    options: Parameters<MigratorCalls["collectCetusFees"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.collectCetusFees(options));
+    return tx;
+  }
+
+  collectBluefinFees(
+    options: Parameters<MigratorCalls["collectBluefinFees"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.collectBluefinFees(options));
+    return tx;
+  }
+
+  settleAndUpdateCetusFeeSplit(
+    options: Omit<
+      Parameters<MigratorCalls["settleAndUpdateCetusFeeSplit"]>[0],
+      "curveFeeCap"
+    > & { curveFeeCapId: string },
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(
+      this.call.settleAndUpdateCetusFeeSplit({
+        ...options,
+        curveFeeCap: options.curveFeeCapId,
+      }),
+    );
+    return tx;
+  }
+
+  settleAndUpdateBluefinFeeSplit(
+    options: Omit<
+      Parameters<MigratorCalls["settleAndUpdateBluefinFeeSplit"]>[0],
+      "curveFeeCap"
+    > & { curveFeeCapId: string },
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(
+      this.call.settleAndUpdateBluefinFeeSplit({
+        ...options,
+        curveFeeCap: options.curveFeeCapId,
+      }),
+    );
+    return tx;
+  }
+
+  claimCreatorFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
       launch: SharedObjectReference;
@@ -615,28 +750,10 @@ export class MigratorTransactions {
     },
   ): Transaction {
     const tx = new Transaction();
-    const lpFeeCap = tx.add(
-      this.call.claimLpFeeCap({
-        ...options,
-        curveFeeCap: options.curveFeeCapId,
-      }),
-    );
-    tx.transferObjects([lpFeeCap], normalizeSuiAddress(options.recipient));
-    return tx;
-  }
-
-  claimCreatorFees(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      lpFeeCapId: string;
-      recipient: string;
-    },
-  ): Transaction {
-    const tx = new Transaction();
     const result = tx.add(
       this.call.claimCreatorFees({
         ...options,
-        lpFeeCap: options.lpFeeCapId,
+        curveFeeCap: options.curveFeeCapId,
       }),
     );
     tx.transferObjects(
@@ -658,10 +775,7 @@ export class MigratorTransactions {
       this.call.signIn({ adminCap: options.adminCapId }),
     );
     const result = tx.add(
-      this.call.claimProtocolFees({
-        ...options,
-        adminWitness,
-      }),
+      this.call.claimProtocolFees({ ...options, adminWitness }),
     );
     tx.transferObjects(
       [result[0]!, result[1]!],
@@ -670,109 +784,79 @@ export class MigratorTransactions {
     return tx;
   }
 
-  setAftermathPolicy(options: {
+  setLpFeeDefaultShares(options: {
     adminCapId: string;
-    memeWeight: bigint;
-    quoteWeight: bigint;
-    daoFeeBps: number;
+    memeBps: bigint;
+    quoteBps: bigint;
   }): Transaction {
-    const tx = new Transaction();
-    const adminWitness = tx.add(
-      this.call.signIn({ adminCap: options.adminCapId }),
+    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+      this.call.setLpFeeDefaultShares({ ...options, adminWitness }),
     );
-    tx.add(this.call.setAftermathPolicy({ ...options, adminWitness }));
-    return tx;
   }
 
-  migrateAftermath(
-    options: Parameters<MigratorCalls["migrateAftermath"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.migrateAftermath(options));
-    return tx;
+  setLpFeeCoinShares(options: {
+    memeType: string;
+    adminCapId: string;
+    memeBps: bigint;
+    quoteBps: bigint;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+      this.call.setLpFeeCoinShares({ ...options, adminWitness }),
+    );
   }
 
-  updateAftermathDaoFee(
+  clearLpFeeCoinShares(options: {
+    memeType: string;
+    adminCapId: string;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+      this.call.clearLpFeeCoinShares({ ...options, adminWitness }),
+    );
+  }
+
+  setLpFeeProtocolDestination(options: {
+    adminCapId: string;
+    destination: string;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+      this.call.setLpFeeProtocolDestination({ ...options, adminWitness }),
+    );
+  }
+
+  publishHolderRewardRound(
     options: Omit<
-      Parameters<MigratorCalls["updateAftermathDaoFee"]>[0],
+      Parameters<MigratorCalls["publishHolderRewardRound"]>[0],
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
-    const tx = new Transaction();
-    const adminWitness = tx.add(
-      this.call.signIn({ adminCap: options.adminCapId }),
+    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+      this.call.publishHolderRewardRound({ ...options, adminWitness }),
     );
-    tx.add(this.call.updateAftermathDaoFee({ ...options, adminWitness }));
-    return tx;
   }
 
-  accrueAftermathDaoFees(
-    options: Parameters<MigratorCalls["accrueAftermathDaoFees"]>[0],
+  /** Relays up to `allocations.length` proofs of one round in a single PTB. */
+  claimHolderRewards(
+    options: LaunchTypes & {
+      round: SharedObjectReference<true>;
+      allocations: readonly RewardProof[];
+    },
   ): Transaction {
     const tx = new Transaction();
-    tx.add(this.call.accrueAftermathDaoFees(options));
+    for (const allocation of options.allocations) {
+      tx.add(this.call.claimHolderReward({ ...options, allocation }));
+    }
     return tx;
   }
 
-  migrateBluefin(
-    options: Parameters<MigratorCalls["migrateBluefin"]>[0],
+  #asAdmin(
+    adminCapId: string,
+    call: (
+      adminWitness: TransactionObjectArgument,
+    ) => (tx: Transaction) => void,
   ): Transaction {
     const tx = new Transaction();
-    tx.add(this.call.migrateBluefin(options));
-    return tx;
-  }
-
-  collectBluefinFees(
-    options: Parameters<MigratorCalls["collectBluefinFees"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.collectBluefinFees(options));
-    return tx;
-  }
-
-  migrateMmt(options: Parameters<MigratorCalls["migrateMmt"]>[0]): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.migrateMmt(options));
-    return tx;
-  }
-
-  collectMmtFees(
-    options: Parameters<MigratorCalls["collectMmtFees"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.collectMmtFees(options));
-    return tx;
-  }
-
-  migrateCetus(
-    options: Parameters<MigratorCalls["migrateCetus"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.migrateCetus(options));
-    return tx;
-  }
-
-  collectCetusFees(
-    options: Parameters<MigratorCalls["collectCetusFees"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.collectCetusFees(options));
-    return tx;
-  }
-
-  migrateTurbos(
-    options: Parameters<MigratorCalls["migrateTurbos"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.migrateTurbos(options));
-    return tx;
-  }
-
-  collectTurbosFees(
-    options: Parameters<MigratorCalls["collectTurbosFees"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.collectTurbosFees(options));
+    const adminWitness = tx.add(this.call.signIn({ adminCap: adminCapId }));
+    tx.add(call(adminWitness));
     return tx;
   }
 }
@@ -788,137 +872,16 @@ function sharedObject<const Mutable extends boolean>(
   );
 }
 
-function normalizeLaunchTypes(types: LaunchTypes): LaunchTypes {
-  return {
-    memeType: normalizeStructTag(types.memeType),
-    quoteType: normalizeStructTag(types.quoteType),
-  };
-}
-
-function normalizeMemeSide(value: "x" | "y"): "x" | "y" {
-  if (value !== "x" && value !== "y") {
-    throw new RangeError("memeSide must be x or y");
-  }
-  return value;
-}
-
-function normalizeMemeSideAb(value: "a" | "b"): "a" | "b" {
+function normalizeMemeSide(value: CetusMemeSide): CetusMemeSide {
   if (value !== "a" && value !== "b") {
     throw new RangeError("memeSide must be a or b");
   }
   return value;
 }
 
-function normalizeAftermathMemeSide(
-  value: "first" | "second",
-): "first" | "second" {
-  if (value !== "first" && value !== "second") {
-    throw new RangeError("memeSide must be first or second");
-  }
-  return value;
-}
-
-function normalizeAftermathPolicy(policy: {
-  memeWeight: bigint;
-  quoteWeight: bigint;
-  daoFeeBps: number;
-}) {
-  const memeWeight = requireU64("memeWeight", policy.memeWeight);
-  const quoteWeight = requireU64("quoteWeight", policy.quoteWeight);
-  if (
-    memeWeight < 10_000_000_000_000_000n ||
-    quoteWeight < 10_000_000_000_000_000n ||
-    memeWeight + quoteWeight !== 1_000_000_000_000_000_000n
-  ) {
-    throw new RangeError(
-      "Aftermath weights must each be at least 1% and sum to 100%",
-    );
-  }
-  const daoFeeBps = normalizeAftermathDaoFeeBps(policy.daoFeeBps);
-  return { memeWeight, quoteWeight, daoFeeBps };
-}
-
-function normalizeAftermathDaoFeeBps(value: number): number {
-  if (!Number.isInteger(value) || value < 0 || value > 10_000) {
-    throw new RangeError(
-      "Aftermath DAO fee must be between 0 and 10,000 basis points",
-    );
-  }
-  return value;
-}
-
-function receivingCoinType(coinType: string): string {
-  return normalizeStructTag(
-    `0x2::transfer::Receiving<0x2::coin::Coin<${coinType}>>`,
-  );
-}
-
-function normalizeAftermathFeeCoinBatches(
-  memeFeeCoins: readonly ReceivingCoinReference[],
-  quoteFeeCoins: readonly ReceivingCoinReference[],
-): {
-  memeFeeCoins: ReceivingCoinReference[];
-  quoteFeeCoins: ReceivingCoinReference[];
-} {
-  if (!Array.isArray(memeFeeCoins)) {
-    throw new TypeError(
-      "memeFeeCoins must be an array of receiving references",
-    );
-  }
-  if (!Array.isArray(quoteFeeCoins)) {
-    throw new TypeError(
-      "quoteFeeCoins must be an array of receiving references",
-    );
-  }
-  const totalFeeCoins = memeFeeCoins.length + quoteFeeCoins.length;
-  if (
-    totalFeeCoins === 0 ||
-    totalFeeCoins > AFTERMATH_MAX_DAO_FEE_COINS_PER_BATCH
-  ) {
-    throw new RangeError(
-      `memeFeeCoins and quoteFeeCoins must contain between 1 and ${AFTERMATH_MAX_DAO_FEE_COINS_PER_BATCH} total receiving references`,
-    );
-  }
-
-  return {
-    memeFeeCoins: normalizeReceivingCoinReferences(
-      "memeFeeCoins",
-      memeFeeCoins,
-    ),
-    quoteFeeCoins: normalizeReceivingCoinReferences(
-      "quoteFeeCoins",
-      quoteFeeCoins,
-    ),
-  };
-}
-
-function normalizeReceivingCoinReferences(
-  name: string,
-  feeCoins: readonly ReceivingCoinReference[],
-): ReceivingCoinReference[] {
-  return feeCoins.map((feeCoin, index) => {
-    if (typeof feeCoin !== "object" || feeCoin === null) {
-      throw new TypeError(`${name}[${index}] must be an object reference`);
-    }
-    if (!isValidTransactionDigest(feeCoin.digest)) {
-      throw new TypeError(
-        `${name}[${index}].digest must be a Sui object digest`,
-      );
-    }
-    return {
-      objectId: normalizeSuiObjectId(feeCoin.objectId),
-      version: normalizePositiveU64(
-        `${name}[${index}].version`,
-        feeCoin.version,
-      ),
-      digest: feeCoin.digest,
-    };
-  });
-}
-
-function normalizePoolKind(value: "new" | "existing"): "new" | "existing" {
-  if (value !== "new" && value !== "existing") {
-    throw new RangeError("pool.kind must be new or existing");
+function requireU32(name: string, value: number): number {
+  if (!Number.isInteger(value) || value < 0 || value > 0xffff_ffff) {
+    throw new RangeError(`${name} must be a u32`);
   }
   return value;
 }

@@ -12,7 +12,7 @@ export type CurveState = {
   memeReserve: bigint;
   realQuoteReserve: bigint;
   virtualQuote: bigint;
-  migrationQuoteTarget: bigint;
+  graduationTarget: bigint;
   quoteFeeBps: bigint;
   memeFeeBps: bigint;
 };
@@ -61,13 +61,13 @@ export function previewBuy(
   validateCurveState(state);
   requirePositiveU64("quoteSupplied", quoteSupplied);
 
-  if (state.realQuoteReserve >= state.migrationQuoteTarget) {
+  if (state.realQuoteReserve >= state.graduationTarget) {
     throw new RangeError(
-      "buy preview requires Quote below the migration target",
+      "buy preview requires Quote below the graduation target",
     );
   }
 
-  const quoteRemaining = state.migrationQuoteTarget - state.realQuoteReserve;
+  const quoteRemaining = state.graduationTarget - state.realQuoteReserve;
   const suppliedFee = applyBpsUp(quoteSupplied, state.quoteFeeBps);
   const suppliedNet = quoteSupplied - suppliedFee;
   let quoteInGross = quoteSupplied;
@@ -115,7 +115,7 @@ export function previewBuy(
     memeOutNet,
     memeReserveAfter: state.memeReserve - memeOutGross,
     realQuoteReserveAfter,
-    crossedThreshold: realQuoteReserveAfter >= state.migrationQuoteTarget,
+    crossedThreshold: realQuoteReserveAfter >= state.graduationTarget,
   };
 }
 
@@ -143,12 +143,12 @@ export function previewSell(
   requirePositiveOutput("memeInAfterFee", memeInAfterFee);
 
   const progressBps =
-    state.realQuoteReserve >= state.migrationQuoteTarget
+    state.realQuoteReserve >= state.graduationTarget
       ? BASIS_POINTS_DENOMINATOR
       : mulDivDown(
           state.realQuoteReserve,
           BASIS_POINTS_DENOMINATOR,
-          state.migrationQuoteTarget,
+          state.graduationTarget,
         );
   const burnBps = sellBurnBps;
   const pendingBurnDelta = applyBpsUp(memeInAfterFee, burnBps);
@@ -192,7 +192,7 @@ function validateCurveState(state: CurveState): void {
   requirePositiveU64("memeReserve", state.memeReserve);
   requireU64("realQuoteReserve", state.realQuoteReserve);
   requirePositiveU64("virtualQuote", state.virtualQuote);
-  requirePositiveU64("migrationQuoteTarget", state.migrationQuoteTarget);
+  requirePositiveU64("graduationTarget", state.graduationTarget);
   requireBasisPoints("quoteFeeBps", state.quoteFeeBps);
   requireBasisPoints("memeFeeBps", state.memeFeeBps);
 }

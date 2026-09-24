@@ -4,9 +4,11 @@ import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
-import { Transaction } from "@mysten/sui/transactions";
-import { normalizeStructTag } from "@mysten/sui/utils";
-import { getLaunch } from "../launchpad/state.ts";
+import type { Transaction } from "@mysten/sui/transactions";
+import type { LpVaultState } from "../migrators/state.ts";
+import { getLpVault } from "../migrators/state.ts";
+import type { MigratorsDeployment } from "../migrators/transactions.ts";
+import { MigratorTransactions } from "../migrators/transactions.ts";
 import type { RewardManifest } from "./allocations.ts";
 import {
   allocateHolderRewards,
@@ -28,13 +30,7 @@ import {
   assertRewardRoundMatchesManifest,
   pendingRewardAllocations,
 } from "./keeper.ts";
-import type { DistributorState } from "./state.ts";
-import {
-  getDistributor,
-  getDistributorVersion,
-  getRewardRound,
-} from "./state.ts";
-import { DistributorCalls } from "./transactions.ts";
+import { getRewardRound } from "./state.ts";
 
 const CHECKPOINT_BATCH_SIZE = 100;
 
@@ -42,21 +38,18 @@ type OperatorConfig = {
   grpcUrl: string;
   network: "mainnet" | "testnet" | "devnet" | "localnet";
   chainId: string;
-  packageId: string;
-  originalPackageId: string;
-  distributorVersionId: string;
-  launchpadOriginalPackageId: string;
-  distributorId: string;
-  publisherCapId?: string;
-  packageVersionId?: string;
-  migratorsVersionId?: string;
-  lpVaultId?: string;
+  /** Call-ready migrators deployment, including its launchpad deployment. */
+  deployment: MigratorsDeployment;
+  /** The migrated launch's `LpVault`, whose rewards share funds every round. */
+  vaultId: string;
+  /** Blast `AdminCap<BLAST_FUN_DOMAIN>` that signs in to publish rounds. */
+  adminCapId?: string;
   sender?: string;
   excludedAddresses?: string[];
 };
 type OperatorState = {
   chainId: string;
-  distributorId: string;
+  vaultId: string;
   activationCheckpoint: string;
   ledger: HolderLedger;
 };
@@ -110,7 +103,7 @@ export async function withOperatorLock<T>(
 }
 
 /** Node-only operator. Publication stays unsigned; only explicit relay --execute reads a gas key. */
-export async function runDistributorOperator(args: string[]): Promise<void> {
+export async function runHolderRewardsOperator(args: string[]): Promise<void> {
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
@@ -127,7 +120,7 @@ export async function runDistributorOperator(args: string[]): Promise<void> {
   });
   if (values.help) {
     console.log(
-      "distributor <inspect|index|prepare|publish-tx|collect-curve-tx|collect-lp-tx|advance|relay> --config FILE --dir DIRECTORY [--until CHECKPOINT] [--round ID] [--manifest FILE] [--out FILE] [--execute]",
+      "holder-rewards <inspect|index|prepare|publish-tx|advance|relay> --config FILE --dir DIRECTORY [--until CHECKPOINT] [--round ID] [--manifest FILE] [--out FILE] [--execute]",
     );
     return;
   }
@@ -140,12 +133,12 @@ export async function runDistributorOperator(args: string[]): Promise<void> {
   if (
     !config.chainId ||
     !config.grpcUrl ||
-    !config.originalPackageId ||
-    !config.distributorVersionId ||
+    !config.deployment ||
+    !config.vaultId ||
     !["mainnet", "testnet", "devnet", "localnet"].includes(config.network)
   )
     throw new Error(
-      "config needs grpcUrl, network, expected genesis chainId, originalPackageId and distributorVersionId",
+      "config needs grpcUrl, network, expected genesis chainId, deployment and vaultId",
     );
   const client = new SuiGrpcClient({
     baseUrl: config.grpcUrl,
@@ -155,28 +148,22 @@ export async function runDistributorOperator(args: string[]): Promise<void> {
   if (info.chainId !== config.chainId)
     throw new Error("RPC chain does not match configured genesis chainId");
   const directory = resolve(values.dir);
-  const calls = new DistributorCalls({
-    packageId: config.packageId,
-    packageVersion: config.distributorVersionId,
-  });
-  const distributor = await getDistributor(
+  const transactions = new MigratorTransactions(config.deployment);
+  const vault = await getLpVault(
     client,
-    config.distributorId,
-    config.originalPackageId,
+    config.vaultId,
+    transactions.call.deployment.originalPackageId,
   );
   const statePath = join(directory, "state.json");
   const pendingPath = join(directory, "pending.json");
-  const pair = {
-    memeType: distributor.memeType,
-    quoteType: distributor.quoteType,
-  };
+  const pair = { memeType: vault.memeType, quoteType: vault.quoteType };
   const output = values.out ?? join(directory, `${command}.json`);
 
   const context: OperatorContext = {
     client,
     config,
-    distributor,
-    calls,
+    vault,
+    transactions,
     directory,
     output,
     statePath,
@@ -199,8 +186,8 @@ type OperatorOptions = {
 type OperatorContext = {
   client: SuiGrpcClient;
   config: OperatorConfig;
-  distributor: DistributorState;
-  calls: DistributorCalls;
+  vault: LpVaultState;
+  transactions: MigratorTransactions;
   directory: string;
   output: string;
   statePath: string;
@@ -214,10 +201,7 @@ type OperatorContext = {
 async function dispatchCommand(context: OperatorContext): Promise<void> {
   switch (context.command) {
     case "inspect":
-      return inspectDistributor(context);
-    case "collect-curve-tx":
-    case "collect-lp-tx":
-      return collectFees(context);
+      return inspectVault(context);
     case "index":
       return indexHolders(context);
     case "prepare":
@@ -236,8 +220,8 @@ async function readManifest(context: OperatorContext): Promise<RewardManifest> {
   const manifest = await readJson<RewardManifest>(
     context.values.manifest ?? context.pendingPath,
   );
-  if (manifest.distributorId !== context.distributor.objectId)
-    throw new Error("manifest belongs to another distributor");
+  if (manifest.vaultId !== context.vault.objectId)
+    throw new Error("manifest belongs to another vault");
   return manifest;
 }
 async function readConfirmedRound(
@@ -249,73 +233,24 @@ async function readConfirmedRound(
   const round = await getRewardRound(
     context.client,
     context.values.round,
-    context.config.originalPackageId,
+    context.transactions.call.deployment.originalPackageId,
   );
   assertRewardRoundMatchesManifest(round, manifest);
   return round;
 }
-async function inspectDistributor(context: OperatorContext): Promise<void> {
-  const { client, distributor, config, output } = context;
-  const launch = await getLaunch(
-    client,
-    distributor.launchId,
-    config.launchpadOriginalPackageId,
-  );
-  const { curveFeeAuthority } = launch;
-  const version = await getDistributorVersion(
-    client,
-    config.distributorVersionId,
-    config.originalPackageId,
-  );
+async function inspectVault(context: OperatorContext): Promise<void> {
+  const { vault, output } = context;
   await writeOperatorJson(output, {
-    activeVersion: version.version,
-    paused: version.paused,
-    distributorId: distributor.objectId,
-    launchId: distributor.launchId,
-    curveFeeAuthority,
-    curveFeesBoundToDistributor:
-      curveFeeAuthority.kind === "custodian" &&
-      curveFeeAuthority.custodianType ===
-        normalizeStructTag(`${config.originalPackageId}::distributor::Witness`),
-    memeType: distributor.memeType,
-    quoteType: distributor.quoteType,
-    memeAmount: distributor.memeAmount,
-    quoteAmount: distributor.quoteAmount,
-    nextRound: distributor.nextRound,
-    lastCheckpoint: distributor.lastCheckpoint,
+    vaultId: vault.objectId,
+    memeType: vault.memeType,
+    quoteType: vault.quoteType,
+    generation: vault.generation,
+    feeSplit: vault.feeSplit,
+    rewardsMeme: vault.rewardsMeme,
+    rewardsQuote: vault.rewardsQuote,
+    nextRound: vault.nextRound,
+    lastCheckpoint: vault.lastCheckpoint,
   });
-}
-
-async function collectFees(context: OperatorContext): Promise<void> {
-  const { command, config, calls, pair, distributor, output } = context;
-  const tx = new Transaction();
-  if (command === "collect-curve-tx") {
-    if (!config.packageVersionId) throw new Error("packageVersionId required");
-    tx.add(
-      calls.collectCurveFees({
-        ...pair,
-        distributor: distributor.objectId,
-        launch: distributor.launchId,
-        packageVersion: config.packageVersionId,
-      }),
-    );
-  } else {
-    if (!config.lpVaultId)
-      throw new Error(
-        "lpVaultId required; verify it against the launch migration event",
-      );
-    if (!config.migratorsVersionId)
-      throw new Error("migratorsVersionId required");
-    tx.add(
-      calls.collectLpFees({
-        ...pair,
-        distributor: distributor.objectId,
-        lpVault: config.lpVaultId,
-        migratorsVersion: config.migratorsVersionId,
-      }),
-    );
-  }
-  await writeTransaction(output, tx, config.sender);
 }
 
 async function indexHolders(context: OperatorContext): Promise<void> {
@@ -325,7 +260,7 @@ async function indexHolders(context: OperatorContext): Promise<void> {
     statePath,
     client,
     config,
-    distributor,
+    vault,
     directory,
     checkpointHeight,
   } = context;
@@ -337,8 +272,8 @@ async function indexHolders(context: OperatorContext): Promise<void> {
     );
   let state =
     (await readOptional<OperatorState>(statePath)) ??
-    (await bootstrap(client, config, distributor));
-  assertState(state, config, distributor);
+    (await bootstrap(client, config, vault));
+  assertState(state, config, vault);
   const until = BigInt(values.until);
   if (checkpointHeight === undefined || until > checkpointHeight)
     throw new Error("requested checkpoint is not finalized at this provider");
@@ -347,7 +282,7 @@ async function indexHolders(context: OperatorContext): Promise<void> {
   while (BigInt(state.ledger.nextCheckpoint) <= until) {
     const checkpoint = await readHolderCheckpoint(
       client,
-      distributor.memeType,
+      vault.memeType,
       BigInt(state.ledger.nextCheckpoint),
     );
     let ledger = applyHolderCheckpoint(state.ledger, checkpoint);
@@ -373,39 +308,34 @@ async function indexHolders(context: OperatorContext): Promise<void> {
 }
 
 async function prepareRound(context: OperatorContext): Promise<void> {
-  const { pendingPath, statePath, config, distributor, directory } = context;
+  const { pendingPath, statePath, config, vault, directory } = context;
   if (await readOptional<RewardManifest>(pendingPath))
     throw new Error("a prepared round already exists");
   const state = await readJson<OperatorState>(statePath);
-  assertState(state, config, distributor);
+  assertState(state, config, vault);
   const end = BigInt(state.ledger.nextCheckpoint) - 1n;
   if (
     end <= BigInt(state.activationCheckpoint) ||
-    (distributor.lastCheckpoint !== null &&
-      distributor.lastCheckpoint !== BigInt(state.ledger.startCheckpoint))
+    (vault.lastCheckpoint !== null &&
+      vault.lastCheckpoint !== BigInt(state.ledger.startCheckpoint))
   )
     throw new Error(
-      "ledger interval does not match distributor; index or advance first",
+      "ledger interval does not match vault; index or advance first",
     );
-  const exclusions = [
-    distributor.objectId,
-    distributor.launchId,
-    ...(config.lpVaultId ? [config.lpVaultId] : []),
-    ...(config.excludedAddresses ?? []),
-  ];
+  const exclusions = [vault.objectId, ...(config.excludedAddresses ?? [])];
   const weights = holderWeights(state.ledger, exclusions);
   const allocation = allocateHolderRewards(
     weights,
-    distributor.memeAmount,
-    distributor.quoteAmount,
+    vault.rewardsMeme,
+    vault.rewardsQuote,
   );
   if (!allocation.allocations.length)
     throw new Error(
       "no payable holder allocations; keep indexing and accumulate funds",
     );
   const manifest = buildRewardManifest({
-    distributorId: distributor.objectId,
-    number: distributor.nextRound,
+    vaultId: vault.objectId,
+    number: vault.nextRound,
     startCheckpoint: BigInt(state.ledger.startCheckpoint),
     endCheckpoint: end,
     allocations: allocation.allocations,
@@ -427,27 +357,24 @@ async function prepareRound(context: OperatorContext): Promise<void> {
 }
 
 async function publishRound(context: OperatorContext): Promise<void> {
-  const { config, calls, pair, output } = context;
+  const { config, transactions, pair, output, vault } = context;
   const manifest = await readManifest(context);
-  if (!config.publisherCapId) throw new Error("publisherCapId required");
-  const tx = new Transaction();
-  const round = tx.add(
-    calls.publishRound({
-      ...pair,
-      publisherCap: config.publisherCapId,
-      manifest,
-    }),
-  );
-  tx.add(calls.shareRound({ ...pair, round }));
+  if (!config.adminCapId) throw new Error("adminCapId required");
+  const tx = transactions.publishHolderRewardRound({
+    ...pair,
+    vault,
+    adminCapId: config.adminCapId,
+    manifest,
+  });
   await writeTransaction(output, tx, config.sender);
 }
 
 async function advanceRound(context: OperatorContext): Promise<void> {
-  const { statePath, config, distributor, directory, pendingPath } = context;
+  const { statePath, config, vault, directory, pendingPath } = context;
   const manifest = await readManifest(context);
   const round = await readConfirmedRound(context, manifest);
   const state = await readJson<OperatorState>(statePath);
-  assertState(state, config, distributor);
+  assertState(state, config, vault);
   if (BigInt(state.ledger.nextCheckpoint) - 1n !== round.endCheckpoint)
     throw new Error("round does not close this ledger checkpoint");
   // Repeating advance after a crash is safe: resetting a zero-weight interval is idempotent.
@@ -463,23 +390,27 @@ async function advanceRound(context: OperatorContext): Promise<void> {
 }
 
 async function relayRewards(context: OperatorContext): Promise<void> {
-  const { values, calls, pair, directory, config, client } = context;
+  const { values, transactions, pair, directory, config, client } = context;
   const manifest = await readManifest(context);
   const round = await readConfirmedRound(context, manifest);
   const pending = pendingRewardAllocations(round, manifest);
-  const key = values.execute ? process.env.DISTRIBUTOR_RELAYER_KEY : undefined;
+  const key = values.execute
+    ? process.env.HOLDER_REWARDS_RELAYER_KEY
+    : undefined;
   if (values.execute && !key)
     throw new Error(
-      "relay --execute requires DISTRIBUTOR_RELAYER_KEY (gas only)",
+      "relay --execute requires HOLDER_REWARDS_RELAYER_KEY (gas only)",
     );
   const signer = key ? Ed25519Keypair.fromSecretKey(key) : undefined;
   for (let offset = 0; offset < pending.length; offset += 10) {
     const batch = pending.slice(offset, offset + 10);
     const first = batch[0];
     if (!first) continue;
-    const tx = new Transaction();
-    for (const allocation of batch)
-      tx.add(calls.claim({ ...pair, round: round.objectId, allocation }));
+    const tx = transactions.claimHolderRewards({
+      ...pair,
+      round,
+      allocations: batch,
+    });
     const roundDir = join(directory, "rounds", manifest.number);
     if (!signer) {
       await writeTransaction(
@@ -507,45 +438,40 @@ async function relayRewards(context: OperatorContext): Promise<void> {
 async function bootstrap(
   client: SuiGrpcClient,
   config: OperatorConfig,
-  distributor: DistributorState,
+  vault: LpVaultState,
 ): Promise<OperatorState> {
-  const first = await coinPackageCreationCheckpoint(
-    client,
-    distributor.memeType,
-  );
+  const first = await coinPackageCreationCheckpoint(client, vault.memeType);
   const { object } = await client.ledgerService.getObject({
-    objectId: distributor.objectId,
-    version: BigInt(distributor.initialSharedVersion),
+    objectId: vault.objectId,
+    version: BigInt(vault.initialSharedVersion),
     readMask: { paths: ["previous_transaction"] },
   }).response;
   if (!object?.previousTransaction)
-    throw new Error("distributor creation history is unavailable");
+    throw new Error("vault creation history is unavailable");
   const { transaction } = await client.ledgerService.getTransaction({
     digest: object.previousTransaction,
     readMask: { paths: ["checkpoint"] },
   }).response;
   if (transaction?.checkpoint === undefined || transaction.checkpoint < first)
-    throw new Error("invalid distributor activation checkpoint");
+    throw new Error("invalid vault activation checkpoint");
   return {
     chainId: config.chainId,
-    distributorId: distributor.objectId,
+    vaultId: vault.objectId,
     activationCheckpoint: transaction.checkpoint.toString(),
-    ledger: createHolderLedger(distributor.memeType, first),
+    ledger: createHolderLedger(vault.memeType, first),
   };
 }
 function assertState(
   state: OperatorState,
   config: OperatorConfig,
-  distributor: DistributorState,
+  vault: LpVaultState,
 ) {
   if (
     state.chainId !== config.chainId ||
-    state.distributorId !== distributor.objectId ||
-    state.ledger.coinType !== distributor.memeType
+    state.vaultId !== vault.objectId ||
+    state.ledger.coinType !== vault.memeType
   )
-    throw new Error(
-      "operator state belongs to another chain, distributor or coin",
-    );
+    throw new Error("operator state belongs to another chain, vault or coin");
 }
 async function writeTransaction(
   path: string,

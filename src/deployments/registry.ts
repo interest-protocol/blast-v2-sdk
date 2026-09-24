@@ -10,7 +10,6 @@ import type {
   BlastSuiDeploymentConstants,
   LaunchpadDeploymentConstants,
   MigratorsDeploymentConstants,
-  VestingDeploymentConstants,
 } from "./types.ts";
 import { BLAST_NETWORKS } from "./types.ts";
 
@@ -42,6 +41,9 @@ export function defineBlastDeployment(
   }
   if (!deployment.packages.launchpad) {
     throw new TypeError("packages.launchpad is required");
+  }
+  if (!deployment.packages.admin) {
+    throw new TypeError("packages.admin is required");
   }
   for (const name of REQUIRED_SHARED_OBJECTS) {
     if (!deployment.sharedObjects[name]) {
@@ -84,6 +86,7 @@ export function launchpadDeployment(
   return {
     packageId: packageReference.packageId,
     originalPackageId: packageReference.originalPackageId,
+    adminPackageId: deployment.packages.admin.packageId,
     packageVersion: sharedObjectReference(objects.packageVersion, false),
     launchConfig: sharedObjectReference(objects.launchConfig, false),
     runtimeConfig: sharedObjectReference(objects.runtimeConfig, false),
@@ -112,19 +115,6 @@ export function blastSuiDeployment(
     originalPackageId: packageReference.originalPackageId,
     packageVersion: sharedObjectReference(packageVersion, false),
     vault: sharedObjectReference(vault, true),
-  };
-}
-
-export function vestingDeployment(
-  deployment: BlastDeployment,
-): VestingDeploymentConstants {
-  const packageReference = deployment.packages.vesting;
-  if (!packageReference) {
-    throw new TypeError("packages.vesting is required");
-  }
-  return {
-    packageId: packageReference.packageId,
-    originalPackageId: packageReference.originalPackageId,
   };
 }
 

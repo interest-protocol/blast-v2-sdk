@@ -7,7 +7,7 @@ const baseState = {
   memeReserve: 800_000_000_000_000_000n,
   realQuoteReserve: 0n,
   virtualQuote: 1_000_000_000_000n,
-  migrationQuoteTarget: 3_000_000_000_000n,
+  graduationTarget: 3_000_000_000_000n,
   quoteFeeBps: 100n,
   memeFeeBps: 0n,
 };
@@ -93,7 +93,7 @@ test("applies the maximum burn after the Meme fee", () => {
         memeReserve: 1_000n,
         realQuoteReserve: 500n,
         virtualQuote: 1_000n,
-        migrationQuoteTarget: 1_000n,
+        graduationTarget: 1_000n,
         quoteFeeBps: 0n,
         memeFeeBps: 100n,
       },

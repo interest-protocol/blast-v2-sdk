@@ -1,103 +1,93 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { AllocationPlan } from "../src/launchpad/allocation.ts";
+import { addProtocolAllocation } from "../src/launchpad/allocation.ts";
 import { deriveLaunchEconomics } from "../src/launchpad/economics.ts";
+
+const liquidityOnly = (curveBps: bigint): AllocationPlan => ({
+  curveMemeBps: curveBps,
+  lpMemeBps: 10_000n - curveBps,
+  lpQuoteBps: 10_000n,
+  recipients: [],
+});
 
 test("derives the complete worked SUI outcome", () => {
   assert.deepEqual(
     deriveLaunchEconomics({
-      initialMemeSupply: 1_000_000_000_000_000_000n,
-      curveMemeInventory: 800_000_000_000_000_000n,
-      poolMemeProvision: 200_000_000_000_000_000n,
+      atomicSupply: 1_000_000_000_000_000_000n,
+      allocationPlan: liquidityOnly(8_000n),
       virtualQuote: 1_000_000_000_000n,
-      migrationQuoteTarget: 3_000_000_000_000n,
-      protocolQuoteMigrationFeeBps: 100n,
+      graduationTarget: 3_000_000_000_000n,
     }),
     {
+      curveMeme: 800_000_000_000_000_000n,
+      liquidityMeme: 200_000_000_000_000_000n,
+      liquidityQuote: 3_000_000_000_000n,
+      allocatedQuote: 0n,
       terminalCurveMeme: 200_000_000_000_000_000n,
       curveMemeReleased: 600_000_000_000_000_000n,
-      protocolQuoteMigrationFee: 30_000_000_000n,
-      netQuote: 2_970_000_000_000n,
       openingValuation: 1_250_000_000_000n,
       curveTerminalValuation: 20_000_000_000_000n,
-      dexOpeningValuation: 14_850_000_000_000n,
+      dexOpeningValuation: 15_000_000_000_000n,
     },
   );
 });
 
-test("shows that a 1,000 SUI opening and 40% release derive a 4,000 SUI endpoint", () => {
-  assert.deepEqual(
-    deriveLaunchEconomics({
-      initialMemeSupply: 1_000_000_000_000_000_000n,
-      curveMemeInventory: 800_000_000_000_000_000n,
-      poolMemeProvision: 200_000_000_000_000_000n,
-      virtualQuote: 800_000_000_000n,
-      migrationQuoteTarget: 800_000_000_000n,
-      protocolQuoteMigrationFeeBps: 0n,
-    }),
-    {
-      terminalCurveMeme: 400_000_000_000_000_000n,
-      curveMemeReleased: 400_000_000_000_000_000n,
-      protocolQuoteMigrationFee: 0n,
-      netQuote: 800_000_000_000n,
-      openingValuation: 1_000_000_000_000n,
-      curveTerminalValuation: 4_000_000_000_000n,
-      dexOpeningValuation: 4_000_000_000_000n,
-    },
-  );
+test("pays Blast its ceiling before the liquidity handoff", () => {
+  const economics = deriveLaunchEconomics({
+    atomicSupply: 1_000_000_000_000_000_000n,
+    allocationPlan: addProtocolAllocation(
+      {
+        curveMemeBps: 8_000n,
+        lpMemeBps: 1_999n,
+        lpQuoteBps: 9_900n,
+        recipients: [],
+      },
+      { destination: "0xb", memeBps: 1n, quoteBps: 100n },
+    ),
+    virtualQuote: 1_000_000_000_000n,
+    graduationTarget: 3_000_000_000_001n,
+  });
+  // Blast Quote = ceil(3_000_000_000_001 * 100 / 10_000) = 30_000_000_001.
+  assert.equal(economics.allocatedQuote, 30_000_000_001n);
+  assert.equal(economics.liquidityQuote, 2_970_000_000_000n);
+  assert.equal(economics.liquidityMeme, 199_900_000_000_000_000n);
 });
 
-test("rounds terminal Meme and the fee up and valuations down on inexact division", () => {
-  // R = ceil(7 * 3 / 8) = 3, M = ceil(5 * 1 / 10_000) = 1, and each valuation
-  // floors its exact rational value (30/7, 80/3, 40/2).
+test("rounds terminal Meme up and valuations down on inexact division", () => {
+  // R = ceil(7 * 3 / 8) = 3; valuations floor 30/7, 80/3, and 50/3.
   assert.deepEqual(
     deriveLaunchEconomics({
-      initialMemeSupply: 10n,
-      curveMemeInventory: 7n,
-      poolMemeProvision: 2n,
+      atomicSupply: 10n,
+      allocationPlan: liquidityOnly(7_000n),
       virtualQuote: 3n,
-      migrationQuoteTarget: 5n,
-      protocolQuoteMigrationFeeBps: 1n,
+      graduationTarget: 5n,
     }),
     {
+      curveMeme: 7n,
+      liquidityMeme: 3n,
+      liquidityQuote: 5n,
+      allocatedQuote: 0n,
       terminalCurveMeme: 3n,
       curveMemeReleased: 4n,
-      protocolQuoteMigrationFee: 1n,
-      netQuote: 4n,
       openingValuation: 4n,
       curveTerminalValuation: 26n,
-      dexOpeningValuation: 20n,
+      dexOpeningValuation: 16n,
     },
   );
 });
 
-test("rejects an impossible Meme partition", () => {
+test("rejects a plan whose liquidity handoff rounds to zero", () => {
   assert.throws(
     () =>
       deriveLaunchEconomics({
-        initialMemeSupply: 10n,
-        curveMemeInventory: 8n,
-        poolMemeProvision: 3n,
+        atomicSupply: 10n,
+        allocationPlan: liquidityOnly(9_999n),
         virtualQuote: 1n,
-        migrationQuoteTarget: 1n,
-        protocolQuoteMigrationFeeBps: 0n,
+        graduationTarget: 1n,
       }),
-    /cannot exceed initialMemeSupply/,
-  );
-});
-
-test("rejects a fee above 10,000 basis points", () => {
-  assert.throws(
-    () =>
-      deriveLaunchEconomics({
-        initialMemeSupply: 10n,
-        curveMemeInventory: 7n,
-        poolMemeProvision: 2n,
-        virtualQuote: 1n,
-        migrationQuoteTarget: 1n,
-        protocolQuoteMigrationFeeBps: 10_001n,
-      }),
-    /between 0 and 10,000/,
+    /liquidityMeme must be a positive u64/,
   );
 });
 
@@ -105,12 +95,10 @@ test("rejects a non-positive curve input", () => {
   assert.throws(
     () =>
       deriveLaunchEconomics({
-        initialMemeSupply: 10n,
-        curveMemeInventory: 7n,
-        poolMemeProvision: 2n,
+        atomicSupply: 10n,
+        allocationPlan: liquidityOnly(7_000n),
         virtualQuote: 0n,
-        migrationQuoteTarget: 1n,
-        protocolQuoteMigrationFeeBps: 0n,
+        graduationTarget: 1n,
       }),
     /virtualQuote must be a positive u64/,
   );

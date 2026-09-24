@@ -1,22 +1,24 @@
 # Blast SDK
 
-The SDK mirrors the completed Sui launchpad and vesting ABIs without becoming a
-second source of truth for protocol execution.
+The SDK mirrors the completed Sui launchpad and migrators ABIs
+without becoming a second source of truth for protocol execution.
 
 It provides:
 
-- exact `bigint` buy, sell, release, fee, and valuation previews;
-- BCS decoding for live `Launch<Meme, Quote>` objects through the transport-
+- exact `bigint` buy, sell, allocation, LP-fee split, and valuation
+  previews;
+- BCS decoding for live `Launch<Meme, Quote>`, `LpVault<Meme, Quote>`,
+  `LpFeePolicy`, and holder-reward `Round` objects through the transport-
   neutral Sui Core API;
-- executable transactions for launch creation, trades, creator claims, and fee
-  claims;
-- composable Move-call helpers for adapter-owned migration transactions;
-- complete migration and LP-fee transactions for Bluefin, Cetus, MMT, Turbos,
-  and Aftermath; and
+- executable transactions that start a launch through its migration adapter
+  (Cetus or Bluefin), configure and share it, trade, and claim fees;
+- complete migration, permissionless LP-fee collection with auto-LP, creator
+  LP-fee claims, settled fee-split updates, LP-fee policy administration, and
+  holder-reward rounds for Cetus and Bluefin; and
 - typed BCS event decoding and deterministic launch-to-vault replay.
 
-See [optional holder rewards](docs/holder-distributor.md) for standalone creator-cap
-custody, holder accounting, signed rounds, and permissionless airdrops.
+See [holder rewards](docs/holder-rewards.md) for holder accounting, Merkle
+rounds funded from the vault's rewards share, and permissionless payouts.
 
 ## Client extension
 
@@ -31,6 +33,7 @@ const client = new SuiGrpcClient({
   blastLaunchpad({
     packageId: "0x...",
     originalPackageId: "0x...",
+    adminPackageId: "0x...", // published blast_admin
     packageVersion: {
       objectId: "0x...",
       initialSharedVersion: "...",
@@ -82,23 +85,22 @@ package lineage and singleton shared-object identities. Package entries keep
 both the current and original package IDs. Shared-object entries keep the
 object ID and initial shared version. Builders add `mutable` from the Move
 function signature because mutability belongs to a transaction argument, not
-to the object itself.
+to the object itself. `packages.admin` names the published `blast_admin`
+package, which owns `acl::sign_in` and is a transitive publish dependency of
+every generated Meme package.
 
 After a canonical network release is registered, initialize the client without
 copying addresses into the application:
 
 ```ts
 import { blastLaunchpad } from "@blast-fun/sdk/launchpad";
-import { blastVesting } from "@blast-fun/sdk/vesting";
 import {
   getBlastDeployment,
   launchpadDeployment,
-  vestingDeployment,
 } from "@blast-fun/sdk/deployments";
 
 const blast = getBlastDeployment("testnet");
 const launchpadExtension = blastLaunchpad(launchpadDeployment(blast));
-const vestingExtension = blastVesting(vestingDeployment(blast));
 ```
 
 For local or unreleased deployments, validate one manifest with
@@ -106,102 +108,116 @@ For local or unreleased deployments, validate one manifest with
 built-in registry remains empty until publish output supplies real IDs; the SDK
 does not ship placeholder addresses.
 
-## Migrators
+## Launch creation
 
-`@blast-fun/sdk/migrators` supports every production migration and LP-fee route
-for Bluefin, Cetus, MMT, Turbos, and Aftermath. Route options make
-coin order and new-pool or existing-pool selection explicit. Turbos also
-requires its `FeeType` and a `bigint` deadline; Aftermath requires a fresh LP
-type, `CreatePoolCapV2`, and DAO `Version`. Aftermath builders also expose the
-admin-only existing-pool DAO-rate update and permissionless Meme/Quote DAO-fee
-receipt through the vault. The accrual builder accepts separate Meme and Quote
-vectors with 1 through 100 total fully resolved receiving coin references.
-Either vector can be empty.
+A launch starts in its migration adapter (contracts ADR 0089). Publish the
+generated Meme package first (see below); its initializer transfers the
+`LaunchTicket` to the publisher. A second transaction then runs the whole
+construction atomically:
 
-The migrator client reads `LpVault` objects from BCS, CLMM venue tiers, and the
-typed Aftermath weight-and-DAO-fee policy dynamic fields with original package type
-identity. If a policy field does not exist, the client returns the documented
-compiled default. It does not convert transport failures or corrupt fields into
-defaults.
-
-The event reducers require Sui checkpoint, transaction digest, and event index
-metadata. Stable replay identity uses transaction digest plus event index;
-checkpoint remains ordering metadata. Transaction effects provide package
-publication and returned-coin recipient facts. Object ownership reads provide
-the current `CurveFeeCap`, `BlastMetadataCap`, and `LpFeeCap` owners. Blast
-events do not provide these native facts. Events do record which capability ID
-each launch and LP vault currently honors (`curveFeeAuthority`,
-`blastMetadataCapId`, `lpFeeAuthority`), including pending migration-born LP-fee
-rights, administrator reassignments, and permanent custodian locks.
-
-## Vesting
-
-`@blast-fun/sdk/vesting` supports the independent `linear` and `checkpoints`
-modules. It validates creation inputs, builds atomic create-and-share
-transactions, decodes live shared objects and their bounded inline checkpoint
-vectors, and mirrors vesting math with `bigint`.
+1. `cetus::new` or `bluefin::new` validates the creator's pool tier against its
+   venue and calls `launch::new`, which returns a `LaunchInitializer` with no
+   abilities. Cetus derives the fee rate from its own registry and reserves the
+   pair's pool creation with the Meme type's `PoolCreationCap`; Bluefin checks
+   its own tier bounds.
+2. `set_graduation_target`, `set_allocation_plan`, `set_lp_fee_split`, and the
+   optional `set_protection` record the creator's settings.
+3. `launch::finalize` checks every invariant and fixes the supply mode.
+4. An optional unprotected `buy` runs on the owned launch before public opening.
+5. `launch::share` opens the launch; protection starts now.
 
 ```ts
-import { blastVesting } from "@blast-fun/sdk/vesting";
+import { blastMigrators } from "@blast-fun/sdk/migrators";
 
-const client = new SuiGrpcClient({
-  network: "testnet",
-  baseUrl: "https://fullnode.testnet.sui.io:443",
-}).$extend(
-  blastVesting({
-    packageId: "0x...",
-    originalPackageId: "0x...",
-  }),
-);
-
-const currentTimestampMs =
-  await client.blastVesting.getCurrentTimestampMs();
-const transaction = client.blastVesting.tx.createCheckpointCancelable({
-  coinType: "0x2::sui::SUI",
-  totalAmount: 1_000n,
-  beneficiary: "0xb0b",
-  refundRecipient: "0xcafe",
-  cancelCapRecipient: "0xca11",
-  currentTimestampMs,
-  checkpoints: [
-    { timestampMs: currentTimestampMs + 60_000n, cumulativeAmount: 200n },
-    { timestampMs: currentTimestampMs + 120_000n, cumulativeAmount: 456n },
-    { timestampMs: currentTimestampMs + 300_000n, cumulativeAmount: 1_000n },
-  ],
+const transaction = client.blastMigrators.tx.createCetusLaunch({
+  memeType,
+  quoteType: "0x2::sui::SUI",
+  ticket: ticketId,
+  memeCurrency, // Coin Registry Currency<Meme>, mutable
+  cetusConfig, // Cetus GlobalConfig, immutable
+  cetusPools, // Cetus Pools, mutable
+  tickSpacing: 200,
+  graduationTarget: 3_000_000_000_000n,
+  // Blast's allocation (here 500 bps of each asset) is added at finalization.
+  allocationPlan: {
+    curveMemeBps: 7_000n,
+    lpMemeBps: 2_000n,
+    lpQuoteBps: 9_000n,
+    recipients: [{ destination: teamWallet, memeBps: 500n, quoteBps: 500n }],
+  },
+  lpFeeSplit: {
+    creatorBps: 5_000n,
+    autoLpBps: 2_500n,
+    rewardsBps: 2_500n,
+    recipients: [],
+  },
+  protection: {
+    windowMs: 60_000n,
+    cumulativeSenderBps: 100n,
+    perTransactionBps: 50n,
+  },
+  preShareBuy: { quoteAmount: 1_000_000_000n, minMemeOut: 1n, recipient },
 });
 ```
 
-Checkpoint amounts are cumulative. At the second checkpoint, `456` total units
-are vested, so that checkpoint adds `456 - 200 = 256` units. The final
-cumulative amount must equal `totalAmount`.
+`createBluefinLaunch` takes `tickSpacing` and `feeRate` instead of the Cetus
+objects. The SDK checks the allocation plan and fee split exactly as the Move
+constructors do and rejects shapes they abort on. The creator's plan excludes
+Blast: `launch::finalize` inserts the `LaunchConfig` protocol allocation as the
+first recipient and requires each asset to sum to 10,000 basis points;
+`addProtocolAllocation` previews that step. `deriveLaunchEconomics`,
+`apportionMeme`, `apportionQuote`, and `apportionFeeSplit` mirror the
+contract's exact apportionment: Blast's migration allocation rounds up, every
+other part goes by largest remainder.
 
-Read and interact with a position without copying object metadata:
+## Migrators
 
-```ts
-const position = await client.blastVesting.getVesting("0x...");
-const preview = await client.blastVesting.preview(
-  position.objectId,
-  BigInt(Date.now()),
-);
-const claimTransaction = client.blastVesting.tx.claim(position);
+`@blast-fun/sdk/migrators` covers every route of the two shipped adapters.
+Cetus orders a pool's coin types by type name, so its routes take
+`memeSide: "a" | "b"`; Bluefin always creates `Pool<Meme, Quote>`.
 
-if (position.kind === "checkpoints") {
-  const checkpoints = await client.blastVesting.getAllCheckpoints(position);
-}
-```
+- Migration is permissionless. Cetus burns the full-range position through
+  Cetus LP Burn and takes the mutable `BurnManager`; Bluefin takes its SUI
+  pool-creation fee, which `tx.migrateBluefin` pays from gas as an
+  exact-balance coin.
+- `collectCetusFees` (with the immutable `BurnManager`) and
+  `collectBluefinFees` are permissionless. One call collects the position's
+  fees, pays Blast's live share from `LpFeePolicy` to its protocol destination,
+  and splits the rest into the creator's balance, auto-LP added straight back
+  to the pool, the holder-rewards balance, and direct recipients.
+  `previewFeeCollection` mirrors that split.
+- The launch's live `CurveFeeCap` claims the creator's share
+  (`claimCreatorFees`) and commits a new split after settling the current one
+  (`settleAndUpdateCetusFeeSplit`, `settleAndUpdateBluefinFeeSplit`). Both take
+  the shared `Launch` read-only.
+- Administrators change Blast's share per coin or by default and its
+  destination (`setLpFeeDefaultShares`, `setLpFeeCoinShares`,
+  `clearLpFeeCoinShares`, `setLpFeeProtocolDestination`), claim migration
+  residuals (`claimProtocolFees`), and publish holder-reward rounds
+  (`publishHolderRewardRound`). Each composes `blast_admin::acl::sign_in` in
+  the same transaction.
 
-The SDK requires 60 seconds between the checked current time and the first
-vesting boundary. `getCurrentTimestampMs` reads the authoritative Sui `Clock`;
-transaction builders fall back to `Date.now()` when no timestamp is supplied.
-Set `minimumLeadTimeMs` explicitly only when the application has a different
-submission policy. The contract checks the on-chain `Clock` again during
-execution.
+The client reads `LpVault` objects, the `LpFeePolicy` singleton, a coin's live
+LP-fee shares (`getLpFeeShares`: its own pair, else the defaults), and
+holder-reward rounds.
+
+The event reducers require Sui checkpoint, transaction digest, and event index
+metadata. Stable replay identity uses transaction digest plus event index;
+checkpoint remains ordering metadata. Decoders authenticate events by their
+type's original package: Sui records the transaction's called package on each
+event, and migration emits launchpad events from a migrators entry.
+Transaction effects provide package publication and returned-coin recipient
+facts. Object ownership reads provide the current `CurveFeeCap` and
+`BlastMetadataCap` owners; events record which capability IDs each launch
+honors.
 
 ## Generated Meme package
 
 `publishMeme` uses the reviewed, compiled Move template. It patches the type
-identifiers, metadata, creator recipient, launch policy, and deployed Blast
-package dependency. The recipient can be the publisher, another Sui address,
+identifiers, decimals, metadata, creator recipient, launch policy, and deployed
+Blast package dependency. Launch finalization rejects a symbol longer than 32
+bytes, and `LaunchConfig` admits the decimal precision (six and nine
+initially), so the SDK rejects a longer symbol before publication. The recipient can be the publisher, another Sui address,
 or a provider-independent Blast account. The transaction publishes the module
 and immediately makes the package immutable. Its initializer calls
 `blast_fun::launch_ticket::new`, so the publisher receives the resulting launch
@@ -209,6 +225,7 @@ ticket for the next launch transaction.
 
 ```ts
 const transaction = client.blastLaunchpad.tx.publishMeme({
+  decimals: 9,
   symbol: "DOG",
   name: "Dog Coin",
   description: "A good dog",
@@ -233,15 +250,9 @@ then wrap its Ed25519 signature with `encodeCreatorClaimAttestation` before
 passing it as `accountAttestation` to `claimCreatorCaps`. The claim returns a
 `CurveFeeCap` for bonding-curve creator fees and a `BlastMetadataCap` for the
 `setName`, `setDescription`, and `setIconUrl` launch metadata builders.
-Post-migration creator LP fees use a separate `LpFeeCap` owned by the
-migrators package. Each vault's migration leaves that right pending; the live
-`CurveFeeCap` holder claims it once with `MigratorTransactions.claimLpFeeCap`,
-then uses `claimCreatorFees`. A creator administrator can replace a claimed cap
-with `issueLpFeeCap`, but never a pending one: a community takeover reassigns
-the launch's `CurveFeeCap` through the launchpad, and its new holder then calls
-`claimLpFeeCap`. Migrators also own the shared
-`LpFeePolicy` object (`sharedObjects.lpFeePolicy`, required by
-`migratorsDeployment`) and emit its LP-fee share events.
+The same live `CurveFeeCap` claims the creator's post-migration LP fees and
+changes the LP-fee split in the migrators package; a creator administrator's
+reassignment of the launch's `CurveFeeCap` moves both rights at once.
 
 Browser builds initialize `@mysten/move-bytecode-template` automatically. If a
 bundler cannot locate its WASM asset, call `initializeMemeTemplate` once with
@@ -251,14 +262,15 @@ For lower-level composition, import `buildMemePackageBytecode` from
 `@blast-fun/sdk/launchpad/template`. Pass the original Blast package ID as its
 second argument; `publishMeme` handles this from the deployment registry.
 
-After publication completes, pass the created ticket ID to `tx.createLaunch`.
-This separation is required because a Move initializer transfers the ticket; it
+After publication completes, pass the created ticket ID to
+`MigratorTransactions.createCetusLaunch` or `createBluefinLaunch`. This
+separation is required because a Move initializer transfers the ticket; it
 cannot return the ticket to another command in the publish transaction.
 
 `tx` methods return complete transactions that route all returned coins or
 capabilities. `call` methods return transaction thunks for programmable
-composition. Migration remains under `call` because an approved adapter must
-consume the typed payload and returned balances in the same transaction.
+composition; `LaunchpadCalls.completeLaunch` applies the settings, finalize,
+optional purchase before sharing, and share to any adapter's initializer.
 
 All protocol amounts use atomic units. Fee obligations round up to their
 recipient. Curve outputs and valuations round down, so the integer remainder

@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  assertPriceWithinBps,
-  assertResidualWithinBps,
-  minimumUtilizedAmount,
-  sqrtPriceX64,
-} from "../src/migrators/index.ts";
+import { autoLpFixedSide, sqrtPriceX64 } from "../src/migrators/index.ts";
 
 test("matches the contract Q64.64 migration-price vectors", () => {
   const oneX64 = 18_446_744_073_709_551_616n;
@@ -26,31 +21,57 @@ test("matches the contract Q64.64 migration-price vectors", () => {
   );
 });
 
-test("matches price-deviation and residual boundaries", () => {
-  const atBoundary = sqrtPriceX64(10_000n, 10_050n, true);
-  assert.doesNotThrow(() =>
-    assertPriceWithinBps(10_000n, 10_000n, true, atBoundary, 50n),
-  );
-  const outside = sqrtPriceX64(10_000n, 10_051n, true);
-  assert.throws(
-    () => assertPriceWithinBps(10_000n, 10_000n, true, outside, 50n),
-    /price deviation exceeds 50 basis points/,
-  );
+const ONE = 1n << 64n;
+const MIN_SQRT_PRICE = 4_295_048_016n;
+const MAX_SQRT_PRICE = 79_226_673_515_401_279_992_447_579_055n;
+const U64_MAX = (1n << 64n) - 1n;
 
-  assert.equal(minimumUtilizedAmount(10_000n, 1n), 9_999n);
-  assert.equal(minimumUtilizedAmount(10_001n, 1n), 9_999n);
-  assert.doesNotThrow(() => assertResidualWithinBps(10_001n, 2n, 1n));
-  assert.throws(
-    () => assertResidualWithinBps(10_000n, 2n, 1n),
-    /residual exceeds 1 basis points/,
-  );
+test("matches the contract auto-LP side-selection vectors", () => {
+  const vectors: [bigint, bigint, bigint, bigint, bigint, boolean, bigint][] = [
+    [ONE / 2n, ONE, ONE * 2n, 1_000_000n, 1_000_010n, true, 1_000_000n],
+    [
+      MIN_SQRT_PRICE,
+      ONE,
+      MAX_SQRT_PRICE,
+      1_000_000_000n,
+      2_000_000_000n,
+      true,
+      1_000_000_000n,
+    ],
+    [ONE / 2n, ONE, ONE * 2n, 1_000_010n, 1_000_000n, false, 1_000_000n],
+    [ONE / 2n, ONE, ONE * 2n, 1_000_000n, 1_000_000n, true, 0n],
+    [ONE / 2n, ONE, ONE * 2n, 2n, 2n, true, 0n],
+    [ONE / 2n, ONE, ONE * 2n, 0n, 1_000_000n, true, 0n],
+    [ONE / 2n, ONE / 2n, ONE * 2n, 1_000_000n, 1_000_000n, true, 0n],
+    [ONE / 2n, ONE * 2n, ONE * 2n, 1_000_000n, 1_000_000n, true, 0n],
+    [
+      MIN_SQRT_PRICE,
+      MAX_SQRT_PRICE - 1n,
+      MAX_SQRT_PRICE,
+      U64_MAX,
+      U64_MAX,
+      false,
+      U64_MAX,
+    ],
+    [
+      MIN_SQRT_PRICE,
+      MIN_SQRT_PRICE + 1n,
+      MAX_SQRT_PRICE,
+      U64_MAX,
+      U64_MAX,
+      true,
+      U64_MAX,
+    ],
+  ];
+  for (const [lower, price, upper, a, b, fixA, amount] of vectors) {
+    assert.deepEqual(autoLpFixedSide(lower, price, upper, a, b), {
+      fixA,
+      amount,
+    });
+  }
 });
 
 test("rejects invalid migration math inputs", () => {
   assert.throws(() => sqrtPriceX64(0n, 1n, true), /positive u64/);
-  assert.throws(() => minimumUtilizedAmount(10_000n, 10_001n), /basis points/);
-  assert.throws(
-    () => assertPriceWithinBps(1n, 1n, true, 1n << 128n, 1n),
-    /u128/,
-  );
+  assert.throws(() => autoLpFixedSide(0n, 1n << 128n, 1n, 1n, 1n), /u128/);
 });

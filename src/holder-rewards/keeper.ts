@@ -5,7 +5,7 @@ import { rewardIsClaimed } from "./state.ts";
 
 type RoundCommitment = Pick<
   RewardRoundState,
-  | "distributorId"
+  | "vaultId"
   | "number"
   | "startCheckpoint"
   | "endCheckpoint"
@@ -21,7 +21,7 @@ export function assertRewardRoundMatchesManifest(
 ): void {
   validateRewardManifest(manifest);
   if (
-    round.distributorId !== manifest.distributorId ||
+    round.vaultId !== manifest.vaultId ||
     round.number !== BigInt(manifest.number) ||
     round.startCheckpoint !== BigInt(manifest.startCheckpoint) ||
     round.endCheckpoint !== BigInt(manifest.endCheckpoint) ||

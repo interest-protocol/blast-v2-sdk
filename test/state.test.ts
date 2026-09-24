@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { ClientWithCoreApi } from "@mysten/sui/client";
-import { normalizeStructTag } from "@mysten/sui/utils";
+import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 
 import {
   decodeLaunchObject,
@@ -17,31 +17,56 @@ const migrationWitness = `${"0".repeat(63)}b::adapter::WITNESS`;
 
 const uid = (id: string) => ({ id: { bytes: id } });
 const balance = (value: bigint) => ({ value });
-const bps = (value: bigint) => ({ value });
-
-function typeName(value: string) {
-  return {
-    name: { bytes: Array.from(new TextEncoder().encode(value)) },
-  };
-}
+const feeSplit = {
+  creatorBps: 5_000n,
+  autoLpBps: 2_000n,
+  rewardsBps: 2_000n,
+  recipients: [
+    {
+      destination:
+        "0x000000000000000000000000000000000000000000000000000000000000000f",
+      bps: 1_000n,
+    },
+  ],
+};
+const allocationPlan = {
+  curveMemeBps: 8_000n,
+  lpMemeBps: 1_900n,
+  lpQuoteBps: 9_900n,
+  recipients: [
+    {
+      destination:
+        "0x000000000000000000000000000000000000000000000000000000000000000a",
+      memeBps: 100n,
+      quoteBps: 100n,
+    },
+  ],
+};
 
 function serializeLaunch(id = objectId): Uint8Array {
   return launchBcs
     .serialize({
       id: uid(id),
-      lifecycle: { Live: true },
-      sell_burn_bps: bps(100n),
+      lifecycle: { MigrationReady: true },
+      protection_end_ms: "61000",
+      protection_window_ms: 60_000n,
+      cumulative_atomic_limit: 10_000n,
+      per_transaction_atomic_limit: 5_000n,
+      sell_burn_bps: 100n,
       virtual_quote: 1_000n,
-      migration_quote_target: 3_000n,
-      quote_fee_bps: bps(100n),
-      meme_fee_bps: bps(25n),
-      protocol_quote_migration_fee_bps: bps(75n),
-      migration_witness: typeName(migrationWitness),
+      graduation_target: 3_000n,
+      quote_fee_bps: 100n,
+      meme_fee_bps: 25n,
+      migration_witness: migrationWitness,
+      pool_tick_spacing: 200,
+      pool_fee_rate: 10_000n,
+      lp_fee_split: feeSplit,
+      atomic_supply: 1_000_000n,
       meme_reserve: balance(800_000n),
       real_quote_reserve: balance(500n),
       pending_burn: balance(11n),
-      protocol_meme_graduation_fee: balance(5_000n),
-      meme_liquidity_provision: balance(200_000n),
+      allocation_plan: allocationPlan,
+      allocated_meme: balance(200_000n),
       fee_ledger: {
         protocol_meme: balance(1n),
         creator_meme: balance(2n),
@@ -49,8 +74,8 @@ function serializeLaunch(id = objectId): Uint8Array {
         creator_quote: balance(4n),
       },
       metadata_cap: { id: uid(metadataCapId) },
-      creator_authority: { recipient: { Address: creator } },
-      curve_fee_authority: { Custodian: "0xd15::distributor::Witness" },
+      creator: { Address: creator },
+      curve_fee_cap_id: { bytes: "0x12" },
       blast_metadata_cap_id: { bytes: "0x11" },
     })
     .toBytes();
@@ -75,17 +100,27 @@ test("decodes the complete launch BCS state", () => {
   assert.equal(state.mutable, true);
   assert.equal(state.memeType.endsWith("0a::meme::MEME"), true);
   assert.equal(state.quoteType.endsWith("02::sui::SUI"), true);
-  assert.equal(state.lifecycle, "Live");
+  assert.equal(state.lifecycle, "MigrationReady");
+  assert.equal(state.protectionEndMs, 61_000n);
+  assert.deepEqual(state.protection, {
+    windowMs: 60_000n,
+    cumulativeAtomicLimit: 10_000n,
+    perTransactionAtomicLimit: 5_000n,
+  });
+  assert.equal(state.graduationTarget, 3_000n);
+  assert.equal(state.poolTickSpacing, 200);
+  assert.equal(state.poolFeeRate, 10_000n);
+  assert.deepEqual(state.lpFeeSplit, feeSplit);
+  assert.deepEqual(state.allocationPlan, allocationPlan);
+  assert.equal(state.atomicSupply, 1_000_000n);
   assert.equal(state.memeReserve, 800_000n);
   assert.equal(state.realQuoteReserve, 500n);
   assert.equal(state.pendingBurn, 11n);
+  assert.equal(state.allocatedMeme, 200_000n);
   assert.equal(state.protocolMemeTradeFees, 1n);
   assert.equal(state.creatorQuoteTradeFees, 4n);
   assert.equal(state.metadataCapId.endsWith("0d"), true);
-  assert.deepEqual(state.curveFeeAuthority, {
-    kind: "custodian",
-    custodianType: normalizeStructTag("0xd15::distributor::Witness"),
-  });
+  assert.equal(state.curveFeeCapId, normalizeSuiObjectId("0x12"));
   assert.equal(
     state.blastMetadataCapId,
     "0x0000000000000000000000000000000000000000000000000000000000000011",
@@ -96,8 +131,8 @@ test("decodes the complete launch BCS state", () => {
       "0x000000000000000000000000000000000000000000000000000000000000000e",
   });
   assert.equal(
-    state.migrationWitnessType.endsWith("0b::adapter::WITNESS"),
-    true,
+    state.migrationWitnessType,
+    normalizeStructTag(migrationWitness),
   );
 });
 

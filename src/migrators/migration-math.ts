@@ -1,11 +1,13 @@
 import {
-  BASIS_POINTS_DENOMINATOR,
-  mulDivUp,
-  requireBasisPoints,
   requirePositiveU64,
   requireU64,
   requireU128,
 } from "../lib/integers.ts";
+
+const Q64 = 1n << 64n;
+const Q128 = 1n << 128n;
+/** Atoms of the other asset `auto_lp_fixed_side` keeps beyond its estimate. */
+export const AUTO_LP_MARGIN = 2n;
 
 /** Mirrors `blast_fun_migrators::migration_math::sqrt_price_x64` over atomic Meme/Quote units. */
 export function sqrtPriceX64(
@@ -16,54 +18,43 @@ export function sqrtPriceX64(
   return integerSqrt(ratioQ128(memeAmount, quoteAmount, memeIsCoinA));
 }
 
-/** Mirrors the adopted-pool price guard in `blast_fun_migrators::migration_math`. */
-export function assertPriceWithinBps(
-  memeAmount: bigint,
-  quoteAmount: bigint,
-  memeIsCoinA: boolean,
-  actualSqrtPriceX64: bigint,
-  maxDeviationBps: bigint,
-): void {
-  requireBasisPoints("maxDeviationBps", maxDeviationBps);
-  requireU128("actualSqrtPriceX64", actualSqrtPriceX64);
+/**
+ * Mirrors `migration_math::auto_lp_fixed_side`, which Bluefin auto-LP uses to
+ * choose the fixed side from the pool's and the position's Q64.64 sqrt prices.
+ * Returns `{ fixA, amount }`; a zero amount means nothing is added now.
+ * Divisions round down except the other side's requirement, which rounds up.
+ */
+export function autoLpFixedSide(
+  sqrtLower: bigint,
+  sqrtPrice: bigint,
+  sqrtUpper: bigint,
+  amountA: bigint,
+  amountB: bigint,
+): { fixA: boolean; amount: bigint } {
+  const lower = requireU128("sqrtLower", sqrtLower);
+  const price = requireU128("sqrtPrice", sqrtPrice);
+  const upper = requireU128("sqrtUpper", sqrtUpper);
+  requireU64("amountA", amountA);
+  requireU64("amountB", amountB);
+  if (amountA === 0n || amountB === 0n) return { fixA: true, amount: 0n };
+  if (price <= lower || price >= upper) return { fixA: true, amount: 0n };
 
-  const expectedRatioQ128 = ratioQ128(memeAmount, quoteAmount, memeIsCoinA);
-  const actualRatioQ128 = actualSqrtPriceX64 * actualSqrtPriceX64;
-  const difference =
-    actualRatioQ128 >= expectedRatioQ128
-      ? actualRatioQ128 - expectedRatioQ128
-      : expectedRatioQ128 - actualRatioQ128;
-
-  if (
-    difference > expectedRatioQ128 ||
-    difference * BASIS_POINTS_DENOMINATOR > expectedRatioQ128 * maxDeviationBps
-  ) {
-    throw new RangeError(
-      `price deviation exceeds ${maxDeviationBps} basis points`,
-    );
+  const liquidityA = (amountA * ((price * upper) / Q64)) / (upper - price);
+  if (liquidityA > 0n && liquidityA < Q128) {
+    const neededB = divCeil(liquidityA * (price - lower), Q64);
+    if (neededB + AUTO_LP_MARGIN <= amountB) {
+      return { fixA: true, amount: amountA };
+    }
   }
-}
-
-/** Mirrors the minimum venue-consumed amount after residual rounding. */
-export function minimumUtilizedAmount(
-  amount: bigint,
-  maxResidualBps: bigint,
-): bigint {
-  requireU64("amount", amount);
-  return amount - maximumResidualAmount(amount, maxResidualBps);
-}
-
-/** Mirrors the venue residual guard in `blast_fun_migrators::migration_math`. */
-export function assertResidualWithinBps(
-  sourceAmount: bigint,
-  residualAmount: bigint,
-  maxResidualBps: bigint,
-): void {
-  requireU64("sourceAmount", sourceAmount);
-  requireU64("residualAmount", residualAmount);
-  if (residualAmount > maximumResidualAmount(sourceAmount, maxResidualBps)) {
-    throw new RangeError(`residual exceeds ${maxResidualBps} basis points`);
+  const liquidityB = (amountB << 64n) / (price - lower);
+  if (liquidityB > 0n) {
+    const neededA =
+      divCeil(liquidityB << 64n, price) - (liquidityB << 64n) / upper;
+    if (neededA + AUTO_LP_MARGIN <= amountA) {
+      return { fixA: false, amount: amountB };
+    }
   }
+  return { fixA: true, amount: 0n };
 }
 
 function ratioQ128(
@@ -89,7 +80,6 @@ function integerSqrt(value: bigint): bigint {
   return low;
 }
 
-function maximumResidualAmount(amount: bigint, maxResidualBps: bigint): bigint {
-  requireBasisPoints("maxResidualBps", maxResidualBps);
-  return mulDivUp(amount, maxResidualBps, BASIS_POINTS_DENOMINATOR);
+function divCeil(numerator: bigint, denominator: bigint): bigint {
+  return (numerator + denominator - 1n) / denominator;
 }

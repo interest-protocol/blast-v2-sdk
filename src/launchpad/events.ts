@@ -1,40 +1,46 @@
 import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import {
-  normalizeSuiAddress,
-  normalizeSuiObjectId,
-  parseStructTag,
-} from "@mysten/sui/utils";
+import { normalizeSuiAddress, parseStructTag } from "@mysten/sui/utils";
 
 import { moveTypeNameBcs, suiObjectIdBcs } from "../lib/bcs.ts";
 import type { SuiEventPosition } from "../lib/events.ts";
 import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
 import { requireU64 } from "../lib/integers.ts";
+import type { AllocationPlan, FeeSplit } from "./allocation.ts";
+import { allocationPlanBcs, feeSplitBcs } from "./allocation.ts";
+import type { CreatorRecipient } from "./state.ts";
+import { creatorRecipientBcs, decodeCreatorRecipient } from "./state.ts";
 
 type EventFieldDescriptor =
   | "id"
   | "typeName"
   | "address"
   | "u64"
+  | "u32"
   | "u8"
   | "bool"
   | "bytes"
   | "string"
-  | "optionAddress"
-  | "optionBytes"
-  | "optionId"
-  | "optionU64";
+  | "creatorRecipient"
+  | "allocationPlan"
+  | "feeSplit";
+
+const tradeFees = {
+  protocol_meme_fee: "u64",
+  creator_meme_fee: "u64",
+  protocol_quote_fee: "u64",
+  creator_quote_fee: "u64",
+} as const;
 
 export const launchpadEventSpecs = {
   Bought: {
     launch_id: "id",
     quote_in: "u64",
     meme_out_gross: "u64",
-    protocol_meme_fee_delta: "u64",
-    creator_meme_fee_delta: "u64",
-    protocol_quote_fee_delta: "u64",
-    creator_quote_fee_delta: "u64",
+    meme_out_net: "u64",
+    quote_refund: "u64",
+    ...tradeFees,
     meme_reserve: "u64",
     real_quote_reserve: "u64",
   },
@@ -43,14 +49,8 @@ export const launchpadEventSpecs = {
     curve_fee_cap_id: "id",
     metadata_cap_id: "id",
   },
-  CreatorFeesLocked: {
-    launch_id: "id",
-    curve_fee_cap_id: "id",
-    custodian: "typeName",
-  },
   CurveFeeCapReassigned: {
     launch_id: "id",
-    revoked_curve_fee_cap_id: "optionId",
     curve_fee_cap_id: "id",
     recipient: "address",
   },
@@ -59,34 +59,33 @@ export const launchpadEventSpecs = {
     meme_amount: "u64",
     quote_amount: "u64",
   },
-  GraduationDefaultsChanged: {
-    protocol_quote_migration_fee_bps: "u64",
-    protocol_meme_graduation_fee_bps: "u64",
-    meme_liquidity_provision_bps: "u64",
-  },
   LaunchCreated: {
     launch_id: "id",
     ticket_id: "id",
     quote: "typeName",
     migration_witness: "typeName",
-    meme_reserve: "u64",
-    protocol_meme_graduation_fee: "u64",
-    meme_liquidity_provision: "u64",
+    pool_tick_spacing: "u32",
+    pool_fee_rate: "u64",
+    lp_fee_split: "feeSplit",
     virtual_quote: "u64",
-    migration_quote_target: "u64",
+    graduation_target: "u64",
     quote_fee_bps: "u64",
     meme_fee_bps: "u64",
-    protocol_quote_migration_fee_bps: "u64",
-    protocol_meme_graduation_fee_bps: "u64",
-    meme_liquidity_provision_bps: "u64",
+    allocation_plan: "allocationPlan",
+    protection_window_ms: "u64",
+    cumulative_sender_bps: "u64",
+    per_transaction_bps: "u64",
+  },
+  LaunchShared: {
+    launch_id: "id",
+    public_start_ms: "u64",
   },
   LaunchTicketCreated: {
     ticket_id: "id",
     meme: "typeName",
-    initial_supply: "u64",
+    decimals: "u8",
     metadata_cap_id: "id",
-    creator_address: "optionAddress",
-    account_commitment: "optionBytes",
+    creator: "creatorRecipient",
     burnable: "bool",
     sell_burn_bps: "u64",
   },
@@ -94,15 +93,20 @@ export const launchpadEventSpecs = {
     quote_fee_bps: "u64",
     meme_fee_bps: "u64",
   },
+  MemeDecimalsSet: { decimals: "u8", allowed: "bool" },
   Migrated: {
     launch_id: "id",
-    migration_meme: "u64",
-    migration_quote: "u64",
+    meme: "u64",
+    quote: "u64",
     disposed_meme: "u64",
     native_supply_burned: "bool",
     total_supply_after: "u64",
-    protocol_meme_graduation_fee: "u64",
-    protocol_quote_migration_fee: "u64",
+  },
+  MigrationAllocationPaid: {
+    launch_id: "id",
+    destination: "address",
+    meme: "u64",
+    quote: "u64",
   },
   MemeMetadataUpdated: {
     launch_id: "id",
@@ -112,64 +116,55 @@ export const launchpadEventSpecs = {
   },
   MetadataCapReassigned: {
     launch_id: "id",
-    revoked_metadata_cap_id: "optionId",
     metadata_cap_id: "id",
     recipient: "address",
   },
-  MigrationWitnessAllowed: { pos0: "typeName" },
-  MigrationWitnessDisallowed: { pos0: "typeName" },
+  MigrationWitnessSet: { migration_witness: "typeName", allowed: "bool" },
+  ProtocolAllocationSet: {
+    destination: "address",
+    meme_bps: "u64",
+    quote_bps: "u64",
+  },
   ProtocolFeesClaimed: {
     launch_id: "id",
     meme_amount: "u64",
     quote_amount: "u64",
   },
   ProtocolFeeShareChanged: { pos0: "u64" },
-  QuoteAllowed: {
+  QuoteSet: {
     quote: "typeName",
     virtual_quote: "u64",
-    migration_quote_target: "u64",
-  },
-  QuoteDisallowed: { pos0: "typeName" },
-  QuoteParametersChanged: {
-    quote: "typeName",
-    virtual_quote: "u64",
-    migration_quote_target: "u64",
   },
   Sold: {
     launch_id: "id",
     meme_in_gross: "u64",
-    pending_burn_delta: "u64",
-    pending_burn_total: "u64",
+    pending_burn: "u64",
     quote_out_gross: "u64",
-    protocol_meme_fee_delta: "u64",
-    creator_meme_fee_delta: "u64",
-    protocol_quote_fee_delta: "u64",
-    creator_quote_fee_delta: "u64",
+    ...tradeFees,
     meme_reserve: "u64",
     real_quote_reserve: "u64",
   },
-  CreatorClaimSignerRevoked: { dummy_field: "bool" },
   CreatorClaimSignerSet: { pos0: "bytes" },
 } as const satisfies Record<string, Record<string, EventFieldDescriptor>>;
 
 export type LaunchpadEventKind = keyof typeof launchpadEventSpecs;
 
+type DescriptorOutputs = {
+  id: string;
+  typeName: string;
+  address: string;
+  u64: bigint;
+  u32: number;
+  u8: number;
+  bool: boolean;
+  bytes: Uint8Array;
+  string: string;
+  creatorRecipient: NonNullable<CreatorRecipient>;
+  allocationPlan: AllocationPlan;
+  feeSplit: FeeSplit;
+};
 type DescriptorOutput<Descriptor extends EventFieldDescriptor> =
-  Descriptor extends "u64" | "optionU64"
-    ? Descriptor extends "optionU64"
-      ? bigint | null
-      : bigint
-    : Descriptor extends "u8"
-      ? number
-      : Descriptor extends "bool"
-        ? boolean
-        : Descriptor extends "bytes" | "optionBytes"
-          ? Descriptor extends "optionBytes"
-            ? Uint8Array | null
-            : Uint8Array
-          : Descriptor extends "optionAddress" | "optionId"
-            ? string | null
-            : string;
+  DescriptorOutputs[Descriptor];
 
 export type LaunchpadEventPayloads = {
   [Kind in LaunchpadEventKind]: {
@@ -192,6 +187,15 @@ const BytesBcs = bcs.vector(bcs.u8()).transform({
   output: (value) => Uint8Array.from(value),
 });
 
+const CreatorRecipientBcs = creatorRecipientBcs.transform({
+  input: (recipient: NonNullable<CreatorRecipient>) =>
+    recipient.kind === "address"
+      ? { Address: recipient.address }
+      : { Account: Array.from(recipient.accountCommitment) },
+  output: (recipient) =>
+    decodeCreatorRecipient(recipient) as NonNullable<CreatorRecipient>,
+});
+
 const EVENT_FIELD_BCS: Record<
   EventFieldDescriptor,
   BcsType<unknown, unknown>
@@ -200,14 +204,14 @@ const EVENT_FIELD_BCS: Record<
   typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
   address: AddressBcs as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,
+  u32: bcs.u32() as BcsType<unknown, unknown>,
   u8: bcs.u8() as BcsType<unknown, unknown>,
   bool: bcs.bool() as BcsType<unknown, unknown>,
   bytes: BytesBcs as BcsType<unknown, unknown>,
   string: bcs.string() as BcsType<unknown, unknown>,
-  optionAddress: bcs.option(AddressBcs) as BcsType<unknown, unknown>,
-  optionBytes: bcs.option(BytesBcs) as BcsType<unknown, unknown>,
-  optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown, unknown>,
-  optionU64: bcs.option(U64Bcs) as BcsType<unknown, unknown>,
+  creatorRecipient: CreatorRecipientBcs as BcsType<unknown, unknown>,
+  allocationPlan: allocationPlanBcs as BcsType<unknown, unknown>,
+  feeSplit: feeSplitBcs as BcsType<unknown, unknown>,
 };
 
 type LaunchpadEventBcsMap = {
@@ -232,8 +236,14 @@ export const launchpadEventBcs = Object.fromEntries(
   ]),
 ) as unknown as LaunchpadEventBcsMap;
 
+/**
+ * Launchpad events are authenticated by their type, which names the original
+ * package. Sui records the transaction's called package and module on each
+ * event, not the emitting module: adapters in the migrators package emit
+ * `Migrated` and `MigrationAllocationPaid`, and a Meme package's publication
+ * emits `LaunchTicketCreated`.
+ */
 export type LaunchpadEventPackageIdentity = {
-  packageId: string;
   originalPackageId: string;
 };
 
@@ -241,7 +251,6 @@ export type LaunchpadEventPosition = SuiEventPosition;
 
 type DecodedLaunchpadEventBase = {
   source: "launchpad";
-  emitterPackageId: string;
   sender: string;
   position: LaunchpadEventPosition;
 };
@@ -257,14 +266,6 @@ export function decodeLaunchpadEvent(
   event: SuiClientTypes.EventEntry,
   packages: LaunchpadEventPackageIdentity,
 ): DecodedLaunchpadEvent {
-  const currentPackageId = normalizeSuiObjectId(packages.packageId);
-  if (normalizeSuiObjectId(event.packageId) !== currentPackageId) {
-    throw new TypeError("launchpad event has an unexpected emitter package");
-  }
-  if (event.module !== "blast_events") {
-    throw new TypeError("launchpad event has an unexpected emitter module");
-  }
-
   const originalPackageId = normalizeSuiAddress(packages.originalPackageId);
   const envelope = parseStructTag(event.eventType);
   if (
@@ -292,7 +293,6 @@ export function decodeLaunchpadEvent(
     source: "launchpad",
     kind,
     payload,
-    emitterPackageId: currentPackageId,
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
   } as DecodedLaunchpadEvent;
