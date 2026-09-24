@@ -7,12 +7,12 @@ and pause switch are gone. Every LP-fee collection credits the creator's
 publishes a Merkle allocation of those funds as a shared `Round`, and anyone can
 relay a proof; each leaf pays its committed beneficiary once.
 
-`@blast-fun/sdk/holder-rewards` supplies integer holder accounting, Merkle
-manifests, round reads, and permissionless payout helpers. The transaction
-builders are `MigratorTransactions.publishHolderRewardRound` and
+`@interest-protocol/blast-sdk/holder-rewards` supplies integer holder
+accounting, Merkle manifests, round reads, and permissionless payout helpers.
+The transaction builders are `MigratorTransactions.publishHolderRewardRound` and
 `claimHolderRewards`. The Node operator is
-`npm run holder-rewards -- <command> ...` from this repository. The packages
-are unpublished; supply verified deployment IDs.
+`npm run holder-rewards -- <command> ...` from this repository. The packages are
+unpublished; supply verified deployment IDs.
 
 ## Rounds
 

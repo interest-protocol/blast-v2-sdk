@@ -1,5 +1,5 @@
 {
-  "name": "@blast-fun/sdk",
+  "name": "@interest-protocol/blast-sdk",
   "version": "0.0.0",
   "description": "Deterministic off-chain previews, reads, and transaction builders for Blast V2",
   "private": true,

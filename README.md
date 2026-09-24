@@ -24,7 +24,7 @@ rounds funded from the vault's rewards share, and permissionless payouts.
 
 ```ts
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { blastLaunchpad } from "@blast-fun/sdk/launchpad";
+import { blastLaunchpad } from "@interest-protocol/blast-sdk/launchpad";
 
 const client = new SuiGrpcClient({
   network: "testnet",
@@ -80,24 +80,24 @@ result can be passed directly as the `launch` transaction input.
 
 ## Deployments
 
-`@blast-fun/sdk/deployments` is the single TypeScript registry for Blast
-package lineage and singleton shared-object identities. Package entries keep
-both the current and original package IDs. Shared-object entries keep the
+`@interest-protocol/blast-sdk/deployments` is the single TypeScript registry for
+Blast package lineage and singleton shared-object identities. Package entries
+keep both the current and original package IDs. Shared-object entries keep the
 object ID and initial shared version. Builders add `mutable` from the Move
-function signature because mutability belongs to a transaction argument, not
-to the object itself. `packages.admin` names the published `blast_admin`
-package, which owns `acl::sign_in` and is a transitive publish dependency of
-every generated Meme package.
+function signature because mutability belongs to a transaction argument, not to
+the object itself. `packages.admin` names the published `blast_admin` package,
+which owns `acl::sign_in` and is a transitive publish dependency of every
+generated Meme package.
 
 After a canonical network release is registered, initialize the client without
 copying addresses into the application:
 
 ```ts
-import { blastLaunchpad } from "@blast-fun/sdk/launchpad";
+import { blastLaunchpad } from "@interest-protocol/blast-sdk/launchpad";
 import {
   getBlastDeployment,
   launchpadDeployment,
-} from "@blast-fun/sdk/deployments";
+} from "@interest-protocol/blast-sdk/deployments";
 
 const blast = getBlastDeployment("testnet");
 const launchpadExtension = blastLaunchpad(launchpadDeployment(blast));
@@ -127,7 +127,7 @@ construction atomically:
 5. `launch::share` opens the launch; protection starts now.
 
 ```ts
-import { blastMigrators } from "@blast-fun/sdk/migrators";
+import { blastMigrators } from "@interest-protocol/blast-sdk/migrators";
 
 const transaction = client.blastMigrators.tx.createCetusLaunch({
   memeType,
@@ -172,8 +172,8 @@ other part goes by largest remainder.
 
 ## Migrators
 
-`@blast-fun/sdk/migrators` covers every route of the two shipped adapters.
-Cetus orders a pool's coin types by type name, so its routes take
+`@interest-protocol/blast-sdk/migrators` covers every route of the two shipped
+adapters. Cetus orders a pool's coin types by type name, so its routes take
 `memeSide: "a" | "b"`; Bluefin always creates `Pool<Meme, Quote>`.
 
 - Migration is permissionless. Cetus burns the full-range position through
@@ -259,8 +259,9 @@ bundler cannot locate its WASM asset, call `initializeMemeTemplate` once with
 the asset URL before building the transaction.
 
 For lower-level composition, import `buildMemePackageBytecode` from
-`@blast-fun/sdk/launchpad/template`. Pass the original Blast package ID as its
-second argument; `publishMeme` handles this from the deployment registry.
+`@interest-protocol/blast-sdk/launchpad/template`. Pass the original Blast
+package ID as its second argument; `publishMeme` handles this from the
+deployment registry.
 
 After publication completes, pass the created ticket ID to
 `MigratorTransactions.createCetusLaunch` or `createBluefinLaunch`. This
