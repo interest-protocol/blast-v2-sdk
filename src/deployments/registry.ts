@@ -279,6 +279,14 @@ function normalizeSharedObjects(
       throw new TypeError(`sharedObjects.${name} is required`);
     }
   }
+  // The Cetus lineage is recorded as a pair, so its config's type is always
+  // checked against the Cetus package that defines it.
+  if (packages.cetusClmm && !objects.cetusConfig) {
+    throw new TypeError("sharedObjects.cetusConfig is required");
+  }
+  if (objects.cetusConfig && !packages.cetusClmm) {
+    throw new TypeError("packages.cetusClmm is required");
+  }
   return freezeRecord(
     "sharedObjects",
     objects,

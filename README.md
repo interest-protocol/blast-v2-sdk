@@ -251,15 +251,16 @@ Cetus is the one post-migration venue the SDK trades through. Its adapter
    Cetus lineage, for the launch's coins and recorded tier, which the
    deployment's `routes` must admit. The manifest records Cetus as
    `packages.cetusClmm` (the called revision and the type-defining original)
-   and `sharedObjects.cetusConfig`; `evaluateProtocolAccess` checks the
-   config's type against that lineage.
+   and `sharedObjects.cetusConfig`, always as a pair (either alone is an
+   invalid manifest); `evaluateProtocolAccess` checks the config's type
+   against that lineage.
 2. `quoteCetusSwap` asks any `CetusQuoteTransport` for one exact-input quote,
    and `normalizeCetusQuote` states it in atoms: input, output,
    `minimumOut = floor(out * (10,000 - slippageBps) / 10,000)`, fee, exact
    prices before and after, impact, expiry, sender, and balances.
 3. `buildCetusSwapTransaction` refuses disabled signing, another deployment,
-   foreign lineage, an unadmitted tier, a substituted route, an expired quote,
-   or inconsistent amounts. It builds `pool::flash_swap`, repays exactly
+   foreign lineage, an unadmitted tier, a substituted route, an expired or
+   future-dated quote, or inconsistent amounts. It builds `pool::flash_swap`, repays exactly
    `amountIn`, and aborts below `minimumOut`.
 4. `reconcileCetusSwap` turns the executed or simulated transaction's single
    `SwapEvent` in that pool into exact trade facts, and refuses anything else.

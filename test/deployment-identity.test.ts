@@ -63,6 +63,28 @@ function runtimeFor(input: BlastDeploymentInput): DeploymentRuntimeObservation {
   };
 }
 
+/** The manifest with the Cetus lineage recorded as a pair (contracts 442116a). */
+const CETUS_MANIFEST = {
+  ...manifest,
+  packages: {
+    ...manifest.packages,
+    cetusClmm: {
+      packageId:
+        "0x260693ec785a6e6c9d81d58c7d2ff72f1288ae0fa6a9725abe05a6478b11f084",
+      originalPackageId:
+        "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb",
+    },
+  },
+  sharedObjects: {
+    ...manifest.sharedObjects,
+    cetusConfig: {
+      objectId:
+        "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f",
+      initialSharedVersion: "1574190",
+    },
+  },
+} satisfies BlastDeploymentInput;
+
 const codes = (access: ReturnType<typeof evaluateProtocolAccess>) =>
   access.signing === "disabled" ? access.reasons.map(({ code }) => code) : [];
 
@@ -185,26 +207,7 @@ test("disables signing on a runtime identity mismatch or foreign lineage", () =>
 });
 
 test("checks a recorded Cetus config against the recorded Cetus lineage", () => {
-  const cetusManifest = {
-    ...manifest,
-    packages: {
-      ...manifest.packages,
-      cetusClmm: {
-        packageId:
-          "0x260693ec785a6e6c9d81d58c7d2ff72f1288ae0fa6a9725abe05a6478b11f084",
-        originalPackageId:
-          "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb",
-      },
-    },
-    sharedObjects: {
-      ...manifest.sharedObjects,
-      cetusConfig: {
-        objectId:
-          "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f",
-        initialSharedVersion: "1574190",
-      },
-    },
-  } satisfies BlastDeploymentInput;
+  const cetusManifest = CETUS_MANIFEST;
   const runtime = runtimeFor(cetusManifest);
   assert.equal(
     evaluateProtocolAccess({
@@ -227,6 +230,36 @@ test("checks a recorded Cetus config against the recorded Cetus lineage", () => 
     ),
     ["foreign-lineage"],
   );
+});
+
+test("rejects a half-recorded Cetus lineage as an invalid manifest", () => {
+  const { cetusClmm, ...packages } = CETUS_MANIFEST.packages;
+  const { cetusConfig, ...sharedObjects } = CETUS_MANIFEST.sharedObjects;
+  assert.ok(cetusClmm && cetusConfig);
+  const withoutConfig = { ...CETUS_MANIFEST, sharedObjects };
+  const withoutPackage = { ...CETUS_MANIFEST, packages };
+  assert.throws(() => defineBlastDeployment(withoutConfig), {
+    name: "DeploymentManifestError",
+    code: "invalid-manifest",
+    message: /sharedObjects\.cetusConfig is required/,
+  });
+  assert.throws(() => defineBlastDeployment(withoutPackage), {
+    name: "DeploymentManifestError",
+    code: "invalid-manifest",
+    message: /packages\.cetusClmm is required/,
+  });
+  for (const half of [withoutConfig, withoutPackage]) {
+    assert.deepEqual(
+      codes(
+        evaluateProtocolAccess({
+          manifest: half,
+          mode: "non-production",
+          runtime: runtimeFor(CETUS_MANIFEST),
+        }),
+      ),
+      ["invalid-manifest"],
+    );
+  }
 });
 
 test("disables signing on an ABI mismatch or an unsupported route", () => {

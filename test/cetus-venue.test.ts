@@ -291,8 +291,9 @@ test("refuses a route outside the deployment's Cetus lineage and tiers", () => {
     );
 
   const { cetusClmm: _, ...packages } = manifest.packages;
+  const { cetusConfig: __, ...sharedObjects } = manifest.sharedObjects;
   rejects("deployment-mismatch", {
-    deployment: defineBlastDeployment({ ...manifest, packages }),
+    deployment: defineBlastDeployment({ ...manifest, packages, sharedObjects }),
   });
   rejects("foreign-lineage", {
     launch: { ...launch, migrationWitnessType: `${foreign}::cetus::Witness` },
@@ -513,7 +514,7 @@ test("builds the quoted buy as one exact-input Cetus flash swap", () => {
   const flashSwap = data.commands[2]!;
   assert.ok(flashSwap.$kind === "MoveCall");
   assert.deepEqual(
-    flashSwap.MoveCall.arguments.map((argument) => describe(tx, argument)),
+    flashSwap.MoveCall.arguments.map((argument) => describeInput(tx, argument)),
     [
       `shared:${CETUS_LINEAGE.globalConfig.objectId}@1574190`,
       `shared-mut:${BLAST_CETUS.pool.objectId}@${BLAST_CETUS.pool.initialSharedVersion}`,
@@ -527,13 +528,13 @@ test("builds the quoted buy as one exact-input Cetus flash swap", () => {
   const split = data.commands[10]!;
   assert.ok(split.$kind === "SplitCoins");
   assert.deepEqual(
-    describe(tx, split.SplitCoins.amounts[0]!, "u64"),
+    describeInput(tx, split.SplitCoins.amounts[0]!, "u64"),
     "u64:4093624972521423",
   );
   const transfer = data.commands[12]!;
   assert.ok(transfer.$kind === "TransferObjects");
   assert.equal(
-    describe(tx, transfer.TransferObjects.address, "address"),
+    describeInput(tx, transfer.TransferObjects.address, "address"),
     `address:${BLAST_CETUS.buy.sender}`,
   );
 });
@@ -570,7 +571,9 @@ test("builds a sell with the opposite direction and price limit", () => {
     );
   const flashSwap = calls.find((call) => call.function === "flash_swap")!;
   assert.deepEqual(
-    flashSwap.arguments.slice(2, 6).map((argument) => describe(tx, argument)),
+    flashSwap.arguments
+      .slice(2, 6)
+      .map((argument) => describeInput(tx, argument)),
     ["bool:false", "bool:true", "u64:1000", `u128:${CETUS_MAX_SQRT_PRICE_X64}`],
   );
   assert.deepEqual(
@@ -641,13 +644,15 @@ test("refuses to build before signing unless deployment, lineage, tier, route, e
   });
   rejects("route-substitution", { quote: { ...buyQuote, a2b: false } });
   rejects("expired-quote", { nowMs: buyQuote.expiresAtMs });
+  // A provider clock ahead of ours would stretch the validity window.
+  rejects("invalid-quote", { nowMs: buyQuote.quotedAtMs - 1n });
   rejects("invalid-quote", { quote: { ...buyQuote, minimumOut: 0n } });
   rejects("invalid-quote", {
     quote: { ...buyQuote, minimumOut: buyQuote.amountOut + 1n },
   });
 });
 
-function describe(
+function describeInput(
   tx: Transaction,
   argument: Parameters<Transaction["object"]>[0] | object,
   pureType: "u64" | "address" | null = null,

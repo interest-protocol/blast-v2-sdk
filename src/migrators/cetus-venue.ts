@@ -30,7 +30,14 @@ import type { LpVaultState } from "./state.ts";
  * prices are exact Quote atoms per Meme atom.
  */
 
-/** Cetus `tick_math` bounds on a pool's Q64.64 square-root price. */
+/**
+ * Cetus CLMM `tick_math::MIN_SQRT_PRICE_X64` and `MAX_SQRT_PRICE_X64`, the
+ * bounds on a pool's Q64.64 square-root price. Source: the `tick_math` module
+ * constants of Cetus CLMM revision 15 (package `0x260693ec…f084`, original
+ * `0x1eabed72…b2fb`), whose bytecode contracts 442116a pin in
+ * `sui/launchpad/ptb_tests/fork/snapshot/packages/`. The market-data vectors'
+ * `min_sqrt_price_x64` and `max_sqrt_price_x64` parameters are the same values.
+ */
 export const CETUS_MIN_SQRT_PRICE_X64 = 4_295_048_016n;
 export const CETUS_MAX_SQRT_PRICE_X64 = 79_226_673_515_401_279_992_447_579_055n;
 
@@ -635,7 +642,7 @@ function requireProviderQuote(
  * pool, after checking, in order: signing is enabled; the access, route, and
  * quote name one deployment; the route matches the deployment's Cetus lineage
  * and admitted tiers; the quote is for this route; it has not expired at
- * `nowMs`; and its amounts are consistent. The transaction aborts unless it
+ * `nowMs` and is not dated after it; and its amounts are consistent. The transaction aborts unless it
  * spends exactly `amountIn` and returns at least `minimumOut`, which goes to
  * the quote's sender. Simulate it with the Core API before signing and pass
  * the result to `reconcileCetusSwap`.
@@ -854,6 +861,12 @@ function requireBuildable(
   }
   if (options.nowMs >= quote.expiresAtMs) {
     throw new CetusVenueError("expired-quote", "the quote has expired");
+  }
+  if (quote.quotedAtMs > options.nowMs) {
+    throw new CetusVenueError(
+      "invalid-quote",
+      "the quote is dated after nowMs, which would stretch its validity",
+    );
   }
   if (
     !isU64(quote.amountIn) ||
