@@ -19,7 +19,9 @@ unpublished; supply verified deployment IDs.
 `publish_round` requires the vault's next round number, a checkpoint interval
 that starts where the previous round ended, a 32-byte root and manifest digest,
 1 to 65,536 leaves, and a nonzero budget within the vault's unreserved rewards.
-It reserves that budget into the `Round`. The leaf is the Blake2b-256 hash of
+It reserves that budget into the `Round`, which keeps the vault, number, root,
+leaf count, claim bitmap, and funds; the checkpoints and manifest digest are in
+its `RoundPublished` event. The leaf is the Blake2b-256 hash of
 `0x00 || "blast-holder-rewards-v1" || bcs(vault ID, round, index, beneficiary,
 meme, quote)`, internal nodes hash `0x01 || left || right`, and a lone last node
 pairs with itself. `buildRewardManifest` reproduces the contracts' vector
@@ -64,6 +66,8 @@ Create a JSON config outside the public artifacts:
       "packageId": "0xCALLABLE_LAUNCHPAD_PACKAGE",
       "originalPackageId": "0xORIGINAL_LAUNCHPAD_PACKAGE",
       "adminPackageId": "0xBLAST_ADMIN_PACKAGE",
+      "partnersPackageId": "0xBLAST_PARTNERS_PACKAGE",
+      "timelockPackageId": "0xBLAST_FUN_TIMELOCK_PACKAGE",
       "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
       "launchConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
       "runtimeConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
@@ -135,8 +139,9 @@ beneficial owners of exchange or LP custody. Rounds are limited to 65,536
 payable addresses; exceeding this limit stops preparation rather than silently
 dropping holders.
 
-`advance` checks the confirmed round against the full manifest, resets holding
-weights at the same checkpoint, and allows the next interval. Old manifests and
+`advance` checks the confirmed round against the manifest (vault, number, root,
+and leaf count) and the vault's last checkpoint against the manifest's end,
+resets holding weights at the same checkpoint, and allows the next interval. Old manifests and
 rounds remain usable. `relay` reads the on-chain bitmap and emits unsigned
 batches of up to ten unpaid claims. Anyone can run it using a public manifest
 and round ID. To execute payouts with a gas-only key, provide
@@ -156,8 +161,8 @@ round and its original manifest in order; then resume indexing. Never invent a
 new holder snapshot to skip missing history.
 
 Publish each round's manifest, accounting policy, exclusions, and checkpoint
-journal through durable public storage before signing. The contract stores the
-manifest digest, not its bytes or URL. Availability is necessary for
+journal through durable public storage before signing. The contract emits the
+manifest digest in `RoundPublished`, not its bytes or URL. Availability is necessary for
 independent claims.
 
 Publication is trusted allocation: a Blast administrator can allocate rewards

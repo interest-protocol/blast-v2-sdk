@@ -37,6 +37,8 @@ const client = new SuiGrpcClient({
     packageId: "0x...",
     originalPackageId: "0x...",
     adminPackageId: "0x...", // published blast_admin
+    partnersPackageId: "0x...", // published blast_partners
+    timelockPackageId: "0x...", // published immutable blast_fun_timelock
     packageVersion: {
       objectId: "0x...",
       initialSharedVersion: "...",
@@ -92,6 +94,9 @@ function signature because mutability belongs to a transaction argument, not to
 the object itself. `packages.admin` names the published `blast_admin` package,
 which owns `blast_acl::sign_in` and is a transitive publish dependency of every
 generated Meme package; `sharedObjects.acl` is its singleton `ACL`.
+`packages.partners` and `packages.timelock` name the `blast_partners` and
+`blast_fun_timelock` packages the launchpad links; both are further Meme
+publish dependencies.
 
 After a canonical network release is registered, initialize the client without
 copying addresses into the application:
@@ -124,11 +129,15 @@ construction atomically:
    abilities. Cetus derives the fee rate from its own registry and reserves the
    pair's pool creation with the Meme type's `PoolCreationCap`; Bluefin checks
    its own tier bounds.
-2. `set_graduation_target`, `set_allocation_plan`, `set_lp_fee_split`, and the
-   optional `set_protection` record the creator's settings.
-3. `launch::finalize` checks every invariant and fixes the supply mode.
-4. An optional unprotected `buy` runs on the owned launch before public opening.
-5. `launch::share` opens the launch; protection starts now.
+2. `set_virtual_quote` (the creator picks the reserve the curve starts from,
+   contracts ADR 0092), `set_graduation_target`, `set_allocation_plan`,
+   `set_lp_fee_split`, the optional `set_opening_round` (ADR 0093), and the
+   optional `set_partner` (ADR 0098) record the creator's settings.
+3. `launch::finalize` takes a `Coin<SUI>` of exactly the `LaunchConfig`
+   creation fee, checks every invariant, and fixes the supply mode.
+4. The optional purchase runs on the owned launch: a curve `buy` without an
+   opening round, or the creator's `join_opening_round` bid with one.
+5. `launch::share` opens trading, or the opening round.
 
 ```ts
 import { blastMigrators } from "@interest-protocol/blast-sdk/migrators";
@@ -141,8 +150,11 @@ const transaction = client.blastMigrators.tx.createCetusLaunch({
   cetusConfig, // Cetus GlobalConfig, immutable
   cetusPools, // Cetus Pools, mutable
   tickSpacing: 200,
+  // Exact LaunchConfig creation fee in MIST, from getLaunchConfig().
+  creationFee: (await client.blastLaunchpad.getLaunchConfig()).creationFee,
+  virtualQuote: 1_000_000_000_000n,
   graduationTarget: 3_000_000_000_000n,
-  // Blast's allocation (here 500 bps of each asset) is added at finalization.
+  // Blast's migration fee (here 500 bps of each asset) is added at finalization.
   allocationPlan: {
     curveMemeBps: 7_000n,
     lpMemeBps: 2_000n,
@@ -156,24 +168,36 @@ const transaction = client.blastMigrators.tx.createCetusLaunch({
     burnBps: 0n,
     recipients: [],
   },
-  protection: {
-    windowMs: 60_000n,
-    cumulativeSenderBps: 100n,
-    perTransactionBps: 50n,
-  },
+  openingRoundMs: 120_000n, // optional: zero or 60,000 to 300,000
+  partner, // optional: a Blast partner LaunchConfig accepts, fixed for good
+  // With an opening round this is the creator's bid in the same pot.
   preShareBuy: { quoteAmount: 1_000_000_000n, minMemeOut: 1n, recipient },
 });
 ```
 
+With an opening round nothing trades until `settleOpeningRound` buys once with
+the whole pot after `openingRoundMs`; `joinOpeningRound` adds to the sender's
+bid until then, and `deliverOpeningRound` sends each bidder its pro-rata share
+(`previewOpeningRoundDelivery`). Anyone may settle and deliver; the reducer's
+`openingRoundBidders` lists the bids a keeper still has to deliver.
+
 `createBluefinLaunch` takes `tickSpacing` and `feeRate` instead of the Cetus
 objects. The SDK checks the allocation plan and fee split exactly as the Move
-constructors do and rejects shapes they abort on. The creator's plan excludes
-Blast: `launch::finalize` inserts the `LaunchConfig` protocol allocation as the
-first recipient and requires each asset to sum to 10,000 basis points;
-`addProtocolAllocation` previews that step. `deriveLaunchEconomics`,
-`apportionMeme`, `apportionQuote`, and `apportionFeeSplit` mirror the
-contract's exact apportionment: Blast's migration allocation rounds up, every
-other part goes by largest remainder.
+constructors do and rejects shapes they abort on. The creator's plan names up
+to sixteen recipients and excludes Blast: `launch::finalize` sets the plan's
+`protocolMemeBps` and `protocolQuoteBps` from the `LaunchConfig` protocol
+allocation and requires each asset to sum to 10,000 basis points;
+`addProtocolAllocation` previews that step. At migration Blast's shares accrue
+as its one-time fee in the launch's fee ledger (`ProtocolFeesAccrued`).
+`deriveLaunchEconomics`, `apportionMeme`, `apportionQuote`, and
+`apportionFeeSplit` mirror the contract's exact apportionment: Blast's
+migration fee rounds up, every other part goes by largest remainder.
+
+A `TreasuryAdmin` claims Blast's Meme, Quote, and SUI (creation-fee) balances
+with `claimProtocolFees`. When the launch names a partner
+(`LaunchState.partnerId`), pass that `partner`: the SDK then calls
+`claim_protocol_fees_with_partner`, which pays the partner its share of each
+balance in the same call.
 
 ## Migrators
 
@@ -208,7 +232,10 @@ Quote, as `<Meme, Quote, CoinA, CoinB>`, to Cetus's single route per operation
   protocol claim, `BuybackAdmin` for buybacks, and `RewardsAdmin` for rounds.
   The `AdminCap` must hold that role.
 
-The client reads `LpVault` objects, the `LpFeePolicy` singleton, a coin's live
+The launchpad client reads launches, the `LaunchConfig` singleton
+(`getLaunchConfig`: creation fee, trade fees, Blast's allocation), and a
+bidder's undelivered opening-round bid (`getOpeningRoundBid`). The migrators
+client reads `LpVault` objects, the `LpFeePolicy` singleton, a coin's live
 LP-fee shares (`getLpFeeShares`: its own pair, else the defaults), and
 holder-reward rounds.
 
@@ -226,7 +253,9 @@ honors.
 
 `publishMeme` uses the reviewed, compiled Move template. It patches the type
 identifiers, decimals, metadata, creator recipient, launch policy, and deployed
-Blast package dependency. Launch finalization rejects a symbol longer than 32
+Blast package dependency. The publish lists every package the launchpad links:
+the `blast_fun_timelock`, `blast_admin`, and `blast_partners` packages from the
+deployment, then the launchpad. Launch finalization rejects a symbol longer than 32
 bytes, and `LaunchConfig` admits the decimal precision (six and nine
 initially), so the SDK rejects a longer symbol before publication. The recipient can be the publisher, another Sui address,
 or a provider-independent Blast account. The transaction publishes the module
@@ -282,7 +311,8 @@ cannot return the ticket to another command in the publish transaction.
 `tx` methods return complete transactions that route all returned coins or
 capabilities. `call` methods return transaction thunks for programmable
 composition; `LaunchpadCalls.completeLaunch` applies the settings, finalize,
-optional purchase before sharing, and share to any adapter's initializer.
+optional purchase or opening-round bid before sharing, and share to any
+adapter's initializer.
 
 All protocol amounts use atomic units. Fee obligations round up to their
 recipient. Curve outputs and valuations round down, so the integer remainder
