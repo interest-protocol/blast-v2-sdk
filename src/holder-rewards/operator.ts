@@ -375,7 +375,9 @@ async function advanceRound(context: OperatorContext): Promise<void> {
   const round = await readConfirmedRound(context, manifest);
   const state = await readJson<OperatorState>(statePath);
   assertState(state, config, vault);
-  if (BigInt(state.ledger.nextCheckpoint) - 1n !== round.endCheckpoint)
+  const end = BigInt(state.ledger.nextCheckpoint) - 1n;
+  // Publication moved the vault's last checkpoint to the round's end.
+  if (end !== BigInt(manifest.endCheckpoint) || vault.lastCheckpoint !== end)
     throw new Error("round does not close this ledger checkpoint");
   // Repeating advance after a crash is safe: resetting a zero-weight interval is idempotent.
   await writeOperatorJson(statePath, {
@@ -384,7 +386,7 @@ async function advanceRound(context: OperatorContext): Promise<void> {
   });
   await writeOperatorJson(
     join(directory, "rounds", manifest.number, "publication.json"),
-    { roundId: round.objectId, manifestDigest: round.manifestDigest },
+    { roundId: round.objectId, manifestDigest: manifest.manifestDigest },
   );
   await rm(pendingPath, { force: true });
 }

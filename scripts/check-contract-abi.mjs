@@ -44,6 +44,11 @@ const artifactDeclarations = [
       "contracts ADR 0090: a minimal launchpad surface — trimmed getters, recipient allocation plans, merged config setters and events, renumbered errors, one migration call",
       "contracts ADR 0091: a burn part in the LP-fee split, with admin buyback and burn",
       "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs",
+      "contracts ADR 0090 (redundancy audit): framework aborts replace duplicate checks; Migrated drops native_supply_burned, the holder-reward Round drops its checkpoints and manifest digest, CreatorClaimMessage drops copy",
+      "contracts ADR 0092: the creator sets the virtual Quote reserve on the initializer; LaunchConfig admits Quotes in a Table and QuoteSet records allowed",
+      "contracts ADR 0093: an optional opening round replaces purchase protection; buy no longer takes the Clock",
+      "contracts ADRs 0094 and 0097: every administrator action takes blast_admin::blast_acl::AdminWitness of its own typed blast_fun_domain role",
+      "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation",
     ],
   },
   {
@@ -64,6 +69,7 @@ const artifactDeclarations = [
       "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody",
       "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody",
       "contracts ADR 0085: name every explorer-visible type after Blast",
+      "contracts ADR 0097: package custody and the redeem fee take blast_admin::blast_acl::AdminWitness of the typed UpgradeAdmin and FeeAdmin roles",
     ],
   },
 ];
@@ -381,10 +387,16 @@ const launchpadBuilders = new Set([
   "launch::set_graduation_target",
   "launch::set_allocation_plan",
   "launch::set_lp_fee_split",
-  "launch::set_protection",
+  "launch::set_virtual_quote",
+  "launch::set_opening_round",
+  "launch::set_partner",
+  "launch::join_opening_round",
+  "launch::settle_opening_round",
+  "launch::deliver_opening_round",
   "launch::claim_creator_caps",
   "launch::claim_creator_fees",
   "launch::claim_protocol_fees",
+  "launch::claim_protocol_fees_with_partner",
   "launch::set_name",
   "launch::set_description",
   "launch::set_icon_url",
@@ -420,15 +432,19 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
   throw new Error(`unclassified function ${packageName}::${key}`);
 }
 
+const launchGetters = new Set([
+  "launch::pool_tier",
+  "launch::lp_fee_split",
+  "launch::assert_curve_fee_cap",
+]);
+
 /** Getters and exact math the SDK mirrors off chain. */
 function isLaunchpadMoveComposition(moduleName, functionName) {
   return (
     moduleName === "bps" ||
     moduleName === "allocation" ||
-    moduleName === "launch" ||
-    (moduleName === "creator_authority" &&
-      functionName.startsWith("destroy_")) ||
-    (moduleName === "blast_fun_domain" && functionName.endsWith("_role"))
+    launchGetters.has(`${moduleName}::${functionName}`) ||
+    (moduleName === "creator_authority" && functionName.startsWith("destroy_"))
   );
 }
 
@@ -461,10 +477,7 @@ const blastSuiAdminExclusions = new Set([
   "package_admin::restrict_to_additive",
   "vault::set_redeem_fee",
 ]);
-const blastSuiMoveComposition = new Set([
-  "blast_sui_domain::package_admin_role",
-  "package_admin::has_upgrade_cap",
-]);
+const blastSuiMoveComposition = new Set(["package_admin::has_upgrade_cap"]);
 
 function classifyBlastSuiFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;

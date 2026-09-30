@@ -71,6 +71,8 @@ export type CreateLaunchOptions = LaunchTypes &
     ticket: TransactionObjectInput;
     /** The Meme `Currency<Meme>` in the Coin Registry, fixed at finalization. */
     memeCurrency: SharedObjectReference<true>;
+    /** `LaunchConfig.creation_fee` in MIST, paid from gas as an exact coin. */
+    creationFee: bigint;
     preShareBuy?: PreShareBuyInput;
   };
 

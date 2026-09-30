@@ -17,6 +17,10 @@ export type BlastPackages = Readonly<
     launchpad: SuiPackageReference;
     /** Published `blast_admin` package (`blast_acl::sign_in`, Meme publish dependency). */
     admin: SuiPackageReference;
+    /** Published `blast_partners` package the launchpad links (contracts ADR 0095). */
+    partners: SuiPackageReference;
+    /** Published immutable `blast_fun_timelock` that `blast_admin` and `blast_partners` link. */
+    timelock: SuiPackageReference;
     blastSui?: SuiPackageReference;
     migrators?: SuiPackageReference;
   }

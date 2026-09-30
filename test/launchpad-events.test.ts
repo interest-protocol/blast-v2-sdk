@@ -26,6 +26,8 @@ const samplePlan = {
   curveMemeBps: 8_000n,
   lpMemeBps: 2_000n,
   lpQuoteBps: 10_000n,
+  protocolMemeBps: 0n,
+  protocolQuoteBps: 0n,
   recipients: [],
 };
 const sampleSplit = {
@@ -40,7 +42,7 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
   const frozenSpecs = readFrozenLaunchpadEventSpecs();
   assert.deepEqual(launchpadEventSpecs, frozenSpecs);
   const kinds = Object.keys(frozenSpecs) as LaunchpadEventKind[];
-  assert.equal(kinds.length, 20);
+  assert.equal(kinds.length, 27);
 
   let projection = createLaunchpadEventProjection();
   for (const [eventIndex, kind] of orderedForReplay(kinds).entries()) {
@@ -59,11 +61,13 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
   }
 });
 
-test("replays lifecycle, reserves, protection, and fees from ordered events", () => {
+test("replays lifecycle, reserves, and fees from ordered events", () => {
   const plan = {
-    curveMemeBps: 7_500n,
+    curveMemeBps: 7_000n,
     lpMemeBps: 2_000n,
-    lpQuoteBps: 9_500n,
+    lpQuoteBps: 9_000n,
+    protocolMemeBps: 500n,
+    protocolQuoteBps: 500n,
     recipients: [{ destination: "0xb", memeBps: 500n, quoteBps: 500n }],
   };
   const fees = (
@@ -90,9 +94,9 @@ test("replays lifecycle, reserves, protection, and fees from ordered events", ()
         lp_fee_split: sampleSplit,
         graduation_target: 200n,
         allocation_plan: plan,
-        protection_window_ms: 60_000n,
-        cumulative_sender_bps: 100n,
-        per_transaction_bps: 0n,
+        opening_round_ms: 0n,
+        creation_fee: 1_001n,
+        partner_id: "0x9a",
       },
       1,
     ),
@@ -154,15 +158,33 @@ test("replays lifecycle, reserves, protection, and fees from ordered events", ()
       8,
     ),
     decoded(
+      "ProtocolFeesAccrued",
+      { launch_id: "0xc", meme_amount: 50_000_000n, quote_amount: 10n },
+      9,
+    ),
+    decoded(
       "Migrated",
       {
         launch_id: "0xc",
         meme: 200n,
-        quote: 190n,
+        quote: 180n,
         disposed_meme: 612n,
         total_supply_after: 388n,
       },
-      9,
+      10,
+    ),
+    decoded(
+      "ProtocolFeesClaimed",
+      {
+        launch_id: "0xc",
+        meme_amount: 30_000_007n,
+        quote_amount: 13n,
+        sui_amount: 601n,
+        partner_meme_amount: 20_000_004n,
+        partner_quote_amount: 8n,
+        partner_sui_amount: 400n,
+      },
+      11,
     ),
   ];
 
@@ -175,29 +197,37 @@ test("replays lifecycle, reserves, protection, and fees from ordered events", ()
   const created = states[1]?.launches[launchId];
   assert.equal(created?.atomicSupply, 1_000_000_000n);
   assert.deepEqual(created?.memeAmounts, {
-    curve: 750_000_000n,
+    curve: 700_000_000n,
     lp: 200_000_000n,
+    protocol: 50_000_000n,
     recipients: [50_000_000n],
   });
-  assert.equal(created?.memeReserve, 750_000_000n);
-  assert.equal(created?.allocatedMeme, 250_000_000n);
+  assert.equal(created?.lifecycle, "Live");
+  assert.equal(created?.memeReserve, 700_000_000n);
+  assert.equal(created?.allocatedMeme, 300_000_000n);
   assert.equal(created?.graduationTarget, 200n);
   assert.equal(created?.poolTickSpacing, 200);
-  assert.deepEqual(created?.protection, {
-    windowMs: 60_000n,
-    cumulativeAtomicLimit: 10_000_000n,
-    perTransactionAtomicLimit: 0n,
-  });
+  assert.equal(created?.creationFee, 1_001n);
+  assert.equal(created?.protocolSuiFees, 1_001n);
+  assert.equal(created?.partnerId, normalizeSuiObjectId("0x9a"));
   assert.equal(states[2]?.launches[launchId]?.publicStartMs, null);
   const shared = states[3]?.launches[launchId];
   assert.equal(shared?.publicStartMs, 1_000n);
-  assert.equal(shared?.protectionEndMs, 61_000n);
   assert.equal(states[5]?.launches[launchId]?.pendingBurn, 12n);
   assert.equal(states[6]?.launches[launchId]?.lifecycle, "MigrationReady");
   const paid = states[8]?.launches[launchId];
   assert.equal(paid?.lifecycle, "Migrated");
-  assert.equal(paid?.allocatedMeme, 200_000_000n);
+  assert.equal(paid?.allocatedMeme, 250_000_000n);
   assert.equal(paid?.realQuoteReserve, 190n);
+  const accrued = states[9]?.launches[launchId];
+  assert.equal(accrued?.allocatedMeme, 200_000_000n);
+  assert.equal(accrued?.realQuoteReserve, 180n);
+  assert.equal(accrued?.protocolMemeFees, 50_000_011n);
+  assert.equal(accrued?.protocolQuoteFees, 23n);
+  assert.deepEqual(accrued?.protocolMigrationFee, {
+    meme: 50_000_000n,
+    quote: 10n,
+  });
   assert.deepEqual(paid?.allocationPayments, [
     {
       destination: normalizeSuiObjectId("0xb"),
@@ -215,15 +245,101 @@ test("replays lifecycle, reserves, protection, and fees from ordered events", ()
   assert.equal(launch.allocatedMeme, 0n);
   assert.equal(launch.creatorMemeFees, 0n);
   assert.equal(launch.creatorQuoteFees, 0n);
-  assert.equal(launch.protocolMemeFees, 11n);
-  assert.equal(launch.protocolQuoteFees, 13n);
+  assert.equal(launch.protocolMemeFees, 0n);
+  assert.equal(launch.protocolQuoteFees, 0n);
+  assert.equal(launch.protocolSuiFees, 0n);
   assert.deepEqual(launch.migration, {
     meme: 200n,
-    quote: 190n,
+    quote: 180n,
     disposedMeme: 612n,
-    nativeSupplyBurned: false,
     totalSupplyAfter: 388n,
   });
+});
+
+test("replays an opening round from bids to deliveries", () => {
+  const bid = (sender: string, quote: bigint, bids: bigint, index: number) => {
+    const event = suiEvent(
+      "OpeningRoundJoined",
+      { launch_id: "0xc", quote, bids },
+      index,
+    );
+    return decodeLaunchpadEvent({ ...event, sender }, packages);
+  };
+  const events = [
+    decoded("LaunchTicketCreated", { ticket_id: "0xb", decimals: 0 }, 0),
+    decoded(
+      "LaunchCreated",
+      {
+        launch_id: "0xc",
+        ticket_id: "0xb",
+        graduation_target: 1_000n,
+        opening_round_ms: 60_000n,
+        partner_id: null,
+      },
+      1,
+    ),
+    // The creator's bid before share joins the same pot.
+    bid("0xa", 300n, 300n, 2),
+    decoded("LaunchShared", { launch_id: "0xc", public_start_ms: 1_000n }, 3),
+    bid("0xb", 100n, 400n, 4),
+    bid("0xa", 100n, 500n, 5),
+    decoded(
+      "Bought",
+      { launch_id: "0xc", meme_reserve: 600n, real_quote_reserve: 495n },
+      6,
+    ),
+    decoded(
+      "OpeningRoundSettled",
+      { launch_id: "0xc", bids: 500n, meme: 399n, quote: 0n },
+      7,
+    ),
+    decoded(
+      "OpeningRoundDelivered",
+      { launch_id: "0xc", bidder: "0xb", bid: 100n, meme: 79n, quote: 0n },
+      8,
+    ),
+  ];
+  const states = events.map((_, index) =>
+    events
+      .slice(0, index + 1)
+      .reduce(reduceLaunchpadEvent, createLaunchpadEventProjection()),
+  );
+  const launchId = normalizeSuiObjectId("0xc");
+  assert.equal(states[1]?.launches[launchId]?.lifecycle, "OpeningRound");
+  const joined = states[5]?.launches[launchId];
+  assert.equal(joined?.lifecycle, "OpeningRound");
+  assert.equal(joined?.openingRoundBids, 500n);
+  assert.equal(joined?.openingRoundQuote, 500n);
+  assert.deepEqual(joined?.openingRoundBidders, {
+    [normalizeSuiObjectId("0xa")]: 400n,
+    [normalizeSuiObjectId("0xb")]: 100n,
+  });
+  const settled = states[7]?.launches[launchId];
+  assert.equal(settled?.lifecycle, "Live");
+  assert.equal(settled?.openingRoundMeme, 399n);
+  assert.equal(settled?.openingRoundQuote, 0n);
+  const delivered = states[8]?.launches[launchId];
+  assert.equal(delivered?.openingRoundBids, 400n);
+  assert.equal(delivered?.openingRoundMeme, 320n);
+  assert.deepEqual(delivered?.openingRoundBidders, {
+    [normalizeSuiObjectId("0xa")]: 400n,
+  });
+
+  // A pot that reaches the target settles straight to MigrationReady.
+  const graduated = [
+    ...events.slice(0, 6),
+    decoded(
+      "Bought",
+      { launch_id: "0xc", meme_reserve: 1n, real_quote_reserve: 1_000n },
+      6,
+    ),
+    decoded(
+      "OpeningRoundSettled",
+      { launch_id: "0xc", bids: 500n, meme: 900n, quote: 7n },
+      7,
+    ),
+  ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
+  assert.equal(graduated.launches[launchId]?.lifecycle, "MigrationReady");
 });
 
 test("replays pre-share purchases that reach the graduation target", () => {
@@ -246,40 +362,52 @@ test("replays launch configuration policy", () => {
   const sui = normalizedType("0x2::sui::SUI");
   const witness = normalizedType("0xf::cetus::CETUS");
   const configured = [
-    decoded("QuoteSet", { quote: "0x2::sui::SUI", virtual_quote: 7n }, 0),
+    decoded("QuoteSet", { quote: "0x2::sui::SUI", allowed: true }, 0),
     decoded("MemeDecimalsSet", { decimals: 8, allowed: true }, 1),
     decoded("MemeDecimalsSet", { decimals: 6, allowed: false }, 2),
-    decoded(
-      "ProtocolAllocationSet",
-      { destination: "0xb", meme_bps: 100n, quote_bps: 200n },
-      3,
-    ),
+    decoded("ProtocolAllocationSet", { meme_bps: 100n, quote_bps: 200n }, 3),
     decoded(
       "MigrationWitnessSet",
       { migration_witness: "0xf::cetus::CETUS", allowed: true },
       4,
     ),
+    decoded("CreationFeeChanged", { pos0: 1_001n }, 5),
+    decoded("PartnerAdded", { partner_id: "0x9a" }, 6),
+    decoded("PartnerAdded", { partner_id: "0x9b" }, 7),
+    decoded(
+      "PartnerRemoved",
+      { partner_id: "0x9b", accepted_until_ms: 604_800_000n },
+      8,
+    ),
   ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
 
-  assert.deepEqual(configured.config.virtualQuotes, { [sui]: 7n });
+  assert.deepEqual(configured.config.quotes, { [sui]: true });
   assert.deepEqual(configured.config.memeDecimals, { 8: true, 9: true });
   assert.deepEqual(configured.config.migrationWitnesses, { [witness]: true });
   assert.deepEqual(configured.config.protocolAllocation, {
-    destination: normalizeSuiObjectId("0xb"),
     memeBps: 100n,
     quoteBps: 200n,
   });
+  assert.equal(configured.config.creationFee, 1_001n);
+  assert.deepEqual(configured.config.partners, {
+    [normalizeSuiObjectId("0x9a")]: (1n << 64n) - 1n,
+    [normalizeSuiObjectId("0x9b")]: 604_800_000n,
+  });
 
   const removed = [
-    decoded("QuoteSet", { quote: "0x2::sui::SUI", virtual_quote: 0n }, 5),
+    decoded("QuoteSet", { quote: "0x2::sui::SUI", allowed: false }, 9),
     decoded(
       "MigrationWitnessSet",
       { migration_witness: "0xf::cetus::CETUS", allowed: false },
-      6,
+      10,
     ),
   ].reduce(reduceLaunchpadEvent, configured);
-  assert.deepEqual(removed.config.virtualQuotes, {});
+  assert.deepEqual(removed.config.quotes, {});
   assert.deepEqual(removed.config.migrationWitnesses, {});
+  assert.deepEqual(createLaunchpadEventProjection().config.protocolAllocation, {
+    memeBps: 0n,
+    quoteBps: 0n,
+  });
 });
 
 test("replays creator claims and signer changes", () => {
@@ -509,6 +637,15 @@ function abiDescriptor(type: unknown): string {
   if (datatype.name === "AllocationPlan") return "allocationPlan";
   if (datatype.name === "FeeSplit") return "feeSplit";
   if (datatype.name === "CreatorRecipient") return "creatorRecipient";
+  if (
+    datatype.name === "Option" &&
+    Array.isArray(datatype.type_arguments) &&
+    abiDescriptor(
+      (datatype.type_arguments[0] as { argument?: unknown })?.argument,
+    ) === "id"
+  ) {
+    return "optionId";
+  }
   throw new TypeError("unsupported ABI event datatype");
 }
 
@@ -578,6 +715,8 @@ function sampleValue(descriptor: string): unknown {
       return sampleSplit;
     case "bool":
       return false;
+    case "optionId":
+      return null;
     case "bytes":
       return new Uint8Array([1]);
     case "string":
@@ -591,12 +730,16 @@ function orderedForReplay(kinds: LaunchpadEventKind[]): LaunchpadEventKind[] {
   const lifecycle: LaunchpadEventKind[] = [
     "LaunchTicketCreated",
     "LaunchCreated",
+    "OpeningRoundJoined",
     "LaunchShared",
     "Bought",
+    "OpeningRoundSettled",
+    "OpeningRoundDelivered",
     "Sold",
     "CreatorFeesClaimed",
     "ProtocolFeesClaimed",
     "MigrationAllocationPaid",
+    "ProtocolFeesAccrued",
     "Migrated",
   ];
   return [...lifecycle, ...kinds.filter((kind) => !lifecycle.includes(kind))];

@@ -20,7 +20,12 @@
       "contracts ADR 0089: start launches in the migration adapter and move every post-migration fee path into the migrators package",
       "contracts ADR 0090: a minimal launchpad surface — trimmed getters, recipient allocation plans, merged config setters and events, renumbered errors, one migration call",
       "contracts ADR 0091: a burn part in the LP-fee split, with admin buyback and burn",
-      "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs"
+      "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs",
+      "contracts ADR 0090 (redundancy audit): framework aborts replace duplicate checks; Migrated drops native_supply_burned, the holder-reward Round drops its checkpoints and manifest digest, CreatorClaimMessage drops copy",
+      "contracts ADR 0092: the creator sets the virtual Quote reserve on the initializer; LaunchConfig admits Quotes in a Table and QuoteSet records allowed",
+      "contracts ADR 0093: an optional opening round replaces purchase protection; buy no longer takes the Clock",
+      "contracts ADRs 0094 and 0097: every administrator action takes blast_admin::blast_acl::AdminWitness of its own typed blast_fun_domain role",
+      "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -389,6 +394,32 @@
                   }
                 },
                 {
+                  "name": "protocol_meme_bps",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun",
+                        "name": "bps"
+                      },
+                      "name": "Bps",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "protocol_quote_bps",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun",
+                        "name": "bps"
+                      },
+                      "name": "Bps",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
                   "name": "recipients",
                   "type": {
                     "vector": {
@@ -479,6 +510,44 @@
                         "name": "Route",
                         "type_arguments": []
                       }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProtocolAllocation",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "meme_bps",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun",
+                        "name": "bps"
+                      },
+                      "name": "Bps",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote_bps",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_fun",
+                        "name": "bps"
+                      },
+                      "name": "Bps",
+                      "type_arguments": []
                     }
                   }
                 }
@@ -614,34 +683,107 @@
           "events": []
         },
         "blast_fun_domain": {
-          "functions": [
+          "functions": [],
+          "structs": [
             {
-              "name": "buyback_admin_role",
-              "sdk": "move-composition",
-              "entry": false,
+              "name": "AdapterAdmin",
+              "abilities": [],
               "typeParameters": [],
-              "parameters": [],
-              "returns": [
-                "u64"
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
               ]
             },
             {
-              "name": "package_admin_role",
-              "sdk": "move-composition",
-              "entry": false,
+              "name": "BuybackAdmin",
+              "abilities": [],
               "typeParameters": [],
-              "parameters": [],
-              "returns": [
-                "u64"
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
               ]
-            }
-          ],
-          "structs": [
+            },
             {
-              "name": "BLAST_FUN_DOMAIN",
-              "abilities": [
-                "Drop"
-              ],
+              "name": "ClaimSignerAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "CreatorAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "FeeAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "ListingAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "RewardsAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "TreasuryAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "UpgradeAdmin",
+              "abilities": [],
               "typeParameters": [],
               "positional": true,
               "fields": [
@@ -894,7 +1036,6 @@
             {
               "name": "CreatorClaimMessage",
               "abilities": [
-                "Copy",
                 "Drop"
               ],
               "typeParameters": [],
@@ -1072,6 +1213,22 @@
                 },
                 {
                   "name": "real_quote_reserve",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "CreationFeeChanged",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "pos0",
                   "type": "u64"
                 }
               ],
@@ -1333,16 +1490,39 @@
                   }
                 },
                 {
-                  "name": "protection_window_ms",
+                  "name": "opening_round_ms",
                   "type": "u64"
                 },
                 {
-                  "name": "cumulative_sender_bps",
+                  "name": "creation_fee",
                   "type": "u64"
                 },
                 {
-                  "name": "per_transaction_bps",
-                  "type": "u64"
+                  "name": "partner_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
                 }
               ],
               "sdk": "decoder-reducer"
@@ -1633,10 +1813,6 @@
                   "type": "u64"
                 },
                 {
-                  "name": "native_supply_burned",
-                  "type": "bool"
-                },
-                {
                   "name": "total_supply_after",
                   "type": "u64"
                 }
@@ -1710,6 +1886,171 @@
               "sdk": "decoder-reducer"
             },
             {
+              "name": "OpeningRoundDelivered",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "launch_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "bidder",
+                  "type": "address"
+                },
+                {
+                  "name": "bid",
+                  "type": "u64"
+                },
+                {
+                  "name": "meme",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "OpeningRoundJoined",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "launch_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "bids",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "OpeningRoundSettled",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "launch_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "bids",
+                  "type": "u64"
+                },
+                {
+                  "name": "meme",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "PartnerAdded",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "partner_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "PartnerRemoved",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "partner_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "accepted_until_ms",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
               "name": "ProtocolAllocationSet",
               "abilities": [
                 "Copy",
@@ -1719,15 +2060,44 @@
               "positional": false,
               "fields": [
                 {
-                  "name": "destination",
-                  "type": "address"
-                },
-                {
                   "name": "meme_bps",
                   "type": "u64"
                 },
                 {
                   "name": "quote_bps",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "ProtocolFeesAccrued",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "launch_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "meme_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "quote_amount",
                   "type": "u64"
                 }
               ],
@@ -1761,6 +2131,22 @@
                 },
                 {
                   "name": "quote_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "sui_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "partner_meme_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "partner_quote_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "partner_sui_amount",
                   "type": "u64"
                 }
               ],
@@ -1805,8 +2191,8 @@
                   }
                 },
                 {
-                  "name": "virtual_quote",
-                  "type": "u64"
+                  "name": "allowed",
+                  "type": "bool"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -1969,6 +2355,33 @@
                         {
                           "argument": {
                             "NamedTypeParameter": "Quote"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "protocol_sui",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "sui"
+                              },
+                              "name": "SUI",
+                              "type_arguments": []
+                            }
                           },
                           "phantom": true
                         }
@@ -2147,21 +2560,6 @@
                   }
                 },
                 "u64",
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "clock"
-                        },
-                        "name": "Clock",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
                 {
                   "Reference": [
                     true,
@@ -2577,7 +2975,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -2588,7 +2986,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "TreasuryAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -2649,8 +3047,307 @@
                       }
                     ]
                   }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "sui",
+                              "name": "sui"
+                            },
+                            "name": "SUI",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
                 }
               ]
+            },
+            {
+              "name": "claim_protocol_fees_with_partner",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "blast_fun_domain"
+                                },
+                                "name": "TreasuryAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_partners",
+                          "name": "blast_partners"
+                        },
+                        "name": "Partner",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "sui",
+                              "name": "sui"
+                            },
+                            "name": "SUI",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "deliver_opening_round",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                "address",
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
             },
             {
               "name": "finalize",
@@ -2694,21 +3391,6 @@
                 },
                 {
                   "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_fun",
-                          "name": "package_version"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
                     true,
                     {
                       "Datatype": {
@@ -2743,6 +3425,30 @@
                       }
                     }
                   ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "sui",
+                              "name": "sui"
+                            },
+                            "name": "SUI",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
                 },
                 {
                   "Reference": [
@@ -2785,6 +3491,116 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "join_opening_round",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
             },
             {
               "name": "lp_fee_split",
@@ -3211,7 +4027,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -3222,7 +4038,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "CreatorAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -3319,7 +4135,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -3330,7 +4146,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "CreatorAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -4006,7 +4822,7 @@
               "returns": []
             },
             {
-              "name": "set_protection",
+              "name": "set_opening_round",
               "sdk": "builder",
               "entry": false,
               "typeParameters": [
@@ -4050,26 +4866,241 @@
                     }
                   ]
                 },
-                "u64",
+                "u64"
+              ],
+              "returns": []
+            },
+            {
+              "name": "set_partner",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
                 {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
                 },
                 {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_fun",
-                      "name": "bps"
-                    },
-                    "name": "Bps",
-                    "type_arguments": []
-                  }
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "LaunchInitializer",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch_config"
+                        },
+                        "name": "LaunchConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_partners",
+                          "name": "blast_partners"
+                        },
+                        "name": "Partner",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "set_virtual_quote",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "LaunchInitializer",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64"
+              ],
+              "returns": []
+            },
+            {
+              "name": "settle_opening_round",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch"
+                        },
+                        "name": "Launch",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "runtime_config"
+                        },
+                        "name": "RuntimeConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 }
               ],
               "returns": []
@@ -4261,7 +5292,7 @@
                   }
                 },
                 {
-                  "name": "protection_end_ms",
+                  "name": "public_start_ms",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -4279,16 +5310,52 @@
                   }
                 },
                 {
-                  "name": "protection_window_ms",
+                  "name": "opening_round_ms",
                   "type": "u64"
                 },
                 {
-                  "name": "cumulative_atomic_limit",
+                  "name": "opening_round_bids",
                   "type": "u64"
                 },
                 {
-                  "name": "per_transaction_atomic_limit",
-                  "type": "u64"
+                  "name": "opening_round_quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Quote"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "opening_round_meme",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Meme"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
                 },
                 {
                   "name": "sell_burn_bps",
@@ -4594,6 +5661,33 @@
                       ]
                     }
                   }
+                },
+                {
+                  "name": "partner_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
             },
@@ -4656,10 +5750,6 @@
                   "type": "u64"
                 },
                 {
-                  "name": "virtual_quote",
-                  "type": "u64"
-                },
-                {
                   "name": "quote_fee_bps",
                   "type": {
                     "Datatype": {
@@ -4682,6 +5772,24 @@
                       },
                       "name": "Bps",
                       "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "virtual_quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": "u64",
+                          "phantom": false
+                        }
+                      ]
                     }
                   }
                 },
@@ -4758,39 +5866,40 @@
                   }
                 },
                 {
-                  "name": "protection_window_ms",
+                  "name": "opening_round_ms",
                   "type": "u64"
                 },
                 {
-                  "name": "cumulative_sender_bps",
+                  "name": "partner_id",
                   "type": {
                     "Datatype": {
                       "module": {
-                        "address": "blast_fun",
-                        "name": "bps"
+                        "address": "std",
+                        "name": "option"
                       },
-                      "name": "Bps",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "per_transaction_bps",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_fun",
-                        "name": "bps"
-                      },
-                      "name": "Bps",
-                      "type_arguments": []
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
                     }
                   }
                 }
               ]
             },
             {
-              "name": "ProtectedPurchasesKey",
+              "name": "OpeningRoundBidKey",
               "abilities": [
                 "Copy",
                 "Drop",
@@ -4817,6 +5926,10 @@
               "typeParameters": [],
               "variants": [
                 {
+                  "name": "OpeningRound",
+                  "fields": []
+                },
+                {
                   "name": "Live",
                   "fields": []
                 },
@@ -4835,6 +5948,256 @@
         },
         "launch_config": {
           "functions": [
+            {
+              "name": "add_partner",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch_config"
+                        },
+                        "name": "LaunchConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "blast_fun_domain"
+                                },
+                                "name": "FeeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_partners",
+                          "name": "blast_partners"
+                        },
+                        "name": "Partner",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "remove_partner",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch_config"
+                        },
+                        "name": "LaunchConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "blast_fun_domain"
+                                },
+                                "name": "FeeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_partners",
+                          "name": "blast_partners"
+                        },
+                        "name": "Partner",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "set_creation_fee",
+              "sdk": "intentional-admin-exclusion",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "launch_config"
+                        },
+                        "name": "LaunchConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "blast_fun_domain"
+                                },
+                                "name": "FeeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64"
+              ],
+              "returns": []
+            },
             {
               "name": "set_meme_decimals_allowed",
               "sdk": "intentional-admin-exclusion",
@@ -4878,7 +6241,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -4889,7 +6252,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "ListingAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -4956,7 +6319,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -4967,7 +6330,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "AdapterAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -5025,7 +6388,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -5036,7 +6399,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "TreasuryAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -5047,7 +6410,6 @@
                     }
                   ]
                 },
-                "address",
                 {
                   "Datatype": {
                     "module": {
@@ -5072,7 +6434,7 @@
               "returns": []
             },
             {
-              "name": "set_quote",
+              "name": "set_quote_allowed",
               "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [
@@ -5120,7 +6482,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -5131,7 +6493,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "ListingAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -5142,7 +6504,7 @@
                     }
                   ]
                 },
-                "u64"
+                "bool"
               ],
               "returns": []
             },
@@ -5189,7 +6551,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -5200,7 +6562,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "FeeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -5276,7 +6638,7 @@
                   }
                 },
                 {
-                  "name": "virtual_quotes",
+                  "name": "quotes",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -5299,7 +6661,7 @@
                           "phantom": true
                         },
                         {
-                          "argument": "u64",
+                          "argument": "bool",
                           "phantom": true
                         }
                       ]
@@ -5364,25 +6726,40 @@
                   "type": {
                     "Datatype": {
                       "module": {
-                        "address": "std",
-                        "name": "option"
+                        "address": "blast_fun",
+                        "name": "allocation"
                       },
-                      "name": "Option",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_fun",
-                                "name": "allocation"
-                              },
-                              "name": "Recipient",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": false
-                        }
-                      ]
+                      "name": "ProtocolAllocation",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "creation_fee",
+                  "type": "u64"
+                }
+              ]
+            },
+            {
+              "name": "PartnerKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "pos0",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
                     }
                   }
                 }
@@ -5675,7 +7052,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -5686,7 +7063,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "UpgradeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -5757,7 +7134,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -5768,7 +7145,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "UpgradeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -5835,7 +7212,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -5846,7 +7223,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "UpgradeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -6062,7 +7439,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -6073,7 +7450,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "ClaimSignerAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -6133,7 +7510,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -6144,7 +7521,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "FeeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -7227,7 +8604,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -7238,7 +8615,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "RewardsAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -7331,21 +8708,7 @@
                   "type": "u64"
                 },
                 {
-                  "name": "start_checkpoint",
-                  "type": "u64"
-                },
-                {
-                  "name": "end_checkpoint",
-                  "type": "u64"
-                },
-                {
                   "name": "root",
-                  "type": {
-                    "vector": "u8"
-                  }
-                },
-                {
-                  "name": "manifest_digest",
                   "type": {
                     "vector": "u8"
                   }
@@ -7475,7 +8838,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -7486,7 +8849,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "BuybackAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -8414,7 +9777,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -8425,7 +9788,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "BuybackAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -9487,7 +10850,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -9498,7 +10861,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "FeeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -9561,7 +10924,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -9572,7 +10935,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "FeeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -9649,7 +11012,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -9660,7 +11023,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "FeeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -9737,7 +11100,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -9748,7 +11111,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "TreasuryAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -9944,7 +11307,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -9955,7 +11318,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "UpgradeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -10026,7 +11389,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -10037,7 +11400,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "UpgradeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -10450,7 +11813,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "acl"
+                          "name": "blast_acl"
                         },
                         "name": "AdminWitness",
                         "type_arguments": [
@@ -10461,7 +11824,7 @@
                                   "address": "blast_fun",
                                   "name": "blast_fun_domain"
                                 },
-                                "name": "BLAST_FUN_DOMAIN",
+                                "name": "TreasuryAdmin",
                                 "type_arguments": []
                               }
                             },

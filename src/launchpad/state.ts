@@ -15,12 +15,22 @@ import {
   suiUidBcs,
 } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
-import type { AllocationPlan, FeeSplit } from "./allocation.ts";
-import { allocationPlanBcs, bpsBcs, feeSplitBcs } from "./allocation.ts";
+import type {
+  AllocationPlan,
+  FeeSplit,
+  ProtocolAllocation,
+} from "./allocation.ts";
+import {
+  allocationPlanBcs,
+  bpsBcs,
+  feeSplitBcs,
+  protocolAllocationBcs,
+} from "./allocation.ts";
 import type { CurveState } from "./curve.ts";
 import type { SharedObjectReference } from "./transactions.ts";
 
 const LifecycleBcs = bcs.enum("Lifecycle", {
+  OpeningRound: null,
   Live: null,
   MigrationReady: null,
   Migrated: null,
@@ -36,16 +46,18 @@ const FeeLedgerBcs = bcs.struct("FeeLedger", {
   creator_meme: suiBalanceBcs,
   protocol_quote: suiBalanceBcs,
   creator_quote: suiBalanceBcs,
+  protocol_sui: suiBalanceBcs,
 });
 
 /** BCS layout of `blast_fun::launch::Launch<Meme, Quote>`. */
 export const launchBcs = bcs.struct("Launch", {
   id: suiUidBcs,
   lifecycle: LifecycleBcs,
-  protection_end_ms: bcs.option(bcs.u64()),
-  protection_window_ms: bcs.u64(),
-  cumulative_atomic_limit: bcs.u64(),
-  per_transaction_atomic_limit: bcs.u64(),
+  public_start_ms: bcs.option(bcs.u64()),
+  opening_round_ms: bcs.u64(),
+  opening_round_bids: bcs.u64(),
+  opening_round_quote: suiBalanceBcs,
+  opening_round_meme: suiBalanceBcs,
   sell_burn_bps: bpsBcs,
   virtual_quote: bcs.u64(),
   graduation_target: bcs.u64(),
@@ -66,37 +78,47 @@ export const launchBcs = bcs.struct("Launch", {
   creator: bcs.option(creatorRecipientBcs),
   curve_fee_cap_id: bcs.option(suiIdBcs),
   blast_metadata_cap_id: bcs.option(suiIdBcs),
+  partner_id: bcs.option(suiIdBcs),
 });
 
-export type LaunchLifecycle = "Live" | "MigrationReady" | "Migrated";
+/** BCS layout of `blast_fun::launch_config::LaunchConfig`. */
+export const launchConfigBcs = bcs.struct("LaunchConfig", {
+  id: suiUidBcs,
+  meme_decimals: bcs.vector(bcs.u8()),
+  quotes: bcs.struct("Table", { id: suiUidBcs, size: bcs.u64() }),
+  quote_fee_bps: bpsBcs,
+  meme_fee_bps: bpsBcs,
+  migration_witnesses: bcs.vector(moveTypeNameBcs),
+  protocol_allocation: protocolAllocationBcs,
+  creation_fee: bcs.u64(),
+});
+
+export type LaunchLifecycle =
+  | "OpeningRound"
+  | "Live"
+  | "MigrationReady"
+  | "Migrated";
 
 export type CreatorRecipient =
   | { kind: "address"; address: string }
   | { kind: "account"; accountCommitment: Uint8Array }
   | null;
 
-/**
- * Public curve-purchase protection, fixed at launch finalization. The atomic
- * limits are the rates applied to the supply, rounded down; a zero
- * per-transaction limit skips that check.
- */
-export type LaunchProtection = {
-  windowMs: bigint;
-  cumulativeAtomicLimit: bigint;
-  perTransactionAtomicLimit: bigint;
-};
-
 export type LaunchState = CurveState &
   SharedObjectReference<true> & {
     memeType: string;
     quoteType: string;
     lifecycle: LaunchLifecycle;
-    /**
-     * First millisecond public purchases are no longer protected; null only
-     * before the key-only launch is shared.
-     */
-    protectionEndMs: bigint | null;
-    protection: LaunchProtection;
+    /** When the launch was shared; null only before the key-only launch is shared. */
+    publicStartMs: bigint | null;
+    /** Opening-round length after share; zero when trading starts at share. */
+    openingRoundMs: bigint;
+    /** Quote of the opening-round bids not yet delivered. */
+    openingRoundBids: bigint;
+    /** The pot until settlement, then the Quote it left to refund. */
+    openingRoundQuote: bigint;
+    /** Meme the settled pot bought, awaiting delivery. */
+    openingRoundMeme: bigint;
     sellBurnBps: bigint;
     migrationWitnessType: string;
     /** Creator-chosen `(tick_spacing, fee_rate)` in the bound venue's native units. */
@@ -113,11 +135,15 @@ export type LaunchState = CurveState &
     creatorMemeTradeFees: bigint;
     protocolQuoteTradeFees: bigint;
     creatorQuoteTradeFees: bigint;
+    /** Blast's SUI creation fee, held until Blast claims its fees. */
+    protocolSuiFees: bigint;
     metadataCapId: string;
     creatorRecipient: CreatorRecipient;
     /** The `CurveFeeCap` the launch honors; null until claimed or reassigned. */
     curveFeeCapId: string | null;
     blastMetadataCapId: string | null;
+    /** The partner named at creation, paid at Blast's claim; it never changes. */
+    partnerId: string | null;
   };
 
 export type LaunchObject = SharedObjectReference<true> & {
@@ -166,12 +192,11 @@ export function decodeLaunchObject(
     memeType: normalizeTypeParameter(tag.typeParams[0]),
     quoteType: normalizeTypeParameter(tag.typeParams[1]),
     lifecycle: parsed.lifecycle.$kind,
-    protectionEndMs: optionalBigInt(parsed.protection_end_ms),
-    protection: {
-      windowMs: BigInt(parsed.protection_window_ms),
-      cumulativeAtomicLimit: BigInt(parsed.cumulative_atomic_limit),
-      perTransactionAtomicLimit: BigInt(parsed.per_transaction_atomic_limit),
-    },
+    publicStartMs: optionalBigInt(parsed.public_start_ms),
+    openingRoundMs: BigInt(parsed.opening_round_ms),
+    openingRoundBids: BigInt(parsed.opening_round_bids),
+    openingRoundQuote: BigInt(parsed.opening_round_quote.value),
+    openingRoundMeme: BigInt(parsed.opening_round_meme.value),
     sellBurnBps: parsed.sell_burn_bps,
     virtualQuote: BigInt(parsed.virtual_quote),
     graduationTarget: BigInt(parsed.graduation_target),
@@ -191,10 +216,12 @@ export function decodeLaunchObject(
     creatorMemeTradeFees: BigInt(parsed.fee_ledger.creator_meme.value),
     protocolQuoteTradeFees: BigInt(parsed.fee_ledger.protocol_quote.value),
     creatorQuoteTradeFees: BigInt(parsed.fee_ledger.creator_quote.value),
+    protocolSuiFees: BigInt(parsed.fee_ledger.protocol_sui.value),
     metadataCapId: normalizeSuiObjectId(parsed.metadata_cap.id.id.bytes),
     creatorRecipient: decodeCreatorRecipient(parsed.creator),
     curveFeeCapId: optionalId(parsed.curve_fee_cap_id),
     blastMetadataCapId: optionalId(parsed.blast_metadata_cap_id),
+    partnerId: optionalId(parsed.partner_id),
   };
 }
 
@@ -225,23 +252,70 @@ export async function getLaunch(
   );
 }
 
+export type LaunchConfigState = {
+  objectId: string;
+  /** Admitted Meme precisions. */
+  memeDecimals: number[];
+  /** Admitted Quote types live in this table, one key each. */
+  quotesTableId: string;
+  quoteCount: bigint;
+  /** Trade fees a new launch snapshots. */
+  quoteFeeBps: bigint;
+  memeFeeBps: bigint;
+  migrationWitnessTypes: string[];
+  /** Blast's one-time migration fee a new launch snapshots. */
+  protocolAllocation: ProtocolAllocation;
+  /** SUI, in MIST, `launch::finalize` requires exactly. */
+  creationFee: bigint;
+};
+
+/** Reads and decodes the `LaunchConfig` singleton that launch creation reads. */
+export async function getLaunchConfig(
+  client: ClientWithCoreApi,
+  objectId: string,
+  originalPackageId: string,
+): Promise<LaunchConfigState> {
+  const { object } = await client.core.getObject({
+    objectId,
+    include: { content: true },
+  });
+  const expected = normalizeStructTag(
+    `${normalizeSuiAddress(originalPackageId)}::launch_config::LaunchConfig`,
+  );
+  if (normalizeStructTag(object.type) !== expected) {
+    throw new TypeError(`object ${object.objectId} is not the launch config`);
+  }
+  const parsed = launchConfigBcs.parse(object.content);
+  return {
+    objectId: normalizeSuiObjectId(parsed.id.id.bytes),
+    memeDecimals: parsed.meme_decimals,
+    quotesTableId: normalizeSuiObjectId(parsed.quotes.id.id.bytes),
+    quoteCount: BigInt(parsed.quotes.size),
+    quoteFeeBps: parsed.quote_fee_bps,
+    memeFeeBps: parsed.meme_fee_bps,
+    migrationWitnessTypes: parsed.migration_witnesses,
+    protocolAllocation: parsed.protocol_allocation,
+    creationFee: BigInt(parsed.creation_fee),
+  };
+}
+
 /**
- * Reads the gross Meme `sender` bought from the curve while the launch was
- * protected (the `launch::ProtectedPurchasesKey` dynamic field); zero before
- * the first protected purchase.
+ * Reads `bidder`'s undelivered opening-round Quote (the
+ * `launch::OpeningRoundBidKey` dynamic field); zero without a bid or once
+ * delivered.
  */
-export async function getProtectedPurchases(
+export async function getOpeningRoundBid(
   client: ClientWithCoreApi,
   launchId: string,
-  sender: string,
+  bidder: string,
   originalPackageId: string,
 ): Promise<bigint> {
   try {
     const { dynamicField } = await client.core.getDynamicField({
       parentId: normalizeSuiObjectId(launchId),
       name: {
-        type: `${normalizeSuiAddress(originalPackageId)}::launch::ProtectedPurchasesKey`,
-        bcs: bcs.Address.serialize(normalizeSuiAddress(sender)).toBytes(),
+        type: `${normalizeSuiAddress(originalPackageId)}::launch::OpeningRoundBidKey`,
+        bcs: bcs.Address.serialize(normalizeSuiAddress(bidder)).toBytes(),
       },
     });
     return BigInt(bcs.u64().parse(dynamicField.value.bcs));

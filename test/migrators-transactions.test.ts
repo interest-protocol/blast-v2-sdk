@@ -26,6 +26,8 @@ const deployment: MigratorsDeployment = {
     packageId: "0x123",
     originalPackageId: "0x122",
     adminPackageId: "0xad",
+    partnersPackageId: "0xae",
+    timelockPackageId: "0xaf",
     packageVersion: shared("0x2", "10", false),
     launchConfig: shared("0x3", "11", false),
     runtimeConfig: shared("0x4", "12", false),
@@ -47,7 +49,9 @@ const lpFeeSplit = {
   recipients: [{ destination: "0xf", bps: 1_000n }],
 };
 const settings = {
+  virtualQuote: 1_000n,
   graduationTarget: 3_000n,
+  creationFee: 1_001n,
   allocationPlan: {
     curveMemeBps: 8_000n,
     lpMemeBps: 1_900n,
@@ -85,6 +89,7 @@ test("starts, configures, finalizes, and shares a Cetus launch in one PTB", () =
   );
   assert.deepEqual(launchCalls, [
     "cetus::new",
+    "launch::set_virtual_quote",
     "launch::set_graduation_target",
     "launch::set_allocation_plan",
     "launch::set_lp_fee_split",
@@ -107,12 +112,14 @@ test("starts, configures, finalizes, and shares a Cetus launch in one PTB", () =
   ]);
   const finalize = moveCall(tx, "launch::finalize");
   assert.equal(finalize.package, normalizeSuiObjectId("0x123"));
+  // The creation fee is an exact-balance SUI coin intent resolved at build.
   assert.deepEqual(argumentKinds(tx, finalize), [
     `Result:${commandIndex(tx, "cetus::new")}`,
-    "shared:0x2",
     "shared-mut:0xd",
     "shared:0x3",
+    "Result:1",
   ]);
+  assert.equal(tx.getData().commands[1]?.$kind, "$Intent");
   assert.equal(tx.getData().commands.at(-1)?.$kind, "TransferObjects");
 });
 
@@ -124,11 +131,8 @@ test("starts a Bluefin launch at the creator's tier", () => {
     memeCurrency: shared("0xd", "22", true),
     tickSpacing: 200,
     feeRate: 10_000n,
-    protection: {
-      windowMs: 60_000n,
-      cumulativeSenderBps: 100n,
-      perTransactionBps: 0n,
-    },
+    openingRoundMs: 120_000n,
+    creationFee: 0n,
   });
 
   const start = moveCall(tx, "bluefin::new");
@@ -140,7 +144,7 @@ test("starts a Bluefin launch at the creator's tier", () => {
     "pure",
     "pure",
   ]);
-  assert.ok(moveFunctions(tx).includes("launch::set_protection"));
+  assert.ok(moveFunctions(tx).includes("launch::set_opening_round"));
   assert.equal(moveFunctions(tx).at(-1), "launch::share");
   assert.throws(
     () =>

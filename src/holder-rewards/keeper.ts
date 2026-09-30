@@ -5,16 +5,14 @@ import { rewardIsClaimed } from "./state.ts";
 
 type RoundCommitment = Pick<
   RewardRoundState,
-  | "vaultId"
-  | "number"
-  | "startCheckpoint"
-  | "endCheckpoint"
-  | "root"
-  | "manifestDigest"
-  | "leafCount"
+  "vaultId" | "number" | "root" | "leafCount"
 >;
 
-/** A relayer must compare the public artifact with authoritative chain state before paying. */
+/**
+ * A relayer must compare the public artifact with authoritative chain state
+ * before paying. The root commits every leaf; the round object keeps no
+ * checkpoints or manifest digest (its `RoundPublished` event does).
+ */
 export function assertRewardRoundMatchesManifest(
   round: RoundCommitment,
   manifest: RewardManifest,
@@ -23,10 +21,7 @@ export function assertRewardRoundMatchesManifest(
   if (
     round.vaultId !== manifest.vaultId ||
     round.number !== BigInt(manifest.number) ||
-    round.startCheckpoint !== BigInt(manifest.startCheckpoint) ||
-    round.endCheckpoint !== BigInt(manifest.endCheckpoint) ||
     round.root !== manifest.root ||
-    round.manifestDigest !== manifest.manifestDigest ||
     round.leafCount !== manifest.allocations.length
   )
     throw new Error("manifest does not match funded round");

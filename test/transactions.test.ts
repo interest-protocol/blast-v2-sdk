@@ -23,6 +23,8 @@ function shared<const Mutable extends boolean>(
 const deployment: LaunchpadDeployment = {
   packageId: "0x123",
   adminPackageId: "0xad",
+  partnersPackageId: "0xae",
+  timelockPackageId: "0xaf",
   packageVersion: shared("0x2", "10", false),
   launchConfig: shared("0x3", "11", false),
   runtimeConfig: shared("0x4", "12", false),
@@ -58,14 +60,13 @@ test("completes an adapter-started launch: settings, finalize, and share", () =>
       ...types,
       initializer,
       currency: shared("0xd", "22", true),
+      creationFee: "0x5f",
+      virtualQuote: 1_000n,
       graduationTarget: 3_000n,
       allocationPlan,
       lpFeeSplit,
-      protection: {
-        windowMs: 60_000n,
-        cumulativeSenderBps: 100n,
-        perTransactionBps: 50n,
-      },
+      openingRoundMs: 60_000n,
+      partner: shared("0x9a", "30", false),
     }),
   );
 
@@ -74,18 +75,30 @@ test("completes an adapter-started launch: settings, finalize, and share", () =>
     name.startsWith("launch::"),
   );
   assert.deepEqual(launchCalls, [
+    "launch::set_virtual_quote",
     "launch::set_graduation_target",
     "launch::set_allocation_plan",
     "launch::set_lp_fee_split",
-    "launch::set_protection",
+    "launch::set_opening_round",
+    "launch::set_partner",
     "launch::finalize",
     "launch::share",
   ]);
+  assert.deepEqual(
+    moveCall(tx, "launch::set_partner").arguments.map(argumentKind(tx)),
+    [
+      "object:0xe",
+      "shared:0x3",
+      "shared:0x9a",
+      `shared:${SUI_CLOCK_OBJECT_ID}`,
+    ],
+  );
   const finalize = moveCall(tx, "launch::finalize");
-  assert.deepEqual(finalize.arguments.slice(1).map(argumentKind(tx)), [
-    "shared:0x2",
+  assert.deepEqual(finalize.arguments.map(argumentKind(tx)), [
+    "object:0xe",
     "shared:0xd",
     "shared:0x3",
+    "object:0x5f",
   ]);
   const share = moveCall(tx, "launch::share");
   assert.deepEqual(share.arguments.map(argumentKind(tx)), [
@@ -137,9 +150,12 @@ test("buys on the owned launch before sharing it", () => {
       ...types,
       initializer: tx.object("0xe"),
       currency: shared("0xd", "22", true),
+      creationFee: "0x5f",
+      virtualQuote: 1_000n,
       graduationTarget: 3_000n,
       allocationPlan,
       lpFeeSplit,
+      openingRoundMs: 0n,
       preShareBuy: { quoteCoin: "0x77", minMemeOut: 5n },
     }),
   );
@@ -148,7 +164,11 @@ test("buys on the owned launch before sharing it", () => {
   const launchCalls = moveFunctions(tx).filter((name) =>
     name.startsWith("launch::"),
   );
-  assert.deepEqual(launchCalls.slice(-3), [
+  assert.deepEqual(launchCalls, [
+    "launch::set_virtual_quote",
+    "launch::set_graduation_target",
+    "launch::set_allocation_plan",
+    "launch::set_lp_fee_split",
     "launch::finalize",
     "launch::buy",
     "launch::share",
@@ -160,7 +180,102 @@ test("buys on the owned launch before sharing it", () => {
     "shared:0x4",
     "object:0x77",
     "pure",
+  ]);
+});
+
+test("bids the creator's purchase into the opening round before sharing", () => {
+  const calls = new LaunchpadCalls(deployment);
+  const tx = new Transaction();
+  const bought = tx.add(
+    calls.completeLaunch({
+      ...types,
+      initializer: tx.object("0xe"),
+      currency: shared("0xd", "22", true),
+      creationFee: "0x5f",
+      virtualQuote: 1_000n,
+      graduationTarget: 3_000n,
+      allocationPlan,
+      lpFeeSplit,
+      openingRoundMs: 300_000n,
+      preShareBuy: { quoteCoin: "0x77", minMemeOut: 0n },
+    }),
+  );
+
+  assert.equal(bought, undefined);
+  assert.deepEqual(
+    moveFunctions(tx)
+      .filter((name) => name.startsWith("launch::"))
+      .slice(-3),
+    ["launch::finalize", "launch::join_opening_round", "launch::share"],
+  );
+  assert.deepEqual(
+    moveCall(tx, "launch::join_opening_round").arguments.map(argumentKind(tx)),
+    [
+      `Result:${commandIndex(tx, "launch::finalize")}`,
+      "shared:0x2",
+      "object:0x77",
+      `shared:${SUI_CLOCK_OBJECT_ID}`,
+    ],
+  );
+});
+
+test("rejects creation settings finalize aborts on", () => {
+  const calls = new LaunchpadCalls(deployment);
+  const tx = new Transaction();
+  const base = { ...types, initializer: tx.object("0xe") };
+  assert.throws(
+    () => calls.setVirtualQuote({ ...base, virtualQuote: 0n }),
+    /virtualQuote must be a positive u64/,
+  );
+  for (const openingRoundMs of [59_999n, 300_001n]) {
+    assert.throws(
+      () => calls.setOpeningRound({ ...base, openingRoundMs }),
+      /zero or between 60,000 and 300,000/,
+    );
+  }
+  assert.doesNotThrow(() =>
+    calls.setOpeningRound({ ...base, openingRoundMs: 0n }),
+  );
+});
+
+test("composes the opening round's join, settlement, and deliveries", () => {
+  const sdk = new LaunchpadTransactions(deployment);
+  const launch = shared("0xc", "20", true);
+  const join = sdk.joinOpeningRound({ ...types, launch, quoteAmount: 500n });
+  assert.deepEqual(moveFunctions(join), ["launch::join_opening_round"]);
+  assert.equal(join.getData().commands[0]?.$kind, "$Intent");
+  assert.deepEqual(moveArgumentKinds(join, 1), [
+    "shared:0xc",
+    "shared:0x2",
+    "Result",
     `shared:${SUI_CLOCK_OBJECT_ID}`,
+  ]);
+  assert.throws(
+    () => sdk.joinOpeningRound({ ...types, launch, quoteAmount: 0n }),
+    /positive u64/,
+  );
+
+  const settle = sdk.settleOpeningRound({ ...types, launch });
+  assert.deepEqual(moveArgumentKinds(settle, 0), [
+    "shared:0xc",
+    "shared:0x2",
+    "shared:0x4",
+    `shared:${SUI_CLOCK_OBJECT_ID}`,
+  ]);
+
+  const deliver = sdk.deliverOpeningRound({
+    ...types,
+    launch,
+    bidders: ["0xa", "0xb"],
+  });
+  assert.deepEqual(moveFunctions(deliver), [
+    "launch::deliver_opening_round",
+    "launch::deliver_opening_round",
+  ]);
+  assert.deepEqual(moveArgumentKinds(deliver, 1), [
+    "shared:0xc",
+    "shared:0x2",
+    "pure",
   ]);
 });
 
@@ -185,7 +300,9 @@ test("constructs the generated Meme publish and makes it immutable", async () =>
     assert.deepEqual(publish.Publish.dependencies, [
       "0x0000000000000000000000000000000000000000000000000000000000000001",
       "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "0x00000000000000000000000000000000000000000000000000000000000000af",
       "0x00000000000000000000000000000000000000000000000000000000000000ad",
+      "0x00000000000000000000000000000000000000000000000000000000000000ae",
       "0x0000000000000000000000000000000000000000000000000000000000000123",
     ]);
   }
@@ -219,7 +336,6 @@ test("constructs a buy with exact-balance coin selection and output routing", ()
       shared("0xc", "20", true),
       shared("0x2", "10", false),
       shared("0x4", "12", false),
-      shared(SUI_CLOCK_OBJECT_ID, 1, false),
     ].map(normalizedShared),
   );
 });
@@ -345,6 +461,37 @@ test("composes admin sign-in with a protocol fee claim", () => {
       (input) => input.objectId.endsWith("05") && input.mutable === false,
     ),
   );
+  assert.deepEqual(
+    moveCall(tx, "launch::claim_protocol_fees").arguments.map(argumentKind(tx)),
+    [
+      "shared:0xc",
+      "shared:0x2",
+      `Result:${commandIndex(tx, "blast_acl::sign_in")}`,
+    ],
+  );
+  assert.equal(transferObjectCount(tx), 3);
+
+  const partnered = sdk.claimProtocolFees({
+    ...types,
+    launch: shared("0xc", "20", true),
+    adminCapId: "0xe",
+    recipient: "0xf",
+    partner: shared("0x9a", "30", false),
+  });
+  assert.deepEqual(
+    moveCall(
+      partnered,
+      "launch::claim_protocol_fees_with_partner",
+    ).arguments.map(argumentKind(partnered)),
+    [
+      "shared:0xc",
+      "shared:0x2",
+      `Result:${commandIndex(partnered, "blast_acl::sign_in")}`,
+      "shared:0x9a",
+      `shared:${SUI_CLOCK_OBJECT_ID}`,
+    ],
+  );
+  assert.equal(transferObjectCount(partnered), 3);
 });
 
 test("uses a fully qualified immutable Clock reference", () => {

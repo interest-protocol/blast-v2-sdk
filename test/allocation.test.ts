@@ -18,7 +18,7 @@ import {
 
 const U64_MAX = (1n << 64n) - 1n;
 
-/** A finalized plan: Blast first with `protocol` of both assets, then the pool. */
+/** A finalized plan: Blast's `protocol` of both assets, then the pool. */
 function plan(protocol: bigint, liquidity: bigint): AllocationPlan {
   return addProtocolAllocation(
     {
@@ -27,8 +27,38 @@ function plan(protocol: bigint, liquidity: bigint): AllocationPlan {
       lpQuoteBps: 10_000n - protocol,
       recipients: [],
     },
-    { destination: "0x1", memeBps: protocol, quoteBps: protocol },
+    { memeBps: protocol, quoteBps: protocol },
   );
+}
+
+/**
+ * Mirrors the Move tests' `shaped`: Meme `[curve, lp, blast, ...]` and Quote
+ * `[lp, blast, ...]`, recipients paid to `0x2` onward.
+ */
+function shaped(meme: bigint[], quote: bigint[]): AllocationPlan {
+  return addProtocolAllocation(
+    {
+      curveMemeBps: meme[0]!,
+      lpMemeBps: meme[1]!,
+      lpQuoteBps: quote[0]!,
+      recipients: meme.slice(3).map((memeBps, index) => ({
+        destination: `0x${(index + 2).toString(16)}`,
+        memeBps,
+        quoteBps: quote[index + 2]!,
+      })),
+    },
+    { memeBps: meme[2]!, quoteBps: quote[1]! },
+  );
+}
+
+function memeAmounts(allocation: AllocationPlan, supply: bigint): bigint[] {
+  const { curve, lp, protocol, recipients } = apportionMeme(allocation, supply);
+  return [curve, lp, protocol, ...recipients];
+}
+
+function quoteAmounts(allocation: AllocationPlan, reserve: bigint): bigint[] {
+  const { lp, protocol, recipients } = apportionQuote(allocation, reserve);
+  return [lp, protocol, ...recipients];
 }
 
 function split(
@@ -47,72 +77,64 @@ function split(
   });
 }
 
+test("matches the Move allocation apportionment vectors", () => {
+  const smallest = shaped([1n, 1n, 9_998n], [1n, 9_999n]);
+  assert.deepEqual(memeAmounts(smallest, 10_000n), [1n, 1n, 9_998n]);
+  assert.deepEqual(quoteAmounts(smallest, 10_000n), [1n, 9_999n]);
+  const unpaid = shaped([7_000n, 2_000n, 1_000n, 0n], [9_000n, 1_000n, 0n]);
+  assert.deepEqual(memeAmounts(unpaid, 999n), [699n, 200n, 100n, 0n]);
+  assert.deepEqual(quoteAmounts(unpaid, 999n), [899n, 100n, 0n]);
+  const ceiling = shaped([7_000n, 2_000n, 500n, 500n], [9_000n, 500n, 500n]);
+  assert.deepEqual(memeAmounts(ceiling, 0n), [0n, 0n, 0n, 0n]);
+  assert.deepEqual(quoteAmounts(ceiling, 0n), [0n, 0n, 0n]);
+  assert.deepEqual(memeAmounts(ceiling, 101n), [70n, 20n, 6n, 5n]);
+  assert.deepEqual(quoteAmounts(ceiling, 101n), [90n, 6n, 5n]);
+  const onePoint = shaped([9_998n, 1n, 1n], [1n, 9_999n]);
+  assert.deepEqual(quoteAmounts(onePoint, 1n), [0n, 1n]);
+  assert.deepEqual(quoteAmounts(onePoint, 9_999n), [0n, 9_999n]);
+  assert.deepEqual(quoteAmounts(onePoint, 10_000n), [1n, 9_999n]);
+  assert.deepEqual(quoteAmounts(onePoint, 10_001n), [1n, 10_000n]);
+  assert.throws(
+    () => shaped([8_000n, 2_000n, 1n], [10_000n, 0n]),
+    /sum to 10,000/,
+  );
+  assert.throws(
+    () => shaped([8_000n, 2_000n, 0n], [10_000n, 1n]),
+    /sum to 10,000/,
+  );
+});
+
 test("rounds Blast's allocation up and the rest by largest remainder", () => {
   assert.deepEqual(apportionMeme(plan(500n, 2_000n), 1_000_000_000_000_000n), {
     curve: 750_000_000_000_000n,
     lp: 200_000_000_000_000n,
-    recipients: [50_000_000_000_000n],
+    protocol: 50_000_000_000_000n,
+    recipients: [],
   });
   // Curve 4,000, pool 4,000, Blast 2,000: Blast takes its ceiling first.
   const tied = plan(2_000n, 4_000n);
-  assert.deepEqual(apportionMeme(tied, 1n), {
-    curve: 0n,
-    lp: 0n,
-    recipients: [1n],
-  });
-  assert.deepEqual(apportionMeme(tied, 2n), {
-    curve: 1n,
-    lp: 0n,
-    recipients: [1n],
-  });
-  assert.deepEqual(apportionMeme(tied, 3n), {
-    curve: 1n,
-    lp: 1n,
-    recipients: [1n],
-  });
-  assert.deepEqual(apportionQuote(tied, 1n), { lp: 0n, recipients: [1n] });
+  assert.deepEqual(memeAmounts(tied, 1n), [0n, 0n, 1n]);
+  assert.deepEqual(memeAmounts(tied, 2n), [1n, 0n, 1n]);
+  assert.deepEqual(memeAmounts(tied, 3n), [1n, 1n, 1n]);
+  assert.deepEqual(quoteAmounts(tied, 1n), [0n, 1n]);
   // 7 over 5,714 / 2,857 / 1,429: Blast ceil(1.0003) = 2, floors 3 and 1,
   // and the leftover atom goes to the pool's 9,999 remainder.
-  assert.deepEqual(apportionMeme(plan(1_429n, 2_857n), 7n), {
-    curve: 3n,
-    lp: 2n,
-    recipients: [2n],
-  });
-  // Later recipients are not rounded up.
-  const shared = addProtocolAllocation(
-    {
-      curveMemeBps: 5_000n,
-      lpMemeBps: 4_000n,
-      lpQuoteBps: 9_000n,
-      recipients: [{ destination: "0xc", memeBps: 500n, quoteBps: 500n }],
-    },
-    { destination: "0xb", memeBps: 500n, quoteBps: 500n },
-  );
-  assert.deepEqual(apportionQuote(shared, 1n), {
-    lp: 0n,
-    recipients: [1n, 0n],
-  });
-  assert.deepEqual(apportionQuote(shared, 3n), {
-    lp: 2n,
-    recipients: [1n, 0n],
-  });
+  assert.deepEqual(memeAmounts(plan(1_429n, 2_857n), 7n), [3n, 2n, 2n]);
+  // Recipients are not rounded up.
+  const shared = shaped([5_000n, 4_000n, 500n, 500n], [9_000n, 500n, 500n]);
+  assert.deepEqual(quoteAmounts(shared, 1n), [0n, 1n, 0n]);
+  assert.deepEqual(quoteAmounts(shared, 3n), [2n, 1n, 0n]);
 });
 
 test("conserves both assets at the u64 maximum", () => {
   const maximum = plan(1_000n, 8_999n);
-  const meme = apportionMeme(maximum, U64_MAX);
-  const quote = apportionQuote(maximum, U64_MAX);
-  assert.equal(
-    meme.recipients.reduce((sum, amount) => sum + amount, meme.curve + meme.lp),
-    U64_MAX,
-  );
-  assert.equal(
-    quote.recipients.reduce((sum, amount) => sum + amount, quote.lp),
-    U64_MAX,
-  );
+  const sum = (amounts: bigint[]) =>
+    amounts.reduce((total, amount) => total + amount, 0n);
+  assert.equal(sum(memeAmounts(maximum, U64_MAX)), U64_MAX);
+  assert.equal(sum(quoteAmounts(maximum, U64_MAX)), U64_MAX);
 });
 
-test("adds Blast first and checks both sums like allocation::add_protocol", () => {
+test("sets Blast's shares and checks both sums like allocation::add_protocol", () => {
   const creator = normalizeAllocationPlan({
     curveMemeBps: 7_000n,
     lpMemeBps: 2_000n,
@@ -120,35 +142,49 @@ test("adds Blast first and checks both sums like allocation::add_protocol", () =
     recipients: [{ destination: "0xc", memeBps: 500n, quoteBps: 0n }],
   });
   const complete = addProtocolAllocation(creator, {
-    destination: "0xb",
     memeBps: 500n,
     quoteBps: 1_000n,
   });
+  assert.deepEqual(complete, {
+    ...creator,
+    protocolMemeBps: 500n,
+    protocolQuoteBps: 1_000n,
+  });
   assert.deepEqual(
     complete.recipients.map(({ destination }) => destination),
-    [normalizeSuiAddress("0xb"), normalizeSuiAddress("0xc")],
+    [normalizeSuiAddress("0xc")],
   );
   assert.deepEqual(requireCompletePlan(complete), complete);
   assert.throws(
-    () =>
-      addProtocolAllocation(creator, {
-        destination: "0xb",
-        memeBps: 500n,
-        quoteBps: 500n,
-      }),
+    () => addProtocolAllocation(creator, { memeBps: 500n, quoteBps: 500n }),
     /sum to 10,000/,
+  );
+  // `allocation::plan` needs positive curve and pool Meme shares only.
+  assert.equal(
+    normalizeAllocationPlan({ ...creator, lpQuoteBps: 0n }).lpQuoteBps,
+    0n,
+  );
+  assert.throws(
+    () => normalizeAllocationPlan({ ...creator, lpMemeBps: 0n }),
+    /positive Meme shares/,
+  );
+  const sixteen = Array.from({ length: 16 }, (_, index) => ({
+    destination: `0x${(index + 1).toString(16)}`,
+    memeBps: 0n,
+    quoteBps: 0n,
+  }));
+  assert.equal(
+    normalizeAllocationPlan({ ...creator, recipients: sixteen }).recipients
+      .length,
+    16,
   );
   assert.throws(
     () =>
       normalizeAllocationPlan({
         ...creator,
-        recipients: Array.from({ length: 16 }, (_, index) => ({
-          destination: `0x${(index + 1).toString(16)}`,
-          memeBps: 0n,
-          quoteBps: 0n,
-        })),
+        recipients: [...sixteen, { ...sixteen[0]!, destination: "0x99" }],
       }),
-    /at most fifteen/,
+    /exceeds sixteen recipients/,
   );
 });
 
@@ -268,7 +304,7 @@ test("rejects plans and splits the Move constructors abort on", () => {
         lpQuoteBps: 10_000n,
         recipients: [],
       }),
-    /positive shares/,
+    /positive Meme shares/,
   );
   assert.throws(
     () =>

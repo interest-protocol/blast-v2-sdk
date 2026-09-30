@@ -8,7 +8,7 @@ import {
   requireU64,
 } from "../lib/integers.ts";
 
-/** Most recipients one finalized allocation plan may name, Blast included. */
+/** Most project recipients one allocation plan may name; Blast's fee has its own fields. */
 export const MAX_ALLOCATION_RECIPIENTS = 16;
 /** Most direct recipients one LP-fee split may name. */
 export const MAX_FEE_SPLIT_RECIPIENTS = 16;
@@ -24,21 +24,35 @@ export type AllocationRecipient = {
 };
 
 /**
- * Mirrors `blast_fun::allocation::AllocationPlan`. The creator's plan excludes
- * Blast; `launch::finalize` inserts Blast's allocation as the first recipient
- * (see `addProtocolAllocation`), so a launch object's plan starts with Blast.
+ * Mirrors `blast_fun::allocation::AllocationPlan`. `allocation::plan` leaves
+ * Blast's shares at zero; `launch::finalize` sets them from the `LaunchConfig`
+ * protocol allocation (see `addProtocolAllocation`). Blast's shares accrue as
+ * its one-time migration fee in the launch's fee ledger (contracts ADR 0098).
  */
 export type AllocationPlan = {
   curveMemeBps: bigint;
   lpMemeBps: bigint;
   lpQuoteBps: bigint;
+  protocolMemeBps: bigint;
+  protocolQuoteBps: bigint;
   recipients: AllocationRecipient[];
 };
+
+/** The creator's plan: `allocation::plan` input, before Blast's shares are added. */
+export type CreatorAllocationPlan = Omit<
+  AllocationPlan,
+  "protocolMemeBps" | "protocolQuoteBps"
+>;
+
+/** Mirrors `blast_fun::allocation::ProtocolAllocation`, Blast's one-time migration fee. */
+export type ProtocolAllocation = { memeBps: bigint; quoteBps: bigint };
 
 /** Exact Meme amounts of one apportioned supply. */
 export type AllocationMemeAmounts = {
   curve: bigint;
   lp: bigint;
+  /** Blast's migration fee, rounded up. */
+  protocol: bigint;
   /** Aligned with `plan.recipients`. */
   recipients: bigint[];
 };
@@ -46,6 +60,8 @@ export type AllocationMemeAmounts = {
 /** Exact Quote amounts of one apportioned final reserve. */
 export type AllocationQuoteAmounts = {
   lp: bigint;
+  /** Blast's migration fee, rounded up. */
+  protocol: bigint;
   /** Aligned with `plan.recipients`. */
   recipients: bigint[];
 };
@@ -98,7 +114,14 @@ export const allocationPlanBcs = bcs.struct("AllocationPlan", {
   curveMemeBps: bpsBcs,
   lpMemeBps: bpsBcs,
   lpQuoteBps: bpsBcs,
+  protocolMemeBps: bpsBcs,
+  protocolQuoteBps: bpsBcs,
   recipients: bcs.vector(recipientBcs),
+});
+/** BCS layout of `blast_fun::allocation::ProtocolAllocation`. */
+export const protocolAllocationBcs = bcs.struct("ProtocolAllocation", {
+  memeBps: bpsBcs,
+  quoteBps: bpsBcs,
 });
 const routeBcs = bcs.struct("Route", {
   destination: addressBcs,
@@ -115,60 +138,69 @@ export const feeSplitBcs = bcs.struct("FeeSplit", {
 
 /**
  * Checks a creator plan exactly as `allocation::plan` and
- * `allocation::recipient` do: positive curve and pool shares, nonzero
- * destinations, recipient order kept. Blast takes one of the sixteen recipient
- * slots at finalization, so a creator plan names at most fifteen. The sums are
- * checked once Blast's allocation is added (`addProtocolAllocation`).
+ * `allocation::recipient` do: positive curve and pool Meme shares, nonzero
+ * destinations, recipient order kept, plus `add_protocol`'s sixteen-recipient
+ * cap. The sums are checked once Blast's shares are added
+ * (`addProtocolAllocation`); finalization then requires a positive pool Quote
+ * amount at the graduation target.
  */
-export function normalizeAllocationPlan(plan: AllocationPlan): AllocationPlan {
-  const normalized = normalizeShares(plan);
-  if (
-    normalized.curveMemeBps === 0n ||
-    normalized.lpMemeBps === 0n ||
-    normalized.lpQuoteBps === 0n
-  ) {
-    throw new RangeError("the curve and the pool need positive shares");
+export function normalizeAllocationPlan(
+  plan: CreatorAllocationPlan,
+): CreatorAllocationPlan {
+  const normalized = {
+    curveMemeBps: requireBasisPoints("curveMemeBps", plan.curveMemeBps),
+    lpMemeBps: requireBasisPoints("lpMemeBps", plan.lpMemeBps),
+    lpQuoteBps: requireBasisPoints("lpQuoteBps", plan.lpQuoteBps),
+    recipients: plan.recipients.map(normalizeRecipient),
+  };
+  if (normalized.curveMemeBps === 0n || normalized.lpMemeBps === 0n) {
+    throw new RangeError("the curve and the pool need positive Meme shares");
   }
-  if (normalized.recipients.length >= MAX_ALLOCATION_RECIPIENTS) {
-    throw new RangeError(
-      "a creator plan names at most fifteen recipients; Blast takes the sixteenth",
-    );
+  if (normalized.recipients.length > MAX_ALLOCATION_RECIPIENTS) {
+    throw new RangeError("allocation plan exceeds sixteen recipients");
   }
   return normalized;
 }
 
 /**
  * Mirrors `allocation::add_protocol`, which `launch::finalize` runs with the
- * `LaunchConfig` protocol allocation: Blast becomes the first recipient, and
- * each asset must then sum to 10,000 basis points.
+ * `LaunchConfig` protocol allocation: Blast's shares fill their own fields,
+ * and each asset must then sum to 10,000 basis points.
  */
 export function addProtocolAllocation(
-  plan: AllocationPlan,
-  protocol: AllocationRecipient,
+  plan: CreatorAllocationPlan,
+  protocol: ProtocolAllocation,
 ): AllocationPlan {
-  const creatorPlan = normalizeAllocationPlan(plan);
   return requireCompletePlan({
-    ...creatorPlan,
-    recipients: [normalizeRecipient(protocol), ...creatorPlan.recipients],
+    ...normalizeAllocationPlan(plan),
+    protocolMemeBps: protocol.memeBps,
+    protocolQuoteBps: protocol.quoteBps,
   });
 }
 
 /**
- * Checks a plan with Blast already included, such as `LaunchState.allocationPlan`:
+ * Checks a plan with Blast's shares set, such as `LaunchState.allocationPlan`:
  * at most sixteen recipients, and each asset summing to 10,000 basis points.
  */
 export function requireCompletePlan(plan: AllocationPlan): AllocationPlan {
-  const normalized = normalizeShares(plan);
-  if (normalized.recipients.length > MAX_ALLOCATION_RECIPIENTS) {
-    throw new RangeError("allocation plan exceeds sixteen recipients");
-  }
+  const normalized = {
+    ...normalizeAllocationPlan(plan),
+    protocolMemeBps: requireBasisPoints(
+      "protocolMemeBps",
+      plan.protocolMemeBps,
+    ),
+    protocolQuoteBps: requireBasisPoints(
+      "protocolQuoteBps",
+      plan.protocolQuoteBps,
+    ),
+  };
   const meme = normalized.recipients.reduce(
     (sum, recipient) => sum + recipient.memeBps,
-    normalized.curveMemeBps + normalized.lpMemeBps,
+    normalized.curveMemeBps + normalized.lpMemeBps + normalized.protocolMemeBps,
   );
   const quote = normalized.recipients.reduce(
     (sum, recipient) => sum + recipient.quoteBps,
-    normalized.lpQuoteBps,
+    normalized.lpQuoteBps + normalized.protocolQuoteBps,
   );
   if (meme !== BASIS_POINTS_DENOMINATOR || quote !== BASIS_POINTS_DENOMINATOR) {
     throw new RangeError(
@@ -213,43 +245,45 @@ export function normalizeFeeSplit(split: FeeSplit): FeeSplit {
 
 /**
  * Mirrors `allocation::apportion_meme` on a complete plan: the curve's, the
- * pool's, and each recipient's share of `supply`. Blast, the first recipient,
- * takes its ceiling; the rest go by largest remainder.
+ * pool's, Blast's, and each recipient's share of `supply`. Blast takes its
+ * ceiling; the rest go by largest remainder.
  */
 export function apportionMeme(
   plan: AllocationPlan,
   supply: bigint,
 ): AllocationMemeAmounts {
-  const [curve = 0n, lp = 0n, ...recipients] = apportion(
+  const [curve = 0n, lp = 0n, protocol = 0n, ...recipients] = apportion(
     [
       plan.curveMemeBps,
       plan.lpMemeBps,
+      plan.protocolMemeBps,
       ...plan.recipients.map((recipient) => recipient.memeBps),
     ],
     supply,
     2,
   );
-  return { curve, lp, recipients };
+  return { curve, lp, protocol, recipients };
 }
 
 /**
- * Mirrors `allocation::apportion_quote` on a complete plan: the pool's and each
- * recipient's share of the final Quote `reserve`. Blast, the first recipient,
+ * Mirrors `allocation::apportion_quote` on a complete plan: the pool's,
+ * Blast's, and each recipient's share of the final Quote `reserve`. Blast
  * takes its ceiling; the rest go by largest remainder.
  */
 export function apportionQuote(
   plan: AllocationPlan,
   reserve: bigint,
 ): AllocationQuoteAmounts {
-  const [lp = 0n, ...recipients] = apportion(
+  const [lp = 0n, protocol = 0n, ...recipients] = apportion(
     [
       plan.lpQuoteBps,
+      plan.protocolQuoteBps,
       ...plan.recipients.map((recipient) => recipient.quoteBps),
     ],
     reserve,
     1,
   );
-  return { lp, recipients };
+  return { lp, protocol, recipients };
 }
 
 /**
@@ -354,15 +388,6 @@ function apportion(
     amounts[target] = (amounts[target] ?? 0n) + 1n;
   }
   return amounts;
-}
-
-function normalizeShares(plan: AllocationPlan): AllocationPlan {
-  return {
-    curveMemeBps: requireBasisPoints("curveMemeBps", plan.curveMemeBps),
-    lpMemeBps: requireBasisPoints("lpMemeBps", plan.lpMemeBps),
-    lpQuoteBps: requireBasisPoints("lpQuoteBps", plan.lpQuoteBps),
-    recipients: plan.recipients.map(normalizeRecipient),
-  };
 }
 
 function normalizeRecipient(

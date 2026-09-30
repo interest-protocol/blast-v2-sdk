@@ -20,6 +20,7 @@ type EventFieldDescriptor =
   | "u32"
   | "u8"
   | "bool"
+  | "optionId"
   | "bytes"
   | "string"
   | "creatorRecipient"
@@ -72,9 +73,9 @@ export const launchpadEventSpecs = {
     quote_fee_bps: "u64",
     meme_fee_bps: "u64",
     allocation_plan: "allocationPlan",
-    protection_window_ms: "u64",
-    cumulative_sender_bps: "u64",
-    per_transaction_bps: "u64",
+    opening_round_ms: "u64",
+    creation_fee: "u64",
+    partner_id: "optionId",
   },
   LaunchShared: {
     launch_id: "id",
@@ -99,7 +100,6 @@ export const launchpadEventSpecs = {
     meme: "u64",
     quote: "u64",
     disposed_meme: "u64",
-    native_supply_burned: "bool",
     total_supply_after: "u64",
   },
   MigrationAllocationPaid: {
@@ -120,20 +120,45 @@ export const launchpadEventSpecs = {
     recipient: "address",
   },
   MigrationWitnessSet: { migration_witness: "typeName", allowed: "bool" },
+  OpeningRoundJoined: { launch_id: "id", quote: "u64", bids: "u64" },
+  OpeningRoundSettled: {
+    launch_id: "id",
+    bids: "u64",
+    meme: "u64",
+    quote: "u64",
+  },
+  OpeningRoundDelivered: {
+    launch_id: "id",
+    bidder: "address",
+    bid: "u64",
+    meme: "u64",
+    quote: "u64",
+  },
+  PartnerAdded: { partner_id: "id" },
+  PartnerRemoved: { partner_id: "id", accepted_until_ms: "u64" },
+  CreationFeeChanged: { pos0: "u64" },
   ProtocolAllocationSet: {
-    destination: "address",
     meme_bps: "u64",
     quote_bps: "u64",
+  },
+  ProtocolFeesAccrued: {
+    launch_id: "id",
+    meme_amount: "u64",
+    quote_amount: "u64",
   },
   ProtocolFeesClaimed: {
     launch_id: "id",
     meme_amount: "u64",
     quote_amount: "u64",
+    sui_amount: "u64",
+    partner_meme_amount: "u64",
+    partner_quote_amount: "u64",
+    partner_sui_amount: "u64",
   },
   ProtocolFeeShareChanged: { pos0: "u64" },
   QuoteSet: {
     quote: "typeName",
-    virtual_quote: "u64",
+    allowed: "bool",
   },
   Sold: {
     launch_id: "id",
@@ -157,6 +182,7 @@ type DescriptorOutputs = {
   u32: number;
   u8: number;
   bool: boolean;
+  optionId: string | null;
   bytes: Uint8Array;
   string: string;
   creatorRecipient: NonNullable<CreatorRecipient>;
@@ -207,6 +233,7 @@ const EVENT_FIELD_BCS: Record<
   u32: bcs.u32() as BcsType<unknown, unknown>,
   u8: bcs.u8() as BcsType<unknown, unknown>,
   bool: bcs.bool() as BcsType<unknown, unknown>,
+  optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown, unknown>,
   bytes: BytesBcs as BcsType<unknown, unknown>,
   string: bcs.string() as BcsType<unknown, unknown>,
   creatorRecipient: CreatorRecipientBcs as BcsType<unknown, unknown>,
