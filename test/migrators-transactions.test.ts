@@ -61,6 +61,13 @@ const cetus = {
   cetusPools: shared("0x71", "31", true),
 };
 const CLOCK = `shared:${SUI_CLOCK_OBJECT_ID}`;
+const meme = normalizedType(types.memeType);
+const quote = normalizedType(types.quoteType);
+/** Cetus routes name the pool's coins in Cetus order after Meme and Quote (contracts ADR 0100). */
+const cetusTypeArguments = {
+  a: [meme, quote, meme, quote],
+  b: [meme, quote, quote, meme],
+};
 
 test("starts, configures, finalizes, and shares a Cetus launch in one PTB", () => {
   const tx = new MigratorTransactions(deployment).createCetusLaunch({
@@ -157,7 +164,8 @@ test("migrates Cetus with the reserved tier and the LP Burn manager", () => {
       memeCurrency: shared("0xd", "22", true),
       burnManager: shared("0x72", "32", true),
     });
-    const call = moveCall(tx, `cetus::migrate_meme_${memeSide}`);
+    const call = moveCall(tx, "cetus::migrate");
+    assert.deepEqual(call.typeArguments, cetusTypeArguments[memeSide]);
     assert.deepEqual(argumentKinds(tx, call), [
       "shared-mut:0xc",
       "shared:0x61",
@@ -207,19 +215,18 @@ test("collects fees permissionlessly with the live LP-fee policy", () => {
     burnManager: shared("0x72", "32", false),
     pool: shared("0x73", "33", true),
   });
-  assert.deepEqual(
-    argumentKinds(cetusTx, moveCall(cetusTx, "cetus::collect_fees_meme_b")),
-    [
-      "shared-mut:0xc",
-      "shared:0x61",
-      "shared:0x40",
-      "shared-mut:0xd",
-      "shared:0x70",
-      "shared:0x72",
-      "shared-mut:0x73",
-      CLOCK,
-    ],
-  );
+  const collect = moveCall(cetusTx, "cetus::collect_fees");
+  assert.deepEqual(collect.typeArguments, cetusTypeArguments.b);
+  assert.deepEqual(argumentKinds(cetusTx, collect), [
+    "shared-mut:0xc",
+    "shared:0x61",
+    "shared:0x40",
+    "shared-mut:0xd",
+    "shared:0x70",
+    "shared:0x72",
+    "shared-mut:0x73",
+    CLOCK,
+  ]);
 
   const bluefinTx = sdk.collectBluefinFees({
     ...types,
@@ -256,7 +263,8 @@ test("settles and updates the fee split under the live curve-fee cap", () => {
     pool: shared("0x73", "33", true),
     feeSplit: lpFeeSplit,
   });
-  const call = moveCall(tx, "cetus::settle_and_update_fee_split_meme_a");
+  const call = moveCall(tx, "cetus::settle_and_update_fee_split");
+  assert.deepEqual(call.typeArguments, cetusTypeArguments.a);
   assert.deepEqual(argumentKinds(tx, call), [
     "shared-mut:0xc",
     "shared:0x61",
@@ -302,21 +310,20 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
   });
   assert.deepEqual(moveFunctions(cetusTx), [
     "acl::sign_in",
-    "cetus::buyback_and_burn_meme_b",
+    "cetus::buyback_and_burn",
   ]);
-  assert.deepEqual(
-    argumentKinds(cetusTx, moveCall(cetusTx, "cetus::buyback_and_burn_meme_b")),
-    [
-      "shared-mut:0xc",
-      "shared:0x61",
-      `Result:${commandIndex(cetusTx, "acl::sign_in")}`,
-      "shared-mut:0xd",
-      "shared:0x70",
-      "shared-mut:0x73",
-      "pure",
-      CLOCK,
-    ],
-  );
+  const buyback = moveCall(cetusTx, "cetus::buyback_and_burn");
+  assert.deepEqual(buyback.typeArguments, cetusTypeArguments.b);
+  assert.deepEqual(argumentKinds(cetusTx, buyback), [
+    "shared-mut:0xc",
+    "shared:0x61",
+    `Result:${commandIndex(cetusTx, "acl::sign_in")}`,
+    "shared-mut:0xd",
+    "shared:0x70",
+    "shared-mut:0x73",
+    "pure",
+    CLOCK,
+  ]);
 
   const bluefinTx = sdk.buybackAndBurnBluefin({
     ...types,

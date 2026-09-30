@@ -174,8 +174,10 @@ other part goes by largest remainder.
 ## Migrators
 
 `@interest-protocol/blast-sdk/migrators` covers every route of the two shipped
-adapters. Cetus orders a pool's coin types by type name, so its routes take
-`memeSide: "a" | "b"`; Bluefin always creates `Pool<Meme, Quote>`.
+adapters. Cetus orders a pool's coin types by type name, so its builders take
+`memeSide: "a" | "b"` and pass the pool's coins in that order after Meme and
+Quote, as `<Meme, Quote, CoinA, CoinB>`, to Cetus's single route per operation
+(contracts ADR 0100); Bluefin always creates `Pool<Meme, Quote>`.
 
 - Migration is permissionless. Cetus burns the full-range position through
   Cetus LP Burn and takes the mutable `BurnManager`; Bluefin takes its SUI
