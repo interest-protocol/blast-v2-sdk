@@ -1,3 +1,4 @@
+import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
@@ -14,13 +15,19 @@ import {
   suiIdBcs,
   suiUidBcs,
 } from "../lib/bcs.ts";
-import { normalizePositiveU64 } from "../lib/integers.ts";
+import {
+  BASIS_POINTS_DENOMINATOR,
+  normalizePositiveU64,
+  requireBasisPoints,
+  requireU64,
+} from "../lib/integers.ts";
 import type { AllocationPlan, FeeSplit } from "./allocation.ts";
 import { allocationPlanBcs, bpsBcs, feeSplitBcs } from "./allocation.ts";
 import type { CurveState } from "./curve.ts";
 import type { SharedObjectReference } from "./transactions.ts";
 
 const LifecycleBcs = bcs.enum("Lifecycle", {
+  OpeningRound: null,
   Live: null,
   MigrationReady: null,
   Migrated: null,
@@ -36,16 +43,18 @@ const FeeLedgerBcs = bcs.struct("FeeLedger", {
   creator_meme: suiBalanceBcs,
   protocol_quote: suiBalanceBcs,
   creator_quote: suiBalanceBcs,
+  protocol_sui: suiBalanceBcs,
 });
 
 /** BCS layout of `blast_fun::launch::Launch<Meme, Quote>`. */
 export const launchBcs = bcs.struct("Launch", {
   id: suiUidBcs,
   lifecycle: LifecycleBcs,
-  protection_end_ms: bcs.option(bcs.u64()),
-  protection_window_ms: bcs.u64(),
-  cumulative_atomic_limit: bcs.u64(),
-  per_transaction_atomic_limit: bcs.u64(),
+  public_start_ms: bcs.option(bcs.u64()),
+  opening_round_ms: bcs.u64(),
+  opening_round_bids: bcs.u64(),
+  opening_round_quote: suiBalanceBcs,
+  opening_round_meme: suiBalanceBcs,
   sell_burn_bps: bpsBcs,
   virtual_quote: bcs.u64(),
   graduation_target: bcs.u64(),
@@ -66,37 +75,56 @@ export const launchBcs = bcs.struct("Launch", {
   creator: bcs.option(creatorRecipientBcs),
   curve_fee_cap_id: bcs.option(suiIdBcs),
   blast_metadata_cap_id: bcs.option(suiIdBcs),
+  partner_id: bcs.option(suiIdBcs),
 });
 
-export type LaunchLifecycle = "Live" | "MigrationReady" | "Migrated";
+const TreasuryCapBcs = bcs.struct("TreasuryCap", {
+  id: suiUidBcs,
+  total_supply: bcs.struct("Supply", { value: bcs.u64() }),
+});
+
+/** BCS layout of `blast_fun::launch_ticket::LaunchTicket<Meme>`. */
+export const launchTicketBcs = bcs.struct("LaunchTicket", {
+  id: suiUidBcs,
+  meme: suiBalanceBcs,
+  treasury_cap: TreasuryCapBcs,
+  metadata_cap: MetadataCapBcs,
+  creator: creatorRecipientBcs,
+  decimals: bcs.u8(),
+  burnable: bcs.bool(),
+  sell_burn_bps: bpsBcs,
+});
+
+/**
+ * `launch::Lifecycle`. A launch with an opening round starts in
+ * `OpeningRound`; settling it, or finalizing without one, makes it `Live`.
+ */
+export type LaunchLifecycle =
+  | "OpeningRound"
+  | "Live"
+  | "MigrationReady"
+  | "Migrated";
 
 export type CreatorRecipient =
   | { kind: "address"; address: string }
   | { kind: "account"; accountCommitment: Uint8Array }
   | null;
 
-/**
- * Public curve-purchase protection, fixed at launch finalization. The atomic
- * limits are the rates applied to the supply, rounded down; a zero
- * per-transaction limit skips that check.
- */
-export type LaunchProtection = {
-  windowMs: bigint;
-  cumulativeAtomicLimit: bigint;
-  perTransactionAtomicLimit: bigint;
-};
-
 export type LaunchState = CurveState &
   SharedObjectReference<true> & {
     memeType: string;
     quoteType: string;
     lifecycle: LaunchLifecycle;
-    /**
-     * First millisecond public purchases are no longer protected; null only
-     * before the key-only launch is shared.
-     */
-    protectionEndMs: bigint | null;
-    protection: LaunchProtection;
+    /** Clock time `launch::share` ran; null before the launch is shared. */
+    publicStartMs: bigint | null;
+    /** Opening-round length after share; zero means no opening round. */
+    openingRoundMs: bigint;
+    /** Quote of the opening-round bids not yet delivered. */
+    openingRoundBids: bigint;
+    /** The pot until settlement, then the Quote it left to refund. */
+    openingRoundQuote: bigint;
+    /** Meme the settled pot bought, held for delivery. */
+    openingRoundMeme: bigint;
     sellBurnBps: bigint;
     migrationWitnessType: string;
     /** Creator-chosen `(tick_spacing, fee_rate)` in the bound venue's native units. */
@@ -109,16 +137,37 @@ export type LaunchState = CurveState &
     allocationPlan: AllocationPlan;
     /** Pooled non-curve Meme allocations paid out when migration begins. */
     allocatedMeme: bigint;
-    protocolMemeTradeFees: bigint;
-    creatorMemeTradeFees: bigint;
-    protocolQuoteTradeFees: bigint;
-    creatorQuoteTradeFees: bigint;
+    /** Blast's unclaimed Meme: trade fees plus the one-time migration fee. */
+    protocolMemeFees: bigint;
+    creatorMemeFees: bigint;
+    /** Blast's unclaimed Quote: trade fees plus the one-time migration fee. */
+    protocolQuoteFees: bigint;
+    creatorQuoteFees: bigint;
+    /** Unclaimed creation fee, in MIST whatever the Quote. */
+    protocolSuiFees: bigint;
     metadataCapId: string;
     creatorRecipient: CreatorRecipient;
     /** The `CurveFeeCap` the launch honors; null until claimed or reassigned. */
     curveFeeCapId: string | null;
     blastMetadataCapId: string | null;
+    /** The Blast partner named at creation, for good; null when none. */
+    partnerId: string | null;
   };
+
+/** Decoded `launch_ticket::LaunchTicket<Meme>`, owned by its publisher. */
+export type LaunchTicketState = {
+  objectId: string;
+  memeType: string;
+  /** The whole atomic supply, held until finalization. */
+  meme: bigint;
+  treasuryCapId: string;
+  totalSupply: bigint;
+  metadataCapId: string;
+  creatorRecipient: CreatorRecipient;
+  decimals: number;
+  burnable: boolean;
+  sellBurnBps: bigint;
+};
 
 export type LaunchObject = SharedObjectReference<true> & {
   type: string;
@@ -166,12 +215,11 @@ export function decodeLaunchObject(
     memeType: normalizeTypeParameter(tag.typeParams[0]),
     quoteType: normalizeTypeParameter(tag.typeParams[1]),
     lifecycle: parsed.lifecycle.$kind,
-    protectionEndMs: optionalBigInt(parsed.protection_end_ms),
-    protection: {
-      windowMs: BigInt(parsed.protection_window_ms),
-      cumulativeAtomicLimit: BigInt(parsed.cumulative_atomic_limit),
-      perTransactionAtomicLimit: BigInt(parsed.per_transaction_atomic_limit),
-    },
+    publicStartMs: optionalBigInt(parsed.public_start_ms),
+    openingRoundMs: BigInt(parsed.opening_round_ms),
+    openingRoundBids: BigInt(parsed.opening_round_bids),
+    openingRoundQuote: BigInt(parsed.opening_round_quote.value),
+    openingRoundMeme: BigInt(parsed.opening_round_meme.value),
     sellBurnBps: parsed.sell_burn_bps,
     virtualQuote: BigInt(parsed.virtual_quote),
     graduationTarget: BigInt(parsed.graduation_target),
@@ -187,14 +235,73 @@ export function decodeLaunchObject(
     pendingBurn: BigInt(parsed.pending_burn.value),
     allocationPlan: parsed.allocation_plan,
     allocatedMeme: BigInt(parsed.allocated_meme.value),
-    protocolMemeTradeFees: BigInt(parsed.fee_ledger.protocol_meme.value),
-    creatorMemeTradeFees: BigInt(parsed.fee_ledger.creator_meme.value),
-    protocolQuoteTradeFees: BigInt(parsed.fee_ledger.protocol_quote.value),
-    creatorQuoteTradeFees: BigInt(parsed.fee_ledger.creator_quote.value),
+    protocolMemeFees: BigInt(parsed.fee_ledger.protocol_meme.value),
+    creatorMemeFees: BigInt(parsed.fee_ledger.creator_meme.value),
+    protocolQuoteFees: BigInt(parsed.fee_ledger.protocol_quote.value),
+    creatorQuoteFees: BigInt(parsed.fee_ledger.creator_quote.value),
+    protocolSuiFees: BigInt(parsed.fee_ledger.protocol_sui.value),
     metadataCapId: normalizeSuiObjectId(parsed.metadata_cap.id.id.bytes),
     creatorRecipient: decodeCreatorRecipient(parsed.creator),
     curveFeeCapId: optionalId(parsed.curve_fee_cap_id),
     blastMetadataCapId: optionalId(parsed.blast_metadata_cap_id),
+    partnerId: optionalId(parsed.partner_id),
+  };
+}
+
+/**
+ * First millisecond the opening round has ended (`public_start_ms +
+ * opening_round_ms`), when `settle_opening_round` may run; null before share
+ * or without an opening round.
+ */
+export function openingRoundEndMs(
+  launch: Pick<LaunchState, "publicStartMs" | "openingRoundMs">,
+): bigint | null {
+  if (launch.publicStartMs === null || launch.openingRoundMs === 0n) {
+    return null;
+  }
+  return launch.publicStartMs + launch.openingRoundMs;
+}
+
+/** Decodes one owned `launch_ticket::LaunchTicket<Meme>` from its BCS content. */
+export function decodeLaunchTicketObject(
+  object: { objectId: string; type: string; content: Uint8Array },
+  originalPackageId?: string,
+): LaunchTicketState {
+  const tag = parseStructTag(object.type);
+  if (tag.module !== "launch_ticket" || tag.name !== "LaunchTicket") {
+    throw new TypeError(`object ${object.objectId} is not a launch ticket`);
+  }
+  if (tag.typeParams.length !== 1) {
+    throw new TypeError(
+      `launch ticket ${object.objectId} must have one type argument`,
+    );
+  }
+  if (
+    originalPackageId !== undefined &&
+    tag.address !== normalizeSuiAddress(originalPackageId)
+  ) {
+    throw new TypeError(
+      `launch ticket ${object.objectId} has an unexpected package`,
+    );
+  }
+  const parsed = launchTicketBcs.parse(object.content);
+  const objectId = normalizeSuiObjectId(object.objectId);
+  if (normalizeSuiObjectId(parsed.id.id.bytes) !== objectId) {
+    throw new TypeError(
+      `launch ticket ${object.objectId} has a mismatched UID`,
+    );
+  }
+  return {
+    objectId,
+    memeType: normalizeTypeParameter(tag.typeParams[0]),
+    meme: BigInt(parsed.meme.value),
+    treasuryCapId: normalizeSuiObjectId(parsed.treasury_cap.id.id.bytes),
+    totalSupply: BigInt(parsed.treasury_cap.total_supply.value),
+    metadataCapId: normalizeSuiObjectId(parsed.metadata_cap.id.id.bytes),
+    creatorRecipient: decodeCreatorRecipient(parsed.creator),
+    decimals: parsed.decimals,
+    burnable: parsed.burnable,
+    sellBurnBps: parsed.sell_burn_bps,
   };
 }
 
@@ -226,22 +333,22 @@ export async function getLaunch(
 }
 
 /**
- * Reads the gross Meme `sender` bought from the curve while the launch was
- * protected (the `launch::ProtectedPurchasesKey` dynamic field); zero before
- * the first protected purchase.
+ * Reads `bidder`'s undelivered opening-round Quote (the
+ * `launch::OpeningRoundBidKey(address)` dynamic field); zero without a bid or
+ * after delivery.
  */
-export async function getProtectedPurchases(
+export async function getOpeningRoundBid(
   client: ClientWithCoreApi,
   launchId: string,
-  sender: string,
+  bidder: string,
   originalPackageId: string,
 ): Promise<bigint> {
   try {
     const { dynamicField } = await client.core.getDynamicField({
       parentId: normalizeSuiObjectId(launchId),
       name: {
-        type: `${normalizeSuiAddress(originalPackageId)}::launch::ProtectedPurchasesKey`,
-        bcs: bcs.Address.serialize(normalizeSuiAddress(sender)).toBytes(),
+        type: `${normalizeSuiAddress(originalPackageId)}::launch::OpeningRoundBidKey`,
+        bcs: bcs.Address.serialize(normalizeSuiAddress(bidder)).toBytes(),
       },
     });
     return BigInt(bcs.u64().parse(dynamicField.value.bcs));
@@ -278,4 +385,266 @@ function optionalBigInt(value: string | null): bigint | null {
 
 function optionalId(value: { bytes: string } | null): string | null {
   return value === null ? null : normalizeSuiObjectId(value.bytes);
+}
+
+const TableBcs = bcs.struct("Table", { id: suiUidBcs, size: bcs.u64() });
+
+/** BCS layout of `blast_fun::launch_config::LaunchConfig`. */
+export const launchConfigBcs = bcs.struct("LaunchConfig", {
+  id: suiUidBcs,
+  meme_decimals: bcs.vector(bcs.u8()),
+  quotes: TableBcs,
+  quote_fee_bps: bpsBcs,
+  meme_fee_bps: bpsBcs,
+  migration_witnesses: bcs.vector(moveTypeNameBcs),
+  protocol_allocation: bcs.struct("ProtocolAllocation", {
+    meme_bps: bpsBcs,
+    quote_bps: bpsBcs,
+  }),
+  creation_fee: bcs.u64(),
+});
+
+/** BCS layout of `blast_fun::runtime_config::RuntimeConfig`. */
+export const runtimeConfigBcs = bcs.struct("RuntimeConfig", {
+  id: suiUidBcs,
+  creator_claim_signer_public_key: bcs.vector(bcs.u8()),
+  protocol_fee_share_bps: bpsBcs,
+});
+
+/** `blast_fun_timelock::Timelocked<T>`: `before` until `atMs`, then `after`. */
+export type Timelocked<T> = {
+  before: T;
+  after: T;
+  atMs: bigint;
+  delayMs: bigint;
+};
+
+const timelockedBcs = <Input, Output>(
+  name: string,
+  value: BcsType<Output, Input>,
+) =>
+  bcs.struct(name, {
+    before: value,
+    after: value,
+    at_ms: bcs.u64(),
+    delay_ms: bcs.u64(),
+  });
+
+/** BCS layout of `blast_partners::blast_partners::Partner`. */
+export const partnerBcs = bcs.struct("Partner", {
+  id: suiUidBcs,
+  recipient: bcs.Address,
+  share_bps: timelockedBcs("Timelocked<u64>", bcs.u64()),
+  cap_id: timelockedBcs("Timelocked<ID>", suiIdBcs),
+});
+
+/** Decoded shared `launch_config::LaunchConfig`, the admission policy for new launches. */
+export type LaunchConfigState = {
+  objectId: string;
+  initialSharedVersion: string;
+  memeDecimals: number[];
+  /** `Table<TypeName, bool>` of admitted Quotes; read entries by dynamic field. */
+  quotesTableId: string;
+  quoteCount: bigint;
+  quoteFeeBps: bigint;
+  memeFeeBps: bigint;
+  migrationWitnessTypes: string[];
+  protocolAllocation: { memeBps: bigint; quoteBps: bigint };
+  /** The exact SUI, in MIST, `launch::finalize` requires. */
+  creationFee: bigint;
+};
+
+export type RuntimeConfigState = {
+  objectId: string;
+  initialSharedVersion: string;
+  /** Empty when account claims are revoked. */
+  creatorClaimSignerPublicKey: Uint8Array;
+  /** Blast's share of each trade fee, rounded up to Blast. */
+  protocolFeeShareBps: bigint;
+};
+
+/** Decoded shared `blast_partners::Partner`. */
+export type PartnerState = {
+  objectId: string;
+  initialSharedVersion: string;
+  recipient: string;
+  /** The partner's share of Blast's fee, in basis points. */
+  shareBps: Timelocked<bigint>;
+  capId: Timelocked<string>;
+};
+
+type SharedObjectContent = {
+  objectId: string;
+  initialSharedVersion: number | string;
+  type: string;
+  content: Uint8Array;
+};
+
+export function decodeLaunchConfigObject(
+  object: SharedObjectContent,
+  originalPackageId?: string,
+): LaunchConfigState {
+  requireObjectType(object, "launch_config", "LaunchConfig", originalPackageId);
+  const parsed = launchConfigBcs.parse(object.content);
+  return {
+    ...sharedIdentity(object, parsed.id.id.bytes),
+    memeDecimals: [...parsed.meme_decimals],
+    quotesTableId: normalizeSuiObjectId(parsed.quotes.id.id.bytes),
+    quoteCount: BigInt(parsed.quotes.size),
+    quoteFeeBps: parsed.quote_fee_bps,
+    memeFeeBps: parsed.meme_fee_bps,
+    migrationWitnessTypes: [...parsed.migration_witnesses],
+    protocolAllocation: {
+      memeBps: parsed.protocol_allocation.meme_bps,
+      quoteBps: parsed.protocol_allocation.quote_bps,
+    },
+    creationFee: BigInt(parsed.creation_fee),
+  };
+}
+
+export function decodeRuntimeConfigObject(
+  object: SharedObjectContent,
+  originalPackageId?: string,
+): RuntimeConfigState {
+  requireObjectType(
+    object,
+    "runtime_config",
+    "RuntimeConfig",
+    originalPackageId,
+  );
+  const parsed = runtimeConfigBcs.parse(object.content);
+  return {
+    ...sharedIdentity(object, parsed.id.id.bytes),
+    creatorClaimSignerPublicKey: Uint8Array.from(
+      parsed.creator_claim_signer_public_key,
+    ),
+    protocolFeeShareBps: parsed.protocol_fee_share_bps,
+  };
+}
+
+export function decodePartnerObject(
+  object: SharedObjectContent,
+  partnersPackageId?: string,
+): PartnerState {
+  requireObjectType(object, "blast_partners", "Partner", partnersPackageId);
+  const parsed = partnerBcs.parse(object.content);
+  return {
+    ...sharedIdentity(object, parsed.id.id.bytes),
+    recipient: normalizeSuiAddress(parsed.recipient),
+    shareBps: {
+      before: BigInt(parsed.share_bps.before),
+      after: BigInt(parsed.share_bps.after),
+      atMs: BigInt(parsed.share_bps.at_ms),
+      delayMs: BigInt(parsed.share_bps.delay_ms),
+    },
+    capId: {
+      before: normalizeSuiObjectId(parsed.cap_id.before.bytes),
+      after: normalizeSuiObjectId(parsed.cap_id.after.bytes),
+      atMs: BigInt(parsed.cap_id.at_ms),
+      delayMs: BigInt(parsed.cap_id.delay_ms),
+    },
+  };
+}
+
+/** Mirrors `Timelocked::value`: `after` from `atMs` on, `before` until then. */
+export function timelockedValue<T>(value: Timelocked<T>, nowMs: bigint): T {
+  return nowMs >= value.atMs ? value.after : value.before;
+}
+
+export type ProtocolFeeClaimPreview = {
+  /** Returned to Blast's treasury admin. */
+  meme: bigint;
+  quote: bigint;
+  sui: bigint;
+  /** Paid to the partner's address balance in the same call. */
+  partnerMeme: bigint;
+  partnerQuote: bigint;
+  partnerSui: bigint;
+};
+
+/**
+ * Mirrors `launch::claim_protocol_fees_with_partner` over the launch's
+ * protocol ledger (`protocolMemeFees`, `protocolQuoteFees`, `protocolSuiFees`):
+ * each partner amount is `floor(amount * shareBps / 10,000)` in atomic units,
+ * and Blast keeps the remainder. A zero share previews `claim_protocol_fees`.
+ */
+export function previewProtocolFeeClaim(input: {
+  meme: bigint;
+  quote: bigint;
+  sui: bigint;
+  partnerShareBps: bigint;
+}): ProtocolFeeClaimPreview {
+  const share = requireBasisPoints("partnerShareBps", input.partnerShareBps);
+  const partner = (name: string, amount: bigint) =>
+    (requireU64(name, amount) * share) / BASIS_POINTS_DENOMINATOR;
+  const partnerMeme = partner("meme", input.meme);
+  const partnerQuote = partner("quote", input.quote);
+  const partnerSui = partner("sui", input.sui);
+  return {
+    meme: input.meme - partnerMeme,
+    quote: input.quote - partnerQuote,
+    sui: input.sui - partnerSui,
+    partnerMeme,
+    partnerQuote,
+    partnerSui,
+  };
+}
+
+function requireObjectType(
+  object: SharedObjectContent,
+  module: string,
+  name: string,
+  packageId: string | undefined,
+): void {
+  const tag = parseStructTag(object.type);
+  if (tag.module !== module || tag.name !== name) {
+    throw new TypeError(`object ${object.objectId} is not a ${name}`);
+  }
+  if (
+    packageId !== undefined &&
+    tag.address !== normalizeSuiAddress(packageId)
+  ) {
+    throw new TypeError(`${name} ${object.objectId} has an unexpected package`);
+  }
+}
+
+function sharedIdentity(
+  object: SharedObjectContent,
+  uid: string,
+): { objectId: string; initialSharedVersion: string } {
+  const objectId = normalizeSuiObjectId(object.objectId);
+  if (normalizeSuiObjectId(uid) !== objectId) {
+    throw new TypeError(`object ${object.objectId} has a mismatched UID`);
+  }
+  return {
+    objectId,
+    initialSharedVersion: normalizePositiveU64(
+      "initialSharedVersion",
+      object.initialSharedVersion,
+    ),
+  };
+}
+
+/** Reads and decodes the shared `LaunchConfig` through the Core API. */
+export async function getLaunchConfig(
+  client: ClientWithCoreApi,
+  objectId: string,
+  originalPackageId?: string,
+): Promise<LaunchConfigState> {
+  const { object } = await client.core.getObject({
+    objectId,
+    include: { content: true },
+  });
+  if (object.owner.$kind !== "Shared") {
+    throw new TypeError(`launch config ${object.objectId} is not shared`);
+  }
+  return decodeLaunchConfigObject(
+    {
+      objectId: object.objectId,
+      initialSharedVersion: object.owner.Shared.initialSharedVersion,
+      type: object.type,
+      content: object.content,
+    },
+    originalPackageId,
+  );
 }

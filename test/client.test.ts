@@ -13,6 +13,8 @@ test("registers the typed launchpad client extension", () => {
     blastLaunchpad({
       packageId: "0x123",
       adminPackageId: "0x111",
+      partnersPackageId: "0xbe",
+      timelockPackageId: "0x7e",
       packageVersion: {
         objectId: "0x2",
         initialSharedVersion: "10",
@@ -28,7 +30,7 @@ test("registers the typed launchpad client extension", () => {
         initialSharedVersion: "12",
         mutable: false,
       },
-      protocolAuthority: {
+      acl: {
         objectId: "0x5",
         initialSharedVersion: "13",
         mutable: false,

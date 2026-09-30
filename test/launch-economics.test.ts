@@ -9,6 +9,8 @@ const liquidityOnly = (curveBps: bigint): AllocationPlan => ({
   curveMemeBps: curveBps,
   lpMemeBps: 10_000n - curveBps,
   lpQuoteBps: 10_000n,
+  protocolMemeBps: 0n,
+  protocolQuoteBps: 0n,
   recipients: [],
 });
 
@@ -44,7 +46,7 @@ test("pays Blast its ceiling before the liquidity handoff", () => {
         lpQuoteBps: 9_900n,
         recipients: [],
       },
-      { destination: "0xb", memeBps: 1n, quoteBps: 100n },
+      { memeBps: 1n, quoteBps: 100n },
     ),
     virtualQuote: 1_000_000_000_000n,
     graduationTarget: 3_000_000_000_001n,

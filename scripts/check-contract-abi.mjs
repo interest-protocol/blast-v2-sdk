@@ -11,7 +11,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const BASELINE_COMMIT = "a5ed34ad49c6c001af2db5b9cbcb206075704412";
+/**
+ * The reviewed contracts commit the SDK is frozen to. The checker materializes
+ * this commit's `sui/` tree with `git archive`, so the contracts working tree
+ * and branch never affect the result.
+ */
+const BASELINE_COMMIT = "a2a1db25f72a44e3b650bebe0ef806de4c70abbc";
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
   {
@@ -34,7 +39,11 @@ const artifactDeclarations = [
       "contracts ADR 0089: start launches in the migration adapter and move every post-migration fee path into the migrators package",
       "contracts ADR 0090: a minimal launchpad surface — trimmed getters, recipient allocation plans, merged config setters and events, renumbered errors, one migration call",
       "contracts ADR 0091: a burn part in the LP-fee split, with admin buyback and burn",
-      "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs",
+      "contracts ADR 0092: the creator picks the virtual Quote reserve",
+      "contracts ADR 0093: an optional opening round replaces purchase protection",
+      "contracts ADR 0094 and 0097: one typed role per administrator action in the singleton Blast ACL",
+      "contracts ADR 0098: a SUI creation fee and one partner per launch set at creation",
+      "contracts a2a1db2: Blast's migration allocation accrues as protocol fees in the launch ledger",
     ],
   },
   {
@@ -46,25 +55,102 @@ const artifactDeclarations = [
       "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody",
       "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody",
       "contracts ADR 0085: name every explorer-visible type after Blast",
+      "contracts ADR 0097: one singleton ACL with typed roles",
     ],
   },
 ];
-const contractsRoot = resolve(
+const contractsRepository = resolve(
   sdkRoot,
   process.argv.slice(2).find((argument) => !argument.startsWith("--")) ??
+    process.env.BLAST_CONTRACTS_DIR ??
     "../contracts",
 );
 const write = process.argv.includes("--write");
 const temporaryRoot = mkdtempSync(join(tmpdir(), "blast-production-abi-"));
+const contractsRoot = join(temporaryRoot, "contracts");
+
+/**
+ * Public functions of the reviewed commit whose SDK call shape does not match.
+ * The artifact records them truthfully and the check fails until the SDK and
+ * the selected commit agree again; never relabel them to make the check pass.
+ */
+const unresolvedSdkMismatches = new Map(
+  [
+    "migrate_meme_a",
+    "migrate_meme_b",
+    "collect_fees_meme_a",
+    "collect_fees_meme_b",
+    "settle_and_update_fee_split_meme_a",
+    "settle_and_update_fee_split_meme_b",
+    "buyback_and_burn_meme_a",
+    "buyback_and_burn_meme_b",
+  ].map((name) => [
+    `cetus::${name}`,
+    "the SDK builds the ADR 0100 generic cetus route, absent at this commit",
+  ]),
+);
+const observedSdkMismatches = [];
 
 function main() {
   try {
     verifySuiCliVersion();
+    materializeContracts();
     for (const declaration of artifactDeclarations) {
       checkArtifact(declaration);
     }
+    if (observedSdkMismatches.length > 0) {
+      console.error(
+        `unresolved SDK/ABI mismatch at contracts ${BASELINE_COMMIT}:\n${observedSdkMismatches.join("\n")}`,
+      );
+      process.exitCode = 1;
+    }
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+/** Extracts the reviewed commit's `sui/` tree; the working tree is never read. */
+function materializeContracts() {
+  const commit = spawnSync(
+    "git",
+    [
+      "-C",
+      contractsRepository,
+      "cat-file",
+      "-e",
+      `${BASELINE_COMMIT}^{commit}`,
+    ],
+    { encoding: "utf8" },
+  );
+  if (commit.status !== 0) {
+    throw new Error(
+      `${contractsRepository} does not contain contracts commit ${BASELINE_COMMIT}`,
+    );
+  }
+  const archive = spawnSync(
+    "git",
+    [
+      "-C",
+      contractsRepository,
+      "archive",
+      "--format=tar",
+      BASELINE_COMMIT,
+      "sui",
+    ],
+    { maxBuffer: 256 * 1024 * 1024 },
+  );
+  if (archive.status !== 0) {
+    throw new Error(
+      `failed to archive contracts commit ${BASELINE_COMMIT}: ${archive.stderr}`,
+    );
+  }
+  mkdirSync(contractsRoot, { recursive: true });
+  const extract = spawnSync("tar", ["-x", "-C", contractsRoot], {
+    input: archive.stdout,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  if (extract.status !== 0) {
+    throw new Error(`failed to extract contracts commit: ${extract.stderr}`);
   }
 }
 
@@ -80,11 +166,7 @@ function checkArtifact(declaration) {
     schemaVersion: 1,
     baseline: {
       contractsCommit: BASELINE_COMMIT,
-      workingTreeDifferedAtFreeze: true,
-      abiNeutralDifferences: [
-        "sui/meme_template/Move.lock",
-        "docs/research/sui-deepbook-indexer-architecture-2026.md",
-      ],
+      source: "git archive of the commit's sui/ tree",
       ...(declaration.approvedAbiAmendments === undefined
         ? {}
         : { approvedAbiAmendments: declaration.approvedAbiAmendments }),
@@ -110,7 +192,7 @@ function checkArtifact(declaration) {
     return;
   }
   console.log(
-    `current production Move ABI matches artifact frozen at ${BASELINE_COMMIT}`,
+    `abi/${declaration.path} matches contracts commit ${BASELINE_COMMIT}`,
   );
 }
 
@@ -298,6 +380,11 @@ const migratorBuilders = new Set([
 function classifyMigratorFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
   if (migratorBuilders.has(key)) return "builder";
+  const mismatch = unresolvedSdkMismatches.get(key);
+  if (mismatch !== undefined) {
+    observedSdkMismatches.push(`blast_fun_migrators::${key}: ${mismatch}`);
+    return "unresolved-sdk-mismatch";
+  }
   if (moduleName === "package_admin") return "intentional-admin-exclusion";
   throw new Error(`unclassified function blast_fun_migrators::${key}`);
 }
@@ -307,13 +394,19 @@ const launchpadBuilders = new Set([
   "launch::share",
   "launch::buy",
   "launch::sell",
+  "launch::set_virtual_quote",
   "launch::set_graduation_target",
   "launch::set_allocation_plan",
   "launch::set_lp_fee_split",
-  "launch::set_protection",
+  "launch::set_opening_round",
+  "launch::set_partner",
+  "launch::join_opening_round",
+  "launch::settle_opening_round",
+  "launch::deliver_opening_round",
   "launch::claim_creator_caps",
   "launch::claim_creator_fees",
   "launch::claim_protocol_fees",
+  "launch::claim_protocol_fees_with_partner",
   "launch::set_name",
   "launch::set_description",
   "launch::set_icon_url",
@@ -355,9 +448,7 @@ function isLaunchpadMoveComposition(moduleName, functionName) {
     moduleName === "bps" ||
     moduleName === "allocation" ||
     moduleName === "launch" ||
-    (moduleName === "creator_authority" &&
-      functionName.startsWith("destroy_")) ||
-    (moduleName === "blast_fun_domain" && functionName.endsWith("_role"))
+    (moduleName === "creator_authority" && functionName.startsWith("destroy_"))
   );
 }
 
@@ -390,10 +481,7 @@ const blastSuiAdminExclusions = new Set([
   "package_admin::restrict_to_additive",
   "vault::set_redeem_fee",
 ]);
-const blastSuiMoveComposition = new Set([
-  "blast_sui_domain::package_admin_role",
-  "package_admin::has_upgrade_cap",
-]);
+const blastSuiMoveComposition = new Set(["package_admin::has_upgrade_cap"]);
 
 function classifyBlastSuiFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;

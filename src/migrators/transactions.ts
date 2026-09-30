@@ -22,6 +22,8 @@ import {
 } from "../holder-rewards/allocations.ts";
 import type { FeeSplit } from "../launchpad/allocation.ts";
 import type {
+  CreatorBidInput,
+  LaunchpadAdminRole,
   LaunchpadDeployment,
   LaunchSettings,
   LaunchTypes,
@@ -70,7 +72,10 @@ export type CreateLaunchOptions = LaunchTypes &
     ticket: TransactionObjectInput;
     /** The Meme `Currency<Meme>` in the Coin Registry, fixed at finalization. */
     memeCurrency: SharedObjectReference<true>;
+    /** Without an opening round: the creator's purchase before share. */
     preShareBuy?: PreShareBuyInput;
+    /** With an opening round: the creator's bid before share. */
+    creatorBid?: CreatorBidInput;
   };
 
 /** Maximum Merkle proof depth the holder-reward leaf count (65,536) allows. */
@@ -118,7 +123,11 @@ export class MigratorCalls {
     );
   }
 
-  signIn(options: { adminCap: TransactionObjectInput }) {
+  /** Signs in with one of the launchpad's typed roles, which migrators reuses. */
+  signIn(options: {
+    adminCap: TransactionObjectInput;
+    role: LaunchpadAdminRole;
+  }) {
     return this.launchpad.signIn(options);
   }
 
@@ -851,7 +860,7 @@ export class MigratorTransactions {
   ): Transaction {
     const tx = new Transaction();
     const adminWitness = tx.add(
-      this.call.signIn({ adminCap: options.adminCapId }),
+      this.call.signIn({ adminCap: options.adminCapId, role: "TreasuryAdmin" }),
     );
     const result = tx.add(
       this.call.claimProtocolFees({ ...options, adminWitness }),
@@ -868,7 +877,7 @@ export class MigratorTransactions {
     memeBps: bigint;
     quoteBps: bigint;
   }): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.setLpFeeDefaultShares({ ...options, adminWitness }),
     );
   }
@@ -879,7 +888,7 @@ export class MigratorTransactions {
     memeBps: bigint;
     quoteBps: bigint;
   }): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.setLpFeeCoinShares({ ...options, adminWitness }),
     );
   }
@@ -888,7 +897,7 @@ export class MigratorTransactions {
     memeType: string;
     adminCapId: string;
   }): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.clearLpFeeCoinShares({ ...options, adminWitness }),
     );
   }
@@ -897,7 +906,7 @@ export class MigratorTransactions {
     adminCapId: string;
     destination: string;
   }): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
       this.call.setLpFeeProtocolDestination({ ...options, adminWitness }),
     );
   }
@@ -908,7 +917,7 @@ export class MigratorTransactions {
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "BuybackAdmin", (adminWitness) =>
       this.call.buybackAndBurnCetus({ ...options, adminWitness }),
     );
   }
@@ -919,7 +928,7 @@ export class MigratorTransactions {
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "BuybackAdmin", (adminWitness) =>
       this.call.buybackAndBurnBluefin({ ...options, adminWitness }),
     );
   }
@@ -930,7 +939,7 @@ export class MigratorTransactions {
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
       this.call.publishHolderRewardRound({ ...options, adminWitness }),
     );
   }
@@ -951,12 +960,15 @@ export class MigratorTransactions {
 
   #asAdmin(
     adminCapId: string,
+    role: LaunchpadAdminRole,
     call: (
       adminWitness: TransactionObjectArgument,
     ) => (tx: Transaction) => void,
   ): Transaction {
     const tx = new Transaction();
-    const adminWitness = tx.add(this.call.signIn({ adminCap: adminCapId }));
+    const adminWitness = tx.add(
+      this.call.signIn({ adminCap: adminCapId, role }),
+    );
     tx.add(call(adminWitness));
     return tx;
   }

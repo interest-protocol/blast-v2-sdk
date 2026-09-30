@@ -35,13 +35,11 @@ const manifest = buildRewardManifest({
     { beneficiary: "0xb", memeAmount: 30n, quoteAmount: 40n },
   ],
 });
+/** The round object commits to its vault, number, Merkle root, and leaf count. */
 const round = {
   vaultId: manifest.vaultId,
   number: 0n,
-  startCheckpoint: 1n,
-  endCheckpoint: 2n,
   root: manifest.root,
-  manifestDigest: manifest.manifestDigest,
   leafCount: 2,
   claimed: [1n],
 };
@@ -127,10 +125,12 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
       launchpad: {
         packageId: address("0x41"),
         adminPackageId: address("0xad"),
+        partnersPackageId: address("0xbe"),
+        timelockPackageId: address("0x7e"),
         packageVersion: shared("0x42", false),
         launchConfig: shared("0x43", false),
         runtimeConfig: shared("0x44", false),
-        protocolAuthority: shared("0x45", false),
+        acl: shared("0x45", false),
       },
       migratorsVersion: shared("0x90", false),
       lpFeePolicy: shared("0x91", false),
@@ -261,10 +261,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
               id: uid(roundId),
               vault: { bytes: vaultId },
               number: 0n,
-              start_checkpoint: 0n,
-              end_checkpoint: 101n,
               root: Array.from(fromHex(published.root)),
-              manifest_digest: Array.from(fromHex(published.manifestDigest)),
               leaf_count: 2n,
               claimed: [1n],
               meme: { value: 1266n },

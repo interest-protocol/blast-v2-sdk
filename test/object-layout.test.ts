@@ -5,7 +5,12 @@ import test from "node:test";
 import type { BcsType } from "@mysten/sui/bcs";
 import { rewardRoundBcs } from "../src/holder-rewards/state.ts";
 import { allocationPlanBcs, feeSplitBcs } from "../src/launchpad/allocation.ts";
-import { launchBcs } from "../src/launchpad/state.ts";
+import {
+  launchBcs,
+  launchConfigBcs,
+  launchTicketBcs,
+  runtimeConfigBcs,
+} from "../src/launchpad/state.ts";
 import {
   lpFeePolicyBcs,
   lpFeeSharePairBcs,
@@ -40,6 +45,8 @@ const plan = {
   curveMemeBps: 0n,
   lpMemeBps: 0n,
   lpQuoteBps: 0n,
+  protocolMemeBps: 0n,
+  protocolQuoteBps: 0n,
   recipients: [],
 };
 
@@ -56,6 +63,49 @@ test("SDK object layouts follow the frozen Move field order", () => {
     unknown,
   ][] = [
     ["launchpad", "launch", "Launch", launchBcs as never, launch()],
+    [
+      "launchpad",
+      "launch_ticket",
+      "LaunchTicket",
+      launchTicketBcs as never,
+      {
+        id: uid("0x1"),
+        meme: balance,
+        treasury_cap: { id: uid("0x2"), total_supply: { value: 0n } },
+        metadata_cap: { id: uid("0x3") },
+        creator: { Address: "0x4" },
+        decimals: 9,
+        burnable: false,
+        sell_burn_bps: 0n,
+      },
+    ],
+    [
+      "launchpad",
+      "launch_config",
+      "LaunchConfig",
+      launchConfigBcs as never,
+      {
+        id: uid("0x1"),
+        meme_decimals: [6, 9],
+        quotes: { id: uid("0x2"), size: 0n },
+        quote_fee_bps: 0n,
+        meme_fee_bps: 0n,
+        migration_witnesses: [],
+        protocol_allocation: { meme_bps: 0n, quote_bps: 0n },
+        creation_fee: 0n,
+      },
+    ],
+    [
+      "launchpad",
+      "runtime_config",
+      "RuntimeConfig",
+      runtimeConfigBcs as never,
+      {
+        id: uid("0x1"),
+        creator_claim_signer_public_key: [],
+        protocol_fee_share_bps: 0n,
+      },
+    ],
     [
       "launchpad",
       "allocation",
@@ -114,10 +164,11 @@ function launch() {
   return {
     id: uid("0x1"),
     lifecycle: { Live: true },
-    protection_end_ms: null,
-    protection_window_ms: 0n,
-    cumulative_atomic_limit: 0n,
-    per_transaction_atomic_limit: 0n,
+    public_start_ms: null,
+    opening_round_ms: 0n,
+    opening_round_bids: 0n,
+    opening_round_quote: balance,
+    opening_round_meme: balance,
     sell_burn_bps: 0n,
     virtual_quote: 0n,
     graduation_target: 0n,
@@ -138,11 +189,13 @@ function launch() {
       creator_meme: balance,
       protocol_quote: balance,
       creator_quote: balance,
+      protocol_sui: balance,
     },
     metadata_cap: { id: uid("0x2") },
     creator: null,
     curve_fee_cap_id: null,
     blast_metadata_cap_id: null,
+    partner_id: null,
   };
 }
 
@@ -171,10 +224,7 @@ function round() {
     id: uid("0x1"),
     vault: { bytes: "0x2" },
     number: 0n,
-    start_checkpoint: 0n,
-    end_checkpoint: 0n,
     root: [],
-    manifest_digest: [],
     leaf_count: 0n,
     claimed: [],
     meme: balance,

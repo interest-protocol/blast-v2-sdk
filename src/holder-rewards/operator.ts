@@ -42,7 +42,7 @@ type OperatorConfig = {
   deployment: MigratorsDeployment;
   /** The migrated launch's `LpVault`, whose rewards share funds every round. */
   vaultId: string;
-  /** Blast `AdminCap<BLAST_FUN_DOMAIN>` that signs in to publish rounds. */
+  /** Blast `blast_acl::AdminCap` holding `RewardsAdmin`, which signs in to publish rounds. */
   adminCapId?: string;
   sender?: string;
   excludedAddresses?: string[];
@@ -375,7 +375,11 @@ async function advanceRound(context: OperatorContext): Promise<void> {
   const round = await readConfirmedRound(context, manifest);
   const state = await readJson<OperatorState>(statePath);
   assertState(state, config, vault);
-  if (BigInt(state.ledger.nextCheckpoint) - 1n !== round.endCheckpoint)
+  // The round object no longer stores its window; the manifest matched its root.
+  if (
+    BigInt(state.ledger.nextCheckpoint) - 1n !==
+    BigInt(manifest.endCheckpoint)
+  )
     throw new Error("round does not close this ledger checkpoint");
   // Repeating advance after a crash is safe: resetting a zero-weight interval is idempotent.
   await writeOperatorJson(statePath, {
@@ -384,7 +388,7 @@ async function advanceRound(context: OperatorContext): Promise<void> {
   });
   await writeOperatorJson(
     join(directory, "rounds", manifest.number, "publication.json"),
-    { roundId: round.objectId, manifestDigest: round.manifestDigest },
+    { roundId: round.objectId, manifestDigest: manifest.manifestDigest },
   );
   await rm(pendingPath, { force: true });
 }

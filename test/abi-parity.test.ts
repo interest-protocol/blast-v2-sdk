@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
-  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -13,14 +12,15 @@ import { join } from "node:path";
 import test from "node:test";
 
 const contractsDirectory = process.env.BLAST_CONTRACTS_DIR ?? "../contracts";
-const contractsManifest = join(contractsDirectory, "sui/launchpad/Move.toml");
+const REVIEWED_CONTRACTS_COMMIT = "a2a1db25f72a44e3b650bebe0ef806de4c70abbc";
 const expectedEvents = {
-  launchpad: 20,
+  launchpad: 27,
   migrators: 13,
   blastSui: 13,
 };
 
 type Artifact = {
+  baseline: { contractsCommit: string; suiCli: string };
   packages: Record<
     string,
     {
@@ -52,9 +52,9 @@ function countEvents(artifact: Artifact, packageName: string): number {
 }
 
 test("matches the frozen production Move ABI", {
-  skip: existsSync(contractsManifest)
+  skip: hasReviewedCommit(contractsDirectory)
     ? false
-    : "requires the sibling blast-v2 contracts checkout",
+    : `requires a contracts repository containing ${REVIEWED_CONTRACTS_COMMIT}`,
 }, () => {
   const result = spawnSync(
     process.execPath,
@@ -63,6 +63,43 @@ test("matches the frozen production Move ABI", {
   );
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test("freezes both artifacts at the reviewed contracts commit", () => {
+  for (const name of [
+    "production-launchpad-v1.json",
+    "production-blast-sui-v1.json",
+  ]) {
+    assert.equal(
+      readArtifact(name).baseline.contractsCommit,
+      REVIEWED_CONTRACTS_COMMIT,
+    );
+  }
+});
+
+test("refuses a contracts repository without the reviewed commit", () => {
+  const repository = mkdtempSync(join(tmpdir(), "blast-foreign-contracts-"));
+  try {
+    const init = spawnSync("git", ["init", "--quiet", repository], {
+      encoding: "utf8",
+    });
+    assert.equal(init.status, 0, init.stderr);
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/check-contract-abi.mjs", repository],
+      { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      new RegExp(
+        `does not contain contracts commit ${REVIEWED_CONTRACTS_COMMIT}`,
+      ),
+    );
+  } finally {
+    rmSync(repository, { recursive: true, force: true });
+  }
 });
 
 test("rejects a Sui CLI version that differs from the frozen artifacts", () => {
@@ -136,6 +173,22 @@ test("rejects unknown blast_sui function classifications", () => {
     );
   }
 });
+
+function hasReviewedCommit(directory: string): boolean {
+  return (
+    spawnSync(
+      "git",
+      [
+        "-C",
+        directory,
+        "cat-file",
+        "-e",
+        `${REVIEWED_CONTRACTS_COMMIT}^{commit}`,
+      ],
+      { encoding: "utf8" },
+    ).status === 0
+  );
+}
 
 function assertEveryOperationIsClassified(artifact: Artifact) {
   for (const packageArtifact of Object.values(artifact.packages)) {

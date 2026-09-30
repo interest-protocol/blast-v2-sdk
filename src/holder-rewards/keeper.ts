@@ -3,15 +3,13 @@ import { validateRewardManifest } from "./allocations.ts";
 import type { RewardRoundState } from "./state.ts";
 import { rewardIsClaimed } from "./state.ts";
 
+/**
+ * What a `blast_holder_rewards::Round` object commits to. Its checkpoint window
+ * and manifest digest are only in the `RoundPublished` event.
+ */
 type RoundCommitment = Pick<
   RewardRoundState,
-  | "vaultId"
-  | "number"
-  | "startCheckpoint"
-  | "endCheckpoint"
-  | "root"
-  | "manifestDigest"
-  | "leafCount"
+  "vaultId" | "number" | "root" | "leafCount"
 >;
 
 /** A relayer must compare the public artifact with authoritative chain state before paying. */
@@ -23,10 +21,7 @@ export function assertRewardRoundMatchesManifest(
   if (
     round.vaultId !== manifest.vaultId ||
     round.number !== BigInt(manifest.number) ||
-    round.startCheckpoint !== BigInt(manifest.startCheckpoint) ||
-    round.endCheckpoint !== BigInt(manifest.endCheckpoint) ||
     round.root !== manifest.root ||
-    round.manifestDigest !== manifest.manifestDigest ||
     round.leafCount !== manifest.allocations.length
   )
     throw new Error("manifest does not match funded round");

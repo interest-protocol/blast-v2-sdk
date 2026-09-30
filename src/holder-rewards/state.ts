@@ -15,10 +15,7 @@ export const rewardRoundBcs = bcs.struct("Round", {
   id: suiUidBcs,
   vault: suiIdBcs,
   number: bcs.u64(),
-  start_checkpoint: bcs.u64(),
-  end_checkpoint: bcs.u64(),
   root: bcs.vector(bcs.u8()),
-  manifest_digest: bcs.vector(bcs.u8()),
   leaf_count: bcs.u64(),
   claimed: bcs.vector(bcs.u256()),
   meme: suiBalanceBcs,
@@ -56,8 +53,7 @@ export function decodeRewardRound(
     leafCount < 1 ||
     leafCount > MAX_REWARD_LEAVES ||
     decoded.claimed.length !== Math.ceil(leafCount / 256) ||
-    decoded.root.length !== 32 ||
-    decoded.manifest_digest.length !== 32
+    decoded.root.length !== 32
   ) {
     throw new Error("invalid round bounds");
   }
@@ -67,10 +63,7 @@ export function decodeRewardRound(
     quoteType: normalizeStructTag(tag.typeParams[1]!),
     vaultId: rewardAddress(decoded.vault.bytes),
     number: BigInt(decoded.number),
-    startCheckpoint: BigInt(decoded.start_checkpoint),
-    endCheckpoint: BigInt(decoded.end_checkpoint),
     root: toHex(Uint8Array.from(decoded.root)),
-    manifestDigest: toHex(Uint8Array.from(decoded.manifest_digest)),
     leafCount,
     claimed: decoded.claimed.map(BigInt),
     memeAmount: BigInt(decoded.meme.value),
