@@ -15,7 +15,7 @@ export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
 export type BlastPackages = Readonly<
   Record<string, SuiPackageReference> & {
     launchpad: SuiPackageReference;
-    /** Published `blast_admin` package (`acl::sign_in`, Meme publish dependency). */
+    /** Published `blast_admin` package (`blast_acl::sign_in`, Meme publish dependency). */
     admin: SuiPackageReference;
     blastSui?: SuiPackageReference;
     migrators?: SuiPackageReference;
@@ -34,9 +34,9 @@ export type BlastSharedObjects = Readonly<
     launchConfig: SharedObjectIdentity;
     runtimeConfig: SharedObjectIdentity;
     lpFeePolicy?: SharedObjectIdentity;
-    protocolAuthority: SharedObjectIdentity;
+    /** The singleton `blast_admin::blast_acl::ACL` every Blast package signs in to. */
+    acl: SharedObjectIdentity;
     blastSuiPackageVersion?: SharedObjectIdentity;
-    blastSuiProtocolAuthority?: SharedObjectIdentity;
     blastSuiPackageAdmin?: SharedObjectIdentity;
     blastSuiVault?: SharedObjectIdentity;
     migratorsPackageVersion?: SharedObjectIdentity;

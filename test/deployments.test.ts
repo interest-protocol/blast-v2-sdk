@@ -36,7 +36,7 @@ const deployment = defineBlastDeployment({
     launchConfig: { objectId: "0x3", initialSharedVersion: "11" },
     runtimeConfig: { objectId: "0x4", initialSharedVersion: "12" },
     lpFeePolicy: { objectId: "0x40", initialSharedVersion: "18" },
-    protocolAuthority: { objectId: "0x5", initialSharedVersion: "13" },
+    acl: { objectId: "0x5", initialSharedVersion: "13" },
     blastSuiPackageVersion: { objectId: "0x8", initialSharedVersion: "16" },
     blastSuiVault: { objectId: "0x9", initialSharedVersion: "17" },
     packageAdmin: { objectId: "0x6", initialSharedVersion: "14" },
@@ -84,7 +84,7 @@ test("derives call-specific launchpad shared references", () => {
       initialSharedVersion: "12",
       mutable: false,
     },
-    protocolAuthority: {
+    acl: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000005",
       initialSharedVersion: "13",
@@ -144,7 +144,7 @@ test("requires blast Sui deployment constants only when requested", () => {
         packageVersion: deployment.sharedObjects.packageVersion,
         launchConfig: deployment.sharedObjects.launchConfig,
         runtimeConfig: deployment.sharedObjects.runtimeConfig,
-        protocolAuthority: deployment.sharedObjects.protocolAuthority,
+        acl: deployment.sharedObjects.acl,
       },
     }),
   );
@@ -217,7 +217,7 @@ test("requires migrator deployment constants only when requested", () => {
     packageVersion: deployment.sharedObjects.packageVersion,
     launchConfig: deployment.sharedObjects.launchConfig,
     runtimeConfig: deployment.sharedObjects.runtimeConfig,
-    protocolAuthority: deployment.sharedObjects.protocolAuthority,
+    acl: deployment.sharedObjects.acl,
   };
   assert.throws(
     () =>

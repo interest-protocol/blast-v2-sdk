@@ -42,7 +42,7 @@ type OperatorConfig = {
   deployment: MigratorsDeployment;
   /** The migrated launch's `LpVault`, whose rewards share funds every round. */
   vaultId: string;
-  /** Blast `AdminCap<BLAST_FUN_DOMAIN>` that signs in to publish rounds. */
+  /** Blast `blast_acl::AdminCap` holding the launchpad `RewardsAdmin` role; it signs in to publish rounds. */
   adminCapId?: string;
   sender?: string;
   excludedAddresses?: string[];

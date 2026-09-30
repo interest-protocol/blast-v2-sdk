@@ -263,7 +263,7 @@ test("publishes against 0x1, 0x2, blast_admin, and Blast, then makes the package
       initialSharedVersion: "12",
       mutable: false,
     },
-    protocolAuthority: {
+    acl: {
       objectId: "0x6",
       initialSharedVersion: "13",
       mutable: false,

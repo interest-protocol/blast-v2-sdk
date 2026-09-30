@@ -28,7 +28,7 @@ test("registers the typed launchpad client extension", () => {
         initialSharedVersion: "12",
         mutable: false,
       },
-      protocolAuthority: {
+      acl: {
         objectId: "0x5",
         initialSharedVersion: "13",
         mutable: false,

@@ -52,7 +52,8 @@ const client = new SuiGrpcClient({
       initialSharedVersion: "...",
       mutable: false,
     },
-    protocolAuthority: {
+    acl: {
+      // the singleton blast_admin::blast_acl::ACL
       objectId: "0x...",
       initialSharedVersion: "...",
       mutable: false,
@@ -89,8 +90,8 @@ keep both the current and original package IDs. Shared-object entries keep the
 object ID and initial shared version. Builders add `mutable` from the Move
 function signature because mutability belongs to a transaction argument, not to
 the object itself. `packages.admin` names the published `blast_admin` package,
-which owns `acl::sign_in` and is a transitive publish dependency of every
-generated Meme package.
+which owns `blast_acl::sign_in` and is a transitive publish dependency of every
+generated Meme package; `sharedObjects.acl` is its singleton `ACL`.
 
 After a canonical network release is registered, initialize the client without
 copying addresses into the application:
@@ -200,8 +201,12 @@ Quote, as `<Meme, Quote, CoinA, CoinB>`, to Cetus's single route per operation
   destination (`setLpFeeDefaultShares`, `setLpFeeCoinShares`,
   `clearLpFeeCoinShares`, `setLpFeeProtocolDestination`), claim migration
   residuals (`claimProtocolFees`), and publish holder-reward rounds
-  (`publishHolderRewardRound`). Each composes `blast_admin::acl::sign_in` in
-  the same transaction.
+  (`publishHolderRewardRound`). Each composes
+  `blast_admin::blast_acl::sign_in<Role>` in the same transaction with the one
+  typed `blast_fun_domain` role its Move function takes (contracts ADR 0097):
+  `FeeAdmin` for LP-fee shares, `TreasuryAdmin` for the destination and every
+  protocol claim, `BuybackAdmin` for buybacks, and `RewardsAdmin` for rounds.
+  The `AdminCap` must hold that role.
 
 The client reads `LpVault` objects, the `LpFeePolicy` singleton, a coin's live
 LP-fee shares (`getLpFeeShares`: its own pair, else the defaults), and

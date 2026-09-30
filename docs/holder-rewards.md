@@ -67,7 +67,7 @@ Create a JSON config outside the public artifacts:
       "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
       "launchConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
       "runtimeConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-      "protocolAuthority": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false }
+      "acl": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false }
     },
     "migratorsVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
     "lpFeePolicy": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },

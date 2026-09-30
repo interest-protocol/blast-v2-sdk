@@ -29,7 +29,7 @@ const deployment: MigratorsDeployment = {
     packageVersion: shared("0x2", "10", false),
     launchConfig: shared("0x3", "11", false),
     runtimeConfig: shared("0x4", "12", false),
-    protocolAuthority: shared("0x5", "13", false),
+    acl: shared("0x5", "13", false),
   },
   migratorsVersion: shared("0x61", "15", false),
   lpFeePolicy: shared("0x40", "18", false),
@@ -309,15 +309,16 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
     minMemeOut: 5n,
   });
   assert.deepEqual(moveFunctions(cetusTx), [
-    "acl::sign_in",
+    "blast_acl::sign_in",
     "cetus::buyback_and_burn",
   ]);
+  assert.equal(signInRole(cetusTx), "BuybackAdmin");
   const buyback = moveCall(cetusTx, "cetus::buyback_and_burn");
   assert.deepEqual(buyback.typeArguments, cetusTypeArguments.b);
   assert.deepEqual(argumentKinds(cetusTx, buyback), [
     "shared-mut:0xc",
     "shared:0x61",
-    `Result:${commandIndex(cetusTx, "acl::sign_in")}`,
+    `Result:${commandIndex(cetusTx, "blast_acl::sign_in")}`,
     "shared-mut:0xd",
     "shared:0x70",
     "shared-mut:0x73",
@@ -339,7 +340,7 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
     [
       "shared-mut:0xc",
       "shared:0x61",
-      `Result:${commandIndex(bluefinTx, "acl::sign_in")}`,
+      `Result:${commandIndex(bluefinTx, "blast_acl::sign_in")}`,
       "shared-mut:0xd",
       "shared:0x80",
       "shared-mut:0x81",
@@ -386,13 +387,15 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
     recipient: "0xe",
   });
   assert.deepEqual(moveFunctions(claim), [
-    "acl::sign_in",
+    "blast_acl::sign_in",
     "vault::claim_protocol_fees",
   ]);
+  assert.equal(signInRole(claim), "TreasuryAdmin");
 
   const cases = [
     [
       "set_default_shares",
+      "FeeAdmin",
       sdk.setLpFeeDefaultShares({
         adminCapId: "0xad1",
         memeBps: 100n,
@@ -402,6 +405,7 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
     ],
     [
       "set_coin_shares",
+      "FeeAdmin",
       sdk.setLpFeeCoinShares({
         memeType: types.memeType,
         adminCapId: "0xad1",
@@ -412,6 +416,7 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
     ],
     [
       "clear_coin_shares",
+      "FeeAdmin",
       sdk.clearLpFeeCoinShares({
         memeType: types.memeType,
         adminCapId: "0xad1",
@@ -420,6 +425,7 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
     ],
     [
       "set_protocol_destination",
+      "TreasuryAdmin",
       sdk.setLpFeeProtocolDestination({
         adminCapId: "0xad1",
         destination: "0xb",
@@ -427,14 +433,15 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
       [],
     ],
   ] as const;
-  for (const [functionName, tx, typeArguments] of cases) {
+  for (const [functionName, role, tx, typeArguments] of cases) {
+    assert.equal(signInRole(tx), role);
     const call = moveCall(tx, `lp_fee_policy::${functionName}`);
     assert.deepEqual(call.typeArguments, typeArguments);
     const kinds = argumentKinds(tx, call);
     assert.deepEqual(kinds.slice(0, 3), [
       "shared-mut:0x40",
       "shared:0x61",
-      `Result:${commandIndex(tx, "acl::sign_in")}`,
+      `Result:${commandIndex(tx, "blast_acl::sign_in")}`,
     ]);
   }
   assert.throws(
@@ -468,11 +475,12 @@ test("publishes a holder-reward round and relays its claims", () => {
     adminCapId: "0xad1",
     manifest,
   });
+  assert.equal(signInRole(publish), "RewardsAdmin");
   const call = moveCall(publish, "blast_holder_rewards::publish_round");
   assert.deepEqual(argumentKinds(publish, call).slice(0, 3), [
     "shared-mut:0xd",
     "shared:0x61",
-    `Result:${commandIndex(publish, "acl::sign_in")}`,
+    `Result:${commandIndex(publish, "blast_acl::sign_in")}`,
   ]);
   assert.equal(call.arguments.length, 11);
   assert.throws(
@@ -529,6 +537,11 @@ function commandIndex(tx: Transaction, name: string): number {
         command.$kind === "MoveCall" &&
         `${command.MoveCall.module}::${command.MoveCall.function}` === name,
     );
+}
+
+/** The `blast_fun_domain` role the transaction signs in with. */
+function signInRole(tx: Transaction): string | undefined {
+  return moveCall(tx, "blast_acl::sign_in").typeArguments[0]?.split("::")[2];
 }
 
 function moveCall(tx: Transaction, name: string) {

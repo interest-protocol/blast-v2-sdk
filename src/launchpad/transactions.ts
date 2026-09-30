@@ -31,16 +31,32 @@ export type LaunchpadDeployment = {
   packageId: string;
   originalPackageId?: string;
   /**
-   * Published `blast_admin` package: it owns `acl::sign_in`, and every
+   * Published `blast_admin` package: it owns `blast_acl::sign_in`, and every
    * generated Meme package lists it as a transitive publish dependency.
    */
   adminPackageId: string;
   packageVersion: SharedObjectReference<false>;
   launchConfig: SharedObjectReference<false>;
   runtimeConfig: SharedObjectReference<false>;
-  /** `blast_admin::acl::Authority<BLAST_FUN_DOMAIN>`. */
-  protocolAuthority: SharedObjectReference<false>;
+  /** The singleton `blast_admin::blast_acl::ACL` every Blast package signs in to. */
+  acl: SharedObjectReference<false>;
 };
+
+/**
+ * The typed `blast_fun::blast_fun_domain` roles (contracts ADR 0097). Each
+ * administrator action takes the `AdminWitness` of exactly one of them; the
+ * migrators reuse the launchpad's roles.
+ */
+export type BlastFunAdminRole =
+  | "UpgradeAdmin"
+  | "CreatorAdmin"
+  | "BuybackAdmin"
+  | "TreasuryAdmin"
+  | "FeeAdmin"
+  | "ListingAdmin"
+  | "AdapterAdmin"
+  | "ClaimSignerAdmin"
+  | "RewardsAdmin";
 
 export type LaunchTypes = {
   memeType: string;
@@ -366,21 +382,22 @@ export class LaunchpadCalls {
     return this.#setMemeMetadata("set_icon_url", options, options.iconUrl);
   }
 
-  /** Signs in to `blast_admin::acl` and returns this PTB's `AdminWitness<BLAST_FUN_DOMAIN>`. */
-  signIn(options: { adminCap: TransactionObjectInput }) {
+  /**
+   * Signs in to `blast_admin::blast_acl` and returns this PTB's
+   * `AdminWitness<Role>`; the `AdminCap` must hold `role`.
+   */
+  signIn(options: {
+    adminCap: TransactionObjectInput;
+    role: BlastFunAdminRole;
+  }) {
     return (tx: Transaction): TransactionObjectArgument =>
       tx.moveCall({
-        target: `${this.deployment.adminPackageId}::acl::sign_in`,
+        target: `${this.deployment.adminPackageId}::blast_acl::sign_in`,
         typeArguments: [
-          `${this.deployment.originalPackageId}::blast_fun_domain::BLAST_FUN_DOMAIN`,
+          `${this.deployment.originalPackageId}::blast_fun_domain::${options.role}`,
         ],
         arguments: [
-          sharedObject(
-            tx,
-            "protocolAuthority",
-            this.deployment.protocolAuthority,
-            false,
-          ),
+          sharedObject(tx, "acl", this.deployment.acl, false),
           tx.object(options.adminCap),
         ],
       });
@@ -659,7 +676,7 @@ export class LaunchpadTransactions {
   ): Transaction {
     const tx = new Transaction();
     const adminWitness = tx.add(
-      this.call.signIn({ adminCap: options.adminCapId }),
+      this.call.signIn({ adminCap: options.adminCapId, role: "TreasuryAdmin" }),
     );
     const claimResult = tx.add(
       this.call.claimProtocolFees({ ...options, adminWitness }),
@@ -735,11 +752,7 @@ function normalizeDeployment(
       deployment.runtimeConfig,
       false,
     ),
-    protocolAuthority: normalizeSharedObjectReference(
-      "protocolAuthority",
-      deployment.protocolAuthority,
-      false,
-    ),
+    acl: normalizeSharedObjectReference("acl", deployment.acl, false),
   };
 }
 

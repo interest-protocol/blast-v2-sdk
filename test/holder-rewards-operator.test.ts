@@ -130,7 +130,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
         packageVersion: shared("0x42", false),
         launchConfig: shared("0x43", false),
         runtimeConfig: shared("0x44", false),
-        protocolAuthority: shared("0x45", false),
+        acl: shared("0x45", false),
       },
       migratorsVersion: shared("0x90", false),
       lpFeePolicy: shared("0x91", false),

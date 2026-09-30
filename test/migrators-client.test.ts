@@ -28,7 +28,7 @@ test("registers the typed migrators client extension", () => {
         packageVersion: shared("0x2", "10", false),
         launchConfig: shared("0x3", "11", false),
         runtimeConfig: shared("0x4", "12", false),
-        protocolAuthority: shared("0x5", "13", false),
+        acl: shared("0x5", "13", false),
       },
       migratorsVersion: shared("0x7", "15", false),
       lpFeePolicy: shared("0x40", "18", false),

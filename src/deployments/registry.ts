@@ -17,7 +17,7 @@ const REQUIRED_SHARED_OBJECTS = [
   "packageVersion",
   "launchConfig",
   "runtimeConfig",
-  "protocolAuthority",
+  "acl",
 ] as const;
 
 /**
@@ -90,7 +90,7 @@ export function launchpadDeployment(
     packageVersion: sharedObjectReference(objects.packageVersion, false),
     launchConfig: sharedObjectReference(objects.launchConfig, false),
     runtimeConfig: sharedObjectReference(objects.runtimeConfig, false),
-    protocolAuthority: sharedObjectReference(objects.protocolAuthority, false),
+    acl: sharedObjectReference(objects.acl, false),
   };
 }
 

@@ -26,7 +26,7 @@ const deployment: LaunchpadDeployment = {
   packageVersion: shared("0x2", "10", false),
   launchConfig: shared("0x3", "11", false),
   runtimeConfig: shared("0x4", "12", false),
-  protocolAuthority: shared("0x5", "13", false),
+  acl: shared("0x5", "13", false),
 };
 const types = {
   memeType: "0xa::meme::MEME",
@@ -328,13 +328,13 @@ test("composes admin sign-in with a protocol fee claim", () => {
   });
 
   assert.deepEqual(moveFunctions(tx), [
-    "acl::sign_in",
+    "blast_acl::sign_in",
     "launch::claim_protocol_fees",
   ]);
-  const signIn = moveCall(tx, "acl::sign_in");
+  const signIn = moveCall(tx, "blast_acl::sign_in");
   assert.equal(signIn.package, normalizeSuiObjectId("0xad"));
   assert.deepEqual(signIn.typeArguments, [
-    `${normalizeSuiObjectId("0x123")}::blast_fun_domain::BLAST_FUN_DOMAIN`,
+    `${normalizeSuiObjectId("0x123")}::blast_fun_domain::TreasuryAdmin`,
   ]);
   assert.deepEqual(signIn.arguments.map(argumentKind(tx)), [
     "shared:0x5",
