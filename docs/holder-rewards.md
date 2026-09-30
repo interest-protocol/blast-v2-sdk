@@ -64,17 +64,19 @@ Create a JSON config outside the public artifacts:
       "packageId": "0xCALLABLE_LAUNCHPAD_PACKAGE",
       "originalPackageId": "0xORIGINAL_LAUNCHPAD_PACKAGE",
       "adminPackageId": "0xBLAST_ADMIN_PACKAGE",
+      "partnersPackageId": "0xBLAST_PARTNERS_PACKAGE",
+      "timelockPackageId": "0xBLAST_FUN_TIMELOCK_PACKAGE",
       "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
       "launchConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
       "runtimeConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-      "protocolAuthority": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false }
+      "acl": { "objectId": "0xBLAST_ACL", "initialSharedVersion": "1", "mutable": false }
     },
     "migratorsVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
     "lpFeePolicy": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
     "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false }
   },
   "vaultId": "0xVERIFIED_LP_VAULT",
-  "adminCapId": "0xBLAST_ADMIN_CAP",
+  "adminCapId": "0xBLAST_ADMIN_CAP_WITH_REWARDS_ADMIN",
   "sender": "0xADMIN_MULTISIG",
   "excludedAddresses": []
 }
