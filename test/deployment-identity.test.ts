@@ -45,6 +45,9 @@ function runtimeFor(input: BlastDeploymentInput): DeploymentRuntimeObservation {
     lpFeePolicy: `${migrators}::lp_fee_policy::LpFeePolicy`,
     venueConfig: `${migrators}::venue_config::VenueConfig`,
   };
+  if (input.packages.cetusClmm) {
+    types.cetusConfig = `${original("cetusClmm")}::config::GlobalConfig`;
+  }
   return {
     chainIdentifier: input.chainIdentifier,
     sharedObjects: Object.fromEntries(
@@ -178,6 +181,51 @@ test("disables signing on a runtime identity mismatch or foreign lineage", () =>
       }),
     ),
     ["runtime-unverified"],
+  );
+});
+
+test("checks a recorded Cetus config against the recorded Cetus lineage", () => {
+  const cetusManifest = {
+    ...manifest,
+    packages: {
+      ...manifest.packages,
+      cetusClmm: {
+        packageId:
+          "0x260693ec785a6e6c9d81d58c7d2ff72f1288ae0fa6a9725abe05a6478b11f084",
+        originalPackageId:
+          "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb",
+      },
+    },
+    sharedObjects: {
+      ...manifest.sharedObjects,
+      cetusConfig: {
+        objectId:
+          "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f",
+        initialSharedVersion: "1574190",
+      },
+    },
+  } satisfies BlastDeploymentInput;
+  const runtime = runtimeFor(cetusManifest);
+  assert.equal(
+    evaluateProtocolAccess({
+      manifest: cetusManifest,
+      mode: "non-production",
+      runtime,
+    }).signing,
+    "enabled",
+  );
+  const foreign = structuredClone(runtime);
+  foreign.sharedObjects.cetusConfig!.type =
+    `${normalizeSuiObjectId("0xbad")}::config::GlobalConfig`;
+  assert.deepEqual(
+    codes(
+      evaluateProtocolAccess({
+        manifest: cetusManifest,
+        mode: "non-production",
+        runtime: foreign,
+      }),
+    ),
+    ["foreign-lineage"],
   );
 });
 

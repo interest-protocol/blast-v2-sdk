@@ -31,7 +31,7 @@ export function curvePrice(reserves: {
   const realQuote = requireAtoms("realQuoteReserve", reserves.realQuoteReserve);
   const memeReserve = requireAtoms("memeReserve", reserves.memeReserve);
   if (memeReserve === 0n) return null;
-  return reduce(virtualQuote + realQuote, memeReserve);
+  return exactPrice(virtualQuote + realQuote, memeReserve);
 }
 
 /**
@@ -62,7 +62,7 @@ export function formatPriceRational(price: ExactPrice): string {
 export function parsePriceRational(value: string): ExactPrice {
   const match = /^(\d+)\/(\d+)$/.exec(value);
   if (!match) throw new RangeError(`invalid price ratio ${value}`);
-  return requirePrice(reduce(BigInt(match[1]!), BigInt(match[2]!)));
+  return requirePrice(exactPrice(BigInt(match[1]!), BigInt(match[2]!)));
 }
 
 /**
@@ -222,7 +222,8 @@ function requireAtoms(name: string, value: bigint): bigint {
   return value;
 }
 
-function reduce(numerator: bigint, denominator: bigint): ExactPrice {
+/** `numerator / denominator` in lowest terms; the denominator must be positive. */
+export function exactPrice(numerator: bigint, denominator: bigint): ExactPrice {
   if (denominator <= 0n) {
     throw new RangeError("a price needs a positive denominator");
   }

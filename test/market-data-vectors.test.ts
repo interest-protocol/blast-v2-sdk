@@ -18,6 +18,10 @@ import {
   parsePriceRational,
 } from "../src/launchpad/market-data.ts";
 import type { LaunchLifecycle } from "../src/launchpad/state.ts";
+import {
+  cetusVenuePrice,
+  cetusVenueTrade,
+} from "../src/migrators/cetus-venue.ts";
 
 /**
  * blast-infra's `tests/vectors/market-data.sha256`, generated from the contracts
@@ -91,6 +95,57 @@ test("runs every curve_price vector case", () => {
         price: price === null ? null : formatPrice(price),
         price_exact_rational:
           price === null ? null : formatPriceRational(price),
+      },
+      vector.expect,
+      vector.name,
+    );
+  }
+});
+
+test("runs every venue_price vector case through the Cetus adapter", () => {
+  const cases = casesOf("venue_price");
+  assert.equal(cases.length, 7);
+  for (const vector of cases) {
+    const price = cetusVenuePrice(
+      BigInt(vector.given.sqrt_price_x64 as string),
+      vector.given.meme_is_coin_a as boolean,
+    );
+    assert.deepEqual(
+      {
+        price: formatPrice(price),
+        price_exact_rational: formatPriceRational(price),
+      },
+      vector.expect,
+      vector.name,
+    );
+  }
+});
+
+test("runs every venue_trade vector case through the Cetus adapter", () => {
+  const cases = casesOf("venue_trade");
+  assert.equal(cases.length, 4);
+  for (const vector of cases) {
+    const given = vector.given as Record<string, string | boolean>;
+    const trade = cetusVenueTrade(
+      {
+        atob: given.a_to_b as boolean,
+        amountIn: BigInt(given.amount_in as string),
+        amountOut: BigInt(given.amount_out as string),
+        feeAmount: BigInt(given.fee_amount as string),
+        beforeSqrtPrice: BigInt(given.before_sqrt_price as string),
+        afterSqrtPrice: BigInt(given.after_sqrt_price as string),
+      },
+      given.meme_is_coin_a as boolean,
+    );
+    assert.deepEqual(
+      {
+        side: trade.side,
+        quote_amount: trade.quoteAmount.toString(),
+        meme_amount: trade.memeAmount.toString(),
+        quote_fee: trade.quoteFee.toString(),
+        meme_fee: trade.memeFee.toString(),
+        price_before: formatPrice(trade.priceBefore),
+        price_after: formatPrice(trade.priceAfter),
       },
       vector.expect,
       vector.name,

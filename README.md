@@ -241,6 +241,31 @@ facts. Object ownership reads provide the current `CurveFeeCap` and
 `BlastMetadataCap` owners; events record which capability IDs each launch
 honors.
 
+### Trading a migrated launch on Cetus
+
+Cetus is the one post-migration venue the SDK trades through. Its adapter
+(`src/migrators/cetus-venue.ts`) never trusts a caller-supplied pool:
+
+1. `getCetusPool` reads a Cetus `pool::Pool`; `resolveCetusVenueRoute` accepts
+   it only as the pool the launch's `LpVault` recorded, of the deployment's
+   Cetus lineage, for the launch's coins and recorded tier, which the
+   deployment's `routes` must admit. The manifest records Cetus as
+   `packages.cetusClmm` (the called revision and the type-defining original)
+   and `sharedObjects.cetusConfig`; `evaluateProtocolAccess` checks the
+   config's type against that lineage.
+2. `quoteCetusSwap` asks any `CetusQuoteTransport` for one exact-input quote,
+   and `normalizeCetusQuote` states it in atoms: input, output,
+   `minimumOut = floor(out * (10,000 - slippageBps) / 10,000)`, fee, exact
+   prices before and after, impact, expiry, sender, and balances.
+3. `buildCetusSwapTransaction` refuses disabled signing, another deployment,
+   foreign lineage, an unadmitted tier, a substituted route, an expired quote,
+   or inconsistent amounts. It builds `pool::flash_swap`, repays exactly
+   `amountIn`, and aborts below `minimumOut`.
+4. `reconcileCetusSwap` turns the executed or simulated transaction's single
+   `SwapEvent` in that pool into exact trade facts, and refuses anything else.
+
+Every error is a `CetusVenueError` whose `code` names the failed check.
+
 ## Generated Meme package
 
 `publishMeme` uses the reviewed, compiled Move template. It patches the type
@@ -326,7 +351,9 @@ results must pass validation again before they regain a Move integer brand.
 `curvePrice`, `formatPrice`, `formatPriceRational`, `liveSupply`,
 `applyLiveSupplyChange`, `marketCap`, and `launchProgressBps` are the exact
 `bigint` formulas the blast-infra indexer serves under `/v1`. `npm test` runs
-every `curve_price`, `live_supply`, `market_cap`, and `progress` case of
+every `curve_price`, `venue_price` (through `cetusVenuePrice`),
+`venue_trade` (through `cetusVenueTrade`), `live_supply`, `market_cap`, and
+`progress` case of
 `test/vectors/market-data.json`, the file blast-infra pins by SHA-256
 `1fd14d23e58b6f5901b55adbf1327b39a185ad3d77a4f415f3a56df87ce5c2d4`, and refuses
 a copy that differs from that pin. Update the vectors only by vendoring the file

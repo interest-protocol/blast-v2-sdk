@@ -248,6 +248,14 @@ function expectedObjectTypes(
       name: "VenueConfig",
     };
   }
+  const cetus = deployment.packages.cetusClmm?.originalPackageId;
+  if (cetus) {
+    types.cetusConfig = {
+      packageId: cetus,
+      module: "config",
+      name: "GlobalConfig",
+    };
+  }
   return types;
 }
 

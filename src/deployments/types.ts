@@ -24,6 +24,8 @@ export type BlastPackages = Readonly<
     timelock: SuiPackageReference;
     blastSui?: SuiPackageReference;
     migrators?: SuiPackageReference;
+    /** Cetus CLMM: the revision Cetus routes call, and the original package that defines its types. */
+    cetusClmm?: SuiPackageReference;
   }
 >;
 
@@ -46,6 +48,8 @@ export type BlastSharedObjects = Readonly<
     blastSuiVault?: SharedObjectIdentity;
     migratorsPackageVersion?: SharedObjectIdentity;
     venueConfig?: SharedObjectIdentity;
+    /** Cetus CLMM `config::GlobalConfig`, read by every Cetus pool call. */
+    cetusConfig?: SharedObjectIdentity;
     packageAdmin?: SharedObjectIdentity;
   }
 >;
