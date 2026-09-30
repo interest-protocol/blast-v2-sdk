@@ -52,6 +52,8 @@ export type MigratorsDeployment = {
 /**
  * Cetus orders a pool's coin types by type name. `a` means Meme is coin A
  * (`Pool<Meme, Quote>`); `b` means Quote is coin A (`Pool<Quote, Meme>`).
+ * Every Cetus route after `new` takes `<Meme, Quote, CoinA, CoinB>`
+ * (contracts ADR 0100); the SDK derives `CoinA` and `CoinB` from this side.
  */
 export type CetusMemeSide = "a" | "b";
 
@@ -206,8 +208,8 @@ export class MigratorCalls {
     const memeSide = normalizeMemeSide(options.memeSide);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::migrate_meme_${memeSide}`,
-        typeArguments: [types.memeType, types.quoteType],
+        target: `${this.deployment.packageId}::cetus::migrate`,
+        typeArguments: cetusTypeArguments(types, memeSide),
         arguments: [
           sharedObject(tx, "launch", options.launch, true),
           this.#migratorsVersion(tx),
@@ -274,8 +276,8 @@ export class MigratorCalls {
     const memeSide = normalizeMemeSide(options.memeSide);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::collect_fees_meme_${memeSide}`,
-        typeArguments: [types.memeType, types.quoteType],
+        target: `${this.deployment.packageId}::cetus::collect_fees`,
+        typeArguments: cetusTypeArguments(types, memeSide),
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
@@ -340,8 +342,8 @@ export class MigratorCalls {
     const feeSplit = this.launchpad.feeSplit(options.feeSplit);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::settle_and_update_fee_split_meme_${memeSide}`,
-        typeArguments: [types.memeType, types.quoteType],
+        target: `${this.deployment.packageId}::cetus::settle_and_update_fee_split`,
+        typeArguments: cetusTypeArguments(types, memeSide),
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
@@ -415,8 +417,8 @@ export class MigratorCalls {
     const minMemeOut = requireU64("minMemeOut", options.minMemeOut);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::buyback_and_burn_meme_${memeSide}`,
-        typeArguments: [types.memeType, types.quoteType],
+        target: `${this.deployment.packageId}::cetus::buyback_and_burn`,
+        typeArguments: cetusTypeArguments(types, memeSide),
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
@@ -969,6 +971,17 @@ function sharedObject<const Mutable extends boolean>(
   return tx.sharedObjectRef(
     normalizeSharedObjectReference(name, reference, mutable),
   );
+}
+
+/** `[Meme, Quote, CoinA, CoinB]`, the pool's coins in Cetus order. */
+function cetusTypeArguments(
+  types: LaunchTypes,
+  memeSide: CetusMemeSide,
+): string[] {
+  const { memeType, quoteType } = types;
+  return memeSide === "a"
+    ? [memeType, quoteType, memeType, quoteType]
+    : [memeType, quoteType, quoteType, memeType];
 }
 
 function normalizeMemeSide(value: CetusMemeSide): CetusMemeSide {
