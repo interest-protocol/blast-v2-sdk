@@ -217,23 +217,29 @@ test("disables signing on an ABI mismatch or an unsupported route", () => {
     ),
     ["abi-mismatch"],
   );
-  for (const venue of ["turbos", "cetus"]) {
-    const route = {
-      ...manifest,
-      routes: [{ venue, tiers: [{ tickSpacing: 60, feeRate: "2500" }] }],
-    };
-    assert.deepEqual(
-      codes(
-        evaluateProtocolAccess({
-          manifest: route,
-          mode: "non-production",
-          runtime,
-        }),
-      ),
-      ["unsupported-route"],
-      venue,
-    );
-  }
+  const withRoute = (venue: string) => ({
+    ...manifest,
+    routes: [{ venue, tiers: [{ tickSpacing: 60, feeRate: "2500" }] }],
+  });
+  assert.deepEqual(
+    codes(
+      evaluateProtocolAccess({
+        manifest: withRoute("turbos"),
+        mode: "non-production",
+        runtime,
+      }),
+    ),
+    ["unsupported-route"],
+  );
+  // The SDK's generic Cetus builders match the frozen ADR 0100 routes.
+  assert.equal(
+    evaluateProtocolAccess({
+      manifest: withRoute("cetus"),
+      mode: "non-production",
+      runtime,
+    }).signing,
+    "enabled",
+  );
   assert.deepEqual(
     codes(
       evaluateProtocolAccess({
@@ -401,7 +407,7 @@ test("pins the frozen ABI identity to the committed artifacts", () => {
     createHash("sha256").update(bytes).digest("hex");
   assert.equal(
     FROZEN_ABI.contractsCommit,
-    "a2a1db25f72a44e3b650bebe0ef806de4c70abbc",
+    "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
   );
   assert.equal(
     FROZEN_ABI.artifacts.launchpad,
@@ -420,7 +426,7 @@ test("pins the frozen ABI identity to the committed artifacts", () => {
       FROZEN_ABI.contractsCommit,
     );
   }
-  assert.deepEqual(FROZEN_ABI.unresolvedRoutes, ["cetus"]);
+  assert.equal("unresolvedRoutes" in FROZEN_ABI, false);
 });
 
 test("observes the chain and shared-object identities through the Core API", async () => {

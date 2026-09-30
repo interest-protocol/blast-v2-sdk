@@ -90,12 +90,12 @@ export const NON_PRODUCTION_MANIFEST = {
     },
   ],
   source: {
-    contractsCommit: "a2a1db25f72a44e3b650bebe0ef806de4c70abbc",
+    contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
     abi: {
       launchpad:
-        "d08ee60a12a3223d1f9e9f4c009a0aaf3adec1b783e0025f453e2c79b7474288",
+        "90da633139dd28069572dc84c8a0d700f8f4535fcc98770734ef42c380632cf3",
       blastSui:
-        "f3a1e1c12c8bac0a1d8a3de38fa7c2e3eab13fa648fface320eecf658e66e22d",
+        "0fdaeaa1dbed9d5ac4d80ad49db9aa5b7c438a5daa3a4fff68702968a8dcd1ed",
     },
   },
   release: {

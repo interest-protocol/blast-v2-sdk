@@ -20,11 +20,11 @@ import {
   reduceLaunchpadEvent,
 } from "../src/launchpad/reducer.ts";
 import { decodeLaunchObject } from "../src/launchpad/state.ts";
-import type { LaunchpadFixture } from "./fixtures/launchpad-a2a1db2.ts";
+import type { LaunchpadFixture } from "./fixtures/launchpad-442116a.ts";
 import {
   LAUNCHPAD_FIXTURE_HEX,
   launchpadFixture,
-} from "./fixtures/launchpad-a2a1db2.ts";
+} from "./fixtures/launchpad-442116a.ts";
 
 const packages: LaunchpadEventPackageIdentity = {
   originalPackageId: "0x122",
@@ -68,7 +68,7 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
   }
 });
 
-test("decodes every literal a2a1db2 launchpad event", () => {
+test("decodes every literal 442116a launchpad event", () => {
   const launchId =
     "0x489d325645528066bd5fc2fd6e54cedebd2d7e98aa6095740a6b892e1b1c09f7";
   const partnerId = `0x${LAUNCHPAD_FIXTURE_HEX.partnerId}`;
@@ -148,7 +148,7 @@ test("decodes every literal a2a1db2 launchpad event", () => {
   });
 });
 
-test("replays the literal a2a1db2 launch to its object state", () => {
+test("replays the literal 442116a launch to its object state", () => {
   const launcher = "0xb1a57";
   const steps: Array<[LaunchpadEventKind, LaunchpadFixture, string]> = [
     ["LaunchTicketCreated", "launchTicketCreated", launcher],

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 const contractsDirectory = process.env.BLAST_CONTRACTS_DIR ?? "../contracts";
-const REVIEWED_CONTRACTS_COMMIT = "a2a1db25f72a44e3b650bebe0ef806de4c70abbc";
+const REVIEWED_CONTRACTS_COMMIT = "442116a0a1b82c6b4a64dc55fa0de430322f4bb7";
 const expectedEvents = {
   launchpad: 27,
   migrators: 13,
@@ -27,7 +27,7 @@ type Artifact = {
       modules: Record<
         string,
         {
-          functions: Array<{ sdk: string }>;
+          functions: Array<{ name: string; sdk: string }>;
           structs: Array<{ name: string }>;
           events: unknown[];
         }
@@ -148,6 +148,22 @@ test("freezes every production package and event", () => {
   for (const artifact of [launchpad, blastSui]) {
     assertEveryOperationIsClassified(artifact);
   }
+});
+
+test("builds the single generic Cetus route for every operation", () => {
+  const cetus = readArtifact("production-launchpad-v1.json").packages.migrators
+    ?.modules.cetus;
+  assert.ok(cetus);
+  assert.deepEqual(
+    cetus.functions.map(({ name, sdk }) => [name, sdk]),
+    [
+      ["buyback_and_burn", "builder"],
+      ["collect_fees", "builder"],
+      ["migrate", "builder"],
+      ["new", "builder"],
+      ["settle_and_update_fee_split", "builder"],
+    ],
+  );
 });
 
 test("rejects unknown blast_sui function classifications", () => {

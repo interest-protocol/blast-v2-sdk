@@ -3,7 +3,8 @@
 ## Baseline
 
 The frozen production ABI is contracts commit
-`a2a1db25f72a44e3b650bebe0ef806de4c70abbc`. The two parity artifacts are:
+`442116a0a1b82c6b4a64dc55fa0de430322f4bb7` (contracts `main`). The two parity
+artifacts are:
 
 - `abi/production-launchpad-v1.json` for `launchpad`, `meme_template`, and the
   migrators package (Cetus and Bluefin adapters, LP vault, LP-fee policy, and
@@ -18,18 +19,15 @@ record Sui CLI `1.77.2-51d177ad7d65`, and the checker verifies the installed
 `src/deployments/identity.ts` carries the commit and the sha256 of both
 artifacts; `test/deployment-identity.test.ts` keeps them equal.
 
-### Unresolved mismatch: Cetus routes
+At this commit the Cetus adapter exposes the contracts ADR 0100 routes:
+one generic `migrate`, `collect_fees`, `settle_and_update_fee_split`, and
+`buyback_and_burn` over `<Meme, Quote, CoinA, CoinB>`, plus the `CastKey`
+struct. The SDK builds exactly these routes, so the artifact classifies them as
+builders and `evaluateProtocolAccess` accepts Cetus routes.
 
-At a2a1db2 the Cetus adapter exposes `migrate`, `collect_fees`,
-`settle_and_update_fee_split`, and `buyback_and_burn` as `_meme_a` and
-`_meme_b` pairs over `<Meme, Quote>`. The SDK builds the single generic routes
-over `<Meme, Quote, CoinA, CoinB>` of contracts ADR 0100 (commit `c657772`,
-branch `migrators-single-cetus-route`, not yet on a2a1db2). The ABI at `c657772`
-differs from a2a1db2 only in these Cetus routes. The artifact classifies the
-eight pair functions as `unresolved-sdk-mismatch`, `check:abi` fails on them,
-and `FROZEN_ABI.unresolvedRoutes` makes `evaluateProtocolAccess` reject Cetus
-routes, until either the SDK builds the pairs again or the selected commit
-moves to one with ADR 0100.
+The literal BCS fixtures in `test/fixtures/launchpad-442116a.ts` were printed by
+the scratch-only generator `test/fixtures/launchpad-442116a.move` in an
+extracted copy of this commit; the contracts repository is never modified.
 
 Move calls use the current package ID. Type names, event types, object schemas,
 migration witnesses, venue markers, and venue-tier dynamic-field keys use the
@@ -57,9 +55,9 @@ original package ID. The deployment model stores both IDs.
 | `launch::reassign_curve_fee_cap`, `reassign_metadata_cap`; `launch_config::*` (quotes, decimals, adapters, fees, protocol allocation, creation fee, partners); `runtime_config::*`; `package_admin::*` | None | ABI classifier | Intentional administration exclusions; replay uses their events, and `decodeLaunchConfigObject`, `decodeRuntimeConfigObject`, and `decodePartnerObject` read their state. |
 | `launch_ticket::new` | Compiled Meme template and `LaunchpadTransactions.publishMeme` | `test/template.test.ts`, `test/transactions.test.ts` | The template initializer constructs the ticket at the selected decimals; publication effects identify the transferred ticket. |
 | `creator_authority::new_address`, `new_account` | Compiled Meme template | `test/template.test.ts` | Template-internal constructors. |
-| Cetus `migrate_meme_a/_b`, `collect_fees_meme_a/_b`, `settle_and_update_fee_split_meme_a/_b` at a2a1db2 | `migrateCetus`, `collectCetusFees`, `settleAndUpdateCetusFeeSplit` with `memeSide` build the ADR 0100 generic routes | `test/migrators-transactions.test.ts` | **Unresolved mismatch** (see Baseline): the builders target the generic routes absent at a2a1db2. |
+| Cetus `migrate`, `collect_fees`, `settle_and_update_fee_split` (type arguments `<Meme, Quote, CoinA, CoinB>`, ADR 0100) | `migrateCetus`, `collectCetusFees`, `settleAndUpdateCetusFeeSplit` with `memeSide` | `test/migrators-transactions.test.ts`, `test/abi-parity.test.ts` | Migration takes the mutable LP Burn `BurnManager`; collection and split updates take it immutably with the `Clock`, and the mutable Meme `Currency` to burn the burn share. |
 | Bluefin `migrate`, `collect_fees`, `settle_and_update_fee_split` | `migrateBluefin`, `collectBluefinFees`, `settleAndUpdateBluefinFeeSplit` | `test/migrators-transactions.test.ts` | Migration pays the exact SUI pool-creation fee from gas; collection and split updates take the mutable Meme `Currency`. |
-| Cetus `buyback_and_burn_meme_a/_b`, Bluefin `buyback_and_burn` | `buybackAndBurnCetus` with `memeSide` (generic route, unresolved mismatch), `buybackAndBurnBluefin` | `test/migrators-transactions.test.ts` | Admin builders composing `sign_in<BuybackAdmin>`; the caller sets `minMemeOut` from an off-chain price. |
+| Cetus `buyback_and_burn` (same four type arguments), Bluefin `buyback_and_burn` | `buybackAndBurnCetus` with `memeSide`, `buybackAndBurnBluefin` | `test/migrators-transactions.test.ts` | Admin builders composing `sign_in<BuybackAdmin>`; the caller sets `minMemeOut` from an off-chain price. |
 | `vault::claim_creator_fees`, `vault::claim_protocol_fees` | `MigratorCalls` and `MigratorTransactions` claim methods | `test/migrators-transactions.test.ts` | The creator claim passes the read-only launch and its live `CurveFeeCap`; the residual claim composes `sign_in<TreasuryAdmin>`; both route the returned coins. |
 | `lp_fee_policy::set_default_shares`, `set_coin_shares`, `clear_coin_shares`, `set_protocol_destination` | `setLpFeeDefaultShares`, `setLpFeeCoinShares`, `clearLpFeeCoinShares`, `setLpFeeProtocolDestination` | `test/migrators-transactions.test.ts` | Admin builders with the mutable `LpFeePolicy`: shares take `sign_in<FeeAdmin>`, the destination `sign_in<TreasuryAdmin>`. |
 | `blast_holder_rewards::publish_round`, `claim` | `publishHolderRewardRound`, `claimHolderReward`, `claimHolderRewards` | `test/migrators-transactions.test.ts`, `test/holder-rewards-operator.test.ts` | Publication composes `sign_in<RewardsAdmin>` and validates the manifest and its vault; relays carry positional proofs. The `Round` object commits to vault, number, root, and leaf count; its checkpoint window and manifest digest are only in `RoundPublished`. |
@@ -215,8 +213,6 @@ that fact.
 No Blast V2 contract is deployed for this release, and the SDK has no canonical
 network deployment entry. Before an indexer or API begins:
 
-0. Resolve the Cetus route mismatch at the frozen commit (see Baseline), then
-   rerun `npm run check:abi`.
 1. Publish the required packages and generated Meme package through an approved
    release process. Capture real current/original package IDs and shared-object
    identities from successful publication effects.

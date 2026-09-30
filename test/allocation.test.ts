@@ -15,7 +15,7 @@ import {
   previewFeeCollection,
   requireCompletePlan,
 } from "../src/launchpad/allocation.ts";
-import { LAUNCHPAD_FIXTURE_HEX } from "./fixtures/launchpad-a2a1db2.ts";
+import { LAUNCHPAD_FIXTURE_HEX } from "./fixtures/launchpad-442116a.ts";
 
 const U64_MAX = (1n << 64n) - 1n;
 
@@ -316,7 +316,7 @@ test("rejects plans and splits the Move constructors abort on", () => {
 });
 
 test("decodes a finalized plan from literal contract bytes", () => {
-  // `LaunchCreated.allocation_plan` of the a2a1db2 fixture: bytes 219-326.
+  // `LaunchCreated.allocation_plan` of the 442116a fixture: bytes 219-326.
   const bytes = Buffer.from(
     [
       "581b000000000000",

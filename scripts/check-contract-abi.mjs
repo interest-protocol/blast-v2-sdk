@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
  * this commit's `sui/` tree with `git archive`, so the contracts working tree
  * and branch never affect the result.
  */
-const BASELINE_COMMIT = "a2a1db25f72a44e3b650bebe0ef806de4c70abbc";
+const BASELINE_COMMIT = "442116a0a1b82c6b4a64dc55fa0de430322f4bb7";
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
   {
@@ -44,6 +44,7 @@ const artifactDeclarations = [
       "contracts ADR 0094 and 0097: one typed role per administrator action in the singleton Blast ACL",
       "contracts ADR 0098: a SUI creation fee and one partner per launch set at creation",
       "contracts a2a1db2: Blast's migration allocation accrues as protocol fees in the launch ledger",
+      "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs",
     ],
   },
   {
@@ -69,40 +70,12 @@ const write = process.argv.includes("--write");
 const temporaryRoot = mkdtempSync(join(tmpdir(), "blast-production-abi-"));
 const contractsRoot = join(temporaryRoot, "contracts");
 
-/**
- * Public functions of the reviewed commit whose SDK call shape does not match.
- * The artifact records them truthfully and the check fails until the SDK and
- * the selected commit agree again; never relabel them to make the check pass.
- */
-const unresolvedSdkMismatches = new Map(
-  [
-    "migrate_meme_a",
-    "migrate_meme_b",
-    "collect_fees_meme_a",
-    "collect_fees_meme_b",
-    "settle_and_update_fee_split_meme_a",
-    "settle_and_update_fee_split_meme_b",
-    "buyback_and_burn_meme_a",
-    "buyback_and_burn_meme_b",
-  ].map((name) => [
-    `cetus::${name}`,
-    "the SDK builds the ADR 0100 generic cetus route, absent at this commit",
-  ]),
-);
-const observedSdkMismatches = [];
-
 function main() {
   try {
     verifySuiCliVersion();
     materializeContracts();
     for (const declaration of artifactDeclarations) {
       checkArtifact(declaration);
-    }
-    if (observedSdkMismatches.length > 0) {
-      console.error(
-        `unresolved SDK/ABI mismatch at contracts ${BASELINE_COMMIT}:\n${observedSdkMismatches.join("\n")}`,
-      );
-      process.exitCode = 1;
     }
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
@@ -380,11 +353,6 @@ const migratorBuilders = new Set([
 function classifyMigratorFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
   if (migratorBuilders.has(key)) return "builder";
-  const mismatch = unresolvedSdkMismatches.get(key);
-  if (mismatch !== undefined) {
-    observedSdkMismatches.push(`blast_fun_migrators::${key}: ${mismatch}`);
-    return "unresolved-sdk-mismatch";
-  }
   if (moduleName === "package_admin") return "intentional-admin-exclusion";
   throw new Error(`unclassified function blast_fun_migrators::${key}`);
 }

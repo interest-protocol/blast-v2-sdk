@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "a2a1db25f72a44e3b650bebe0ef806de4c70abbc",
+    "contractsCommit": "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
     "source": "git archive of the commit's sui/ tree",
     "approvedAbiAmendments": [
       "contracts ADR 0059: remove sender and unchanged state from event payloads",

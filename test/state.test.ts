@@ -17,11 +17,11 @@ import {
   previewProtocolFeeClaim,
   timelockedValue,
 } from "../src/launchpad/state.ts";
-import type { LaunchpadFixture } from "./fixtures/launchpad-a2a1db2.ts";
+import type { LaunchpadFixture } from "./fixtures/launchpad-442116a.ts";
 import {
   LAUNCHPAD_FIXTURE_HEX,
   launchpadFixture,
-} from "./fixtures/launchpad-a2a1db2.ts";
+} from "./fixtures/launchpad-442116a.ts";
 
 const launchId =
   "0x489d325645528066bd5fc2fd6e54cedebd2d7e98aa6095740a6b892e1b1c09f7";

@@ -7,7 +7,6 @@ import {
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
-import type { MigratorVenue } from "../migrators/state.ts";
 import { MIGRATOR_VENUES } from "../migrators/state.ts";
 import {
   BLAST_DEPLOYMENTS,
@@ -27,20 +26,13 @@ import type {
  * ABI mismatch.
  */
 export const FROZEN_ABI = Object.freeze({
-  contractsCommit: "a2a1db25f72a44e3b650bebe0ef806de4c70abbc",
+  contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
   artifacts: Object.freeze({
     launchpad:
-      "d08ee60a12a3223d1f9e9f4c009a0aaf3adec1b783e0025f453e2c79b7474288",
+      "90da633139dd28069572dc84c8a0d700f8f4535fcc98770734ef42c380632cf3",
     blastSui:
-      "f3a1e1c12c8bac0a1d8a3de38fa7c2e3eab13fa648fface320eecf658e66e22d",
+      "0fdaeaa1dbed9d5ac4d80ad49db9aa5b7c438a5daa3a4fff68702968a8dcd1ed",
   }),
-  /**
-   * Routes whose SDK call shape does not match the frozen commit. The SDK
-   * builds the contracts ADR 0100 generic Cetus routes, which a2a1db2 does not
-   * have (it has `*_meme_a` and `*_meme_b`), so Cetus stays disabled until the
-   * two agree. `npm run check:abi` fails on the same conflict.
-   */
-  unresolvedRoutes: Object.freeze(["cetus"] as MigratorVenue[]),
 });
 
 /** This SDK build's release identity. */
@@ -337,9 +329,7 @@ function sourceReasons(deployment: BlastDeployment): DeploymentRejection[] {
     );
   }
   const unsupported = deployment.routes.filter(
-    ({ venue }) =>
-      !MIGRATOR_VENUES.includes(venue) ||
-      FROZEN_ABI.unresolvedRoutes.includes(venue),
+    ({ venue }) => !MIGRATOR_VENUES.includes(venue),
   );
   if (unsupported.length > 0) {
     reasons.push(

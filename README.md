@@ -1,10 +1,9 @@
 # Blast SDK
 
 The SDK mirrors the Sui launchpad and migrators ABIs of contracts commit
-`a2a1db25f72a44e3b650bebe0ef806de4c70abbc` without becoming a second source of
+`442116a0a1b82c6b4a64dc55fa0de430322f4bb7` without becoming a second source of
 truth for protocol execution. See
-[launchpad ABI coverage](docs/launchpad-abi-coverage.md) for the one known
-mismatch at that commit (the Cetus routes).
+[launchpad ABI coverage](docs/launchpad-abi-coverage.md).
 
 It provides:
 
@@ -196,10 +195,7 @@ protocol-fee claim.
 adapters. Cetus orders a pool's coin types by type name, so its builders take
 `memeSide: "a" | "b"` and pass the pool's coins in that order after Meme and
 Quote, as `<Meme, Quote, CoinA, CoinB>`, to Cetus's single route per operation
-(contracts ADR 0100). The frozen commit a2a1db2 still has the `_meme_a` and
-`_meme_b` pairs, so `evaluateProtocolAccess` rejects Cetus routes and
-`npm run check:abi` fails until the SDK and the selected commit agree. Bluefin
-always creates `Pool<Meme, Quote>`.
+(contracts ADR 0100); Bluefin always creates `Pool<Meme, Quote>`.
 
 - Migration is permissionless. Cetus burns the full-range position through
   Cetus LP Burn and takes the mutable `BurnManager`; Bluefin takes its SUI
