@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { Transaction } from "@mysten/sui/transactions";
+import type { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 
 import {

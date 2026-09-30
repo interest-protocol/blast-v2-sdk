@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { BlastDeploymentInput } from "../src/deployments/index.ts";
 import {
   BLAST_DEPLOYMENTS,
   blastSuiDeployment,
@@ -9,8 +10,10 @@ import {
   launchpadDeployment,
   migratorsDeployment,
 } from "../src/deployments/index.ts";
+import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
 
-const deployment = defineBlastDeployment({
+const input = {
+  ...NON_PRODUCTION_MANIFEST,
   network: "testnet",
   chainIdentifier: " 4c78adac ",
   packages: {
@@ -45,7 +48,8 @@ const deployment = defineBlastDeployment({
     migratorsPackageVersion: { objectId: "0xa", initialSharedVersion: "19" },
     venueConfig: { objectId: "0x7", initialSharedVersion: "15" },
   },
-});
+} satisfies BlastDeploymentInput;
+const deployment = defineBlastDeployment(input);
 
 test("normalizes and freezes one complete deployment manifest", () => {
   assert.equal(deployment.chainIdentifier, "4c78adac");
@@ -125,7 +129,7 @@ test("requires the published blast_admin package", () => {
   assert.throws(
     () =>
       defineBlastDeployment({
-        ...deployment,
+        ...input,
         packages: withoutAdmin as typeof deployment.packages,
       }),
     /packages\.admin is required/,
@@ -141,7 +145,8 @@ test("requires blast Sui deployment constants only when requested", () => {
     deployment.sharedObjects;
   assert.doesNotThrow(() =>
     defineBlastDeployment({
-      ...deployment,
+      ...input,
+      routes: [],
       packages: {
         launchpad: deployment.packages.launchpad,
         admin: deployment.packages.admin,
@@ -288,9 +293,9 @@ test("rejects placeholder package IDs", () => {
   assert.throws(
     () =>
       defineBlastDeployment({
-        ...deployment,
+        ...input,
         packages: {
-          ...deployment.packages,
+          ...input.packages,
           launchpad: {
             packageId: "0x0",
             originalPackageId: "0x122",

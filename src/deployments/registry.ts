@@ -1,77 +1,83 @@
+import { isValidTransactionDigest } from "@mysten/sui/utils";
+
+import { requirePositiveU64, requireU64 } from "../lib/integers.ts";
 import {
   normalizeSharedObjectIdentity,
   normalizeSuiPackageReference,
   sharedObjectReference,
 } from "../lib/sui.ts";
+import type { MigratorVenue } from "../migrators/state.ts";
+import { MIGRATOR_VENUES } from "../migrators/state.ts";
 import type {
   BlastDeployment,
+  BlastDeploymentInput,
   BlastDeploymentRegistry,
   BlastNetwork,
+  BlastPackages,
+  BlastSharedObjects,
   BlastSuiDeploymentConstants,
   LaunchpadDeploymentConstants,
+  MigrationRoute,
   MigratorsDeploymentConstants,
+  PostDeployEvidence,
 } from "./types.ts";
-import { BLAST_NETWORKS } from "./types.ts";
+import { BLAST_DEPLOYMENT_SCHEMA_VERSION, BLAST_NETWORKS } from "./types.ts";
 
+const REQUIRED_PACKAGES = ["launchpad", "admin", "partners", "timelock"];
 const REQUIRED_SHARED_OBJECTS = [
   "packageVersion",
   "launchConfig",
   "runtimeConfig",
   "acl",
-] as const;
+];
+const MIGRATOR_SHARED_OBJECTS = [
+  "migratorsPackageVersion",
+  "lpFeePolicy",
+  "venueConfig",
+];
+const COMMIT = /^[0-9a-f]{40}$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
+/** Why a manifest is not a valid deployment identity. */
+export class DeploymentManifestError extends Error {
+  readonly code: "invalid-manifest" | "unsupported-route";
+
+  constructor(code: DeploymentManifestError["code"], message: string) {
+    super(message);
+    this.name = "DeploymentManifestError";
+    this.code = code;
+  }
+}
 
 /**
- * Canonical released deployments. Release tooling adds entries only after it
- * validates publish or upgrade effects against the target chain.
+ * Canonical released deployments, the only production identities. Release
+ * tooling adds an entry only after it validates publish effects and
+ * post-deploy evidence on the target chain; until then every network is
+ * absent and production signing stays disabled.
  */
 export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({});
 
+/**
+ * Validates, normalizes, and freezes one manifest into the runtime identity
+ * schema. Shape only: `evaluateProtocolAccess` decides whether it may sign.
+ * A production manifest must name mainnet; a non-production one never may.
+ */
 export function defineBlastDeployment(
-  deployment: BlastDeployment,
+  input: BlastDeploymentInput,
 ): BlastDeployment {
-  if (!BLAST_NETWORKS.includes(deployment.network)) {
-    throw new RangeError(`unsupported Blast network: ${deployment.network}`);
+  try {
+    return normalizeDeployment(input);
+  } catch (error) {
+    if (error instanceof DeploymentManifestError) throw error;
+    throw new DeploymentManifestError(
+      "invalid-manifest",
+      error instanceof Error ? error.message : String(error),
+    );
   }
-  if (typeof deployment.chainIdentifier !== "string") {
-    throw new TypeError("chainIdentifier must be a string");
-  }
-  const chainIdentifier = deployment.chainIdentifier.trim();
-  if (!chainIdentifier) {
-    throw new RangeError("chainIdentifier must not be empty");
-  }
-  if (!deployment.packages.launchpad) {
-    throw new TypeError("packages.launchpad is required");
-  }
-  for (const name of ["admin", "partners", "timelock"] as const) {
-    if (!deployment.packages[name]) {
-      throw new TypeError(`packages.${name} is required`);
-    }
-  }
-  for (const name of REQUIRED_SHARED_OBJECTS) {
-    if (!deployment.sharedObjects[name]) {
-      throw new TypeError(`sharedObjects.${name} is required`);
-    }
-  }
-
-  const packages = normalizeRecord(
-    "packages",
-    deployment.packages,
-    normalizeSuiPackageReference,
-  );
-  const sharedObjects = normalizeRecord(
-    "sharedObjects",
-    deployment.sharedObjects,
-    normalizeSharedObjectIdentity,
-  );
-
-  return Object.freeze({
-    network: deployment.network,
-    chainIdentifier,
-    packages,
-    sharedObjects,
-  }) as BlastDeployment;
 }
 
+/** The released deployment on `network`; throws while none is released. */
 export function getBlastDeployment(network: BlastNetwork): BlastDeployment {
   const deployment = BLAST_DEPLOYMENTS[network];
   if (!deployment) {
@@ -83,14 +89,14 @@ export function getBlastDeployment(network: BlastNetwork): BlastDeployment {
 export function launchpadDeployment(
   deployment: BlastDeployment,
 ): LaunchpadDeploymentConstants {
-  const packageReference = deployment.packages.launchpad;
+  const packages = deployment.packages;
   const objects = deployment.sharedObjects;
   return {
-    packageId: packageReference.packageId,
-    originalPackageId: packageReference.originalPackageId,
-    adminPackageId: deployment.packages.admin.packageId,
-    partnersPackageId: deployment.packages.partners.packageId,
-    timelockPackageId: deployment.packages.timelock.packageId,
+    packageId: packages.launchpad.packageId,
+    originalPackageId: packages.launchpad.originalPackageId,
+    adminPackageId: packages.admin.packageId,
+    partnersPackageId: packages.partners.packageId,
+    timelockPackageId: packages.timelock.packageId,
     packageVersion: sharedObjectReference(objects.packageVersion, false),
     launchConfig: sharedObjectReference(objects.launchConfig, false),
     runtimeConfig: sharedObjectReference(objects.runtimeConfig, false),
@@ -151,7 +157,209 @@ export function migratorsDeployment(
   };
 }
 
-function normalizeRecord<Value, Normalized>(
+/** Checks one route tier in its venue's native units. */
+export function normalizeRoute(route: {
+  venue: string;
+  tiers: readonly { tickSpacing: number; feeRate: string | number | bigint }[];
+}): MigrationRoute {
+  if (!(MIGRATOR_VENUES as readonly string[]).includes(route.venue)) {
+    throw new DeploymentManifestError(
+      "unsupported-route",
+      `unsupported route ${String(route.venue)}`,
+    );
+  }
+  const venue = route.venue as MigratorVenue;
+  if (!Array.isArray(route.tiers) || route.tiers.length === 0) {
+    throw new RangeError(`route ${venue} needs at least one tier`);
+  }
+  return Object.freeze({
+    venue,
+    tiers: Object.freeze(route.tiers.map((tier) => normalizeTier(venue, tier))),
+  });
+}
+
+function normalizeDeployment(input: BlastDeploymentInput): BlastDeployment {
+  if (input.schemaVersion !== BLAST_DEPLOYMENT_SCHEMA_VERSION) {
+    throw new RangeError(`unsupported schemaVersion ${input.schemaVersion}`);
+  }
+  if (
+    input.environment !== "production" &&
+    input.environment !== "non-production"
+  ) {
+    throw new RangeError(`unknown environment ${String(input.environment)}`);
+  }
+  const network = input.network as BlastNetwork;
+  if (!BLAST_NETWORKS.includes(network)) {
+    throw new RangeError(`unsupported Blast network: ${input.network}`);
+  }
+  if ((input.environment === "production") !== (network === "mainnet")) {
+    throw new RangeError(
+      "a production manifest names mainnet, and a non-production manifest never does",
+    );
+  }
+  const packages = normalizePackages(input.packages);
+  const routes = Object.freeze((input.routes ?? []).map(normalizeRoute));
+  if (routes.length > 0 && !packages.migrators) {
+    throw new TypeError("routes require packages.migrators");
+  }
+  return Object.freeze({
+    schemaVersion: BLAST_DEPLOYMENT_SCHEMA_VERSION,
+    environment: input.environment,
+    network,
+    chainIdentifier: requireText("chainIdentifier", input.chainIdentifier),
+    explorer: Object.freeze({ baseUrl: requireUrl(input.explorer?.baseUrl) }),
+    packages,
+    sharedObjects: normalizeSharedObjects(input.sharedObjects, packages),
+    routes,
+    source: Object.freeze({
+      contractsCommit: requirePattern(
+        "source.contractsCommit",
+        input.source?.contractsCommit,
+        COMMIT,
+      ),
+      abi: Object.freeze({
+        launchpad: requirePattern(
+          "source.abi.launchpad",
+          input.source?.abi?.launchpad,
+          SHA256,
+        ),
+        blastSui: requirePattern(
+          "source.abi.blastSui",
+          input.source?.abi?.blastSui,
+          SHA256,
+        ),
+      }),
+    }),
+    release: Object.freeze({
+      transactions: normalizeReleaseTransactions(input.release?.transactions),
+    }),
+    sdk: Object.freeze({
+      version: requirePattern("sdk.version", input.sdk?.version, SEMVER),
+      commit: requirePattern("sdk.commit", input.sdk?.commit, COMMIT),
+    }),
+    evidence: Object.freeze((input.evidence ?? []).map(normalizeEvidence)),
+  });
+}
+
+function normalizePackages(
+  packages: BlastDeploymentInput["packages"],
+): BlastPackages {
+  for (const name of REQUIRED_PACKAGES) {
+    if (!packages?.[name]) throw new TypeError(`packages.${name} is required`);
+  }
+  return freezeRecord(
+    "packages",
+    packages,
+    normalizeSuiPackageReference,
+  ) as BlastPackages;
+}
+
+function normalizeSharedObjects(
+  objects: BlastDeploymentInput["sharedObjects"],
+  packages: BlastPackages,
+): BlastSharedObjects {
+  const required = packages.migrators
+    ? [...REQUIRED_SHARED_OBJECTS, ...MIGRATOR_SHARED_OBJECTS]
+    : REQUIRED_SHARED_OBJECTS;
+  for (const name of required) {
+    if (!objects?.[name]) {
+      throw new TypeError(`sharedObjects.${name} is required`);
+    }
+  }
+  return freezeRecord(
+    "sharedObjects",
+    objects,
+    normalizeSharedObjectIdentity,
+  ) as BlastSharedObjects;
+}
+
+function normalizeTier(
+  venue: MigratorVenue,
+  tier: { tickSpacing: number; feeRate: string | number | bigint },
+) {
+  const tickSpacing = tier.tickSpacing;
+  if (
+    !Number.isInteger(tickSpacing) ||
+    tickSpacing < 1 ||
+    tickSpacing > 0xffff_ffff
+  ) {
+    throw new RangeError(`${venue} tickSpacing must be a positive u32`);
+  }
+  const feeRate = requirePositiveU64(`${venue} feeRate`, BigInt(tier.feeRate));
+  // Bluefin's own pool bounds; Cetus derives its fee rate from the tick spacing.
+  if (venue === "bluefin" && (tickSpacing > 400 || feeRate > 20_000n)) {
+    throw new RangeError(
+      "bluefin tiers are tick spacing 1-400 and fee rate 1-20,000",
+    );
+  }
+  return Object.freeze({ tickSpacing, feeRate: feeRate.toString() });
+}
+
+function normalizeReleaseTransactions(
+  transactions: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, string>> {
+  if (!transactions?.launchpad) {
+    throw new TypeError("release.transactions.launchpad is required");
+  }
+  for (const [step, digest] of Object.entries(transactions)) {
+    if (!isValidTransactionDigest(digest)) {
+      throw new TypeError(
+        `release.transactions.${step} must be a transaction digest`,
+      );
+    }
+  }
+  return Object.freeze({ ...transactions });
+}
+
+function normalizeEvidence(
+  evidence: BlastDeploymentInput["evidence"][number],
+): PostDeployEvidence {
+  if (
+    evidence.transactionDigest !== null &&
+    !isValidTransactionDigest(evidence.transactionDigest)
+  ) {
+    throw new TypeError(
+      "evidence.transactionDigest must be a transaction digest",
+    );
+  }
+  return Object.freeze({
+    check: requireText("evidence.check", evidence.check),
+    transactionDigest: evidence.transactionDigest,
+    checkpoint: requireU64(
+      "evidence.checkpoint",
+      BigInt(evidence.checkpoint),
+    ).toString(),
+    verifiedAtMs: requirePositiveU64(
+      "evidence.verifiedAtMs",
+      BigInt(evidence.verifiedAtMs),
+    ).toString(),
+  });
+}
+
+function requireText(name: string, value: unknown): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new TypeError(`${name} must be a non-empty string`);
+  }
+  return value.trim();
+}
+
+function requirePattern(name: string, value: unknown, pattern: RegExp): string {
+  if (typeof value !== "string" || !pattern.test(value)) {
+    throw new TypeError(`${name} is malformed`);
+  }
+  return value;
+}
+
+function requireUrl(value: unknown): string {
+  const text = requireText("explorer.baseUrl", value);
+  const url = new URL(text);
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new TypeError("explorer.baseUrl must be an http(s) URL");
+  }
+  return text.replace(/\/+$/, "");
+}
+
+function freezeRecord<Value, Normalized>(
   namespace: string,
   values: Readonly<Record<string, Value>>,
   normalize: (name: string, value: Value) => Normalized,
