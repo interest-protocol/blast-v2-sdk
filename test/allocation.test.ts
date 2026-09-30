@@ -36,18 +36,20 @@ function plan(protocol: bigint, liquidity: bigint): AllocationPlan {
  * `[lp, blast, ...]`, recipients paid to `0x2` onward.
  */
 function shaped(meme: bigint[], quote: bigint[]): AllocationPlan {
+  const [curveMemeBps = 0n, lpMemeBps = 0n, memeBps = 0n, ...memeShares] = meme;
+  const [lpQuoteBps = 0n, quoteBps = 0n, ...quoteShares] = quote;
   return addProtocolAllocation(
     {
-      curveMemeBps: meme[0]!,
-      lpMemeBps: meme[1]!,
-      lpQuoteBps: quote[0]!,
-      recipients: meme.slice(3).map((memeBps, index) => ({
+      curveMemeBps,
+      lpMemeBps,
+      lpQuoteBps,
+      recipients: memeShares.map((share, index) => ({
         destination: `0x${(index + 2).toString(16)}`,
-        memeBps,
-        quoteBps: quote[index + 2]!,
+        memeBps: share,
+        quoteBps: quoteShares[index] ?? 0n,
       })),
     },
-    { memeBps: meme[2]!, quoteBps: quote[1]! },
+    { memeBps, quoteBps },
   );
 }
 
@@ -182,7 +184,10 @@ test("sets Blast's shares and checks both sums like allocation::add_protocol", (
     () =>
       normalizeAllocationPlan({
         ...creator,
-        recipients: [...sixteen, { ...sixteen[0]!, destination: "0x99" }],
+        recipients: [
+          ...sixteen,
+          { destination: "0x99", memeBps: 0n, quoteBps: 0n },
+        ],
       }),
     /exceeds sixteen recipients/,
   );
