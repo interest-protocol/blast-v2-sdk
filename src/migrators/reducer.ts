@@ -120,6 +120,8 @@ export type ReturnedCoinRecipientsFact = {
     | "lpProtocolFees";
   memeCoin: { objectId: string; recipient: string };
   quoteCoin: { objectId: string; recipient: string };
+  /** `launchProtocolFees` also returns Blast's SUI creation fee. */
+  suiCoin?: { objectId: string; recipient: string };
 };
 
 export type NativeReconstructionFact =
@@ -514,6 +516,12 @@ function normalizeNativeFact(
       objectId: normalizeSuiObjectId(fact.quoteCoin.objectId),
       recipient: normalizeSuiAddress(fact.quoteCoin.recipient),
     },
+    ...(fact.suiCoin && {
+      suiCoin: {
+        objectId: normalizeSuiObjectId(fact.suiCoin.objectId),
+        recipient: normalizeSuiAddress(fact.suiCoin.recipient),
+      },
+    }),
   };
 }
 
