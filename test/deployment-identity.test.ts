@@ -258,6 +258,155 @@ test("disables signing on an ABI mismatch or an unsupported route", () => {
   );
 });
 
+/** Genesis checkpoint digests, as contracts 442116a records them. */
+const MAINNET_CHAIN = "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S";
+const TESTNET_CHAIN = "69WiPg3DAQiwdxfncX6wYQ2siKwAe6L9BZthQea3JNMD";
+
+test("never enables signing for a non-production manifest bound to mainnet's chain", () => {
+  for (const network of ["testnet", "devnet", "localnet"]) {
+    const onMainnet = { ...manifest, network, chainIdentifier: MAINNET_CHAIN };
+    assert.deepEqual(
+      codes(
+        evaluateProtocolAccess({
+          manifest: onMainnet,
+          mode: "non-production",
+          runtime: runtimeFor(onMainnet),
+        }),
+      ),
+      ["invalid-manifest"],
+      network,
+    );
+  }
+});
+
+test("rejects a chain identifier that contradicts the network", () => {
+  const invalid = (network: string, chainIdentifier: string) =>
+    assert.throws(
+      () => defineBlastDeployment({ ...manifest, network, chainIdentifier }),
+      { name: "DeploymentManifestError", code: "invalid-manifest" },
+      `${network} ${chainIdentifier}`,
+    );
+  invalid("testnet", MAINNET_CHAIN);
+  invalid("testnet", manifest.chainIdentifier);
+  invalid("devnet", TESTNET_CHAIN);
+  invalid("localnet", TESTNET_CHAIN);
+  // Only the genesis digest the Core API reports; not JSON-RPC's short form.
+  invalid("testnet", "4c78adac");
+  invalid("localnet", "35834a8a");
+  const production = productionManifest();
+  assert.throws(
+    () =>
+      defineBlastDeployment({
+        ...production,
+        chainIdentifier: TESTNET_CHAIN,
+      }),
+    { code: "invalid-manifest" },
+  );
+
+  const testnet = {
+    ...manifest,
+    network: "testnet",
+    chainIdentifier: TESTNET_CHAIN,
+  };
+  assert.equal(
+    evaluateProtocolAccess({
+      manifest: testnet,
+      mode: "non-production",
+      runtime: runtimeFor(testnet),
+    }).signing,
+    "enabled",
+  );
+});
+
+test("rejects the review probe: a testnet label on mainnet's chain", () => {
+  // R-001 B-001: observed on a mainnet node, with and without a foreign lineage.
+  const probe = {
+    ...manifest,
+    network: "testnet",
+    chainIdentifier: MAINNET_CHAIN,
+  };
+  const foreign = {
+    ...probe,
+    packages: {
+      ...probe.packages,
+      launchpad: {
+        packageId: `0x${"ee".repeat(32)}`,
+        originalPackageId: `0x${"ee".repeat(32)}`,
+      },
+    },
+  };
+  for (const candidate of [probe, foreign]) {
+    assert.deepEqual(
+      codes(
+        evaluateProtocolAccess({
+          manifest: candidate,
+          mode: "non-production",
+          runtime: runtimeFor(candidate),
+        }),
+      ),
+      ["invalid-manifest"],
+    );
+  }
+});
+
+test("reports a malformed runtime observation instead of throwing", () => {
+  const runtime = runtimeFor(manifest);
+  const malformed = [
+    { chainIdentifier: runtime.chainIdentifier },
+    {
+      ...runtime,
+      sharedObjects: {
+        ...runtime.sharedObjects,
+        acl: { type: runtime.sharedObjects.acl?.type },
+      },
+    },
+  ] as unknown as DeploymentRuntimeObservation[];
+  for (const observation of malformed) {
+    assert.deepEqual(
+      codes(
+        evaluateProtocolAccess({
+          manifest,
+          mode: "non-production",
+          runtime: observation,
+        }),
+      ),
+      ["runtime-unverified"],
+    );
+  }
+});
+
+test("flags the SDK's own non-production fixture identities in production", () => {
+  // Every other production check passes, so only the fixture IDs remain.
+  const relabeled = {
+    ...manifest,
+    environment: "production",
+    network: "mainnet",
+    chainIdentifier: MAINNET_CHAIN,
+    sdk: { ...manifest.sdk, version: "1.0.0" },
+  };
+  const access = evaluateProtocolAccess({
+    manifest: relabeled,
+    mode: "production",
+    runtime: runtimeFor(relabeled),
+    registry: { mainnet: defineBlastDeployment(relabeled) },
+    sdk: {
+      name: SDK_RELEASE.name,
+      version: "1.0.0",
+      published: true,
+      commit: relabeled.sdk.commit,
+    },
+  });
+  assert.deepEqual(codes(access), ["fixture-identity-in-production"]);
+  const message =
+    access.signing === "disabled" ? access.reasons[0]?.message : "";
+  for (const id of [
+    ...Object.values(manifest.packages).map(({ packageId }) => packageId),
+    ...Object.values(manifest.sharedObjects).map(({ objectId }) => objectId),
+  ]) {
+    assert.ok(message?.includes(id), id);
+  }
+});
+
 test("never lets a non-production or fixture identity sign in production", () => {
   const nonProduction = codes(
     evaluateProtocolAccess({
@@ -285,6 +434,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
     ...manifest,
     environment: "production",
     network: "mainnet",
+    chainIdentifier: MAINNET_CHAIN,
     packages: {
       ...manifest.packages,
       launchpad: { packageId: "0x123", originalPackageId: "0x123" },

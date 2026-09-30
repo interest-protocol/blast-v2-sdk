@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { LAUNCHPAD_ADMIN_ROLES } from "../src/launchpad/transactions.ts";
+
 const contractsDirectory = process.env.BLAST_CONTRACTS_DIR ?? "../contracts";
 const REVIEWED_CONTRACTS_COMMIT = "442116a0a1b82c6b4a64dc55fa0de430322f4bb7";
 const expectedEvents = {
@@ -163,6 +165,16 @@ test("builds the single generic Cetus route for every operation", () => {
       ["new", "builder"],
       ["settle_and_update_fee_split", "builder"],
     ],
+  );
+});
+
+test("names exactly the frozen blast_fun_domain admin roles", () => {
+  const domain = readArtifact("production-launchpad-v1.json").packages.launchpad
+    ?.modules.blast_fun_domain;
+  assert.ok(domain);
+  assert.deepEqual(
+    [...LAUNCHPAD_ADMIN_ROLES].sort(),
+    domain.structs.map(({ name }) => name).sort(),
   );
 });
 

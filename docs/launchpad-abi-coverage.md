@@ -29,6 +29,27 @@ The literal BCS fixtures in `test/fixtures/launchpad-442116a.ts` were printed by
 the scratch-only generator `test/fixtures/launchpad-442116a.move` in an
 extracted copy of this commit; the contracts repository is never modified.
 
+### Breaking changes from SDK `70bd985`
+
+The move to `442116a` changes these public APIs. Each follows a contract
+change; downstream slices built against `70bd985` must update:
+
+- `LaunchpadDeployment.protocolAuthority` is now `acl`, and
+  `partnersPackageId` and `timelockPackageId` are required.
+- `signIn` requires a typed `role` (`LAUNCHPAD_ADMIN_ROLES`, ADR 0094/0097).
+- `defineBlastDeployment` takes the normalized manifest schema
+  (`BlastDeploymentInput`) and binds `chainIdentifier` to `network`.
+- `LaunchSettings` requires `virtualQuote` and `creationFee` (ADR 0092/0098).
+- `AllocationPlan` carries Blast's protocol shares; creator inputs use
+  `CreatorAllocationPlan`.
+- `setProtection`, `LaunchProtection`, and `getProtectedPurchases` are removed
+  (ADR 0093 replaces purchase protection with the opening round).
+- Launch fee fields drop `Trade`: `protocolMemeTradeFees` is now
+  `protocolMemeFees`, and so on; `protocolSuiFees` is new.
+- `LaunchpadConfigProjection.virtualQuotes` is now `quotes`.
+- The holder-reward `Round` no longer has `startCheckpoint`, `endCheckpoint`,
+  or `manifestDigest`; they are only in `RoundPublished`.
+
 Move calls use the current package ID. Type names, event types, object schemas,
 migration witnesses, venue markers, and venue-tier dynamic-field keys use the
 original package ID. The deployment model stores both IDs.
@@ -93,7 +114,7 @@ recipient, and request-result-to-`keep` routing for every returned object.
 
 | Frozen object or type boundary | SDK implementation | Verification |
 | --- | --- | --- |
-| `Launch<Meme, Quote>` shared mutable object (lifecycle with `OpeningRound`, public start, opening-round pot, five-balance fee ledger with the SUI creation fee, partner) | `launchBcs`, `decodeLaunchObject`, `getLaunch`, `openingRoundEndMs`, `getOpeningRoundBid` (`OpeningRoundBidKey(address)`) | `test/state.test.ts` decodes literal Move-printed bytes at five lifecycle points; `test/launchpad-events.test.ts` replays the literal events to the same object state |
+| `Launch<Meme, Quote>` shared mutable object (lifecycle with `OpeningRound`, public start, opening-round pot, five-balance fee ledger with the SUI creation fee, partner) | `launchBcs`, `decodeLaunchObject`, `getLaunch`, `openingRoundEndMs`, `getOpeningRoundBid` (`OpeningRoundBidKey(address)`) | `test/state.test.ts` decodes literal Move-printed bytes at six lifecycle points; `test/launchpad-events.test.ts` replays the literal events to the same object state |
 | `LaunchTicket<Meme>` owned object and `LaunchInitializer<Meme, Quote>` linear value | `launchTicketBcs`, `decodeLaunchTicketObject`; publication readers; adapter launch builders (initializer facts replay from `LaunchCreated`) | `test/state.test.ts` (literal bytes), `test/effects.test.ts`, `test/migrators-transactions.test.ts` |
 | `LaunchConfig`, `RuntimeConfig` shared objects; `blast_partners::Partner` | `launchConfigBcs`, `decodeLaunchConfigObject`, `getLaunchConfig`; `runtimeConfigBcs`, `decodeRuntimeConfigObject`; `partnerBcs`, `decodePartnerObject`, `timelockedValue` | `test/state.test.ts` (literal bytes) |
 | `AllocationPlan` (with stored protocol shares), `ProtocolAllocation`, `FeeSplit`, `Bps` | `allocationPlanBcs`, `feeSplitBcs`, `bpsBcs`, `addProtocolAllocation` and the constructor builders | `test/allocation.test.ts` (literal plan bytes), `test/transactions.test.ts` |

@@ -156,7 +156,7 @@ export function evaluateProtocolAccess(options: {
     ),
     ...sourceReasons(deployment),
     ...sdkReasons(deployment, options.mode, options.sdk ?? SDK_RELEASE),
-    ...runtimeReasons(deployment, options.runtime),
+    ...observedRuntimeReasons(deployment, options.runtime),
   ];
   const unique = reasons.filter(
     (entry, index) =>
@@ -380,6 +380,23 @@ function sdkReasons(
   return reasons;
 }
 
+/** A structurally invalid observation is unverified, never an exception. */
+function observedRuntimeReasons(
+  deployment: BlastDeployment,
+  runtime: DeploymentRuntimeObservation | undefined,
+): DeploymentRejection[] {
+  try {
+    return runtimeReasons(deployment, runtime);
+  } catch (error) {
+    return [
+      reason(
+        "runtime-unverified",
+        `malformed runtime observation: ${errorMessage(error)}`,
+      ),
+    ];
+  }
+}
+
 function runtimeReasons(
   deployment: BlastDeployment,
   runtime: DeploymentRuntimeObservation | undefined,
@@ -448,8 +465,21 @@ function typeReasons(
 }
 
 /**
+ * The IDs of this repository's non-production test manifest
+ * (`test/fixtures/non-production-deployment.ts`): sha256("blast-sdk-nonprod-<n>")
+ * for n below 12.
+ */
+const SDK_FIXTURE_IDS: ReadonlySet<string> = new Set(
+  Array.from(
+    { length: 12 },
+    (_, n) => `0x${bytesToHex(sha256(utf8ToBytes(`blast-sdk-nonprod-${n}`)))}`,
+  ),
+);
+
+/**
  * Hash-derived Sui IDs never fit in 64 bits; an ID that does is a hand-written
- * test or placeholder value.
+ * test or placeholder value. The SDK's own test manifest IDs are fixtures too.
+ * Any other hash-derived test ID is caught only by the registry match.
  */
 function fixtureIdentities(deployment: BlastDeployment): string[] {
   const ids = [
@@ -459,7 +489,11 @@ function fixtureIdentities(deployment: BlastDeployment): string[] {
     ]),
     ...Object.values(deployment.sharedObjects).map(({ objectId }) => objectId),
   ];
-  return [...new Set(ids.filter((id) => BigInt(id) < 1n << 64n))];
+  return [
+    ...new Set(
+      ids.filter((id) => BigInt(id) < 1n << 64n || SDK_FIXTURE_IDS.has(id)),
+    ),
+  ];
 }
 
 function disabled(

@@ -15,7 +15,7 @@ import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts
 const input = {
   ...NON_PRODUCTION_MANIFEST,
   network: "testnet",
-  chainIdentifier: " 4c78adac ",
+  chainIdentifier: " 69WiPg3DAQiwdxfncX6wYQ2siKwAe6L9BZthQea3JNMD ",
   packages: {
     launchpad: {
       packageId: "0x123",
@@ -52,7 +52,10 @@ const input = {
 const deployment = defineBlastDeployment(input);
 
 test("normalizes and freezes one complete deployment manifest", () => {
-  assert.equal(deployment.chainIdentifier, "4c78adac");
+  assert.equal(
+    deployment.chainIdentifier,
+    "69WiPg3DAQiwdxfncX6wYQ2siKwAe6L9BZthQea3JNMD",
+  );
   assert.equal(deployment.packages.launchpad.packageId.endsWith("0123"), true);
   assert.equal(
     deployment.sharedObjects.packageAdmin?.initialSharedVersion,

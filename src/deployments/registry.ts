@@ -35,6 +35,18 @@ const MIGRATOR_SHARED_OBJECTS = [
   "lpFeePolicy",
   "venueConfig",
 ];
+/**
+ * Genesis checkpoint digests of the public Sui chains, in the form every Core
+ * API transport of `@mysten/sui` reports from `getChainIdentifier`. Source:
+ * contracts 442116a, `sui/migrators/scripts/check_mainnet_abi.mjs` (mainnet)
+ * and `deployments/sui/lineage-search-2026-09-22.md` (testnet). Their first
+ * four bytes are JSON-RPC's `sui_getChainIdentifier` values `35834a8a` and
+ * `4c78adac`, which that record also lists.
+ */
+const SUI_CHAIN_IDENTIFIERS: Readonly<Partial<Record<BlastNetwork, string>>> = {
+  mainnet: "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S",
+  testnet: "69WiPg3DAQiwdxfncX6wYQ2siKwAe6L9BZthQea3JNMD",
+};
 const COMMIT = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -62,6 +74,7 @@ export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({});
  * Validates, normalizes, and freezes one manifest into the runtime identity
  * schema. Shape only: `evaluateProtocolAccess` decides whether it may sign.
  * A production manifest must name mainnet; a non-production one never may.
+ * The chain identifier must be the named network's genesis digest.
  */
 export function defineBlastDeployment(
   input: BlastDeploymentInput,
@@ -206,7 +219,7 @@ function normalizeDeployment(input: BlastDeploymentInput): BlastDeployment {
     schemaVersion: BLAST_DEPLOYMENT_SCHEMA_VERSION,
     environment: input.environment,
     network,
-    chainIdentifier: requireText("chainIdentifier", input.chainIdentifier),
+    chainIdentifier: requireChainIdentifier(network, input.chainIdentifier),
     explorer: Object.freeze({ baseUrl: requireUrl(input.explorer?.baseUrl) }),
     packages,
     sharedObjects: normalizeSharedObjects(input.sharedObjects, packages),
@@ -334,6 +347,25 @@ function normalizeEvidence(
       BigInt(evidence.verifiedAtMs),
     ).toString(),
   });
+}
+
+/**
+ * Binds the chain to the network label: mainnet and testnet must carry their
+ * own genesis digest, and no other network may carry either one.
+ */
+function requireChainIdentifier(network: BlastNetwork, value: unknown): string {
+  const chain = requireText("chainIdentifier", value);
+  if (!isValidTransactionDigest(chain)) {
+    throw new TypeError(
+      "chainIdentifier must be the genesis checkpoint digest the Core API reports",
+    );
+  }
+  const expected = SUI_CHAIN_IDENTIFIERS[network];
+  const known = Object.values(SUI_CHAIN_IDENTIFIERS).includes(chain);
+  if (expected === undefined ? known : chain !== expected) {
+    throw new RangeError(`chainIdentifier ${chain} is not Sui ${network}`);
+  }
+  return chain;
 }
 
 function requireText(name: string, value: unknown): string {

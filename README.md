@@ -91,7 +91,9 @@ result can be passed directly as the `launch` transaction input.
 `@interest-protocol/blast-sdk/deployments` is the single deployment import for
 every runtime. A manifest is the normalized runtime identity: schema version,
 environment (`production` names mainnet; `non-production` never does), network
-and chain identifier, explorer, current and original package IDs (launchpad,
+and chain identifier (the genesis checkpoint digest the Core API reports; mainnet
+and testnet must carry their own, and no other network may carry either),
+explorer, current and original package IDs (launchpad,
 `blast_admin`, `blast_partners`, `blast_fun_timelock`, and optionally migrators
 and Blast SUI), shared-object IDs and initial versions, migration routes and
 their tiers, the contracts commit and ABI artifact digests it was built from,
@@ -104,11 +106,14 @@ protocol transaction:
 
 ```ts
 import {
+  defineBlastDeployment,
   evaluateProtocolAccess,
   launchpadDeployment,
   observeDeploymentRuntime,
 } from "@interest-protocol/blast-sdk/deployments";
+import { blastLaunchpad } from "@interest-protocol/blast-sdk/launchpad";
 
+const deployment = defineBlastDeployment(manifest);
 const runtime = await observeDeploymentRuntime(client, deployment);
 const access = evaluateProtocolAccess({ manifest, mode: "production", runtime });
 if (access.signing === "enabled") {
@@ -116,11 +121,14 @@ if (access.signing === "enabled") {
 }
 ```
 
-It never throws for an identity problem. Any reason disables signing: an
-invalid manifest, an environment mismatch, fixture identities in production, an
-unreleased or foreign-lineage deployment, an ABI mismatch, an unsupported
-route, a private or unversioned SDK, post-deploy evidence missing, or a runtime
-chain or shared-object mismatch. `BLAST_DEPLOYMENTS` is empty and this SDK
+It never throws for an identity problem. Any reason disables signing (see
+`DeploymentRejectionCode`): an invalid manifest (including a chain identifier
+that contradicts the network), an environment mismatch, fixture identities in
+production, an unreleased or foreign-lineage deployment, an ABI mismatch, an
+unsupported route, a private or unversioned SDK (`sdk-unreleased`), an SDK
+other than the one that validated the manifest (`sdk-mismatch`), post-deploy
+evidence missing, a missing or malformed runtime observation
+(`runtime-unverified`), or a runtime chain or shared-object mismatch. `BLAST_DEPLOYMENTS` is empty and this SDK
 build is private and unversioned (`SDK_RELEASE`), so production signing stays
 disabled until a real release registers both. Quick presets (`QUICK_PRESETS`,
 empty) bind to one deployment fingerprint and an SDK version range, and
