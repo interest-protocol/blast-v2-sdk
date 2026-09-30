@@ -2,23 +2,34 @@
 
 ## Baseline
 
-The frozen production ABI uses contracts commit
-`a5ed34ad49c6c001af2db5b9cbcb206075704412`. The two parity artifacts are:
+The frozen production ABI is contracts commit
+`a2a1db25f72a44e3b650bebe0ef806de4c70abbc`. The two parity artifacts are:
 
 - `abi/production-launchpad-v1.json` for `launchpad`, `meme_template`, and the
   migrators package (Cetus and Bluefin adapters, LP vault, LP-fee policy, and
   holder rewards); and
 - `abi/production-blast-sui-v1.json` for `blast_sui`.
 
-Both artifacts record Sui CLI `1.77.2-51d177ad7d65`. The checker verifies
-the installed `sui --version` against those artifact values before it runs a
-Move summary. The contracts working tree differed from the ABI commit when the
-artifacts were frozen. The only
-differences were `sui/meme_template/Move.lock` and
-`docs/research/sui-deepbook-indexer-architecture-2026.md`. They do not change a
-production function, object layout, or event schema. Contracts commit
-`02cd182463629bc6977a097a2ab235ed765c9f01` adds ABI documentation only and does
-not change the frozen production code.
+`npm run check:abi` extracts that commit's `sui/` tree with `git archive` from
+the contracts repository (`BLAST_CONTRACTS_DIR`, default `../contracts`), so the
+contracts working tree and branch never affect the comparison. Both artifacts
+record Sui CLI `1.77.2-51d177ad7d65`, and the checker verifies the installed
+`sui --version` before it runs `sui move summary`. `FROZEN_ABI` in
+`src/deployments/identity.ts` carries the commit and the sha256 of both
+artifacts; `test/deployment-identity.test.ts` keeps them equal.
+
+### Unresolved mismatch: Cetus routes
+
+At a2a1db2 the Cetus adapter exposes `migrate`, `collect_fees`,
+`settle_and_update_fee_split`, and `buyback_and_burn` as `_meme_a` and
+`_meme_b` pairs over `<Meme, Quote>`. The SDK builds the single generic routes
+over `<Meme, Quote, CoinA, CoinB>` of contracts ADR 0100 (commit `c657772`,
+branch `migrators-single-cetus-route`, not yet on a2a1db2). The ABI at `c657772`
+differs from a2a1db2 only in these Cetus routes. The artifact classifies the
+eight pair functions as `unresolved-sdk-mismatch`, `check:abi` fails on them,
+and `FROZEN_ABI.unresolvedRoutes` makes `evaluateProtocolAccess` reject Cetus
+routes, until either the SDK builds the pairs again or the selected commit
+moves to one with ADR 0100.
 
 Move calls use the current package ID. Type names, event types, object schemas,
 migration witnesses, venue markers, and venue-tier dynamic-field keys use the
@@ -30,26 +41,28 @@ original package ID. The deployment model stores both IDs.
 
 | Contract surface | SDK implementation | Verification | Status or reason |
 | --- | --- | --- | --- |
-| `cetus::new`, `bluefin::new`; `launch::set_graduation_target`, `set_allocation_plan`, `set_lp_fee_split`, `set_protection`, `finalize`, `buy`, `share` | `MigratorCalls.newCetusLaunch`, `newBluefinLaunch`; `LaunchpadCalls` setters, `finalizeLaunch`, `shareLaunch`, `completeLaunch`; `MigratorTransactions.createCetusLaunch`, `createBluefinLaunch` | `test/migrators-transactions.test.ts`, `test/transactions.test.ts` | Complete atomic start-configure-finalize-share transaction with an optional routed purchase before sharing. |
+| `cetus::new`, `bluefin::new`; `launch::set_virtual_quote`, `set_graduation_target`, `set_allocation_plan`, `set_lp_fee_split`, `set_opening_round`, `set_partner`, `finalize`, `buy`, `join_opening_round`, `share` | `MigratorCalls.newCetusLaunch`, `newBluefinLaunch`; `LaunchpadCalls` setters, `finalizeLaunch`, `shareLaunch`, `completeLaunch`; `MigratorTransactions.createCetusLaunch`, `createBluefinLaunch` | `test/migrators-transactions.test.ts`, `test/transactions.test.ts` | Complete atomic start-configure-finalize-share transaction. `finalize` takes the exact SUI creation fee (a coin intent by default); the creator's optional pre-share purchase (routed to its recipient) or opening-round bid runs on the owned launch. |
+| Meme publication and Coin Registry registration | `LaunchpadTransactions.publishMeme`, `finalizeCurrencyRegistration`; `readMemePublication`, `readCurrencyRegistration`, `readLaunchCreation` | `test/effects.test.ts`, `test/template.test.ts` | Publication lists the whole dependency closure (std, sui, timelock, admin, partners, launchpad). Effects readers return the package, Meme type, ticket, pending and shared `Currency<Meme>`, and the shared launch. |
+| `launch::join_opening_round`, `settle_opening_round`, `deliver_opening_round` | `LaunchpadCalls` and `LaunchpadTransactions` `joinOpeningRound`, `settleOpeningRound`, `deliverOpeningRound`; `getOpeningRoundBid` | `test/transactions.test.ts`, `test/state.test.ts` | Settlement and delivery are permissionless; delivery's coins go to the bidder inside the contract, so the builder routes nothing. |
 | `allocation::recipient`, `plan`, `route`, `fee_split`; `bps::new` | `LaunchpadCalls.allocationPlan`, `feeSplit`, `bps` | `test/transactions.test.ts`, `test/allocation.test.ts` | Compositional constructors; inputs are checked like the Move constructors first. |
 | `allocation` getters and `apportion_fee_split` | `normalizeAllocationPlan`, `addProtocolAllocation`, `requireCompletePlan`, `normalizeFeeSplit`, `apportionMeme`, `apportionQuote`, `apportionFeeSplit`, `previewFeeCollection` | `test/allocation.test.ts` | Move-composition; mirrored off chain against the Move vectors. |
-| `launch::buy` | `LaunchpadCalls.buy`; `LaunchpadTransactions.buy`; `previewBuy` | `test/transactions.test.ts`, `test/curve.test.ts` | Complete builder (with the `Clock` that times protection) and arithmetic preview. |
+| `launch::buy` | `LaunchpadCalls.buy`; `LaunchpadTransactions.buy`; `previewBuy` | `test/transactions.test.ts`, `test/curve.test.ts` | Complete builder (no `Clock` since purchase protection was removed) and arithmetic preview. |
 | `launch::sell` | `LaunchpadCalls.sell`; `LaunchpadTransactions.sell`; `previewSell` | `test/transactions.test.ts`, `test/curve.test.ts` | Complete builder and arithmetic preview. |
 | `launch::claim_creator_caps` | `encodeCreatorClaimMessage`, `encodeCreatorClaimAttestation`; `LaunchpadCalls.claimCreatorCaps`; `LaunchpadTransactions.claimCreatorCaps` | `test/creator-claim.test.ts`, `test/transactions.test.ts` | Routes `CurveFeeCap` and `BlastMetadataCap`; current ownership is a native object fact. |
 | `launch::claim_creator_fees` | `LaunchpadCalls.claimCreatorFees`; `LaunchpadTransactions.claimCreatorFees` | `test/transactions.test.ts` | Passes the live `CurveFeeCap` and routes both returned coins. |
 | `launch::set_name`, `set_description`, `set_icon_url` | `LaunchpadCalls` and `LaunchpadTransactions` `setName`, `setDescription`, `setIconUrl` | `test/transactions.test.ts` | Pass the live `BlastMetadataCap` and the mutable `Currency<Meme>`. |
-| `launch::claim_protocol_fees` | `LaunchpadCalls.claimProtocolFees`; `LaunchpadTransactions.claimProtocolFees` | `test/transactions.test.ts` | Composes `blast_admin::acl::sign_in` and routes both returned coins. |
+| `launch::claim_protocol_fees`, `claim_protocol_fees_with_partner` | `LaunchpadCalls.claimProtocolFees`, `claimProtocolFeesWithPartner`; `LaunchpadTransactions.claimProtocolFees` (partner route when `partner` is given); `previewProtocolFeeClaim` | `test/transactions.test.ts`, `test/state.test.ts` | Composes `blast_admin::blast_acl::sign_in<TreasuryAdmin>` and routes the Meme, Quote, and SUI coins; the partner is paid inside the call. |
 | `launch::new`, `treasury_cap_mut`, `migrate` | Adapter entries | `test/migrators-transactions.test.ts` | Adapter composition: only the adapter module can construct its witness. |
-| Launch getters, `launch::assert_curve_fee_cap`, `bps::*`, `creator_authority::destroy_*`, `blast_fun_domain::*_role` | `decodeLaunchObject`, `getProtectedPurchases`, reducers | `test/state.test.ts`, `test/migrators-state.test.ts` | Move-composition; the SDK reads BCS state instead. |
-| `launch::reassign_curve_fee_cap`, `reassign_metadata_cap`; `launch_config::*`; `runtime_config::*`; `package_admin::*` | None | ABI classifier | Intentional administration exclusions; replay uses their events. |
+| Launch getters, `launch::assert_curve_fee_cap`, `bps::*`, `creator_authority::destroy_*` | `decodeLaunchObject`, `getOpeningRoundBid`, `launchMigrationRoute`, reducers | `test/state.test.ts`, `test/migrators-state.test.ts` | Move-composition; the SDK reads BCS state instead. `blast_fun_domain` now declares only typed role structs, which `signIn` names. |
+| `launch::reassign_curve_fee_cap`, `reassign_metadata_cap`; `launch_config::*` (quotes, decimals, adapters, fees, protocol allocation, creation fee, partners); `runtime_config::*`; `package_admin::*` | None | ABI classifier | Intentional administration exclusions; replay uses their events, and `decodeLaunchConfigObject`, `decodeRuntimeConfigObject`, and `decodePartnerObject` read their state. |
 | `launch_ticket::new` | Compiled Meme template and `LaunchpadTransactions.publishMeme` | `test/template.test.ts`, `test/transactions.test.ts` | The template initializer constructs the ticket at the selected decimals; publication effects identify the transferred ticket. |
 | `creator_authority::new_address`, `new_account` | Compiled Meme template | `test/template.test.ts` | Template-internal constructors. |
-| Cetus `migrate`, `collect_fees`, `settle_and_update_fee_split` (type arguments `<Meme, Quote, CoinA, CoinB>`, ADR 0100) | `migrateCetus`, `collectCetusFees`, `settleAndUpdateCetusFeeSplit` with `memeSide` | `test/migrators-transactions.test.ts` | Migration takes the mutable LP Burn `BurnManager`; collection and split updates take it immutably with the `Clock`, and the mutable Meme `Currency` to burn the burn share. |
+| Cetus `migrate_meme_a/_b`, `collect_fees_meme_a/_b`, `settle_and_update_fee_split_meme_a/_b` at a2a1db2 | `migrateCetus`, `collectCetusFees`, `settleAndUpdateCetusFeeSplit` with `memeSide` build the ADR 0100 generic routes | `test/migrators-transactions.test.ts` | **Unresolved mismatch** (see Baseline): the builders target the generic routes absent at a2a1db2. |
 | Bluefin `migrate`, `collect_fees`, `settle_and_update_fee_split` | `migrateBluefin`, `collectBluefinFees`, `settleAndUpdateBluefinFeeSplit` | `test/migrators-transactions.test.ts` | Migration pays the exact SUI pool-creation fee from gas; collection and split updates take the mutable Meme `Currency`. |
-| Cetus `buyback_and_burn` (same four type arguments), Bluefin `buyback_and_burn` | `buybackAndBurnCetus` with `memeSide`, `buybackAndBurnBluefin` | `test/migrators-transactions.test.ts` | Admin builders composing sign-in (buyback-admin role); the caller sets `minMemeOut` from an off-chain price. |
-| `vault::claim_creator_fees`, `vault::claim_protocol_fees` | `MigratorCalls` and `MigratorTransactions` claim methods | `test/migrators-transactions.test.ts` | The creator claim passes the read-only launch and its live `CurveFeeCap`; the residual claim composes admin sign-in; both route the returned coins. |
-| `lp_fee_policy::set_default_shares`, `set_coin_shares`, `clear_coin_shares`, `set_protocol_destination` | `setLpFeeDefaultShares`, `setLpFeeCoinShares`, `clearLpFeeCoinShares`, `setLpFeeProtocolDestination` | `test/migrators-transactions.test.ts` | Admin builders composing sign-in with the mutable `LpFeePolicy`. |
-| `blast_holder_rewards::publish_round`, `claim` | `publishHolderRewardRound`, `claimHolderReward`, `claimHolderRewards` | `test/migrators-transactions.test.ts`, `test/holder-rewards-operator.test.ts` | Publication validates the manifest and its vault; relays carry positional proofs. |
+| Cetus `buyback_and_burn_meme_a/_b`, Bluefin `buyback_and_burn` | `buybackAndBurnCetus` with `memeSide` (generic route, unresolved mismatch), `buybackAndBurnBluefin` | `test/migrators-transactions.test.ts` | Admin builders composing `sign_in<BuybackAdmin>`; the caller sets `minMemeOut` from an off-chain price. |
+| `vault::claim_creator_fees`, `vault::claim_protocol_fees` | `MigratorCalls` and `MigratorTransactions` claim methods | `test/migrators-transactions.test.ts` | The creator claim passes the read-only launch and its live `CurveFeeCap`; the residual claim composes `sign_in<TreasuryAdmin>`; both route the returned coins. |
+| `lp_fee_policy::set_default_shares`, `set_coin_shares`, `clear_coin_shares`, `set_protocol_destination` | `setLpFeeDefaultShares`, `setLpFeeCoinShares`, `clearLpFeeCoinShares`, `setLpFeeProtocolDestination` | `test/migrators-transactions.test.ts` | Admin builders with the mutable `LpFeePolicy`: shares take `sign_in<FeeAdmin>`, the destination `sign_in<TreasuryAdmin>`. |
+| `blast_holder_rewards::publish_round`, `claim` | `publishHolderRewardRound`, `claimHolderReward`, `claimHolderRewards` | `test/migrators-transactions.test.ts`, `test/holder-rewards-operator.test.ts` | Publication composes `sign_in<RewardsAdmin>` and validates the manifest and its vault; relays carry positional proofs. The `Round` object commits to vault, number, root, and leaf count; its checkpoint window and manifest digest are only in `RoundPublished`. |
 | `vault` and `lp_fee_policy` state (no public getters) | `decodeLpVaultObject`, `getLpFeePolicy`, `getLpFeeShares` | `test/migrators-state.test.ts` | The SDK reads BCS state. |
 | Migrators `package_admin::*` | None | ABI classifier | Intentional administration exclusions. |
 
@@ -82,26 +95,30 @@ recipient, and request-result-to-`keep` routing for every returned object.
 
 | Frozen object or type boundary | SDK implementation | Verification |
 | --- | --- | --- |
-| `Launch<Meme, Quote>` shared mutable object | `launchBcs`, `decodeLaunchObject`, `getLaunch`, `getProtectedPurchases` | `test/state.test.ts`, `test/migrators-state.test.ts` |
-| `LaunchTicket<Meme>` owned object and `LaunchInitializer<Meme, Quote>` linear value | Meme publication and adapter launch builders | `test/template.test.ts`, `test/migrators-transactions.test.ts`; ticket identity comes from publication effects |
-| `AllocationPlan`, `FeeSplit`, `Bps` | `allocationPlanBcs`, `feeSplitBcs`, `bpsBcs` and the constructor builders | `test/allocation.test.ts`, `test/transactions.test.ts` |
+| `Launch<Meme, Quote>` shared mutable object (lifecycle with `OpeningRound`, public start, opening-round pot, five-balance fee ledger with the SUI creation fee, partner) | `launchBcs`, `decodeLaunchObject`, `getLaunch`, `openingRoundEndMs`, `getOpeningRoundBid` (`OpeningRoundBidKey(address)`) | `test/state.test.ts` decodes literal Move-printed bytes at five lifecycle points; `test/launchpad-events.test.ts` replays the literal events to the same object state |
+| `LaunchTicket<Meme>` owned object and `LaunchInitializer<Meme, Quote>` linear value | `launchTicketBcs`, `decodeLaunchTicketObject`; publication readers; adapter launch builders (initializer facts replay from `LaunchCreated`) | `test/state.test.ts` (literal bytes), `test/effects.test.ts`, `test/migrators-transactions.test.ts` |
+| `LaunchConfig`, `RuntimeConfig` shared objects; `blast_partners::Partner` | `launchConfigBcs`, `decodeLaunchConfigObject`, `getLaunchConfig`; `runtimeConfigBcs`, `decodeRuntimeConfigObject`; `partnerBcs`, `decodePartnerObject`, `timelockedValue` | `test/state.test.ts` (literal bytes) |
+| `AllocationPlan` (with stored protocol shares), `ProtocolAllocation`, `FeeSplit`, `Bps` | `allocationPlanBcs`, `feeSplitBcs`, `bpsBcs`, `addProtocolAllocation` and the constructor builders | `test/allocation.test.ts` (literal plan bytes), `test/transactions.test.ts` |
 | `CurveFeeCap<Meme>`, `BlastMetadataCap<Meme>` owned objects | creator-cap, fee-claim, metadata, split-update builders; live IDs decoded as `curveFeeCapId`, `blastMetadataCapId` | `test/transactions.test.ts`, `test/state.test.ts`; current owner is a native ownership fact |
 | `LpVault<Meme, Quote>` shared mutable object | `lpVaultBcs`, `decodeLpVaultObject`, `getLpVault` | `test/migrators-state.test.ts`, `test/migrators-client.test.ts` |
 | `LpFeePolicy` shared singleton and its per-coin table | `lpFeePolicyBcs`, `getLpFeePolicy`, `getLpFeeShares` | `test/migrators-state.test.ts` |
 | `blast_holder_rewards::Round<Meme, Quote>` shared object | `rewardRoundBcs`, `decodeRewardRound`, `getRewardRound` | `test/holder-rewards-chain.test.ts` |
 | `VenueConfig` (Cetus `PoolCreationCap` custody) | `migratorsDeployment`; mutable in `cetus::new`, immutable at migration | `test/deployments.test.ts`, `test/migrators-transactions.test.ts` |
-| Launchpad, `blast_admin`, and migrators package and shared-object identities | `launchpadDeployment`, `migratorsDeployment` | `test/deployments.test.ts` |
+| Launchpad, `blast_admin`, `blast_partners`, `blast_fun_timelock`, and migrators package and shared-object identities (the singleton `blast_acl::ACL`) | `defineBlastDeployment`, `launchpadDeployment`, `migratorsDeployment` | `test/deployments.test.ts` |
+| Normalized runtime identity, fail-closed signing, Quick presets | `deploymentFingerprint`, `evaluateProtocolAccess`, `observeDeploymentRuntime`, `FROZEN_ABI`, `SDK_RELEASE`, `QUICK_PRESETS`, `resolveQuickPreset` | `test/deployment-identity.test.ts`, `test/quick-presets.test.ts`, one valid non-production manifest in `test/fixtures/non-production-deployment.ts` |
 | Venue `Witness` | `MigratorCalls.migrationWitnessType` | original-package witness type |
 | Blast SUI `vault::Vault` shared mutable object | `blastSuiVaultBcs`, `decodeBlastSuiVaultObject`, `getBlastSuiVault`, `BlastSuiClient.getVault` | `test/blast-sui-state.test.ts` pins independent literal BCS bytes to the contracts baseline and Sui revision; `test/blast-sui-client.test.ts` reuses that golden. |
 | `deposit_receipt::BlastSuiDepositReceipt` address-owned object | `blastSuiDepositReceiptBcs`, `decodeBlastSuiDepositReceiptObject`, `getBlastSuiDepositReceipt`, `BlastSuiClient.getDepositReceipt` | `test/blast-sui-state.test.ts` pins independent literal BCS bytes to the contracts baseline and Sui revision; `test/blast-sui-client.test.ts` reuses that golden. |
 | `fun_sui::FUN_SUI` original-package type | `funSuiType` and transaction coin selection | `test/blast-sui-math.test.ts`, `test/blast-sui-transactions.test.ts` |
 | `blast_sui::BLAST_SUI` original-package type | `blastSuiType` and transaction coin selection | `test/blast-sui-math.test.ts`, `test/blast-sui-transactions.test.ts` |
 | Deposit-receipt original-package type | `blastSuiDepositReceiptType` and state/event validation | `test/blast-sui-math.test.ts`, `test/blast-sui-state.test.ts` |
-| Blast SUI package, `PackageVersion`, `ProtocolAuthority`, `PackageAdmin`, and `Vault` identity slots | optional `BlastPackages.blastSui` and distinctly named optional shared identities; `blastSuiDeployment` returns the call-ready immutable version and mutable vault | `test/deployments.test.ts`, `test/blast-sui-math.test.ts` |
+| Blast SUI package, `PackageVersion`, `PackageAdmin`, and `Vault` identity slots (administration uses the singleton `acl`) | optional `BlastPackages.blastSui` and distinctly named optional shared identities; `blastSuiDeployment` returns the call-ready immutable version and mutable vault | `test/deployments.test.ts`, `test/blast-sui-math.test.ts` |
 | Framework `SuiSystemState` | native system-object helper with initial shared version 1 and mutable input | `test/blast-sui-transactions.test.ts` |
 
-`BLAST_DEPLOYMENTS` remains empty. Deployment helpers validate caller-supplied
-identities only and perform no publish, deploy, upgrade, or configuration call.
+`BLAST_DEPLOYMENTS` remains empty and `SDK_RELEASE` is private and unversioned,
+so `evaluateProtocolAccess` keeps production signing disabled. Deployment
+helpers validate caller-supplied identities only and perform no publish,
+deploy, upgrade, or configuration call.
 
 ## Blast SUI arithmetic coverage
 
@@ -125,9 +142,9 @@ authoritative, and these helpers do not duplicate mutable admission policy.
 
 | Frozen event surface | SDK implementation | Verification |
 | --- | --- | --- |
-| 20 wrapped launchpad payloads: `Bought`, `CreatorCapsClaimed`, `CreatorClaimSignerSet`, `CreatorFeesClaimed`, `CurveFeeCapReassigned`, `LaunchCreated`, `LaunchShared`, `LaunchTicketCreated`, `LaunchTradeFeesChanged`, `MemeDecimalsSet`, `MemeMetadataUpdated`, `MetadataCapReassigned`, `Migrated`, `MigrationAllocationPaid`, `MigrationWitnessSet`, `ProtocolAllocationSet`, `ProtocolFeesClaimed`, `ProtocolFeeShareChanged`, `QuoteSet`, `Sold` | `launchpadEventSpecs`, `launchpadEventBcs`, `decodeLaunchpadEvent`, `reduceLaunchpadEvent` | `test/launchpad-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
+| 27 wrapped launchpad payloads: `Bought`, `CreationFeeChanged`, `CreatorCapsClaimed`, `CreatorClaimSignerSet`, `CreatorFeesClaimed`, `CurveFeeCapReassigned`, `LaunchCreated`, `LaunchShared`, `LaunchTicketCreated`, `LaunchTradeFeesChanged`, `MemeDecimalsSet`, `MemeMetadataUpdated`, `MetadataCapReassigned`, `Migrated`, `MigrationAllocationPaid`, `MigrationWitnessSet`, `OpeningRoundDelivered`, `OpeningRoundJoined`, `OpeningRoundSettled`, `PartnerAdded`, `PartnerRemoved`, `ProtocolAllocationSet`, `ProtocolFeesAccrued`, `ProtocolFeesClaimed`, `ProtocolFeeShareChanged`, `QuoteSet`, `Sold` | `launchpadEventSpecs`, `launchpadEventBcs`, `decodeLaunchpadEvent`, `reduceLaunchpadEvent` | `test/launchpad-events.test.ts` checks names and ordered fields/types against the artifact, decodes literal Move-printed payloads, and replays them to the literal launch object state. |
 | Thirteen direct migrator payloads in `blast_events`: `AutoLiquidityAdded`, `AutoLpPositionOpened`, `BuybackBurned`, `CetusPoolReserved`, `CreatorFeesClaimed`, `FeeSplitChanged`, `FeesCollected`, `LpFeeDestinationChanged`, `LpFeePolicyChanged`, `ProtocolFeesClaimed`, `RewardPaid`, `RoundPublished`, `VaultCreated` | `migratorEventSpecs`, `migratorEventBcs`, `decodeMigratorEvent`, `reduceMigratorEvent` | `test/migrator-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
-| Ordered launch-to-vault replay | `reduceLaunchpadProductInput` | launchpad and migrator replay tests reconstruct launch lifecycle, protection, reserves, launch fees, allocation payouts, migration, vault/pool/position identity, residuals and liquidity (the vault linked to its launch by Meme type on `VaultCreated`), split generations, creator/auto-LP/rewards balances, holder-reward rounds, and LP-fee policy. Actor identities omitted from payloads are reconstructed from native event senders. |
+| Ordered launch-to-vault replay | `reduceLaunchpadProductInput` | launchpad and migrator replay tests reconstruct launch lifecycle, opening rounds and per-bidder bids, reserves, launch and migration fees, partner payouts, allocation payouts, migration, vault/pool/position identity, residuals and liquidity (the vault linked to its launch by Meme type on `VaultCreated`), split generations, creator/auto-LP/rewards balances, holder-reward rounds, and LP-fee policy. Actor identities omitted from payloads are reconstructed from native event senders. |
 
 Launchpad and migrator decoders authenticate an event by its type, which names
 the original package. Sui records the transaction's called package and module on
@@ -184,7 +201,7 @@ that fact.
 
 | Frozen surface or proposed layer | Status and reason |
 | --- | --- |
-| All `launch_config` administration; `runtime_config` setters (an empty signer key revokes); launch cap reassignment | Intentional routine-administration exclusion. Product transactions do not need these calls. Their event schemas remain frozen and decoded. |
+| All `launch_config` administration (quotes, decimals, adapters, trade fees, protocol allocation, creation fee, partners); `runtime_config` setters (an empty signer key revokes); launch cap reassignment | Intentional routine-administration exclusion. Product transactions do not need these calls. Their event schemas remain frozen and decoded. |
 | All launchpad and migrators `package_admin` functions | Intentional package-upgrade exclusion. |
 | Blast SUI `package_admin::{new,share,add_capability,authorize_upgrade,commit_upgrade_and_advance,restrict_to_additive,make_immutable}` and `blast_sui_domain::package_admin_role` | Intentional package-bootstrap/upgrade exclusion. Administration uses `blast_admin::acl` with the `BLAST_SUI_DOMAIN` witness; the Blast SUI package no longer has its own `acl` module or ACL/upgrade events. `PackageCapabilityAdded` remains decoded. |
 | Blast SUI `vault::set_redeem_fee` | Intentional routine-administration exclusion. The live fee is available in vault state and events. |
@@ -198,6 +215,8 @@ that fact.
 No Blast V2 contract is deployed for this release, and the SDK has no canonical
 network deployment entry. Before an indexer or API begins:
 
+0. Resolve the Cetus route mismatch at the frozen commit (see Baseline), then
+   rerun `npm run check:abi`.
 1. Publish the required packages and generated Meme package through an approved
    release process. Capture real current/original package IDs and shared-object
    identities from successful publication effects.

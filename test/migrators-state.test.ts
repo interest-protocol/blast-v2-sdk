@@ -10,6 +10,7 @@ import {
   getLpFeePolicy,
   getLpFeeShares,
   getLpVault,
+  launchMigrationRoute,
   lpFeePolicyBcs,
   lpFeeSharePairBcs,
   lpVaultBcs,
@@ -202,4 +203,43 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
     quoteBps: 2_000n,
     source: "default",
   });
+});
+
+test("identifies a launch's recorded migration route from its witness and tier", () => {
+  const migrators = normalizeSuiAddress("0x320");
+  assert.deepEqual(
+    launchMigrationRoute(
+      {
+        migrationWitnessType: `${migrators}::bluefin::Witness`,
+        poolTickSpacing: 200,
+        poolFeeRate: 10_000n,
+      },
+      "0x320",
+    ),
+    { venue: "bluefin", tickSpacing: 200, feeRate: 10_000n },
+  );
+  assert.throws(
+    () =>
+      launchMigrationRoute(
+        {
+          migrationWitnessType: `${normalizeSuiAddress("0x999")}::bluefin::Witness`,
+          poolTickSpacing: 200,
+          poolFeeRate: 10_000n,
+        },
+        "0x320",
+      ),
+    /another migrators package/,
+  );
+  assert.throws(
+    () =>
+      launchMigrationRoute(
+        {
+          migrationWitnessType: `${migrators}::turbos::Witness`,
+          poolTickSpacing: 200,
+          poolFeeRate: 10_000n,
+        },
+        "0x320",
+      ),
+    /unsupported migration route/,
+  );
 });

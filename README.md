@@ -1,17 +1,23 @@
 # Blast SDK
 
-The SDK mirrors the completed Sui launchpad and migrators ABIs
-without becoming a second source of truth for protocol execution.
+The SDK mirrors the Sui launchpad and migrators ABIs of contracts commit
+`a2a1db25f72a44e3b650bebe0ef806de4c70abbc` without becoming a second source of
+truth for protocol execution. See
+[launchpad ABI coverage](docs/launchpad-abi-coverage.md) for the one known
+mismatch at that commit (the Cetus routes).
 
 It provides:
 
-- exact `bigint` buy, sell, allocation, LP-fee split, and valuation
-  previews;
+- exact `bigint` buy, sell, allocation, LP-fee split, protocol-claim, and
+  valuation previews, plus the display economics (curve price, live supply,
+  market cap, progress) the blast-infra indexer shares through pinned vectors;
 - BCS decoding for live `Launch<Meme, Quote>`, `LpVault<Meme, Quote>`,
   `LpFeePolicy`, and holder-reward `Round` objects through the transport-
   neutral Sui Core API;
-- executable transactions that start a launch through its migration adapter
-  (Cetus or Bluefin), configure and share it, trade, and claim fees;
+- executable transactions that publish a Meme, register its currency, start a
+  launch through its migration adapter, configure and share it, run its
+  opening round, trade, and claim fees, with explicit returned-object routing
+  and readers for the objects each step's effects create;
 - complete migration, permissionless LP-fee collection with auto-LP, creator
   LP-fee claims, settled fee-split updates, LP-fee policy administration, and
   holder-reward rounds for Cetus and Bluefin; and
@@ -34,6 +40,8 @@ const client = new SuiGrpcClient({
     packageId: "0x...",
     originalPackageId: "0x...",
     adminPackageId: "0x...", // published blast_admin
+    partnersPackageId: "0x...", // published blast_partners
+    timelockPackageId: "0x...", // published blast_fun_timelock
     packageVersion: {
       objectId: "0x...",
       initialSharedVersion: "...",
@@ -49,7 +57,8 @@ const client = new SuiGrpcClient({
       initialSharedVersion: "...",
       mutable: false,
     },
-    protocolAuthority: {
+    acl: {
+      // the singleton blast_admin::blast_acl::ACL
       objectId: "0x...",
       initialSharedVersion: "...",
       mutable: false,
@@ -80,70 +89,82 @@ result can be passed directly as the `launch` transaction input.
 
 ## Deployments
 
-`@interest-protocol/blast-sdk/deployments` is the single TypeScript registry for
-Blast package lineage and singleton shared-object identities. Package entries
-keep both the current and original package IDs. Shared-object entries keep the
-object ID and initial shared version. Builders add `mutable` from the Move
-function signature because mutability belongs to a transaction argument, not to
-the object itself. `packages.admin` names the published `blast_admin` package,
-which owns `acl::sign_in` and is a transitive publish dependency of every
-generated Meme package.
+`@interest-protocol/blast-sdk/deployments` is the single deployment import for
+every runtime. A manifest is the normalized runtime identity: schema version,
+environment (`production` names mainnet; `non-production` never does), network
+and chain identifier, explorer, current and original package IDs (launchpad,
+`blast_admin`, `blast_partners`, `blast_fun_timelock`, and optionally migrators
+and Blast SUI), shared-object IDs and initial versions, migration routes and
+their tiers, the contracts commit and ABI artifact digests it was built from,
+release transaction digests, the SDK version and commit, and post-deploy
+evidence. `defineBlastDeployment` validates and freezes one manifest;
+`deploymentFingerprint` hashes its identity-bearing fields.
 
-After a canonical network release is registered, initialize the client without
-copying addresses into the application:
+Every consumer calls `evaluateProtocolAccess` before building or signing a
+protocol transaction:
 
 ```ts
-import { blastLaunchpad } from "@interest-protocol/blast-sdk/launchpad";
 import {
-  getBlastDeployment,
+  evaluateProtocolAccess,
   launchpadDeployment,
+  observeDeploymentRuntime,
 } from "@interest-protocol/blast-sdk/deployments";
 
-const blast = getBlastDeployment("testnet");
-const launchpadExtension = blastLaunchpad(launchpadDeployment(blast));
+const runtime = await observeDeploymentRuntime(client, deployment);
+const access = evaluateProtocolAccess({ manifest, mode: "production", runtime });
+if (access.signing === "enabled") {
+  client.$extend(blastLaunchpad(launchpadDeployment(access.deployment)));
+}
 ```
 
-For local or unreleased deployments, validate one manifest with
-`defineBlastDeployment`, then pass it through the matching deployment helper. The
-built-in registry remains empty until publish output supplies real IDs; the SDK
-does not ship placeholder addresses.
+It never throws for an identity problem. Any reason disables signing: an
+invalid manifest, an environment mismatch, fixture identities in production, an
+unreleased or foreign-lineage deployment, an ABI mismatch, an unsupported
+route, a private or unversioned SDK, post-deploy evidence missing, or a runtime
+chain or shared-object mismatch. `BLAST_DEPLOYMENTS` is empty and this SDK
+build is private and unversioned (`SDK_RELEASE`), so production signing stays
+disabled until a real release registers both. Quick presets (`QUICK_PRESETS`,
+empty) bind to one deployment fingerprint and an SDK version range, and
+`resolveQuickPreset` returns values only while access is enabled for that exact
+deployment.
 
 ## Launch creation
 
-A launch starts in its migration adapter (contracts ADR 0089). Publish the
-generated Meme package first (see below); its initializer transfers the
-`LaunchTicket` to the publisher. A second transaction then runs the whole
-construction atomically:
+A launch starts in its migration adapter (contracts ADR 0089) after three
+transactions:
 
-1. `cetus::new` or `bluefin::new` validates the creator's pool tier against its
-   venue and calls `launch::new`, which returns a `LaunchInitializer` with no
-   abilities. Cetus derives the fee rate from its own registry and reserves the
-   pair's pool creation with the Meme type's `PoolCreationCap`; Bluefin checks
-   its own tier bounds.
-2. `set_graduation_target`, `set_allocation_plan`, `set_lp_fee_split`, and the
-   optional `set_protection` record the creator's settings.
-3. `launch::finalize` checks every invariant and fixes the supply mode.
-4. An optional unprotected `buy` runs on the owned launch before public opening.
-5. `launch::share` opens the launch; protection starts now.
+1. `tx.publishMeme` publishes the generated Meme package against its whole
+   dependency closure. `readMemePublication` reads the Meme type, the
+   `LaunchTicket` its initializer transferred to the publisher, and the
+   `Currency<Meme>` sent to the Coin Registry.
+2. `tx.finalizeCurrencyRegistration` shares that currency;
+   `readCurrencyRegistration` returns its shared reference.
+3. `createCetusLaunch` or `createBluefinLaunch` runs the whole construction
+   atomically: the adapter's `new` returns a `LaunchInitializer`;
+   `set_virtual_quote`, `set_graduation_target`, `set_allocation_plan`,
+   `set_lp_fee_split`, and the optional `set_opening_round` and `set_partner`
+   record the creator's settings; `launch::finalize` takes the exact
+   `LaunchConfig` creation fee in SUI; then the creator's optional purchase
+   (without an opening round) or bid (with one) runs on the owned launch before
+   `launch::share`. `readLaunchCreation` returns the shared launch.
 
 ```ts
-import { blastMigrators } from "@interest-protocol/blast-sdk/migrators";
-
-const transaction = client.blastMigrators.tx.createCetusLaunch({
+const transaction = client.blastMigrators.tx.createBluefinLaunch({
   memeType,
   quoteType: "0x2::sui::SUI",
   ticket: ticketId,
-  memeCurrency, // Coin Registry Currency<Meme>, mutable
-  cetusConfig, // Cetus GlobalConfig, immutable
-  cetusPools, // Cetus Pools, mutable
+  memeCurrency, // shared Currency<Meme>, mutable
   tickSpacing: 200,
-  graduationTarget: 3_000_000_000_000n,
-  // Blast's allocation (here 500 bps of each asset) is added at finalization.
+  feeRate: 10_000n,
+  virtualQuote: 3_000_000_000_000n,
+  graduationTarget: 12_000_000_000_000n,
+  creationFee: (await client.blastLaunchpad.getLaunchConfig()).creationFee,
+  // Blast's allocation is stored from LaunchConfig at finalization.
   allocationPlan: {
     curveMemeBps: 7_000n,
     lpMemeBps: 2_000n,
-    lpQuoteBps: 9_000n,
-    recipients: [{ destination: teamWallet, memeBps: 500n, quoteBps: 500n }],
+    lpQuoteBps: 9_500n,
+    recipients: [{ destination: teamWallet, memeBps: 250n, quoteBps: 250n }],
   },
   lpFeeSplit: {
     creatorBps: 5_000n,
@@ -152,24 +173,22 @@ const transaction = client.blastMigrators.tx.createCetusLaunch({
     burnBps: 0n,
     recipients: [],
   },
-  protection: {
-    windowMs: 60_000n,
-    cumulativeSenderBps: 100n,
-    perTransactionBps: 50n,
-  },
-  preShareBuy: { quoteAmount: 1_000_000_000n, minMemeOut: 1n, recipient },
+  openingRoundMs: 60_000n,
+  creatorBid: { quoteAmount: 1_000_000_000n },
 });
 ```
 
-`createBluefinLaunch` takes `tickSpacing` and `feeRate` instead of the Cetus
-objects. The SDK checks the allocation plan and fee split exactly as the Move
-constructors do and rejects shapes they abort on. The creator's plan excludes
-Blast: `launch::finalize` inserts the `LaunchConfig` protocol allocation as the
-first recipient and requires each asset to sum to 10,000 basis points;
-`addProtocolAllocation` previews that step. `deriveLaunchEconomics`,
+During the opening round anyone joins the pot (`joinOpeningRound`); after it
+ends anyone settles it with one curve purchase (`settleOpeningRound`) and
+delivers each bidder's pro-rata Meme and refund (`deliverOpeningRound`), which
+the contract transfers to the bidder. The SDK checks the allocation plan and
+fee split exactly as the Move constructors do. `addProtocolAllocation` previews
+the protocol shares `launch::finalize` stores; `deriveLaunchEconomics`,
 `apportionMeme`, `apportionQuote`, and `apportionFeeSplit` mirror the
-contract's exact apportionment: Blast's migration allocation rounds up, every
-other part goes by largest remainder.
+contract's exact apportionment: Blast's migration allocation rounds up and
+accrues to the launch's protocol fees at migration, every other part goes by
+largest remainder. `previewProtocolFeeClaim` mirrors the partner's share of a
+protocol-fee claim.
 
 ## Migrators
 
@@ -177,7 +196,10 @@ other part goes by largest remainder.
 adapters. Cetus orders a pool's coin types by type name, so its builders take
 `memeSide: "a" | "b"` and pass the pool's coins in that order after Meme and
 Quote, as `<Meme, Quote, CoinA, CoinB>`, to Cetus's single route per operation
-(contracts ADR 0100); Bluefin always creates `Pool<Meme, Quote>`.
+(contracts ADR 0100). The frozen commit a2a1db2 still has the `_meme_a` and
+`_meme_b` pairs, so `evaluateProtocolAccess` rejects Cetus routes and
+`npm run check:abi` fails until the SDK and the selected commit agree. Bluefin
+always creates `Pool<Meme, Quote>`.
 
 - Migration is permissionless. Cetus burns the full-range position through
   Cetus LP Burn and takes the mutable `BurnManager`; Bluefin takes its SUI
@@ -197,8 +219,9 @@ Quote, as `<Meme, Quote, CoinA, CoinB>`, to Cetus's single route per operation
   destination (`setLpFeeDefaultShares`, `setLpFeeCoinShares`,
   `clearLpFeeCoinShares`, `setLpFeeProtocolDestination`), claim migration
   residuals (`claimProtocolFees`), and publish holder-reward rounds
-  (`publishHolderRewardRound`). Each composes `blast_admin::acl::sign_in` in
-  the same transaction.
+  (`publishHolderRewardRound`). Each composes `blast_admin::blast_acl::sign_in`
+  with the one typed role the action takes (`FeeAdmin`, `TreasuryAdmin`,
+  `BuybackAdmin`, or `RewardsAdmin`) in the same transaction.
 
 The client reads `LpVault` objects, the `LpFeePolicy` singleton, a coin's live
 LP-fee shares (`getLpFeeShares`: its own pair, else the defaults), and
@@ -266,15 +289,18 @@ For lower-level composition, import `buildMemePackageBytecode` from
 package ID as its second argument; `publishMeme` handles this from the
 deployment registry.
 
-After publication completes, pass the created ticket ID to
-`MigratorTransactions.createCetusLaunch` or `createBluefinLaunch`. This
-separation is required because a Move initializer transfers the ticket; it
-cannot return the ticket to another command in the publish transaction.
+After publication completes, read the ticket and pending currency with
+`readMemePublication`, share the currency with `finalizeCurrencyRegistration`,
+then pass the ticket ID to `MigratorTransactions.createCetusLaunch` or
+`createBluefinLaunch`. This separation is required because a Move initializer
+transfers the ticket; it cannot return the ticket to another command in the
+publish transaction.
 
 `tx` methods return complete transactions that route all returned coins or
 capabilities. `call` methods return transaction thunks for programmable
-composition; `LaunchpadCalls.completeLaunch` applies the settings, finalize,
-optional purchase before sharing, and share to any adapter's initializer.
+composition; `LaunchpadCalls.completeLaunch` applies the settings, finalize
+with the creation fee, the creator's optional purchase or opening-round bid
+before sharing, and share to any adapter's initializer.
 
 All protocol amounts use atomic units. Fee obligations round up to their
 recipient. Curve outputs and valuations round down, so the integer remainder
@@ -291,6 +317,17 @@ addition, basis-point validation, and non-negative multiply-divide with an
 explicit rounding direction. Arithmetic remains native `bigint`; computed
 results must pass validation again before they regain a Move integer brand.
 
+## Display economics
+
+`curvePrice`, `formatPrice`, `formatPriceRational`, `liveSupply`,
+`applyLiveSupplyChange`, `marketCap`, and `launchProgressBps` are the exact
+`bigint` formulas the blast-infra indexer serves under `/v1`. `npm test` runs
+every `curve_price`, `live_supply`, `market_cap`, and `progress` case of
+`test/vectors/market-data.json`, the file blast-infra pins by SHA-256
+`1fd14d23e58b6f5901b55adbf1327b39a185ad3d77a4f415f3a56df87ce5c2d4`, and refuses
+a copy that differs from that pin. Update the vectors only by vendoring the file
+and its pin together in both repositories.
+
 ## Checks
 
 Use Node 22.18 or newer:
@@ -299,12 +336,14 @@ Use Node 22.18 or newer:
 npm install
 npm run typecheck
 npm test
-npm run check:abi
+BLAST_CONTRACTS_DIR=../contracts npm run check:abi
 ```
 
-The default test suite runs the live ABI comparison when the sibling
-`contracts/` checkout is available. `npm run check:abi` is the explicit
-cross-repository release gate.
+`npm run check:abi` extracts the frozen contracts commit with `git archive` from
+the contracts repository (`BLAST_CONTRACTS_DIR`, default `../contracts`) and
+compares its `sui move summary` with `abi/` using the pinned Sui CLI; the
+contracts working tree and branch do not matter. The default test suite runs the
+same comparison when that repository contains the commit.
 
 See [docs/launch-economics.md](docs/launch-economics.md) for the endpoint and
 valuation formulas. See

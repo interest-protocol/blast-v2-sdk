@@ -44,12 +44,19 @@ DEX opening valuation    = floor(S * N       / L)
 ```
 
 `R` is terminal curve Meme, `B` is Meme released by the curve, `N` is Quote
-handed to the destination pool, and `T - N` is Quote paid to the plan's
-recipients, Blast first. `plan` is the complete plan with Blast's allocation
-included. Apportionment gives Blast its ceiling, every other part its floor,
-and the residue one atom each by descending remainder, earlier parts first on
-ties (curve, pool, then recipients in plan order); `allocation.ts` mirrors it
-exactly.
+handed to the destination pool, and `T - N` is Quote split between Blast's
+one-time fee and the plan's recipients. `plan` is the complete plan with
+Blast's protocol shares stored (`addProtocolAllocation`); at migration Blast's
+parts accrue to the launch's protocol fees and the recipients are paid.
+Apportionment gives Blast its ceiling, every other part its floor, and the
+residue one atom each by descending remainder, earlier parts first on ties
+(Meme: curve, pool, Blast, then recipients in plan order; Quote: pool, Blast,
+then recipients); `allocation.ts` mirrors it exactly.
+
+The virtual Quote reserve `V` is the creator's choice (`set_virtual_quote`),
+not a `LaunchConfig` value. Display prices, live supply, market cap, and
+progress use the formulas in `market-data.ts`, checked against blast-infra's
+pinned `market-data.json` vectors.
 
 For a Meme/SUI launch, Quote values are MIST. UI formatting divides by SUI's
 decimal scale; no USD price or oracle is involved.
