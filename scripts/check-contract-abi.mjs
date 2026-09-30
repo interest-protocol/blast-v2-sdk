@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -12,6 +13,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const BASELINE_COMMIT = "a5ed34ad49c6c001af2db5b9cbcb206075704412";
+const LAUNCHPAD_BASELINE = {
+  contractsCommit: BASELINE_COMMIT,
+  workingTreeDifferedAtFreeze: true,
+  abiNeutralDifferences: [
+    "sui/meme_template/Move.lock",
+    "docs/research/sui-deepbook-indexer-architecture-2026.md",
+  ],
+};
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
   {
@@ -36,6 +45,15 @@ const artifactDeclarations = [
       "contracts ADR 0091: a burn part in the LP-fee split, with admin buyback and burn",
       "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs",
     ],
+  },
+  {
+    path: "production-presale-v1.json",
+    // The presale package is new, frozen at its first contracts main commit.
+    baseline: {
+      contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
+      workingTreeDifferedAtFreeze: false,
+    },
+    packages: [["presale", "presale", "blast_presale"]],
   },
   {
     path: "production-blast-sui-v1.json",
@@ -76,15 +94,11 @@ function checkArtifact(declaration) {
       summarizePackage(join(contractsRoot, "sui", directory), packageName),
     ]),
   );
+  const baseline = declaration.baseline ?? LAUNCHPAD_BASELINE;
   const artifact = {
     schemaVersion: 1,
     baseline: {
-      contractsCommit: BASELINE_COMMIT,
-      workingTreeDifferedAtFreeze: true,
-      abiNeutralDifferences: [
-        "sui/meme_template/Move.lock",
-        "docs/research/sui-deepbook-indexer-architecture-2026.md",
-      ],
+      ...baseline,
       ...(declaration.approvedAbiAmendments === undefined
         ? {}
         : { approvedAbiAmendments: declaration.approvedAbiAmendments }),
@@ -110,7 +124,7 @@ function checkArtifact(declaration) {
     return;
   }
   console.log(
-    `current production Move ABI matches artifact frozen at ${BASELINE_COMMIT}`,
+    `current production Move ABI matches abi/${declaration.path} frozen at ${baseline.contractsCommit}`,
   );
 }
 
@@ -124,6 +138,8 @@ function verifySuiCliVersion() {
   const actual = result.stdout.trim().replace(/^sui\s+/, "");
   for (const declaration of artifactDeclarations) {
     const artifactPath = join(sdkRoot, "abi", declaration.path);
+    // A new package's artifact is first created by --write.
+    if (write && !existsSync(artifactPath)) continue;
     const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
     const expected = artifact.baseline?.suiCli;
     if (typeof expected !== "string") {
@@ -266,7 +282,62 @@ const functionClassifiers = {
   meme_template: classifyMemeTemplateFunction,
   blast_fun_migrators: classifyMigratorFunction,
   blast_sui: classifyBlastSuiFunction,
+  blast_presale: classifyPresaleFunction,
 };
+
+const presaleBuilders = new Set([
+  "blast_presale::open_eligibility",
+  "blast_presale::allowlisted_eligibility",
+  "blast_presale::uncapped_for_eligible",
+  "blast_presale::uncapped_for_anyone",
+  "blast_presale::recipient_allocation",
+  "blast_presale::fee_recipient",
+  "blast_presale::share",
+  "blast_presale::commit_open",
+  "blast_presale::commit_allowlisted",
+  "blast_presale::commit_uncapped",
+  "blast_presale::settle",
+  "blast_presale::cancel_unlaunched",
+  "blast_presale::claim",
+  "blast_presale::destroy_cap",
+  "cetus::new",
+  "cetus::migrate",
+  "cetus::collect_fees",
+  "bluefin::new",
+  "bluefin::migrate",
+  "bluefin::collect_fees",
+  "presale_vault::claim_migration_residuals",
+  "holder_rewards::publish_round",
+  "holder_rewards::claim",
+  "holder_rewards::close_round",
+]);
+const presaleEventNames = new Set([
+  "PresaleCreated",
+  "PresaleOpened",
+  "Committed",
+  "PresaleFunded",
+  "PresaleCancelled",
+  "PresaleMigrated",
+  "RaiseAllocated",
+  "RecipientAllocated",
+  "Claimed",
+  "PresaleVaultCreated",
+  "FeesCollected",
+  "MigrationResidualsClaimed",
+  "RoundPublished",
+  "RoundClosed",
+  "RewardClaimed",
+]);
+
+function classifyPresaleFunction(moduleName, functionName) {
+  const key = `${moduleName}::${functionName}`;
+  if (presaleBuilders.has(key)) return "builder";
+  // `allowlist.ts` mirrors the Merkle tree off chain.
+  if (moduleName === "merkle_tree") return "move-composition";
+  if (key === "package_admin::wrap") return "intentional-deployment-exclusion";
+  if (moduleName === "package_admin") return "intentional-admin-exclusion";
+  throw new Error(`unclassified function blast_presale::${key}`);
+}
 
 function classifyMemeTemplateFunction(moduleName, functionName) {
   throw new Error(
@@ -434,6 +505,7 @@ const blastSuiEventNames = new Set([
 ]);
 
 function isEventStruct(packageName, moduleName, structName) {
+  if (packageName === "blast_presale") return presaleEventNames.has(structName);
   if (packageName === "blast_sui" && moduleName === "events") {
     return blastSuiEventNames.has(structName);
   }
