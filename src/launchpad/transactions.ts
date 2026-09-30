@@ -22,6 +22,8 @@ import type { SharedObjectReference } from "../lib/sui.ts";
 import { normalizeSharedObjectReference } from "../lib/sui.ts";
 import type { CreatorAllocationPlan, FeeSplit } from "./allocation.ts";
 import { normalizeAllocationPlan, normalizeFeeSplit } from "./allocation.ts";
+import type { ObjectVersionReference } from "./effects.ts";
+import { COIN_REGISTRY_ID } from "./effects.ts";
 import type { MemeTemplateOptions } from "./template.ts";
 import { buildMemePackageBytecode } from "./template.ts";
 
@@ -729,6 +731,32 @@ export class LaunchpadTransactions {
     tx.moveCall({
       target: `${SUI_FRAMEWORK_ADDRESS}::package::make_immutable`,
       arguments: [upgradeCap],
+    });
+    return tx;
+  }
+
+  /**
+   * Shares a published Meme's `Currency<Meme>` through
+   * `coin_registry::finalize_registration`, the step between publication and
+   * launch creation. Anyone may run it; `readCurrencyRegistration` reads the
+   * shared currency from its effects.
+   */
+  finalizeCurrencyRegistration(options: {
+    memeType: string;
+    currency: ObjectVersionReference;
+  }): Transaction {
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${SUI_FRAMEWORK_ADDRESS}::coin_registry::finalize_registration`,
+      typeArguments: [normalizeStructTag(options.memeType)],
+      arguments: [
+        tx.object(COIN_REGISTRY_ID),
+        tx.receivingRef({
+          objectId: normalizeSuiObjectId(options.currency.objectId),
+          version: options.currency.version,
+          digest: options.currency.digest,
+        }),
+      ],
     });
     return tx;
   }
