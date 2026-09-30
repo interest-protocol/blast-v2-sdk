@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { previewBuy, previewSell } from "../src/launchpad/curve.ts";
+import {
+  previewBuy,
+  previewOpeningRoundDelivery,
+  previewSell,
+} from "../src/launchpad/curve.ts";
 
 const baseState = {
   memeReserve: 800_000_000_000_000_000n,
@@ -119,4 +123,33 @@ test("applies the maximum burn after the Meme fee", () => {
 
 test("rejects a trade whose net input rounds to zero", () => {
   assert.throws(() => previewBuy(baseState, 1n), /quoteInNet rounds to zero/);
+});
+
+test("delivers opening-round shares rounded down, the last bid taking the rest", () => {
+  // Alice bid 1 and Bob 2 of 3; the round holds 999 Meme and 10 Quote.
+  const round = {
+    openingRoundBids: 3n,
+    openingRoundMeme: 999n,
+    openingRoundQuote: 10n,
+  };
+  const alice = previewOpeningRoundDelivery(round, 1n);
+  assert.deepEqual(alice, { meme: 333n, quote: 3n });
+  assert.deepEqual(
+    previewOpeningRoundDelivery(
+      {
+        openingRoundBids: 2n,
+        openingRoundMeme: 999n - alice.meme,
+        openingRoundQuote: 10n - alice.quote,
+      },
+      2n,
+    ),
+    { meme: 666n, quote: 7n },
+  );
+  // Reversed, Bob's floor leaves Alice the remainder: at most dust moves.
+  assert.deepEqual(previewOpeningRoundDelivery(round, 2n), {
+    meme: 666n,
+    quote: 6n,
+  });
+  assert.throws(() => previewOpeningRoundDelivery(round, 4n), /exceeds/);
+  assert.throws(() => previewOpeningRoundDelivery(round, 0n), /positive/);
 });

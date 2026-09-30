@@ -188,6 +188,30 @@ export function previewSell(
   };
 }
 
+/**
+ * Mirrors `launch::deliver_opening_round`: a bidder's share of the Meme and
+ * refunded Quote the settled round holds, each `held * bid / bids` rounded
+ * down. The last undelivered bid (`bid === openingRoundBids`) takes the
+ * remainder, so rounding dust stays with the later deliveries.
+ */
+export function previewOpeningRoundDelivery(
+  round: {
+    openingRoundBids: bigint;
+    openingRoundMeme: bigint;
+    openingRoundQuote: bigint;
+  },
+  bid: bigint,
+): { meme: bigint; quote: bigint } {
+  requirePositiveU64("bid", bid);
+  if (bid > round.openingRoundBids) {
+    throw new RangeError("bid exceeds the undelivered opening-round bids");
+  }
+  return {
+    meme: mulDivDown(round.openingRoundMeme, bid, round.openingRoundBids),
+    quote: mulDivDown(round.openingRoundQuote, bid, round.openingRoundBids),
+  };
+}
+
 function validateCurveState(state: CurveState): void {
   requirePositiveU64("memeReserve", state.memeReserve);
   requireU64("realQuoteReserve", state.realQuoteReserve);
