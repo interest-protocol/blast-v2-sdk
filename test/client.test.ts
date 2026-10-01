@@ -12,7 +12,6 @@ test("registers the typed launchpad client extension", () => {
   }).$extend(
     blastLaunchpad({
       packageId: "0x123",
-      adminPackageId: "0x111",
       partnersPackageId: "0x112",
       timelockPackageId: "0x113",
       packageVersion: {
@@ -30,10 +29,9 @@ test("registers the typed launchpad client extension", () => {
         initialSharedVersion: "12",
         mutable: false,
       },
-      acl: {
-        objectId: "0x5",
-        initialSharedVersion: "13",
-        mutable: false,
+      admin: {
+        packageId: "0x111",
+        acl: { objectId: "0x5", initialSharedVersion: "13" },
       },
     }),
   );

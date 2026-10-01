@@ -22,13 +22,12 @@ function shared<const Mutable extends boolean>(
 
 const deployment: LaunchpadDeployment = {
   packageId: "0x123",
-  adminPackageId: "0xad",
   partnersPackageId: "0xae",
   timelockPackageId: "0xaf",
   packageVersion: shared("0x2", "10", false),
   launchConfig: shared("0x3", "11", false),
   runtimeConfig: shared("0x4", "12", false),
-  acl: shared("0x5", "13", false),
+  admin: { packageId: "0xad", acl: shared("0x5", "13", false) },
 };
 const types = {
   memeType: "0xa::meme::MEME",

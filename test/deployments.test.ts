@@ -72,8 +72,6 @@ test("derives call-specific launchpad shared references", () => {
       "0x0000000000000000000000000000000000000000000000000000000000000123",
     originalPackageId:
       "0x0000000000000000000000000000000000000000000000000000000000000122",
-    adminPackageId:
-      "0x0000000000000000000000000000000000000000000000000000000000000111",
     partnersPackageId:
       "0x0000000000000000000000000000000000000000000000000000000000000112",
     timelockPackageId:
@@ -96,11 +94,14 @@ test("derives call-specific launchpad shared references", () => {
       initialSharedVersion: "12",
       mutable: false,
     },
-    acl: {
-      objectId:
-        "0x0000000000000000000000000000000000000000000000000000000000000005",
-      initialSharedVersion: "13",
-      mutable: false,
+    admin: {
+      packageId:
+        "0x0000000000000000000000000000000000000000000000000000000000000111",
+      acl: {
+        objectId:
+          "0x0000000000000000000000000000000000000000000000000000000000000005",
+        initialSharedVersion: "13",
+      },
     },
   });
 });
@@ -122,6 +123,15 @@ test("derives current-package blast Sui call references", () => {
         "0x0000000000000000000000000000000000000000000000000000000000000009",
       initialSharedVersion: "17",
       mutable: true,
+    },
+    admin: {
+      packageId:
+        "0x0000000000000000000000000000000000000000000000000000000000000111",
+      acl: {
+        objectId:
+          "0x0000000000000000000000000000000000000000000000000000000000000005",
+        initialSharedVersion: "13",
+      },
     },
   });
 });

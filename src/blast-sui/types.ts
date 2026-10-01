@@ -1,5 +1,7 @@
 import { normalizeSuiObjectId } from "@mysten/sui/utils";
 
+import type { AdminDeployment } from "../admin/transactions.ts";
+import { normalizeAdminDeployment } from "../admin/transactions.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import {
   normalizeSharedObjectReference,
@@ -12,7 +14,11 @@ export type BlastSuiDeployment = {
   originalPackageId?: string;
   packageVersion: SharedObjectReference<false>;
   vault: SharedObjectReference<true>;
+  admin: AdminDeployment;
 };
+
+/** The typed `blast_sui_domain` roles. */
+export type BlastSuiAdminRole = "UpgradeAdmin" | "FeeAdmin";
 
 type NormalizedBlastSuiDeployment = Required<BlastSuiDeployment>;
 
@@ -32,6 +38,7 @@ export function normalizeBlastSuiDeployment(
       false,
     ),
     vault: normalizeSharedObjectReference("vault", deployment.vault, true),
+    admin: normalizeAdminDeployment(deployment.admin),
   };
 }
 

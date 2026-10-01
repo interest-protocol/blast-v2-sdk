@@ -52,6 +52,10 @@ test("normalizes blast Sui deployment references with exact mutability", () => {
         initialSharedVersion: "17",
         mutable: true,
       },
+      admin: {
+        packageId: "0xad",
+        acl: { objectId: "0xac", initialSharedVersion: "3" },
+      },
     }),
     {
       packageId:
@@ -69,6 +73,15 @@ test("normalizes blast Sui deployment references with exact mutability", () => {
           "0x0000000000000000000000000000000000000000000000000000000000000009",
         initialSharedVersion: "17",
         mutable: true,
+      },
+      admin: {
+        packageId:
+          "0x00000000000000000000000000000000000000000000000000000000000000ad",
+        acl: {
+          objectId:
+            "0x00000000000000000000000000000000000000000000000000000000000000ac",
+          initialSharedVersion: "3",
+        },
       },
     },
   );

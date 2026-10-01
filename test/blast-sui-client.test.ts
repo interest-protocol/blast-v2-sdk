@@ -28,6 +28,10 @@ const deployment: BlastSuiDeployment = {
     mutable: false,
   },
   vault: { objectId: "0x44", initialSharedVersion: "9", mutable: true },
+  admin: {
+    packageId: "0xad",
+    acl: { objectId: "0xac", initialSharedVersion: "3" },
+  },
 };
 
 test("registers calls, transactions, and exact Core API state reads", async () => {

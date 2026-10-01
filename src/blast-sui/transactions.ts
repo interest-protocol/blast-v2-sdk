@@ -5,9 +5,10 @@ import type {
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiAddress, SUI_TYPE_ARG } from "@mysten/sui/utils";
 
+import { AdminCalls } from "../admin/transactions.ts";
 import { requireU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
-import type { BlastSuiDeployment } from "./types.ts";
+import type { BlastSuiAdminRole, BlastSuiDeployment } from "./types.ts";
 import {
   blastSuiType,
   funSuiType,
@@ -20,9 +21,27 @@ type NormalizedBlastSuiDeployment = ReturnType<
 
 export class BlastSuiCalls {
   readonly deployment: NormalizedBlastSuiDeployment;
+  readonly admin: AdminCalls;
 
   constructor(deployment: BlastSuiDeployment) {
     this.deployment = normalizeBlastSuiDeployment(deployment);
+    this.admin = new AdminCalls(this.deployment.admin);
+  }
+
+  /** The Move type of one `blast_sui_domain` role, for `AdminCalls.grantRole`. */
+  roleType(role: BlastSuiAdminRole): string {
+    return `${this.deployment.originalPackageId}::blast_sui_domain::${role}`;
+  }
+
+  /** This PTB's `AdminWitness<Role>`; the `AdminCap` must hold `role`. */
+  signIn(options: {
+    adminCap: TransactionObjectInput;
+    role: BlastSuiAdminRole;
+  }) {
+    return this.admin.signIn({
+      adminCap: options.adminCap,
+      role: this.roleType(options.role),
+    });
   }
 
   mintFunSui(options: { suiCoin: TransactionObjectInput }) {

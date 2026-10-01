@@ -61,6 +61,15 @@ const artifactDeclarations = [
     packages: [["presale", "presale", "blast_presale"]],
   },
   {
+    path: "production-admin-v1.json",
+    // The shared ACL package is new to SDK coverage, frozen at contracts main.
+    baseline: {
+      contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
+      workingTreeDifferedAtFreeze: false,
+    },
+    packages: [["admin", "admin", "blast_admin"]],
+  },
+  {
     path: "production-blast-sui-v1.json",
     packages: [["blastSui", "blast_sui", "blast_sui"]],
     approvedAbiAmendments: [
@@ -219,7 +228,7 @@ function normalizeModule(packageName, moduleName, summary) {
   const normalizedStructs = normalizeStructs(summary.structs);
   const events = normalizedStructs
     .filter(({ name }) => isEventStruct(packageName, moduleName, name))
-    .map((event) => ({ ...event, sdk: "decoder-reducer" }));
+    .map((event) => ({ ...event, sdk: classifyEvent(packageName, event) }));
   const structs = normalizedStructs.filter(
     ({ name }) => !isEventStruct(packageName, moduleName, name),
   );
@@ -289,7 +298,50 @@ const functionClassifiers = {
   blast_fun_migrators: classifyMigratorFunction,
   blast_sui: classifyBlastSuiFunction,
   blast_presale: classifyPresaleFunction,
+  blast_admin: classifyAdminFunction,
 };
+
+const aclBuilders = new Set([
+  "sign_in",
+  "grant_admin",
+  "revoke_admin",
+  "grant_role",
+  "revoke_role",
+  "destroy_admin_cap",
+  "begin_super_admin_transfer",
+  "cancel_super_admin_transfer",
+  "accept_super_admin_transfer",
+  "destroy_retired_super_admin_cap",
+]);
+
+function classifyAdminFunction(moduleName, functionName) {
+  if (moduleName === "blast_acl" && aclBuilders.has(functionName)) {
+    return "builder";
+  }
+  // Consumers' own package_admin and package_version modules call these on
+  // values they wrap; no transaction can reach them directly.
+  if (
+    moduleName === "upgrade_custody" ||
+    moduleName === "operational_version"
+  ) {
+    return "move-composition";
+  }
+  throw new Error(
+    `unclassified function blast_admin::${moduleName}::${functionName}`,
+  );
+}
+
+/**
+ * Every event the SDK decodes and replays. blast_admin's generic upgrade and
+ * operational-version events follow package upgrades, which publish tooling
+ * drives, so the SDK leaves them out with the upgrade calls.
+ */
+function classifyEvent(packageName, event) {
+  if (packageName === "blast_admin" && event.typeParameters.length > 0) {
+    return "intentional-upgrade-exclusion";
+  }
+  return "decoder-reducer";
+}
 
 const presaleBuilders = new Set([
   "blast_presale::open_eligibility",
@@ -519,6 +571,7 @@ const blastSuiEventNames = new Set([
 
 function isEventStruct(packageName, moduleName, structName) {
   if (packageName === "blast_presale") return presaleEventNames.has(structName);
+  if (packageName === "blast_admin") return moduleName === "blast_admin_events";
   if (packageName === "blast_sui" && moduleName === "events") {
     return blastSuiEventNames.has(structName);
   }

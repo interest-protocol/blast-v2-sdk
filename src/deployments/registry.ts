@@ -91,13 +91,15 @@ export function launchpadDeployment(
   return {
     packageId: packageReference.packageId,
     originalPackageId: packageReference.originalPackageId,
-    adminPackageId: deployment.packages.admin.packageId,
+    admin: {
+      packageId: deployment.packages.admin.packageId,
+      acl: objects.acl,
+    },
     partnersPackageId: deployment.packages.partners.packageId,
     timelockPackageId: deployment.packages.timelock.packageId,
     packageVersion: sharedObjectReference(objects.packageVersion, false),
     launchConfig: sharedObjectReference(objects.launchConfig, false),
     runtimeConfig: sharedObjectReference(objects.runtimeConfig, false),
-    acl: sharedObjectReference(objects.acl, false),
   };
 }
 
@@ -122,6 +124,10 @@ export function blastSuiDeployment(
     originalPackageId: packageReference.originalPackageId,
     packageVersion: sharedObjectReference(packageVersion, false),
     vault: sharedObjectReference(vault, true),
+    admin: {
+      packageId: deployment.packages.admin.packageId,
+      acl: deployment.sharedObjects.acl,
+    },
   };
 }
 

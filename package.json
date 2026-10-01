@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./admin": "./src/admin/index.ts",
     "./blast-sui": "./src/blast-sui/index.ts",
     "./deployments": "./src/deployments/index.ts",
     "./holder-rewards": "./src/holder-rewards/index.ts",

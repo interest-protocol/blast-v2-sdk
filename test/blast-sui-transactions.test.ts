@@ -21,6 +21,7 @@ const deployment: BlastSuiDeployment = {
   originalPackageId: "0x122",
   packageVersion: shared("0x10", "8", false),
   vault: shared("0x11", "9", true),
+  admin: { packageId: "0xad", acl: shared("0xac", "3", false) },
 };
 const recipient = "0xbeef";
 

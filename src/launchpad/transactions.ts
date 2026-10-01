@@ -13,6 +13,8 @@ import {
   SUI_FRAMEWORK_ADDRESS,
 } from "@mysten/sui/utils";
 
+import type { AdminDeployment } from "../admin/transactions.ts";
+import { AdminCalls, normalizeAdminDeployment } from "../admin/transactions.ts";
 import {
   requireBasisPoints,
   requirePositiveU64,
@@ -31,11 +33,8 @@ export type { SharedObjectReference } from "../lib/sui.ts";
 export type LaunchpadDeployment = {
   packageId: string;
   originalPackageId?: string;
-  /**
-   * Published `blast_admin` package: it owns `blast_acl::sign_in`, and every
-   * generated Meme package lists it as a transitive publish dependency.
-   */
-  adminPackageId: string;
+  /** `blast_admin`, a transitive Meme publish dependency, and its ACL. */
+  admin: AdminDeployment;
   /** Published `blast_partners` package, a transitive Meme publish dependency. */
   partnersPackageId: string;
   /** Published immutable `blast_fun_timelock`, a transitive Meme publish dependency. */
@@ -43,8 +42,6 @@ export type LaunchpadDeployment = {
   packageVersion: SharedObjectReference<false>;
   launchConfig: SharedObjectReference<false>;
   runtimeConfig: SharedObjectReference<false>;
-  /** The singleton `blast_admin::blast_acl::ACL` every Blast package signs in to. */
-  acl: SharedObjectReference<false>;
 };
 
 /**
@@ -119,9 +116,16 @@ export type LaunchInitializerInput = LaunchTypes & {
 
 export class LaunchpadCalls {
   readonly deployment: NormalizedDeployment;
+  readonly admin: AdminCalls;
 
   constructor(deployment: LaunchpadDeployment) {
     this.deployment = normalizeDeployment(deployment);
+    this.admin = new AdminCalls(this.deployment.admin);
+  }
+
+  /** The Move type of one `blast_fun_domain` role, for `AdminCalls.grantRole`. */
+  roleType(role: BlastFunAdminRole): string {
+    return `${this.deployment.originalPackageId}::blast_fun_domain::${role}`;
   }
 
   /** Builds one `bps::Bps` value. */
@@ -488,25 +492,15 @@ export class LaunchpadCalls {
     return this.#setMemeMetadata("set_icon_url", options, options.iconUrl);
   }
 
-  /**
-   * Signs in to `blast_admin::blast_acl` and returns this PTB's
-   * `AdminWitness<Role>`; the `AdminCap` must hold `role`.
-   */
+  /** This PTB's `AdminWitness<Role>`; the `AdminCap` must hold `role`. */
   signIn(options: {
     adminCap: TransactionObjectInput;
     role: BlastFunAdminRole;
   }) {
-    return (tx: Transaction): TransactionObjectArgument =>
-      tx.moveCall({
-        target: `${this.deployment.adminPackageId}::blast_acl::sign_in`,
-        typeArguments: [
-          `${this.deployment.originalPackageId}::blast_fun_domain::${options.role}`,
-        ],
-        arguments: [
-          sharedObject(tx, "acl", this.deployment.acl, false),
-          tx.object(options.adminCap),
-        ],
-      });
+    return this.admin.signIn({
+      adminCap: options.adminCap,
+      role: this.roleType(options.role),
+    });
   }
 
   /**
@@ -673,7 +667,7 @@ export class LaunchpadTransactions {
           MOVE_STDLIB_ADDRESS,
           SUI_FRAMEWORK_ADDRESS,
           this.call.deployment.timelockPackageId,
-          this.call.deployment.adminPackageId,
+          this.call.deployment.admin.packageId,
           this.call.deployment.partnersPackageId,
           this.call.deployment.packageId,
         ],
@@ -932,7 +926,7 @@ function normalizeDeployment(
     originalPackageId: normalizeSuiObjectId(
       deployment.originalPackageId ?? packageId,
     ),
-    adminPackageId: normalizeSuiObjectId(deployment.adminPackageId),
+    admin: normalizeAdminDeployment(deployment.admin),
     partnersPackageId: normalizeSuiObjectId(deployment.partnersPackageId),
     timelockPackageId: normalizeSuiObjectId(deployment.timelockPackageId),
     packageVersion: normalizeSharedObjectReference(
@@ -950,7 +944,6 @@ function normalizeDeployment(
       deployment.runtimeConfig,
       false,
     ),
-    acl: normalizeSharedObjectReference("acl", deployment.acl, false),
   };
 }
 

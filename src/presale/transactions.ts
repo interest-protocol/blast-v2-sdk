@@ -13,6 +13,8 @@ import {
   parseStructTag,
 } from "@mysten/sui/utils";
 
+import type { AdminDeployment } from "../admin/transactions.ts";
+import { AdminCalls, normalizeAdminDeployment } from "../admin/transactions.ts";
 import type {
   RewardManifest,
   RewardProof,
@@ -49,12 +51,13 @@ export type PresaleDeployment = {
   originalPackageId?: string;
   /** `venue_config::VenueConfig`, holding each Meme's Cetus `PoolCreationCap`. */
   venueConfig: SharedObjectReference<false>;
-  /** `blast_admin` and its shared `blast_acl::ACL`; only holder-reward rounds need them. */
-  admin?: { packageId: string; acl: SharedObjectReference<false> };
+  admin: AdminDeployment;
 };
 
-type NormalizedDeployment = Required<Omit<PresaleDeployment, "admin">> &
-  Pick<PresaleDeployment, "admin">;
+type NormalizedDeployment = Required<PresaleDeployment>;
+
+/** The typed `blast_presale_domain` roles. */
+export type PresaleAdminRole = "UpgradeAdmin" | "RewardsAdmin";
 
 /** Venues the presale adapters ship. */
 export type PresaleVenue = "cetus" | "bluefin";
@@ -112,6 +115,7 @@ function cetusTypeName(type: string): string {
 
 export class PresaleCalls {
   readonly deployment: NormalizedDeployment;
+  readonly admin: AdminCalls;
 
   constructor(deployment: PresaleDeployment) {
     const packageId = normalizeSuiObjectId(deployment.packageId);
@@ -125,17 +129,25 @@ export class PresaleCalls {
         deployment.venueConfig,
         false,
       ),
-      ...(deployment.admin && {
-        admin: {
-          packageId: normalizeSuiObjectId(deployment.admin.packageId),
-          acl: normalizeSharedObjectReference(
-            "admin.acl",
-            deployment.admin.acl,
-            false,
-          ),
-        },
-      }),
+      admin: normalizeAdminDeployment(deployment.admin),
     };
+    this.admin = new AdminCalls(this.deployment.admin);
+  }
+
+  /** The Move type of one `blast_presale_domain` role, for `AdminCalls.grantRole`. */
+  roleType(role: PresaleAdminRole): string {
+    return this.#type(`blast_presale_domain::${role}`);
+  }
+
+  /** This PTB's `AdminWitness<Role>`; the `AdminCap` must hold `role`. */
+  signIn(options: {
+    adminCap: TransactionObjectInput;
+    role: PresaleAdminRole;
+  }) {
+    return this.admin.signIn({
+      adminCap: options.adminCap,
+      role: this.roleType(options.role),
+    });
   }
 
   /** The type a presale stores as its `migration_witness`. */
@@ -528,20 +540,6 @@ export class PresaleCalls {
       );
   }
 
-  /** `blast_acl::sign_in<RewardsAdmin>`: this PTB's `AdminWitness<RewardsAdmin>`. */
-  signInRewardsAdmin(options: { adminCap: TransactionObjectInput }) {
-    const admin = this.#admin();
-    return (tx: Transaction): TransactionObjectArgument =>
-      tx.moveCall({
-        target: `${admin.packageId}::blast_acl::sign_in`,
-        typeArguments: [this.#type("blast_presale_domain::RewardsAdmin")],
-        arguments: [
-          sharedObject(tx, "admin.acl", admin.acl, false),
-          tx.object(options.adminCap),
-        ],
-      });
-  }
-
   /**
    * `holder_rewards::publish_round` from a manifest built with
    * `PRESALE_REWARD_LEAF_DOMAIN`; reserves its budget from the vault's holder
@@ -736,13 +734,6 @@ export class PresaleCalls {
   #type(name: string): string {
     return normalizeStructTag(`${this.deployment.originalPackageId}::${name}`);
   }
-
-  #admin(): NonNullable<NormalizedDeployment["admin"]> {
-    if (!this.deployment.admin) {
-      throw new TypeError("deployment.admin is required to sign in");
-    }
-    return this.deployment.admin;
-  }
 }
 
 export class PresaleTransactions {
@@ -907,7 +898,7 @@ export class PresaleTransactions {
   ): Transaction {
     const tx = new Transaction();
     const adminWitness = tx.add(
-      this.call.signInRewardsAdmin({ adminCap: options.adminCapId }),
+      this.call.signIn({ adminCap: options.adminCapId, role: "RewardsAdmin" }),
     );
     tx.add(this.call.publishHolderRewardRound({ ...options, adminWitness }));
     return tx;

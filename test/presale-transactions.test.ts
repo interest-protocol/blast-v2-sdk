@@ -411,14 +411,6 @@ test("rejects a manifest from the migrators' leaf domain or another vault", () =
     leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
   });
   assert.throws(() => publish(presaleManifest, "0xbb"), /another vault/);
-  assert.throws(
-    () =>
-      new PresaleCalls({
-        packageId: deployment.packageId,
-        venueConfig: deployment.venueConfig,
-      }).signInRewardsAdmin({ adminCap: "0x1" }),
-    /deployment.admin/,
-  );
 });
 
 // === ABI and PTB inspection ===
