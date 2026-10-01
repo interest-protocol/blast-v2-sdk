@@ -121,7 +121,7 @@ if (access.signing === "enabled") {
 }
 ```
 
-It never throws for an identity problem. Any reason disables signing (see
+It never throws for an identity problem. Any core reason disables signing (see
 `DeploymentRejectionCode`): an invalid manifest (including a chain identifier
 that contradicts the network), an environment mismatch, fixture identities in
 production, an unreleased or foreign-lineage deployment, an ABI mismatch, an
@@ -134,6 +134,41 @@ disabled until a real release registers both. Quick presets (`QUICK_PRESETS`,
 empty) bind to one deployment fingerprint and an SDK version range, and
 `resolveQuickPreset` returns values only while access is enabled for that exact
 deployment.
+
+### Venue sets and per-venue availability
+
+Each enabled venue records its package lineage and every shared object that
+creating, migrating, and trading a launch on it needs, as one set
+(`VENUE_IDENTITY_SETS`):
+
+| Venue | Packages (current revision and original) | Shared objects |
+| --- | --- | --- |
+| Cetus | `cetusClmm` (Cetus CLMM), `cetusLpBurn` (Cetus LP Burn) | `cetusConfig` (`config::GlobalConfig`), `cetusPools` (`factory::Pools`), `cetusBurnManager` (`lp_burn::BurnManager`) |
+| Bluefin | `bluefinSpot` (Bluefin Spot) | `bluefinConfig` (`config::GlobalConfig`) |
+
+A set is all or nothing: any partial set is `invalid-manifest`, which
+disables every action. `evaluateProtocolAccess` returns `venues`, one entry
+per venue, on enabled and disabled results alike. `signing: "enabled"` covers
+the core actions (curve trades, opening rounds, publication, and creation's
+core checks). **An action on a venue (creating, migrating, or trading a
+launch on it) requires `signing: "enabled"` and `venues[venue].available`.**
+
+- Core reasons stay global and mark both venues unavailable with them: every
+  existing reason above, including a chain mismatch and any shared object's
+  ID or initial-version mismatch, venue objects included.
+- Venue reasons disable only that venue: no recorded set (`venue-unrecorded`),
+  a set without a route (`venue-not-routed`), or a recorded venue object that
+  the runtime did not observe (`runtime-unverified`) or observed with another
+  type (`runtime-mismatch`) or lineage (`foreign-lineage`).
+
+`resolveVenueObjects(access, venue)` returns that venue's builder inputs,
+grouped by action at the mutability each call takes (`create`, `migrate`,
+`fees`, `buyback`), and throws `VenueUnavailableError` with the venue's
+reasons otherwise. `getBluefinPoolCreationFee(client, deployment)` reads the
+exact SUI pool-creation fee, in MIST, that `bluefin::migrate` requires: the
+recorded Bluefin `GlobalConfig`'s `"pool_creation_fee"` `Table<String, u64>`
+entry for SUI. A missing field or entry, an unexpected type, or a config of
+another lineage is a `BluefinPoolCreationFeeError`; there is no default.
 
 ## Launch creation
 
@@ -249,16 +284,15 @@ Cetus is the one post-migration venue the SDK trades through. Its adapter
 1. `getCetusPool` reads a Cetus `pool::Pool`; `resolveCetusVenueRoute` accepts
    it only as the pool the launch's `LpVault` recorded, of the deployment's
    Cetus lineage, for the launch's coins and recorded tier, which the
-   deployment's `routes` must admit. The manifest records Cetus as
-   `packages.cetusClmm` (the called revision and the type-defining original)
-   and `sharedObjects.cetusConfig`, always as a pair (either alone is an
-   invalid manifest); `evaluateProtocolAccess` checks the config's type
-   against that lineage.
+   deployment's `routes` must admit. The manifest records Cetus as one venue
+   set (see Deployments); `evaluateProtocolAccess` checks each object's type
+   against that lineage and reports `venues.cetus`.
 2. `quoteCetusSwap` asks any `CetusQuoteTransport` for one exact-input quote,
    and `normalizeCetusQuote` states it in atoms: input, output,
    `minimumOut = floor(out * (10,000 - slippageBps) / 10,000)`, fee, exact
    prices before and after, impact, expiry, sender, and balances.
-3. `buildCetusSwapTransaction` refuses disabled signing, another deployment,
+3. `buildCetusSwapTransaction` refuses disabled signing, an unavailable Cetus
+   venue (`venue-unavailable`), another deployment,
    foreign lineage, an unadmitted tier, a substituted route, an expired or
    future-dated quote, or inconsistent amounts. It builds `pool::flash_swap`, repays exactly
    `amountIn`, and aborts below `minimumOut`.

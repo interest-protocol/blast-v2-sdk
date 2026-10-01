@@ -11,7 +11,6 @@ import {
   SUI_CLOCK_OBJECT_ID,
 } from "@mysten/sui/utils";
 
-import type { DeploymentRuntimeObservation } from "../src/deployments/index.ts";
 import {
   defineBlastDeployment,
   deploymentFingerprint,
@@ -42,6 +41,7 @@ import {
   MAINNET_CETUS_SWAPS,
 } from "./fixtures/cetus-venue.ts";
 import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
+import { runtimeFor, VENUE_LINEAGE } from "./fixtures/venue-deployment.ts";
 
 /**
  * The non-production manifest re-pointed at the blast-infra venue fixture:
@@ -59,10 +59,13 @@ const manifest = {
       packageId: CETUS_LINEAGE.packageId,
       originalPackageId: CETUS_LINEAGE.originalPackageId,
     },
+    cetusLpBurn: VENUE_LINEAGE.packages.cetusLpBurn,
   },
   sharedObjects: {
     ...NON_PRODUCTION_MANIFEST.sharedObjects,
     cetusConfig: CETUS_LINEAGE.globalConfig,
+    cetusPools: VENUE_LINEAGE.sharedObjects.cetusPools,
+    cetusBurnManager: VENUE_LINEAGE.sharedObjects.cetusBurnManager,
   },
   routes: [{ venue: "cetus", tiers: [{ tickSpacing: 200, feeRate: "10000" }] }],
 } satisfies BlastDeploymentInput;
@@ -290,8 +293,17 @@ test("refuses a route outside the deployment's Cetus lineage and tiers", () => {
       code,
     );
 
-  const { cetusClmm: _, ...packages } = manifest.packages;
-  const { cetusConfig: __, ...sharedObjects } = manifest.sharedObjects;
+  const {
+    cetusClmm: _clmm,
+    cetusLpBurn: _lpBurn,
+    ...packages
+  } = manifest.packages;
+  const {
+    cetusConfig: _config,
+    cetusPools: _pools,
+    cetusBurnManager: _burnManager,
+    ...sharedObjects
+  } = manifest.sharedObjects;
   rejects("deployment-mismatch", {
     deployment: defineBlastDeployment({ ...manifest, packages, sharedObjects }),
   });
@@ -429,34 +441,6 @@ test("refuses a provider quote that is not the requested exact-input swap", () =
   rejects("invalid-quote", {}, { validForMs: 0n });
   rejects("invalid-quote", {}, { balances: { quote: 499_999n, meme: 0n } });
 });
-
-/** A node's report of the manifest's chain and shared objects, each of its expected type. */
-function runtimeFor(input: BlastDeploymentInput): DeploymentRuntimeObservation {
-  const original = (name: string) => input.packages[name]!.originalPackageId;
-  const types: Record<string, string> = {
-    packageVersion: `${original("launchpad")}::package_version::PackageVersion`,
-    launchConfig: `${original("launchpad")}::launch_config::LaunchConfig`,
-    runtimeConfig: `${original("launchpad")}::runtime_config::RuntimeConfig`,
-    acl: `${original("admin")}::blast_acl::ACL`,
-    migratorsPackageVersion: `${original("migrators")}::package_version::PackageVersion`,
-    lpFeePolicy: `${original("migrators")}::lp_fee_policy::LpFeePolicy`,
-    venueConfig: `${original("migrators")}::venue_config::VenueConfig`,
-    cetusConfig: `${original("cetusClmm")}::config::GlobalConfig`,
-  };
-  return {
-    chainIdentifier: input.chainIdentifier,
-    sharedObjects: Object.fromEntries(
-      Object.entries(input.sharedObjects).map(([name, identity]) => [
-        name,
-        {
-          objectId: identity.objectId,
-          type: types[name]!,
-          initialSharedVersion: String(identity.initialSharedVersion),
-        },
-      ]),
-    ),
-  };
-}
 
 const access = evaluateProtocolAccess({
   manifest,
@@ -615,6 +599,17 @@ test("refuses to build before signing unless deployment, lineage, tier, route, e
   rejects("signing-disabled", {
     access: evaluateProtocolAccess({ manifest, mode: "non-production" }),
   });
+  // A Cetus object of another lineage leaves core signing on but Cetus off.
+  const foreignConfig = runtimeFor(manifest);
+  foreignConfig.sharedObjects.cetusConfig!.type =
+    `${foreign}::config::GlobalConfig`;
+  const cetusOff = evaluateProtocolAccess({
+    manifest,
+    mode: "non-production",
+    runtime: foreignConfig,
+  });
+  assert.equal(cetusOff.signing, "enabled");
+  rejects("venue-unavailable", { access: cetusOff });
   const otherManifest = {
     ...manifest,
     routes: [{ venue: "cetus", tiers: [{ tickSpacing: 60, feeRate: "2500" }] }],

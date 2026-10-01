@@ -17,7 +17,16 @@ import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts
 
 const deployment = defineBlastDeployment(NON_PRODUCTION_MANIFEST);
 const fingerprint = deploymentFingerprint(deployment);
-const enabled: ProtocolAccess = { signing: "enabled", deployment, fingerprint };
+const venues = {
+  cetus: { available: true },
+  bluefin: { available: true },
+} as const;
+const enabled: ProtocolAccess = {
+  signing: "enabled",
+  deployment,
+  fingerprint,
+  venues,
+};
 const values: QuickPresetValues = {
   virtualQuote: 3_000_000_000_000n,
   graduationTarget: 12_345_678_901_237n,
@@ -82,6 +91,7 @@ test("binds a Quick preset to one deployment fingerprint and SDK range", () => {
       deployment,
       fingerprint,
       reasons: [{ code: "runtime-unverified", message: "no runtime" }],
+      venues,
     }),
     { status: "unavailable", reason: "signing-disabled" },
   );

@@ -7,6 +7,7 @@ import {
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
+import type { MigratorVenue } from "../migrators/state.ts";
 import { MIGRATOR_VENUES } from "../migrators/state.ts";
 import {
   BLAST_DEPLOYMENTS,
@@ -18,7 +19,9 @@ import type {
   BlastDeploymentInput,
   BlastDeploymentRegistry,
   DeploymentEnvironment,
+  VenueObjectType,
 } from "./types.ts";
+import { VENUE_IDENTITY_SETS } from "./types.ts";
 
 /**
  * The ABI this SDK is frozen to: the reviewed contracts commit and the sha256
@@ -70,28 +73,42 @@ export type DeploymentRejectionCode =
   | "sdk-mismatch"
   | "missing-evidence"
   | "runtime-unverified"
-  | "runtime-mismatch";
+  | "runtime-mismatch"
+  | "venue-unrecorded"
+  | "venue-not-routed";
 
 export type DeploymentRejection = Readonly<{
   code: DeploymentRejectionCode;
   message: string;
 }>;
 
+/** Whether actions on one venue may be signed, and why not. */
+export type VenueAvailability =
+  | Readonly<{ available: true }>
+  | Readonly<{ available: false; reasons: readonly DeploymentRejection[] }>;
+
 /**
  * Whether protocol actions may be signed against a deployment. Consumers must
  * not build or sign protocol transactions unless `signing` is `"enabled"`.
+ * `signing` covers the core actions (curve trades, opening rounds,
+ * publication, and creation's core checks). An action on a venue (creating,
+ * migrating, or trading a launch on it) also requires
+ * `venues[venue].available`; while signing is disabled, every venue is
+ * unavailable and carries the core reasons.
  */
 export type ProtocolAccess =
   | Readonly<{
       signing: "enabled";
       deployment: BlastDeployment;
       fingerprint: string;
+      venues: Readonly<Record<MigratorVenue, VenueAvailability>>;
     }>
   | Readonly<{
       signing: "disabled";
       deployment: BlastDeployment | null;
       fingerprint: string | null;
       reasons: readonly DeploymentRejection[];
+      venues: Readonly<Record<MigratorVenue, VenueAvailability>>;
     }>;
 
 /** What a node reports for the deployment's chain and shared objects. */
@@ -125,8 +142,15 @@ export function deploymentFingerprint(deployment: BlastDeployment): string {
 
 /**
  * The one fail-closed identity check every consumer runs before signing. It
- * never throws for an identity problem: every failure is a reason, and any
- * reason disables signing.
+ * never throws for an identity problem: every failure is a reason.
+ *
+ * Core reasons (manifest, environment, registry, release, SDK, ABI, chain,
+ * packages, and any shared object's ID or initial version) disable all
+ * signing, and every venue with it. A partial venue set is an invalid
+ * manifest, so it is core too. Venue reasons disable only that venue: no
+ * recorded set for it (`venue-unrecorded`), a set without a route
+ * (`venue-not-routed`), or a recorded venue object the runtime did not
+ * observe or observed with another type or lineage.
  */
 export function evaluateProtocolAccess(options: {
   manifest: BlastDeploymentInput | BlastDeployment;
@@ -147,6 +171,7 @@ export function evaluateProtocolAccess(options: {
         : "invalid-manifest";
     return disabled(null, [reason(code, errorMessage(error))]);
   }
+  const runtime = observedRuntimeReasons(deployment, options.runtime);
   const reasons = [
     ...environmentReasons(deployment, options.mode),
     ...registryReasons(
@@ -156,16 +181,88 @@ export function evaluateProtocolAccess(options: {
     ),
     ...sourceReasons(deployment),
     ...sdkReasons(deployment, options.mode, options.sdk ?? SDK_RELEASE),
-    ...observedRuntimeReasons(deployment, options.runtime),
+    ...runtime.core,
   ];
-  const unique = reasons.filter(
+  const unique = uniqueByCode(reasons);
+  const fingerprint = deploymentFingerprint(deployment);
+  return unique.length === 0
+    ? Object.freeze({
+        signing: "enabled",
+        deployment,
+        fingerprint,
+        venues: venueAvailability(deployment, [], runtime.venues),
+      })
+    : disabled(deployment, unique, fingerprint, runtime.venues);
+}
+
+/** Each venue's availability: the core reasons first, then its own. */
+function venueAvailability(
+  deployment: BlastDeployment | null,
+  core: readonly DeploymentRejection[],
+  observed: Readonly<Partial<Record<MigratorVenue, DeploymentRejection[]>>>,
+): Readonly<Record<MigratorVenue, VenueAvailability>> {
+  const entries = MIGRATOR_VENUES.map((venue) => {
+    const reasons = uniqueByCode([
+      ...core,
+      ...(deployment ? venueRecordReasons(deployment, venue) : []),
+      ...(observed[venue] ?? []),
+    ]);
+    const availability: VenueAvailability =
+      reasons.length === 0
+        ? Object.freeze({ available: true })
+        : Object.freeze({ available: false, reasons: Object.freeze(reasons) });
+    return [venue, availability] as const;
+  });
+  return Object.freeze(
+    Object.fromEntries(entries) as Record<MigratorVenue, VenueAvailability>,
+  );
+}
+
+function venueRecordReasons(
+  deployment: BlastDeployment,
+  venue: MigratorVenue,
+): DeploymentRejection[] {
+  // A set is complete or absent, so any recorded object means the whole set.
+  if (!venueObjectNames(venue).some((name) => deployment.sharedObjects[name])) {
+    return [
+      reason(
+        "venue-unrecorded",
+        `the manifest records no ${venue} packages and objects`,
+      ),
+    ];
+  }
+  return deployment.routes.some((route) => route.venue === venue)
+    ? []
+    : [reason("venue-not-routed", `the manifest admits no ${venue} route`)];
+}
+
+function venueObjectNames(venue: MigratorVenue): string[] {
+  return Object.keys(VENUE_IDENTITY_SETS[venue].sharedObjects);
+}
+
+/** The venue whose set records the shared object `name`, if any. */
+function venueOf(
+  name: string,
+): { venue: MigratorVenue; type: VenueObjectType } | null {
+  for (const venue of MIGRATOR_VENUES) {
+    const type = (
+      VENUE_IDENTITY_SETS[venue].sharedObjects as Record<
+        string,
+        VenueObjectType
+      >
+    )[name];
+    if (type) return { venue, type };
+  }
+  return null;
+}
+
+function uniqueByCode(
+  reasons: readonly DeploymentRejection[],
+): DeploymentRejection[] {
+  return reasons.filter(
     (entry, index) =>
       reasons.findIndex((other) => other.code === entry.code) === index,
   );
-  const fingerprint = deploymentFingerprint(deployment);
-  return unique.length === 0
-    ? Object.freeze({ signing: "enabled", deployment, fingerprint })
-    : disabled(deployment, unique, fingerprint);
 }
 
 /**
@@ -246,14 +343,6 @@ function expectedObjectTypes(
       packageId: migrators,
       module: "venue_config",
       name: "VenueConfig",
-    };
-  }
-  const cetus = deployment.packages.cetusClmm?.originalPackageId;
-  if (cetus) {
-    types.cetusConfig = {
-      packageId: cetus,
-      module: "config",
-      name: "GlobalConfig",
     };
   }
   return types;
@@ -388,38 +477,51 @@ function sdkReasons(
   return reasons;
 }
 
+type RuntimeReasons = {
+  core: DeploymentRejection[];
+  venues: Partial<Record<MigratorVenue, DeploymentRejection[]>>;
+};
+
 /** A structurally invalid observation is unverified, never an exception. */
 function observedRuntimeReasons(
   deployment: BlastDeployment,
   runtime: DeploymentRuntimeObservation | undefined,
-): DeploymentRejection[] {
+): RuntimeReasons {
   try {
     return runtimeReasons(deployment, runtime);
   } catch (error) {
-    return [
-      reason(
-        "runtime-unverified",
-        `malformed runtime observation: ${errorMessage(error)}`,
-      ),
-    ];
+    return {
+      core: [
+        reason(
+          "runtime-unverified",
+          `malformed runtime observation: ${errorMessage(error)}`,
+        ),
+      ],
+      venues: {},
+    };
   }
 }
 
+/**
+ * Compares the observation with the manifest. A chain, ID, or initial-version
+ * difference is core; a venue object's absence or type is its venue's.
+ */
 function runtimeReasons(
   deployment: BlastDeployment,
   runtime: DeploymentRuntimeObservation | undefined,
-): DeploymentRejection[] {
+): RuntimeReasons {
+  const result: RuntimeReasons = { core: [], venues: {} };
   if (!runtime) {
-    return [
+    result.core.push(
       reason(
         "runtime-unverified",
         "no runtime observation of the chain and shared objects",
       ),
-    ];
+    );
+    return result;
   }
-  const reasons: DeploymentRejection[] = [];
   if (runtime.chainIdentifier !== deployment.chainIdentifier) {
-    reasons.push(
+    result.core.push(
       reason(
         "runtime-mismatch",
         `the node reports chain ${runtime.chainIdentifier}, not ${deployment.chainIdentifier}`,
@@ -428,9 +530,11 @@ function runtimeReasons(
   }
   const expected = expectedObjectTypes(deployment);
   for (const [name, identity] of Object.entries(deployment.sharedObjects)) {
+    const venue = venueOf(name);
+    const own = venue ? venueList(result, venue.venue) : result.core;
     const observed = runtime.sharedObjects[name];
     if (!observed) {
-      reasons.push(reason("runtime-unverified", `${name} was not observed`));
+      own.push(reason("runtime-unverified", `${name} was not observed`));
       continue;
     }
     if (
@@ -438,14 +542,29 @@ function runtimeReasons(
       String(observed.initialSharedVersion) !==
         String(identity.initialSharedVersion)
     ) {
-      reasons.push(
+      result.core.push(
         reason("runtime-mismatch", `${name} differs from the manifest`),
       );
     }
-    const type = expected[name];
-    if (type) reasons.push(...typeReasons(name, observed.type, type));
+    const type = venue
+      ? {
+          ...venue.type,
+          packageId:
+            deployment.packages[venue.type.package]?.originalPackageId ?? "",
+        }
+      : expected[name];
+    if (type) own.push(...typeReasons(name, observed.type, type));
   }
-  return reasons;
+  return result;
+}
+
+function venueList(
+  result: RuntimeReasons,
+  venue: MigratorVenue,
+): DeploymentRejection[] {
+  const list = result.venues[venue] ?? [];
+  result.venues[venue] = list;
+  return list;
 }
 
 function typeReasons(
@@ -508,12 +627,14 @@ function disabled(
   deployment: BlastDeployment | null,
   reasons: DeploymentRejection[],
   fingerprint: string | null = null,
+  venues: RuntimeReasons["venues"] = {},
 ): ProtocolAccess {
   return Object.freeze({
     signing: "disabled",
     deployment,
     fingerprint,
     reasons: Object.freeze(reasons),
+    venues: venueAvailability(deployment, reasons, venues),
   });
 }
 

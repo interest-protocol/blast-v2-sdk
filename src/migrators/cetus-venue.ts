@@ -291,6 +291,7 @@ export type CetusVenueRejection =
   | "route-substitution"
   | "unsupported-tier"
   | "signing-disabled"
+  | "venue-unavailable"
   | "expired-quote"
   | "invalid-quote"
   | "effects-mismatch";
@@ -639,7 +640,8 @@ function requireProviderQuote(
 
 /**
  * Builds the quoted swap as one Cetus exact-input flash swap in the route's
- * pool, after checking, in order: signing is enabled; the access, route, and
+ * pool, after checking, in order: signing is enabled and Cetus is available
+ * (`access.venues.cetus`); the access, route, and
  * quote name one deployment; the route matches the deployment's Cetus lineage
  * and admitted tiers; the quote is for this route; it has not expired at
  * `nowMs` and is not dated after it; and its amounts are consistent. The transaction aborts unless it
@@ -818,6 +820,12 @@ function requireBuildable(
     throw new CetusVenueError(
       "signing-disabled",
       "protocol signing is disabled for this deployment",
+    );
+  }
+  if (!access.venues.cetus.available) {
+    throw new CetusVenueError(
+      "venue-unavailable",
+      `Cetus is unavailable: ${access.venues.cetus.reasons.map(({ code }) => code).join(", ")}`,
     );
   }
   const { deployment, fingerprint } = access;

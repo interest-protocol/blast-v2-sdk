@@ -21,69 +21,15 @@ import {
 } from "../src/deployments/index.ts";
 import type { BlastDeploymentInput } from "../src/deployments/types.ts";
 import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
+import { manifestWithVenues, runtimeFor } from "./fixtures/venue-deployment.ts";
 
 const manifest = NON_PRODUCTION_MANIFEST;
 const deployment = defineBlastDeployment(manifest);
 const pkg = (name: keyof typeof manifest.packages) =>
   manifest.packages[name].originalPackageId;
 
-/** What a node returns for the fixture's shared objects and chain. */
-function runtimeFor(input: BlastDeploymentInput): DeploymentRuntimeObservation {
-  const original = (name: string) => {
-    const reference = input.packages[name];
-    assert.ok(reference, name);
-    return reference.originalPackageId;
-  };
-  const launchpad = original("launchpad");
-  const migrators = original("migrators");
-  const types: Record<string, string> = {
-    packageVersion: `${launchpad}::package_version::PackageVersion`,
-    launchConfig: `${launchpad}::launch_config::LaunchConfig`,
-    runtimeConfig: `${launchpad}::runtime_config::RuntimeConfig`,
-    acl: `${original("admin")}::blast_acl::ACL`,
-    migratorsPackageVersion: `${migrators}::package_version::PackageVersion`,
-    lpFeePolicy: `${migrators}::lp_fee_policy::LpFeePolicy`,
-    venueConfig: `${migrators}::venue_config::VenueConfig`,
-  };
-  if (input.packages.cetusClmm) {
-    types.cetusConfig = `${original("cetusClmm")}::config::GlobalConfig`;
-  }
-  return {
-    chainIdentifier: input.chainIdentifier,
-    sharedObjects: Object.fromEntries(
-      Object.entries(input.sharedObjects).map(([name, identity]) => [
-        name,
-        {
-          objectId: identity.objectId,
-          type: types[name] ?? "0x2::object::UID",
-          initialSharedVersion: String(identity.initialSharedVersion),
-        },
-      ]),
-    ),
-  };
-}
-
-/** The manifest with the Cetus lineage recorded as a pair (contracts 442116a). */
-const CETUS_MANIFEST = {
-  ...manifest,
-  packages: {
-    ...manifest.packages,
-    cetusClmm: {
-      packageId:
-        "0x260693ec785a6e6c9d81d58c7d2ff72f1288ae0fa6a9725abe05a6478b11f084",
-      originalPackageId:
-        "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb",
-    },
-  },
-  sharedObjects: {
-    ...manifest.sharedObjects,
-    cetusConfig: {
-      objectId:
-        "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f",
-      initialSharedVersion: "1574190",
-    },
-  },
-} satisfies BlastDeploymentInput;
+/** The manifest with the complete Cetus set and its route (contracts 442116a snapshot). */
+const CETUS_MANIFEST = manifestWithVenues(["cetus"]);
 
 const codes = (access: ReturnType<typeof evaluateProtocolAccess>) =>
   access.signing === "disabled" ? access.reasons.map(({ code }) => code) : [];
@@ -206,28 +152,27 @@ test("disables signing on a runtime identity mismatch or foreign lineage", () =>
   );
 });
 
-test("checks a recorded Cetus config against the recorded Cetus lineage", () => {
-  const cetusManifest = CETUS_MANIFEST;
-  const runtime = runtimeFor(cetusManifest);
-  assert.equal(
-    evaluateProtocolAccess({
-      manifest: cetusManifest,
-      mode: "non-production",
-      runtime,
-    }).signing,
-    "enabled",
-  );
+test("checks a recorded Cetus config against the recorded Cetus lineage, for Cetus only", () => {
+  const runtime = runtimeFor(CETUS_MANIFEST);
+  const access = evaluateProtocolAccess({
+    manifest: CETUS_MANIFEST,
+    mode: "non-production",
+    runtime,
+  });
+  assert.equal(access.signing, "enabled");
+  assert.deepEqual(access.venues.cetus, { available: true });
   const foreign = structuredClone(runtime);
   foreign.sharedObjects.cetusConfig!.type =
     `${normalizeSuiObjectId("0xbad")}::config::GlobalConfig`;
+  const mismatched = evaluateProtocolAccess({
+    manifest: CETUS_MANIFEST,
+    mode: "non-production",
+    runtime: foreign,
+  });
+  assert.equal(mismatched.signing, "enabled");
   assert.deepEqual(
-    codes(
-      evaluateProtocolAccess({
-        manifest: cetusManifest,
-        mode: "non-production",
-        runtime: foreign,
-      }),
-    ),
+    !mismatched.venues.cetus.available &&
+      mismatched.venues.cetus.reasons.map(({ code }) => code),
     ["foreign-lineage"],
   );
 });

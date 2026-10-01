@@ -24,8 +24,12 @@ export type BlastPackages = Readonly<
     timelock: SuiPackageReference;
     blastSui?: SuiPackageReference;
     migrators?: SuiPackageReference;
-    /** Cetus CLMM: the revision Cetus routes call, and the original package that defines its types. */
+    /** Cetus CLMM: the revision Cetus calls target, and the original package that defines its types. */
     cetusClmm?: SuiPackageReference;
+    /** Cetus LP Burn, which defines `lp_burn::BurnManager`. */
+    cetusLpBurn?: SuiPackageReference;
+    /** Bluefin Spot, which defines its `config::GlobalConfig`. */
+    bluefinSpot?: SuiPackageReference;
   }
 >;
 
@@ -50,11 +54,65 @@ export type BlastSharedObjects = Readonly<
     venueConfig?: SharedObjectIdentity;
     /** Cetus CLMM `config::GlobalConfig`, read by every Cetus pool call. */
     cetusConfig?: SharedObjectIdentity;
+    /** Cetus CLMM `factory::Pools`, where Cetus launches reserve and create their pool. */
+    cetusPools?: SharedObjectIdentity;
+    /** Cetus LP Burn `lp_burn::BurnManager`, which burns and then collects the migration position. */
+    cetusBurnManager?: SharedObjectIdentity;
+    /** Bluefin Spot `config::GlobalConfig`, read by Bluefin migration, fees, and buyback. */
+    bluefinConfig?: SharedObjectIdentity;
     packageAdmin?: SharedObjectIdentity;
   }
 >;
 
 export const BLAST_DEPLOYMENT_SCHEMA_VERSION = 1;
+
+/** A venue object's expected type: `<package's original ID>::<module>::<name>`. */
+export type VenueObjectType = Readonly<{
+  package: string;
+  module: string;
+  name: string;
+}>;
+
+/**
+ * Each enabled venue's identity set: the packages whose lineage it records
+ * and the shared objects that creating, migrating, and trading a launch on
+ * it need, each typed by one of those packages. A manifest records a venue's
+ * whole set or none of it.
+ */
+export const VENUE_IDENTITY_SETS = Object.freeze({
+  cetus: Object.freeze({
+    packages: Object.freeze(["cetusClmm", "cetusLpBurn"] as const),
+    sharedObjects: Object.freeze({
+      cetusConfig: {
+        package: "cetusClmm",
+        module: "config",
+        name: "GlobalConfig",
+      },
+      cetusPools: { package: "cetusClmm", module: "factory", name: "Pools" },
+      cetusBurnManager: {
+        package: "cetusLpBurn",
+        module: "lp_burn",
+        name: "BurnManager",
+      },
+    }),
+  }),
+  bluefin: Object.freeze({
+    packages: Object.freeze(["bluefinSpot"] as const),
+    sharedObjects: Object.freeze({
+      bluefinConfig: {
+        package: "bluefinSpot",
+        module: "config",
+        name: "GlobalConfig",
+      },
+    }),
+  }),
+}) satisfies Record<
+  MigratorVenue,
+  {
+    packages: readonly string[];
+    sharedObjects: Readonly<Record<string, VenueObjectType>>;
+  }
+>;
 
 /**
  * A production manifest may enable production signing; a non-production one

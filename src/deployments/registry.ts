@@ -21,7 +21,11 @@ import type {
   MigratorsDeploymentConstants,
   PostDeployEvidence,
 } from "./types.ts";
-import { BLAST_DEPLOYMENT_SCHEMA_VERSION, BLAST_NETWORKS } from "./types.ts";
+import {
+  BLAST_DEPLOYMENT_SCHEMA_VERSION,
+  BLAST_NETWORKS,
+  VENUE_IDENTITY_SETS,
+} from "./types.ts";
 
 const REQUIRED_PACKAGES = ["launchpad", "admin", "partners", "timelock"];
 const REQUIRED_SHARED_OBJECTS = [
@@ -279,19 +283,41 @@ function normalizeSharedObjects(
       throw new TypeError(`sharedObjects.${name} is required`);
     }
   }
-  // The Cetus lineage is recorded as a pair, so its config's type is always
-  // checked against the Cetus package that defines it.
-  if (packages.cetusClmm && !objects.cetusConfig) {
-    throw new TypeError("sharedObjects.cetusConfig is required");
-  }
-  if (objects.cetusConfig && !packages.cetusClmm) {
-    throw new TypeError("packages.cetusClmm is required");
-  }
+  requireCompleteVenueSets(packages, objects);
   return freezeRecord(
     "sharedObjects",
     objects,
     normalizeSharedObjectIdentity,
   ) as BlastSharedObjects;
+}
+
+/**
+ * A venue's set is all or nothing: any recorded key requires every key, so
+ * each venue object is always type-checked against the package lineage that
+ * defines it. A partial set is an invalid manifest.
+ */
+function requireCompleteVenueSets(
+  packages: BlastPackages,
+  objects: BlastDeploymentInput["sharedObjects"],
+): void {
+  for (const [venue, set] of Object.entries(VENUE_IDENTITY_SETS)) {
+    const paths = [
+      ...set.packages.map((name) => ({
+        path: `packages.${name}`,
+        present: Boolean(packages[name]),
+      })),
+      ...Object.keys(set.sharedObjects).map((name) => ({
+        path: `sharedObjects.${name}`,
+        present: Boolean(objects[name]),
+      })),
+    ];
+    const missing = paths.find(({ present }) => !present);
+    if (missing && paths.some(({ present }) => present)) {
+      throw new TypeError(
+        `${missing.path} is required: the ${venue} venue set is partial`,
+      );
+    }
+  }
 }
 
 function normalizeTier(
