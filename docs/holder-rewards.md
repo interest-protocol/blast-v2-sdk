@@ -34,6 +34,7 @@ const manifest = buildRewardManifest({
   startCheckpoint,
   endCheckpoint,
   allocations,
+  leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN, // presale rounds: PRESALE_REWARD_LEAF_DOMAIN
 });
 const publish = client.blastMigrators.tx.publishHolderRewardRound({
   memeType,
@@ -46,7 +47,11 @@ const relay = client.blastMigrators.tx.claimHolderRewards({
   memeType,
   quoteType,
   round, // the shared Round, mutable
-  allocations: pendingRewardAllocations(roundState, manifest),
+  allocations: pendingRewardAllocations(
+    roundState,
+    manifest,
+    MIGRATOR_REWARD_LEAF_DOMAIN,
+  ),
 });
 ```
 
@@ -65,17 +70,19 @@ Create a JSON config outside the public artifacts:
     "launchpad": {
       "packageId": "0xCALLABLE_LAUNCHPAD_PACKAGE",
       "originalPackageId": "0xORIGINAL_LAUNCHPAD_PACKAGE",
-      "adminPackageId": "0xBLAST_ADMIN_PACKAGE",
+      "admin": {
+        "packageId": "0xBLAST_ADMIN_PACKAGE",
+        "acl": { "objectId": "0x...", "initialSharedVersion": "1" }
+      },
       "partnersPackageId": "0xBLAST_PARTNERS_PACKAGE",
       "timelockPackageId": "0xBLAST_FUN_TIMELOCK_PACKAGE",
-      "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-      "launchConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-      "runtimeConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-      "acl": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false }
+      "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1" },
+      "launchConfig": { "objectId": "0x...", "initialSharedVersion": "1" },
+      "runtimeConfig": { "objectId": "0x...", "initialSharedVersion": "1" }
     },
-    "migratorsVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-    "lpFeePolicy": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-    "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false }
+    "migratorsVersion": { "objectId": "0x...", "initialSharedVersion": "1" },
+    "lpFeePolicy": { "objectId": "0x...", "initialSharedVersion": "1" },
+    "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1" }
   },
   "vaultId": "0xVERIFIED_LP_VAULT",
   "adminCapId": "0xBLAST_ADMIN_CAP",

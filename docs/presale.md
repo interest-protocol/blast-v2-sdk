@@ -6,18 +6,22 @@ commitments, one common fill rate, migration-gated claims, full refunds when a
 sale does not migrate, permissionless Cetus or Bluefin migration into a
 `PresaleVault`, LP-fee splits, and holder-reward rounds.
 
-The package is not published. No deployment is registered; pass the IDs from
-the publish and `package_admin::wrap` effects:
+The package is not published, so no release is registered. Once one is,
+`presaleDeployment(getBlastDeployment(network))` returns the deployment; until
+then pass the IDs from the publish and `package_admin::wrap` effects:
 
 ```ts
 const presale = new PresaleTransactions({
   packageId, // current package
   originalPackageId, // first publication; names every type
-  venueConfig: { objectId, initialSharedVersion, mutable: false },
-  // Only holder-reward rounds need blast_admin and its shared ACL.
-  admin: { packageId: adminPackageId, acl: { objectId, initialSharedVersion, mutable: false } },
+  venueConfig: { objectId, initialSharedVersion },
+  // blast_admin and its shared ACL, for RewardsAdmin sign-in.
+  admin: { packageId: adminPackageId, acl: { objectId, initialSharedVersion } },
 });
 ```
+
+Deployment shared objects carry no `mutable` flag: each call sets the
+mutability its Move signature needs.
 
 ## Lifecycle
 
@@ -33,7 +37,7 @@ const presale = new PresaleTransactions({
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. |
 | Fees | `collectCetusFees`, `collectBluefinFees` | Pays every fee recipient. The holder-reward share stays in the vault. |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
-| Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication signs in as `blast_presale_domain::RewardsAdmin` through `blast_admin::blast_acl::sign_in` in the same PTB. |
+| Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication signs in as `blast_presale_domain::RewardsAdmin` (`PresaleCalls.signIn`) in the same PTB; `roleType` names the role for `AdminTransactions.grantRole`. |
 | Cap | `destroyCap` | After cancellation only. |
 
 `PresaleCalls` exposes each Move call separately for composition.
@@ -90,4 +94,4 @@ Every public function is classified:
   and `holder_rewards` `publish_round`, `claim`, and `close_round`.
 - **Off-chain mirror:** `merkle_tree::node` and `verify` (`allowlist.ts`).
 - **Excluded:** `package_admin::wrap` (deployment), and `authorize_upgrade` and
-  `commit_upgrade` (upgrade administration).
+  `commit_upgrade` (upgrade custody, which CLI publish tooling drives).
