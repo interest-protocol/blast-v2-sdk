@@ -25,11 +25,11 @@ export type LaunchEconomics = {
   liquidityMeme: bigint;
   /** Quote handed to the adapter for the pool at the graduation target. */
   liquidityQuote: bigint;
-  /**
-   * Terminal Quote not handed to the pool: Blast's one-time fee, accrued to the
-   * launch's protocol fees, plus the plan's recipients.
-   */
+  /** Terminal Quote paid to the plan's recipients or accrued as Blast's fee. */
   allocatedQuote: bigint;
+  /** Blast's one-time migration fee at the graduation target, rounded up. */
+  protocolMeme: bigint;
+  protocolQuote: bigint;
   terminalCurveMeme: bigint;
   curveMemeReleased: bigint;
   openingValuation: bigint;
@@ -55,11 +55,15 @@ export function deriveLaunchEconomics(
     input.graduationTarget,
   );
   const plan = requireCompletePlan(input.allocationPlan);
-  const { curve: curveMeme, lp: liquidityMeme } = apportionMeme(
+  const {
+    curve: curveMeme,
+    lp: liquidityMeme,
+    protocol: protocolMeme,
+  } = apportionMeme(plan, atomicSupply);
+  const { lp: liquidityQuote, protocol: protocolQuote } = apportionQuote(
     plan,
-    atomicSupply,
+    graduationTarget,
   );
-  const liquidityQuote = apportionQuote(plan, graduationTarget).lp;
   requirePositiveU64("curveMeme", curveMeme);
   requirePositiveU64("liquidityMeme", liquidityMeme);
   requirePositiveU64("liquidityQuote", liquidityQuote);
@@ -76,6 +80,8 @@ export function deriveLaunchEconomics(
     liquidityMeme,
     liquidityQuote,
     allocatedQuote: graduationTarget - liquidityQuote,
+    protocolMeme,
+    protocolQuote,
     terminalCurveMeme,
     curveMemeReleased: curveMeme - terminalCurveMeme,
     openingValuation: (atomicSupply * virtualQuote) / curveMeme,

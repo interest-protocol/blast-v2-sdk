@@ -27,6 +27,8 @@ test("derives the complete worked SUI outcome", () => {
       liquidityMeme: 200_000_000_000_000_000n,
       liquidityQuote: 3_000_000_000_000n,
       allocatedQuote: 0n,
+      protocolMeme: 0n,
+      protocolQuote: 0n,
       terminalCurveMeme: 200_000_000_000_000_000n,
       curveMemeReleased: 600_000_000_000_000_000n,
       openingValuation: 1_250_000_000_000n,
@@ -36,7 +38,7 @@ test("derives the complete worked SUI outcome", () => {
   );
 });
 
-test("pays Blast its ceiling before the liquidity handoff", () => {
+test("accrues Blast's ceiling as its migration fee before the liquidity handoff", () => {
   const economics = deriveLaunchEconomics({
     atomicSupply: 1_000_000_000_000_000_000n,
     allocationPlan: addProtocolAllocation(
@@ -53,6 +55,8 @@ test("pays Blast its ceiling before the liquidity handoff", () => {
   });
   // Blast Quote = ceil(3_000_000_000_001 * 100 / 10_000) = 30_000_000_001.
   assert.equal(economics.allocatedQuote, 30_000_000_001n);
+  assert.equal(economics.protocolQuote, 30_000_000_001n);
+  assert.equal(economics.protocolMeme, 100_000_000_000_000n);
   assert.equal(economics.liquidityQuote, 2_970_000_000_000n);
   assert.equal(economics.liquidityMeme, 199_900_000_000_000_000n);
 });
@@ -71,6 +75,8 @@ test("rounds terminal Meme up and valuations down on inexact division", () => {
       liquidityMeme: 3n,
       liquidityQuote: 5n,
       allocatedQuote: 0n,
+      protocolMeme: 0n,
+      protocolQuote: 0n,
       terminalCurveMeme: 3n,
       curveMemeReleased: 4n,
       openingValuation: 4n,

@@ -183,10 +183,11 @@ test("rejects a foreign type, package, or mismatched UID", () => {
   assert.throws(() =>
     decodePresaleObject(
       object(type.replace("Presale<", "Other<"), presaleBytes()),
+      pkg,
     ),
   );
   assert.throws(
-    () => decodePresaleObject(object(type, presaleBytes(), "0xac")),
+    () => decodePresaleObject(object(type, presaleBytes(), "0xac"), pkg),
     /mismatched UID/,
   );
 });

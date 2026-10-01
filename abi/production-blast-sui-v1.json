@@ -13,7 +13,7 @@
       "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody",
       "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody",
       "contracts ADR 0085: name every explorer-visible type after Blast",
-      "contracts ADR 0097: one singleton Blast ACL with typed administrator roles"
+      "contracts ADR 0097: package custody and the redeem fee take blast_admin::blast_acl::AdminWitness of the typed UpgradeAdmin and FeeAdmin roles"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -1162,7 +1162,7 @@
           "functions": [
             {
               "name": "add_capability",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-deployment-exclusion",
               "entry": false,
               "typeParameters": [
                 {
@@ -1242,7 +1242,7 @@
             },
             {
               "name": "authorize_upgrade",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -1324,7 +1324,7 @@
             },
             {
               "name": "commit_upgrade_and_advance",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -1428,7 +1428,7 @@
             },
             {
               "name": "make_immutable",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -1551,7 +1551,7 @@
             },
             {
               "name": "restrict_to_additive",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -2568,7 +2568,7 @@
             },
             {
               "name": "set_redeem_fee",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [

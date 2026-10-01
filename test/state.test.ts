@@ -8,7 +8,6 @@ import {
   decodeLaunchObject,
   getLaunch,
   getLaunchConfig,
-  getOpeningRoundBid,
   launchBcs,
   launchConfigBcs,
 } from "../src/launchpad/state.ts";
@@ -36,9 +35,9 @@ const feeSplit = {
 const allocationPlan = {
   curveMemeBps: 8_000n,
   lpMemeBps: 1_900n,
-  lpQuoteBps: 9_900n,
+  lpQuoteBps: 9_800n,
   protocolMemeBps: 0n,
-  protocolQuoteBps: 0n,
+  protocolQuoteBps: 100n,
   recipients: [
     {
       destination:
@@ -56,9 +55,9 @@ function serializeLaunch(id = objectId): Uint8Array {
       lifecycle: { MigrationReady: true },
       public_start_ms: "1000",
       opening_round_ms: 60_000n,
-      opening_round_bids: 70n,
-      opening_round_quote: balance(5n),
-      opening_round_meme: balance(9_000n),
+      opening_round_bids: 700n,
+      opening_round_quote: balance(9n),
+      opening_round_meme: balance(12_345n),
       sell_burn_bps: 100n,
       virtual_quote: 1_000n,
       graduation_target: 3_000n,
@@ -79,7 +78,7 @@ function serializeLaunch(id = objectId): Uint8Array {
         creator_meme: balance(2n),
         protocol_quote: balance(3n),
         creator_quote: balance(4n),
-        protocol_sui: balance(5_000n),
+        protocol_sui: balance(5n),
       },
       metadata_cap: { id: uid(metadataCapId) },
       creator: { Address: creator },
@@ -112,11 +111,9 @@ test("decodes the complete launch BCS state", () => {
   assert.equal(state.lifecycle, "MigrationReady");
   assert.equal(state.publicStartMs, 1_000n);
   assert.equal(state.openingRoundMs, 60_000n);
-  assert.equal(state.openingRoundBids, 70n);
-  assert.equal(state.openingRoundQuote, 5n);
-  assert.equal(state.openingRoundMeme, 9_000n);
-  assert.equal(state.protocolSuiFees, 5_000n);
-  assert.equal(state.partnerId, normalizeSuiObjectId("0x13"));
+  assert.equal(state.openingRoundBids, 700n);
+  assert.equal(state.openingRoundQuote, 9n);
+  assert.equal(state.openingRoundMeme, 12_345n);
   assert.equal(state.graduationTarget, 3_000n);
   assert.equal(state.poolTickSpacing, 200);
   assert.equal(state.poolFeeRate, 10_000n);
@@ -129,6 +126,8 @@ test("decodes the complete launch BCS state", () => {
   assert.equal(state.allocatedMeme, 200_000n);
   assert.equal(state.protocolMemeTradeFees, 1n);
   assert.equal(state.creatorQuoteTradeFees, 4n);
+  assert.equal(state.protocolSuiFees, 5n);
+  assert.equal(state.partnerId, normalizeSuiObjectId("0x13"));
   assert.equal(state.metadataCapId.endsWith("0d"), true);
   assert.equal(state.curveFeeCapId, normalizeSuiObjectId("0x12"));
   assert.equal(
@@ -185,87 +184,67 @@ test("rejects a launch object whose embedded UID does not match", () => {
 
   assert.throws(
     () =>
-      decodeLaunchObject({
-        objectId,
-        initialSharedVersion: "7",
-        mutable: true,
-        type: "0x1::launch::Launch<0xa::meme::MEME, 0x2::sui::SUI>",
-        content,
-      }),
+      decodeLaunchObject(
+        {
+          objectId,
+          initialSharedVersion: "7",
+          mutable: true,
+          type: "0x1::launch::Launch<0xa::meme::MEME, 0x2::sui::SUI>",
+          content,
+        },
+        "0x1",
+      ),
     /mismatched UID/,
   );
 });
 
-test("decodes the shared launch config, including the creation fee", async () => {
-  const configId = normalizeSuiObjectId("0x3");
+test("orders the lifecycle variants like launch::Lifecycle", () => {
+  const bytes = serializeLaunch();
+  // The UID's 32 bytes precede the lifecycle tag; OpeningRound is variant 0.
+  assert.equal(bytes[32], 2);
+  const opening = launchBcs.parse(bytes);
+  opening.lifecycle = { OpeningRound: true, $kind: "OpeningRound" };
+  assert.equal(launchBcs.serialize(opening).toBytes()[32], 0);
+});
+
+test("reads the creation fee and Blast allocation from LaunchConfig", async () => {
+  const content = launchConfigBcs
+    .serialize({
+      id: uid("0x40"),
+      meme_decimals: [6, 9],
+      quotes: { id: uid("0x41"), size: 1n },
+      quote_fee_bps: 100n,
+      meme_fee_bps: 50n,
+      migration_witnesses: [migrationWitness],
+      protocol_allocation: { memeBps: 100n, quoteBps: 200n },
+      creation_fee: 1_001n,
+    })
+    .toBytes();
   const client = {
     core: {
       getObject: async () => ({
         object: {
-          objectId: configId,
-          owner: { $kind: "Shared", Shared: { initialSharedVersion: "11" } },
+          objectId: "0x40",
           type: "0x1::launch_config::LaunchConfig",
-          content: launchConfigBcs
-            .serialize({
-              id: uid(configId),
-              meme_decimals: { contents: [6, 9] },
-              quotes: { id: uid("0x31"), size: 1n },
-              quote_fee_bps: 100n,
-              meme_fee_bps: 50n,
-              migration_witnesses: { contents: [migrationWitness] },
-              protocol_allocation: { memeBps: 100n, quoteBps: 200n },
-              creation_fee: 1_000_000_000n,
-            })
-            .toBytes(),
+          content,
         },
       }),
     },
   } as unknown as ClientWithCoreApi;
 
-  const config = await getLaunchConfig(client, configId, "0x1");
-  assert.equal(config.initialSharedVersion, "11");
-  assert.equal(config.mutable, false);
-  assert.deepEqual(config.memeDecimals, [6, 9]);
-  assert.equal(config.quotesTableId, normalizeSuiObjectId("0x31"));
-  assert.equal(config.quoteCount, 1n);
-  assert.equal(config.quoteFeeBps, 100n);
-  assert.deepEqual(config.migrationWitnesses, [
-    normalizeStructTag(migrationWitness),
-  ]);
-  assert.deepEqual(config.protocolAllocation, {
-    memeBps: 100n,
-    quoteBps: 200n,
+  assert.deepEqual(await getLaunchConfig(client, "0x40", "0x1"), {
+    objectId: normalizeSuiObjectId("0x40"),
+    memeDecimals: [6, 9],
+    quotesTableId: normalizeSuiObjectId("0x41"),
+    quoteCount: 1n,
+    quoteFeeBps: 100n,
+    memeFeeBps: 50n,
+    migrationWitnessTypes: [normalizeStructTag(migrationWitness)],
+    protocolAllocation: { memeBps: 100n, quoteBps: 200n },
+    creationFee: 1_001n,
   });
-  assert.equal(config.creationFee, 1_000_000_000n);
   await assert.rejects(
-    getLaunchConfig(client, configId, "0x2"),
-    /is not the launch config/,
+    getLaunchConfig(client, "0x40", "0x2"),
+    /not the launch config/,
   );
-});
-
-test("reads an opening-round bid by its typed bidder key", async () => {
-  let request: unknown;
-  const client = {
-    core: {
-      getDynamicField: async (input: unknown) => {
-        request = input;
-        return {
-          dynamicField: {
-            value: { bcs: new Uint8Array([7, 0, 0, 0, 0, 0, 0, 0]) },
-          },
-        };
-      },
-    },
-  } as unknown as ClientWithCoreApi;
-
-  assert.equal(await getOpeningRoundBid(client, "0xc", "0xb", "0x1"), 7n);
-  assert.deepEqual(request, {
-    parentId: normalizeSuiObjectId("0xc"),
-    name: {
-      type: `${normalizeSuiObjectId("0x1")}::launch::OpeningRoundBidKey`,
-      bcs: Uint8Array.from(
-        Buffer.from(normalizeSuiObjectId("0xb").slice(2), "hex"),
-      ),
-    },
-  });
 });

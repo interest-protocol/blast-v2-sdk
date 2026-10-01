@@ -19,6 +19,8 @@ const expectedEvents = {
   migrators: 13,
   blastSui: 13,
   presale: 18,
+  admin: 15,
+  partners: 2,
 };
 
 type Artifact = {
@@ -30,7 +32,7 @@ type Artifact = {
         {
           functions: Array<{ sdk: string }>;
           structs: Array<{ name: string }>;
-          events: unknown[];
+          events: Array<{ sdk: string; typeParameters: unknown[] }>;
         }
       >;
     }
@@ -96,6 +98,8 @@ test("freezes every production package and event", () => {
   const launchpad = readArtifact("production-launchpad-v1.json");
   const blastSui = readArtifact("production-blast-sui-v1.json");
   const presale = readArtifact("production-presale-v1.json");
+  const admin = readArtifact("production-admin-v1.json");
+  const partners = readArtifact("production-partners-v1.json");
 
   assert.deepEqual(Object.keys(launchpad.packages).sort(), [
     "launchpad",
@@ -104,16 +108,20 @@ test("freezes every production package and event", () => {
   ]);
   assert.deepEqual(Object.keys(blastSui.packages), ["blastSui"]);
   assert.deepEqual(Object.keys(presale.packages), ["presale"]);
+  assert.deepEqual(Object.keys(admin.packages), ["admin"]);
+  assert.deepEqual(Object.keys(partners.packages), ["partners"]);
   assert.equal(countEvents(launchpad, "launchpad"), expectedEvents.launchpad);
   assert.equal(countEvents(launchpad, "migrators"), expectedEvents.migrators);
   assert.equal(countEvents(blastSui, "blastSui"), expectedEvents.blastSui);
   assert.equal(countEvents(presale, "presale"), expectedEvents.presale);
+  assert.equal(countEvents(admin, "admin"), expectedEvents.admin);
+  assert.equal(countEvents(partners, "partners"), expectedEvents.partners);
   const eventWrapper = blastSui.packages.blastSui?.modules.blast_events;
   assert.ok(eventWrapper);
   assert.ok(eventWrapper.structs.some(({ name }) => name === "Event"));
 
-  for (const artifact of [launchpad, blastSui, presale]) {
-    assertEveryOperationIsClassified(artifact);
+  for (const artifact of [launchpad, blastSui, presale, admin, partners]) {
+    assertEveryOperationIsClassified(artifact, artifact === admin);
   }
 });
 
@@ -141,6 +149,26 @@ test("rejects unknown blast_sui function classifications", () => {
   }
 });
 
+test("rejects unknown blast_admin function classifications", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "scripts/check-contract-abi.mjs",
+      "--classify-function",
+      "blast_admin",
+      "blast_acl",
+      "future_operation",
+    ],
+    { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /unclassified function blast_admin::blast_acl::future_operation/,
+  );
+});
+
 test("rejects unknown blast_presale function classifications", () => {
   const result = spawnSync(
     process.execPath,
@@ -161,14 +189,23 @@ test("rejects unknown blast_presale function classifications", () => {
   );
 });
 
-function assertEveryOperationIsClassified(artifact: Artifact) {
+function assertEveryOperationIsClassified(
+  artifact: Artifact,
+  isAdmin: boolean,
+) {
   for (const packageArtifact of Object.values(artifact.packages)) {
     for (const moduleArtifact of Object.values(packageArtifact.modules)) {
       for (const operation of moduleArtifact.functions) {
         assert.ok(operation.sdk.length > 0);
       }
       for (const event of moduleArtifact.events) {
-        assert.match(JSON.stringify(event), /"sdk":"decoder-reducer"/);
+        // Only blast_admin's generic upgrade events are left to publish tooling.
+        assert.equal(
+          event.sdk,
+          isAdmin && event.typeParameters.length > 0
+            ? "intentional-upgrade-exclusion"
+            : "decoder-reducer",
+        );
       }
     }
   }

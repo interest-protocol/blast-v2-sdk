@@ -8,7 +8,7 @@ import {
   requireU64,
 } from "../lib/integers.ts";
 
-/** Most project recipients one allocation plan may name; Blast's allocation is separate. */
+/** Most project recipients one allocation plan may name; Blast's fee has its own fields. */
 export const MAX_ALLOCATION_RECIPIENTS = 16;
 /** Most direct recipients one LP-fee split may name. */
 export const MAX_FEE_SPLIT_RECIPIENTS = 16;
@@ -23,39 +23,35 @@ export type AllocationRecipient = {
   quoteBps: bigint;
 };
 
-/** The creator's plan, built by `allocation::plan`, before Blast's allocation is added. */
-export type CreatorAllocationPlan = {
+/**
+ * Mirrors `blast_fun::allocation::AllocationPlan`. `allocation::plan` leaves
+ * Blast's shares at zero; `launch::finalize` sets them from the `LaunchConfig`
+ * protocol allocation (see `addProtocolAllocation`). Blast's shares accrue as
+ * its one-time migration fee in the launch's fee ledger (contracts ADR 0098).
+ */
+export type AllocationPlan = {
   curveMemeBps: bigint;
   lpMemeBps: bigint;
   lpQuoteBps: bigint;
+  protocolMemeBps: bigint;
+  protocolQuoteBps: bigint;
   recipients: AllocationRecipient[];
 };
 
-/**
- * Mirrors `blast_fun::allocation::ProtocolAllocation`: Blast's one-time shares
- * of the Meme supply and of the final Quote reserve, accrued as protocol fees
- * at migration.
- */
-export type ProtocolAllocation = {
-  memeBps: bigint;
-  quoteBps: bigint;
-};
+/** The creator's plan: `allocation::plan` input, before Blast's shares are added. */
+export type CreatorAllocationPlan = Omit<
+  AllocationPlan,
+  "protocolMemeBps" | "protocolQuoteBps"
+>;
 
-/**
- * Mirrors `blast_fun::allocation::AllocationPlan`. `launch::finalize` sets
- * Blast's shares from the `LaunchConfig` protocol allocation (see
- * `addProtocolAllocation`); a creator plan carries zero.
- */
-export type AllocationPlan = CreatorAllocationPlan & {
-  protocolMemeBps: bigint;
-  protocolQuoteBps: bigint;
-};
+/** Mirrors `blast_fun::allocation::ProtocolAllocation`, Blast's one-time migration fee. */
+export type ProtocolAllocation = { memeBps: bigint; quoteBps: bigint };
 
 /** Exact Meme amounts of one apportioned supply. */
 export type AllocationMemeAmounts = {
   curve: bigint;
   lp: bigint;
-  /** Blast's one-time Meme fee. */
+  /** Blast's migration fee, rounded up. */
   protocol: bigint;
   /** Aligned with `plan.recipients`. */
   recipients: bigint[];
@@ -64,7 +60,7 @@ export type AllocationMemeAmounts = {
 /** Exact Quote amounts of one apportioned final reserve. */
 export type AllocationQuoteAmounts = {
   lp: bigint;
-  /** Blast's one-time Quote fee. */
+  /** Blast's migration fee, rounded up. */
   protocol: bigint;
   /** Aligned with `plan.recipients`. */
   recipients: bigint[];
@@ -141,10 +137,12 @@ export const feeSplitBcs = bcs.struct("FeeSplit", {
 });
 
 /**
- * Checks a creator plan as `allocation::plan` and `allocation::recipient` do:
- * positive curve and pool Meme shares, nonzero destinations, recipient order
- * kept, and at most sixteen recipients (checked again at finalization). The
- * sums are checked once Blast's allocation is added (`addProtocolAllocation`).
+ * Checks a creator plan exactly as `allocation::plan` and
+ * `allocation::recipient` do: positive curve and pool Meme shares, nonzero
+ * destinations, recipient order kept, plus `add_protocol`'s sixteen-recipient
+ * cap. The sums are checked once Blast's shares are added
+ * (`addProtocolAllocation`); finalization then requires a positive pool Quote
+ * amount at the graduation target.
  */
 export function normalizeAllocationPlan(
   plan: CreatorAllocationPlan,
@@ -166,8 +164,8 @@ export function normalizeAllocationPlan(
 
 /**
  * Mirrors `allocation::add_protocol`, which `launch::finalize` runs with the
- * `LaunchConfig` protocol allocation: Blast's shares are set, and each asset
- * must then sum to 10,000 basis points.
+ * `LaunchConfig` protocol allocation: Blast's shares fill their own fields,
+ * and each asset must then sum to 10,000 basis points.
  */
 export function addProtocolAllocation(
   plan: CreatorAllocationPlan,
@@ -186,9 +184,7 @@ export function addProtocolAllocation(
  */
 export function requireCompletePlan(plan: AllocationPlan): AllocationPlan {
   const normalized = {
-    curveMemeBps: requireBasisPoints("curveMemeBps", plan.curveMemeBps),
-    lpMemeBps: requireBasisPoints("lpMemeBps", plan.lpMemeBps),
-    lpQuoteBps: requireBasisPoints("lpQuoteBps", plan.lpQuoteBps),
+    ...normalizeAllocationPlan(plan),
     protocolMemeBps: requireBasisPoints(
       "protocolMemeBps",
       plan.protocolMemeBps,
@@ -197,11 +193,7 @@ export function requireCompletePlan(plan: AllocationPlan): AllocationPlan {
       "protocolQuoteBps",
       plan.protocolQuoteBps,
     ),
-    recipients: plan.recipients.map(normalizeRecipient),
   };
-  if (normalized.recipients.length > MAX_ALLOCATION_RECIPIENTS) {
-    throw new RangeError("allocation plan exceeds sixteen recipients");
-  }
   const meme = normalized.recipients.reduce(
     (sum, recipient) => sum + recipient.memeBps,
     normalized.curveMemeBps + normalized.lpMemeBps + normalized.protocolMemeBps,
@@ -253,7 +245,7 @@ export function normalizeFeeSplit(split: FeeSplit): FeeSplit {
 
 /**
  * Mirrors `allocation::apportion_meme` on a complete plan: the curve's, the
- * pool's, Blast's, and each recipient's share of `supply`. Blast's takes its
+ * pool's, Blast's, and each recipient's share of `supply`. Blast takes its
  * ceiling; the rest go by largest remainder.
  */
 export function apportionMeme(
@@ -275,7 +267,7 @@ export function apportionMeme(
 
 /**
  * Mirrors `allocation::apportion_quote` on a complete plan: the pool's,
- * Blast's, and each recipient's share of the final Quote `reserve`. Blast's
+ * Blast's, and each recipient's share of the final Quote `reserve`. Blast
  * takes its ceiling; the rest go by largest remainder.
  */
 export function apportionQuote(

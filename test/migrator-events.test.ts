@@ -405,6 +405,15 @@ test("keeps transaction-effects and ownership facts separate from events", () =>
       memeCoin: { objectId: "0x64", recipient: "0x65" },
       quoteCoin: { objectId: "0x66", recipient: "0x67" },
     },
+    {
+      source: "transactionEffects" as const,
+      kind: "returnedCoinRecipients" as const,
+      position: { checkpoint: 12n, transactionDigest: "claim-tx" },
+      claim: "launchProtocolFees" as const,
+      memeCoin: { objectId: "0x68", recipient: "0x69" },
+      quoteCoin: { objectId: "0x6a", recipient: "0x69" },
+      suiCoin: { objectId: "0x6b", recipient: "0x69" },
+    },
   ];
 
   const projection = nativeInputs.reduce(
@@ -424,11 +433,23 @@ test("keeps transaction-effects and ownership facts separate from events", () =>
   const returnedClaims = Object.values(
     projection.native.returnedCoinRecipients,
   );
-  assert.equal(returnedClaims.length, 2);
+  assert.equal(returnedClaims.length, 3);
   assert.deepEqual(
     returnedClaims.map((fact) => fact.quoteCoin.recipient).sort(),
-    [normalizeSuiObjectId("0x63"), normalizeSuiObjectId("0x67")].sort(),
+    [
+      normalizeSuiObjectId("0x63"),
+      normalizeSuiObjectId("0x67"),
+      normalizeSuiObjectId("0x69"),
+    ].sort(),
   );
+  const protocolClaim = returnedClaims.find(
+    (fact) => fact.claim === "launchProtocolFees",
+  );
+  assert.ok(protocolClaim?.claim === "launchProtocolFees");
+  assert.deepEqual(protocolClaim.suiCoin, {
+    objectId: normalizeSuiObjectId("0x6b"),
+    recipient: normalizeSuiObjectId("0x69"),
+  });
   assert.equal("creatorCapOwners" in projection.launchpad, false);
   assert.equal("returnedCoinRecipients" in projection.migrators, false);
 });

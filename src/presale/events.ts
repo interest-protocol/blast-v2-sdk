@@ -298,7 +298,7 @@ export type DecodedPresaleEvent = {
     memeType: string;
     quoteType: string;
     /** `PresaleVaultCreated` only: the venue marker, e.g. `<pkg>::cetus::Venue`. */
-    venueType: string | null;
+    venueType: Kind extends "PresaleVaultCreated" ? string : null;
     /** Transaction sender; for `Committed`, the committing wallet. */
     sender: string;
     position: SuiEventPosition;
@@ -316,25 +316,25 @@ export function decodePresaleEvent(
 ): DecodedPresaleEvent {
   const tag = parseStructTag(event.eventType);
   const kind = tag.name as PresaleEventKind;
-  const venue = kind === "PresaleVaultCreated";
+  const [memeType, quoteType, venueType = null, ...extra] = tag.typeParams;
   if (
     tag.address !== normalizeSuiAddress(packages.originalPackageId) ||
     !Object.hasOwn(presaleEventModules, kind) ||
     presaleEventModules[kind] !== tag.module ||
-    tag.typeParams.length !== (venue ? 3 : 2)
+    memeType === undefined ||
+    quoteType === undefined ||
+    (venueType === null) === (kind === "PresaleVaultCreated") ||
+    extra.length > 0
   ) {
     throw new TypeError(`unexpected presale event type ${event.eventType}`);
   }
-  const [memeType, quoteType, venueType] = tag.typeParams.map((type) =>
-    normalizeStructTag(type),
-  );
   return {
     source: "presale",
     kind,
     payload: presaleEventBcs[kind].parse(event.bcs),
-    memeType: memeType!,
-    quoteType: quoteType!,
-    venueType: venueType ?? null,
+    memeType: normalizeStructTag(memeType),
+    quoteType: normalizeStructTag(quoteType),
+    venueType: venueType && normalizeStructTag(venueType),
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
   } as DecodedPresaleEvent;

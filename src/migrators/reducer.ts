@@ -109,18 +109,20 @@ export type CreatorCapOwnershipFact = {
   owner: string;
 };
 
+/** A coin a claim returned and where its transaction sent it. */
+export type ReturnedCoin = { objectId: string; recipient: string };
+
+/** The coins one claim returned: a launch protocol claim also returns Blast's SUI. */
 export type ReturnedCoinRecipientsFact = {
   source: "transactionEffects";
   kind: "returnedCoinRecipients";
   position: NativeTransactionPosition;
-  claim:
-    | "launchCreatorFees"
-    | "launchProtocolFees"
-    | "lpCreatorFees"
-    | "lpProtocolFees";
-  memeCoin: { objectId: string; recipient: string };
-  quoteCoin: { objectId: string; recipient: string };
-};
+  memeCoin: ReturnedCoin;
+  quoteCoin: ReturnedCoin;
+} & (
+  | { claim: "launchCreatorFees" | "lpCreatorFees" | "lpProtocolFees" }
+  | { claim: "launchProtocolFees"; suiCoin: ReturnedCoin }
+);
 
 export type NativeReconstructionFact =
   | PackagePublicationFact
@@ -503,17 +505,20 @@ function normalizeNativeFact(
       ),
     };
   }
-  return {
-    ...fact,
+  const coins = {
     position,
-    memeCoin: {
-      objectId: normalizeSuiObjectId(fact.memeCoin.objectId),
-      recipient: normalizeSuiAddress(fact.memeCoin.recipient),
-    },
-    quoteCoin: {
-      objectId: normalizeSuiObjectId(fact.quoteCoin.objectId),
-      recipient: normalizeSuiAddress(fact.quoteCoin.recipient),
-    },
+    memeCoin: normalizeReturnedCoin(fact.memeCoin),
+    quoteCoin: normalizeReturnedCoin(fact.quoteCoin),
+  };
+  return fact.claim === "launchProtocolFees"
+    ? { ...fact, ...coins, suiCoin: normalizeReturnedCoin(fact.suiCoin) }
+    : { ...fact, ...coins };
+}
+
+function normalizeReturnedCoin(coin: ReturnedCoin): ReturnedCoin {
+  return {
+    objectId: normalizeSuiObjectId(coin.objectId),
+    recipient: normalizeSuiAddress(coin.recipient),
   };
 }
 

@@ -5,27 +5,25 @@ import type {
   TransactionResult,
 } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
-import {
-  normalizeStructTag,
-  normalizeSuiAddress,
-  normalizeSuiObjectId,
-} from "@mysten/sui/utils";
+import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import type {
   RewardManifest,
   RewardProof,
 } from "../holder-rewards/allocations.ts";
 import {
+  MIGRATOR_REWARD_LEAF_DOMAIN,
   rewardAddress,
   rewardDigest,
   validateRewardManifest,
 } from "../holder-rewards/allocations.ts";
 import type { FeeSplit } from "../launchpad/allocation.ts";
 import type {
-  LaunchCompletionInput,
-  LaunchpadAdminRole,
+  BlastFunAdminRole,
   LaunchpadDeployment,
+  LaunchSettings,
   LaunchTypes,
+  PreShareBuyInput,
 } from "../launchpad/transactions.ts";
 import {
   addLaunchCompletion,
@@ -33,20 +31,28 @@ import {
   normalizeLaunchTypes,
 } from "../launchpad/transactions.ts";
 import { requireU64 } from "../lib/integers.ts";
-import type { SharedObjectReference } from "../lib/sui.ts";
-import { normalizeSharedObjectReference } from "../lib/sui.ts";
+import { deploymentObject, moveResults } from "../lib/ptb.ts";
+import type {
+  SharedObjectIdentity,
+  SharedObjectReference,
+} from "../lib/sui.ts";
+import {
+  normalizeSharedObjectIdentity,
+  normalizeSharedObjectReference,
+  normalizeSuiPackageReference,
+} from "../lib/sui.ts";
 import type { MigratorVenue } from "./state.ts";
 
 export type MigratorsDeployment = {
   packageId: string;
-  originalPackageId?: string;
+  originalPackageId: string;
   launchpad: LaunchpadDeployment;
   /** Migrators `package_version::PackageVersion` checked by every protected entry. */
-  migratorsVersion: SharedObjectReference<false>;
+  migratorsVersion: SharedObjectIdentity;
   /** Migrators `lp_fee_policy::LpFeePolicy` read by every LP-fee collection. */
-  lpFeePolicy: SharedObjectReference<false>;
+  lpFeePolicy: SharedObjectIdentity;
   /** Migrators `venue_config::VenueConfig`, holding each Meme's Cetus `PoolCreationCap`. */
-  venueConfig: SharedObjectReference<false>;
+  venueConfig: SharedObjectIdentity;
 };
 
 /**
@@ -65,47 +71,39 @@ export type CetusObjects = {
 
 /** Settings for starting a launch through an adapter in one transaction. */
 export type CreateLaunchOptions = LaunchTypes &
-  LaunchCompletionInput & {
+  LaunchSettings & {
     /** The `LaunchTicket<Meme>` the generated package's initializer transferred to its publisher. */
     ticket: TransactionObjectInput;
     /** The Meme `Currency<Meme>` in the Coin Registry, fixed at finalization. */
     memeCurrency: SharedObjectReference<true>;
+    /** `LaunchConfig.creation_fee` in MIST, paid from gas as an exact coin. */
+    creationFee: bigint;
+    preShareBuy?: PreShareBuyInput;
   };
 
 /** Maximum Merkle proof depth the holder-reward leaf count (65,536) allows. */
 export const MAX_HOLDER_REWARD_PROOF_DEPTH = 16;
 
-type NormalizedDeployment = Required<Omit<MigratorsDeployment, "launchpad">> & {
-  launchpad: LaunchpadDeployment;
-};
-
 export class MigratorCalls {
-  readonly deployment: NormalizedDeployment;
+  readonly deployment: MigratorsDeployment;
   readonly launchpad: LaunchpadCalls;
 
   constructor(deployment: MigratorsDeployment) {
-    const packageId = normalizeSuiObjectId(deployment.packageId);
     this.launchpad = new LaunchpadCalls(deployment.launchpad);
     this.deployment = {
-      packageId,
-      originalPackageId: normalizeSuiObjectId(
-        deployment.originalPackageId ?? packageId,
-      ),
+      ...normalizeSuiPackageReference("migrators", deployment),
       launchpad: this.launchpad.deployment,
-      migratorsVersion: normalizeSharedObjectReference(
+      migratorsVersion: normalizeSharedObjectIdentity(
         "migratorsVersion",
         deployment.migratorsVersion,
-        false,
       ),
-      lpFeePolicy: normalizeSharedObjectReference(
+      lpFeePolicy: normalizeSharedObjectIdentity(
         "lpFeePolicy",
         deployment.lpFeePolicy,
-        false,
       ),
-      venueConfig: normalizeSharedObjectReference(
+      venueConfig: normalizeSharedObjectIdentity(
         "venueConfig",
         deployment.venueConfig,
-        false,
       ),
     };
   }
@@ -117,15 +115,11 @@ export class MigratorCalls {
     );
   }
 
-  /**
-   * `blast_acl::sign_in<Role>` against the launchpad's ACL. The migrators take
-   * `BuybackAdmin`, `TreasuryAdmin`, `FeeAdmin`, and `RewardsAdmin` witnesses.
-   */
-  signIn(
-    role: LaunchpadAdminRole,
-    options: { adminCap: TransactionObjectInput },
-  ) {
-    return this.launchpad.signIn(role, options);
+  signIn(options: {
+    adminCap: TransactionObjectInput;
+    role: BlastFunAdminRole;
+  }) {
+    return this.launchpad.signIn(options);
   }
 
   /**
@@ -152,12 +146,7 @@ export class MigratorCalls {
           this.#migratorsVersion(tx),
           this.#launchpadVersion(tx),
           this.#launchConfig(tx),
-          sharedObject(
-            tx,
-            "venueConfig",
-            { ...this.deployment.venueConfig, mutable: true },
-            true,
-          ),
+          deploymentObject(tx, this.deployment.venueConfig, true),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "cetusPools", options.cetusPools, true),
           tx.pure.u32(tickSpacing),
@@ -221,7 +210,7 @@ export class MigratorCalls {
           this.#migratorsVersion(tx),
           this.#launchpadVersion(tx),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
+          deploymentObject(tx, this.deployment.venueConfig, false),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "cetusPools", options.cetusPools, true),
           sharedObject(tx, "burnManager", options.burnManager, true),
@@ -403,7 +392,7 @@ export class MigratorCalls {
 
   /**
    * Swaps the vault's whole burn Quote for Meme in its Cetus pool and burns
-   * it, under an `AdminWitness<BuybackAdmin>`. Aborts unless the swap returns at least
+   * it, under a `BuybackAdmin` witness. Aborts unless the swap returns at least
    * `minMemeOut`; set it from an off-chain price, since anyone can move the
    * pool's price within a transaction. Unspent Quote waits for the next one.
    */
@@ -495,7 +484,7 @@ export class MigratorCalls {
       });
   }
 
-  /** Claims the protocol-owned migration residuals under `AdminWitness<TreasuryAdmin>`. */
+  /** Claims the protocol-owned migration residuals under a `TreasuryAdmin` witness. */
   claimProtocolFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
@@ -574,8 +563,8 @@ export class MigratorCalls {
 
   /**
    * Publishes a holder-reward round from a validated manifest, reserving its
-   * budget from the vault's rewards balance, and shares the `Round`, under an
-   * `AdminWitness<RewardsAdmin>`.
+   * budget from the vault's rewards balance, and shares the `Round`
+   * (`RewardsAdmin`).
    */
   publishHolderRewardRound(
     options: LaunchTypes & {
@@ -585,7 +574,10 @@ export class MigratorCalls {
     },
   ) {
     const types = normalizeLaunchTypes(options);
-    const manifest = validateRewardManifest(options.manifest);
+    const manifest = validateRewardManifest(
+      options.manifest,
+      MIGRATOR_REWARD_LEAF_DOMAIN,
+    );
     if (
       rewardAddress(manifest.vaultId) !== rewardAddress(options.vault.objectId)
     ) {
@@ -664,12 +656,7 @@ export class MigratorCalls {
         target: `${this.deployment.packageId}::lp_fee_policy::${functionName}`,
         typeArguments,
         arguments: [
-          sharedObject(
-            tx,
-            "lpFeePolicy",
-            { ...this.deployment.lpFeePolicy, mutable: true },
-            true,
-          ),
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
           this.#migratorsVersion(tx),
           tx.object(options.adminWitness),
           ...extra(tx),
@@ -679,34 +666,23 @@ export class MigratorCalls {
   }
 
   #migratorsVersion(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
-      tx,
-      "migratorsVersion",
-      this.deployment.migratorsVersion,
-      false,
-    );
+    return deploymentObject(tx, this.deployment.migratorsVersion, false);
   }
 
   #launchpadVersion(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
+    return deploymentObject(
       tx,
-      "packageVersion",
       this.deployment.launchpad.packageVersion,
       false,
     );
   }
 
   #launchConfig(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
-      tx,
-      "launchConfig",
-      this.deployment.launchpad.launchConfig,
-      false,
-    );
+    return deploymentObject(tx, this.deployment.launchpad.launchConfig, false);
   }
 
   #lpFeePolicy(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false);
+    return deploymentObject(tx, this.deployment.lpFeePolicy, false);
   }
 }
 
@@ -843,7 +819,7 @@ export class MigratorTransactions {
       }),
     );
     tx.transferObjects(
-      [result[0]!, result[1]!],
+      moveResults(result, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
@@ -858,13 +834,13 @@ export class MigratorTransactions {
   ): Transaction {
     const tx = new Transaction();
     const adminWitness = tx.add(
-      this.call.signIn("TreasuryAdmin", { adminCap: options.adminCapId }),
+      this.call.signIn({ adminCap: options.adminCapId, role: "TreasuryAdmin" }),
     );
     const result = tx.add(
       this.call.claimProtocolFees({ ...options, adminWitness }),
     );
     tx.transferObjects(
-      [result[0]!, result[1]!],
+      moveResults(result, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
@@ -875,7 +851,7 @@ export class MigratorTransactions {
     memeBps: bigint;
     quoteBps: bigint;
   }): Transaction {
-    return this.#asAdmin("FeeAdmin", options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.setLpFeeDefaultShares({ ...options, adminWitness }),
     );
   }
@@ -886,7 +862,7 @@ export class MigratorTransactions {
     memeBps: bigint;
     quoteBps: bigint;
   }): Transaction {
-    return this.#asAdmin("FeeAdmin", options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.setLpFeeCoinShares({ ...options, adminWitness }),
     );
   }
@@ -895,7 +871,7 @@ export class MigratorTransactions {
     memeType: string;
     adminCapId: string;
   }): Transaction {
-    return this.#asAdmin("FeeAdmin", options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.clearLpFeeCoinShares({ ...options, adminWitness }),
     );
   }
@@ -904,7 +880,7 @@ export class MigratorTransactions {
     adminCapId: string;
     destination: string;
   }): Transaction {
-    return this.#asAdmin("TreasuryAdmin", options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
       this.call.setLpFeeProtocolDestination({ ...options, adminWitness }),
     );
   }
@@ -915,7 +891,7 @@ export class MigratorTransactions {
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
-    return this.#asAdmin("BuybackAdmin", options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "BuybackAdmin", (adminWitness) =>
       this.call.buybackAndBurnCetus({ ...options, adminWitness }),
     );
   }
@@ -926,7 +902,7 @@ export class MigratorTransactions {
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
-    return this.#asAdmin("BuybackAdmin", options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "BuybackAdmin", (adminWitness) =>
       this.call.buybackAndBurnBluefin({ ...options, adminWitness }),
     );
   }
@@ -937,7 +913,7 @@ export class MigratorTransactions {
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
-    return this.#asAdmin("RewardsAdmin", options.adminCapId, (adminWitness) =>
+    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
       this.call.publishHolderRewardRound({ ...options, adminWitness }),
     );
   }
@@ -957,15 +933,15 @@ export class MigratorTransactions {
   }
 
   #asAdmin(
-    role: LaunchpadAdminRole,
     adminCapId: string,
+    role: BlastFunAdminRole,
     call: (
       adminWitness: TransactionObjectArgument,
     ) => (tx: Transaction) => void,
   ): Transaction {
     const tx = new Transaction();
     const adminWitness = tx.add(
-      this.call.signIn(role, { adminCap: adminCapId }),
+      this.call.signIn({ adminCap: adminCapId, role }),
     );
     tx.add(call(adminWitness));
     return tx;

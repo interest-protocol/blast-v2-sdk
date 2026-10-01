@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { itemAt } from "../src/lib/arrays.ts";
 import { U64_MAX } from "../src/lib/integers.ts";
 import type {
   CommitPreviewInput,
@@ -78,7 +79,7 @@ test("apportions Blast's snapshotted token and raise shares like blast_presale::
   const preview = previewPresaleCreation({
     ...config,
     recipientAllocations: [
-      recipients[0]!,
+      itemAt(recipients, 0),
       { recipient: "0xb110c", bps: 1_000n },
     ],
     raiseAllocations: [{ recipient: "0x5a1e", bps: 2_000n }],
@@ -104,7 +105,7 @@ test("apportions Blast's snapshotted token and raise shares like blast_presale::
   // 1,000 * [2,000, 333, 7,667] / 10,000: the LP takes the leftover atom.
   assert.deepEqual(
     [
-      preview.raisePayouts[0]!.amount,
+      itemAt(preview.raisePayouts, 0).amount,
       preview.protocolQuote,
       preview.liquidityQuote,
     ],
@@ -170,7 +171,7 @@ test("splits LP fees like presale_vault::fee_shares", () => {
     rewards: 3n,
   });
   // `a_remainder_tie_goes_to_the_fee_recipient_before_holders`.
-  assert.deepEqual(apportionFee([feeRecipients[0]!], 5_000n, 3n), {
+  assert.deepEqual(apportionFee(feeRecipients.slice(0, 1), 5_000n, 3n), {
     recipients: [2n],
     rewards: 1n,
   });

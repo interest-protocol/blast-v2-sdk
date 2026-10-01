@@ -1,4 +1,4 @@
-import type { RewardManifest } from "./allocations.ts";
+import type { RewardLeafDomain, RewardManifest } from "./allocations.ts";
 import { validateRewardManifest } from "./allocations.ts";
 import type { RewardRoundState } from "./state.ts";
 import { rewardIsClaimed } from "./state.ts";
@@ -9,15 +9,16 @@ type RoundCommitment = Pick<
 >;
 
 /**
- * A relayer must compare the public artifact with authoritative chain state before paying.
- * The root binds every leaf's vault, round, index, beneficiary, and amounts; the round's
- * checkpoint interval and manifest digest live only in its `RoundPublished` event.
+ * A relayer must compare the public artifact with authoritative chain state
+ * before paying. The root commits every leaf; the round object keeps no
+ * checkpoints or manifest digest (its `RoundPublished` event does).
  */
 export function assertRewardRoundMatchesManifest(
   round: RoundCommitment,
   manifest: RewardManifest,
+  leafDomain: RewardLeafDomain,
 ): void {
-  validateRewardManifest(manifest);
+  validateRewardManifest(manifest, leafDomain);
   if (
     round.vaultId !== manifest.vaultId ||
     round.number !== BigInt(manifest.number) ||
@@ -31,8 +32,9 @@ export function assertRewardRoundMatchesManifest(
 export function pendingRewardAllocations(
   round: RoundCommitment & Pick<RewardRoundState, "claimed">,
   manifest: RewardManifest,
+  leafDomain: RewardLeafDomain,
 ) {
-  assertRewardRoundMatchesManifest(round, manifest);
+  assertRewardRoundMatchesManifest(round, manifest, leafDomain);
   return manifest.allocations.filter(
     (allocation) => !rewardIsClaimed(round, Number(allocation.index)),
   );

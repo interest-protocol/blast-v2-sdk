@@ -11,8 +11,10 @@ import {
 
 import {
   buildRewardManifest,
+  MIGRATOR_REWARD_LEAF_DOMAIN,
   PRESALE_REWARD_LEAF_DOMAIN,
 } from "../src/holder-rewards/allocations.ts";
+import { itemAt } from "../src/lib/arrays.ts";
 import type { SharedObjectReference } from "../src/lib/sui.ts";
 import { buildAllowlist } from "../src/presale/allowlist.ts";
 import { openEligibility, uncappedForAnyone } from "../src/presale/math.ts";
@@ -207,7 +209,7 @@ test("commits through each route and returns the change to the wallet", () => {
       amount: 250n,
       recipient: "0xa11ce",
       route,
-      allowlist: allowlist.proofs[0]!,
+      allowlist: itemAt(allowlist.proofs, 0),
     });
     const call = moveCall(ptb, `blast_presale::commit_${route}`);
     assert.deepEqual(call.typeArguments, [memeA, sui]);
@@ -465,21 +467,21 @@ test("rejects a manifest from the migrators' leaf domain or another vault", () =
       manifest,
       claimDeadlineMs: 1n,
     });
-  assert.throws(() => publish(buildRewardManifest(options)), /root mismatch/);
+  assert.throws(
+    () =>
+      publish(
+        buildRewardManifest({
+          ...options,
+          leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
+        }),
+      ),
+    /root mismatch/,
+  );
   const presaleManifest = buildRewardManifest({
     ...options,
     leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
   });
   assert.throws(() => publish(presaleManifest, "0xbb"), /another vault/);
-  assert.throws(
-    () =>
-      new PresaleCalls({
-        packageId: deployment.packageId,
-        venueConfig: deployment.venueConfig,
-        feePolicy: deployment.feePolicy,
-      }).signInRewardsAdmin({ adminCap: "0x1" }),
-    /deployment.admin/,
-  );
 });
 
 // === ABI and PTB inspection ===
@@ -545,7 +547,7 @@ function commandIndexOf(ptb: Transaction, kind: string, nth: number): number {
     .commands.flatMap((command, index) =>
       command.$kind === kind ? [index] : [],
     );
-  return indexes[nth]!;
+  return itemAt(indexes, nth);
 }
 
 function moveCall(ptb: Transaction, name: string) {

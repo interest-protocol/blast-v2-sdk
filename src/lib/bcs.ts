@@ -1,5 +1,9 @@
 import { bcs } from "@mysten/sui/bcs";
-import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
+import {
+  normalizeStructTag,
+  normalizeSuiAddress,
+  normalizeSuiObjectId,
+} from "@mysten/sui/utils";
 
 export const suiIdBcs = bcs.struct("ID", { bytes: bcs.Address });
 export const suiUidBcs = bcs.struct("UID", { id: suiIdBcs });
@@ -25,3 +29,13 @@ export const moveTypeNameBcs = bcs
         new TextDecoder().decode(Uint8Array.from(value.name.bytes)),
       ),
   });
+
+export const u64Bcs = bcs.u64().transform({
+  input: (value: bigint) => value,
+  output: (value) => BigInt(value),
+});
+
+export const addressBcs = bcs.Address.transform({
+  input: (value: string) => normalizeSuiAddress(value),
+  output: (value) => normalizeSuiAddress(value),
+});

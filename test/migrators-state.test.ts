@@ -5,6 +5,7 @@ import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
 
+import { getOpeningRoundBid } from "../src/launchpad/state.ts";
 import {
   decodeLpVaultObject,
   getLpFeePolicy,
@@ -202,4 +203,26 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
     quoteBps: 2_000n,
     source: "default",
   });
+});
+
+test("reads a bidder's undelivered opening-round bid, zero without one", async () => {
+  let found = true;
+  const client = {
+    core: {
+      getDynamicField: async (request: { name: { type: string } }) => {
+        assert.equal(
+          request.name.type,
+          `${normalizeSuiAddress("0x1")}::launch::OpeningRoundBidKey`,
+        );
+        if (!found) throw notFound();
+        return {
+          dynamicField: { value: { bcs: bcs.u64().serialize(42n).toBytes() } },
+        };
+      },
+    },
+  } as unknown as ClientWithCoreApi;
+
+  assert.equal(await getOpeningRoundBid(client, "0xc", "0xa", "0x1"), 42n);
+  found = false;
+  assert.equal(await getOpeningRoundBid(client, "0xc", "0xa", "0x1"), 0n);
 });

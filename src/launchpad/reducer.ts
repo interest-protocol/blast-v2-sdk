@@ -19,19 +19,6 @@ export type LaunchMigrationProjection = {
   totalSupplyAfter: bigint;
 };
 
-/**
- * Opening-round custody, mirroring the launch's `opening_round_*` fields.
- * `bids` is the undelivered bids' total; `quote` is the pot until settlement,
- * then the Quote it left to refund; `meme` is what the pot bought.
- */
-export type LaunchOpeningRoundProjection = {
-  bids: bigint;
-  quote: bigint;
-  meme: bigint;
-  /** Each undelivered bidder's Quote; the joining sender is the bidder. */
-  bidders: Readonly<Record<string, bigint>>;
-};
-
 export type LaunchAllocationPayment = {
   destination: string;
   meme: bigint;
@@ -66,19 +53,23 @@ export type LaunchEventProjection = {
   creatorMemeFees: bigint;
   protocolQuoteFees: bigint;
   creatorQuoteFees: bigint;
-  /** Blast's SUI on the launch, from the creation fee; zero once claimed. */
+  /** Blast's SUI: the creation fee until Blast claims it. */
   protocolSuiFees: bigint;
-  /** SUI the creator paid at finalization, in MIST. */
-  creationFee: bigint;
-  /** The Blast partner named at creation; it never changes. */
-  partnerId: string | null;
+  /** Blast's one-time Meme and Quote migration fee (`ProtocolFeesAccrued`). */
+  protocolMigrationFee: { meme: bigint; quote: bigint } | null;
   virtualQuote: bigint;
   graduationTarget: bigint;
   quoteFeeBps: bigint;
   memeFeeBps: bigint;
-  /** Zero has no opening round; otherwise it ends this long after share. */
+  creationFee: bigint;
+  partnerId: string | null;
   openingRoundMs: bigint;
-  openingRound: LaunchOpeningRoundProjection;
+  /** Undelivered opening-round bids: the pot until settlement. */
+  openingRoundBids: bigint;
+  openingRoundQuote: bigint;
+  openingRoundMeme: bigint;
+  /** Each bidder's undelivered bid; a keeper delivers every entry after settlement. */
+  openingRoundBidders: Readonly<Record<string, bigint>>;
   publicStartMs: bigint | null;
   migration: LaunchMigrationProjection | null;
   allocationPayments: LaunchAllocationPayment[];
@@ -115,7 +106,7 @@ export type LaunchpadConfigProjection = {
     quoteFeeBps: bigint;
     memeFeeBps: bigint;
   } | null;
-  /** Admitted Quotes. */
+  /** Admitted Quotes; each creator picks its virtual reserve. */
   quotes: Readonly<Record<string, true>>;
   migrationWitnesses: Readonly<Record<string, true>>;
   /**
@@ -123,14 +114,11 @@ export type LaunchpadConfigProjection = {
    * emitting an event, so the projection starts there too.
    */
   memeDecimals: Readonly<Record<number, true>>;
-  /** Blast's one-time shares new launches snapshot; zero until set. */
+  /** Blast's one-time migration fee; `LaunchConfig` starts it at zero. */
   protocolAllocation: ProtocolAllocation;
-  /** SUI, in MIST, every new launch pays; zero until set. */
+  /** SUI, in MIST, each launch pays at creation; zero initially. */
   creationFee: bigint;
-  /**
-   * Partners new launches may name, each until its `acceptedUntilMs`
-   * (exclusive); `U64_MAX` until Blast removes it.
-   */
+  /** Partners new launches may name, and when each stops being accepted. */
   partners: Readonly<Record<string, bigint>>;
 };
 
@@ -248,8 +236,7 @@ export function reduceLaunchpadEvent(
             migrationWitnessType: payload.migration_witness,
             launcher: ticket.launcher,
             metadataCapId: ticket.metadataCapId,
-            lifecycle:
-              payload.opening_round_ms === 0n ? "Live" : "OpeningRound",
+            lifecycle: payload.opening_round_ms > 0n ? "OpeningRound" : "Live",
             decimals: ticket.decimals,
             atomicSupply: ticket.atomicSupply,
             sellBurnBps: ticket.sellBurnBps,
@@ -267,14 +254,18 @@ export function reduceLaunchpadEvent(
             protocolQuoteFees: 0n,
             creatorQuoteFees: 0n,
             protocolSuiFees: payload.creation_fee,
-            creationFee: payload.creation_fee,
-            partnerId: payload.partner_id,
+            protocolMigrationFee: null,
             virtualQuote: payload.virtual_quote,
             graduationTarget: payload.graduation_target,
             quoteFeeBps: payload.quote_fee_bps,
             memeFeeBps: payload.meme_fee_bps,
+            creationFee: payload.creation_fee,
+            partnerId: payload.partner_id,
             openingRoundMs: payload.opening_round_ms,
-            openingRound: { bids: 0n, quote: 0n, meme: 0n, bidders: {} },
+            openingRoundBids: 0n,
+            openingRoundQuote: 0n,
+            openingRoundMeme: 0n,
+            openingRoundBidders: {},
             publicStartMs: null,
             migration: null,
             allocationPayments: [],
@@ -294,53 +285,43 @@ export function reduceLaunchpadEvent(
     }
     case "OpeningRoundJoined": {
       const payload = event.payload;
-      return updateLaunch(next, payload.launch_id, (launch) => {
-        const { openingRound } = launch;
-        return {
-          ...launch,
-          openingRound: {
-            ...openingRound,
-            bids: payload.bids,
-            quote: openingRound.quote + payload.quote,
-            bidders: {
-              ...openingRound.bidders,
-              [event.sender]:
-                (openingRound.bidders[event.sender] ?? 0n) + payload.quote,
-            },
-          },
-        };
-      });
+      return updateLaunch(next, payload.launch_id, (launch) => ({
+        ...launch,
+        openingRoundBids: payload.bids,
+        openingRoundQuote: launch.openingRoundQuote + payload.quote,
+        openingRoundBidders: {
+          ...launch.openingRoundBidders,
+          [event.sender]:
+            (launch.openingRoundBidders[event.sender] ?? 0n) + payload.quote,
+        },
+      }));
     }
     case "OpeningRoundSettled": {
-      // The pot's `Bought`, emitted first, already moved a pot that reached
-      // the target to `MigrationReady`.
+      // The pot's `Bought` precedes this event and already set MigrationReady
+      // when it reached the target.
       const payload = event.payload;
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
         lifecycle:
           launch.lifecycle === "OpeningRound" ? "Live" : launch.lifecycle,
-        openingRound: {
-          ...launch.openingRound,
-          bids: payload.bids,
-          quote: payload.quote,
-          meme: payload.meme,
-        },
+        openingRoundBids: payload.bids,
+        openingRoundMeme: payload.meme,
+        openingRoundQuote: payload.quote,
       }));
     }
     case "OpeningRoundDelivered": {
       const payload = event.payload;
-      return updateLaunch(next, payload.launch_id, (launch) => {
-        const { openingRound } = launch;
-        return {
-          ...launch,
-          openingRound: {
-            bids: openingRound.bids - payload.bid,
-            quote: openingRound.quote - payload.quote,
-            meme: openingRound.meme - payload.meme,
-            bidders: withEntry(openingRound.bidders, payload.bidder, undefined),
-          },
-        };
-      });
+      return updateLaunch(next, payload.launch_id, (launch) => ({
+        ...launch,
+        openingRoundBids: launch.openingRoundBids - payload.bid,
+        openingRoundMeme: launch.openingRoundMeme - payload.meme,
+        openingRoundQuote: launch.openingRoundQuote - payload.quote,
+        openingRoundBidders: withEntry(
+          launch.openingRoundBidders,
+          payload.bidder,
+          undefined,
+        ),
+      }));
     }
     case "Bought": {
       const payload = event.payload;
@@ -386,6 +367,10 @@ export function reduceLaunchpadEvent(
         realQuoteReserve: launch.realQuoteReserve - payload.quote_amount,
         protocolMemeFees: launch.protocolMemeFees + payload.meme_amount,
         protocolQuoteFees: launch.protocolQuoteFees + payload.quote_amount,
+        protocolMigrationFee: {
+          meme: payload.meme_amount,
+          quote: payload.quote_amount,
+        },
       }));
     }
     case "MigrationAllocationPaid": {
@@ -450,16 +435,21 @@ export function reduceLaunchpadEvent(
     case "PartnerAdded":
       return updateConfig(next, {
         ...state.config,
-        partners: {
-          ...state.config.partners,
-          [event.payload.partner_id]: U64_MAX,
-        },
+        partners: withEntry(
+          state.config.partners,
+          event.payload.partner_id,
+          U64_MAX,
+        ),
       });
     case "PartnerRemoved": {
       const { partner_id, accepted_until_ms } = event.payload;
       return updateConfig(next, {
         ...state.config,
-        partners: { ...state.config.partners, [partner_id]: accepted_until_ms },
+        partners: withEntry(
+          state.config.partners,
+          partner_id,
+          accepted_until_ms,
+        ),
       });
     }
     case "MemeDecimalsSet": {

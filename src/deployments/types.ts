@@ -1,7 +1,4 @@
-import type { BlastSuiDeployment } from "../blast-sui/types.ts";
-import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
 import type { SharedObjectIdentity, SuiPackageReference } from "../lib/sui.ts";
-import type { MigratorsDeployment } from "../migrators/transactions.ts";
 
 export const BLAST_NETWORKS = [
   "mainnet",
@@ -12,42 +9,48 @@ export const BLAST_NETWORKS = [
 
 export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
 
-export type BlastPackages = Readonly<
-  Record<string, SuiPackageReference> & {
-    launchpad: SuiPackageReference;
-    /** Published `blast_admin` package (`blast_acl::sign_in`, Meme publish dependency). */
-    admin: SuiPackageReference;
-    /** Published `blast_partners` package (launchpad and Meme publish dependency). */
-    partners: SuiPackageReference;
-    /** Published `blast_fun_timelock` package (`blast_admin` and `blast_partners` dependency). */
-    timelock: SuiPackageReference;
-    blastSui?: SuiPackageReference;
-    migrators?: SuiPackageReference;
-  }
->;
+/**
+ * Every published Blast package. `meme_template` has no entry: it is
+ * bytecode each launch publishes as its own Meme package.
+ */
+export type BlastPackages = Readonly<{
+  /** Immutable `blast_fun_timelock`, which `admin` and `partners` link. */
+  timelock: SuiPackageReference;
+  /** Immutable `blast_admin`, home of the shared ACL. */
+  admin: SuiPackageReference;
+  /** Immutable `blast_partners`. */
+  partners: SuiPackageReference;
+  launchpad: SuiPackageReference;
+  migrators: SuiPackageReference;
+  presale: SuiPackageReference;
+  blastSui: SuiPackageReference;
+}>;
 
 /**
- * Canonical shared-object identities for one deployment.
- *
- * Mutability is intentionally absent because it belongs to each Move call,
- * not to the on-chain object. Transaction builders add the required value.
+ * Every package's shared singletons the SDK calls or reads. Mutability is
+ * absent because it belongs to each Move call, not to the on-chain object.
  */
-export type BlastSharedObjects = Readonly<
-  Record<string, SharedObjectIdentity> & {
+export type BlastSharedObjects = Readonly<{
+  admin: Readonly<{ acl: SharedObjectIdentity }>;
+  launchpad: Readonly<{
     packageVersion: SharedObjectIdentity;
     launchConfig: SharedObjectIdentity;
     runtimeConfig: SharedObjectIdentity;
-    lpFeePolicy?: SharedObjectIdentity;
-    /** The one shared `blast_admin::blast_acl::ACL` every Blast package signs in against. */
-    acl: SharedObjectIdentity;
-    blastSuiPackageVersion?: SharedObjectIdentity;
-    blastSuiPackageAdmin?: SharedObjectIdentity;
-    blastSuiVault?: SharedObjectIdentity;
-    migratorsPackageVersion?: SharedObjectIdentity;
-    venueConfig?: SharedObjectIdentity;
-    packageAdmin?: SharedObjectIdentity;
-  }
->;
+  }>;
+  migrators: Readonly<{
+    packageVersion: SharedObjectIdentity;
+    lpFeePolicy: SharedObjectIdentity;
+    venueConfig: SharedObjectIdentity;
+  }>;
+  presale: Readonly<{
+    venueConfig: SharedObjectIdentity;
+    feePolicy: SharedObjectIdentity;
+  }>;
+  blastSui: Readonly<{
+    packageVersion: SharedObjectIdentity;
+    vault: SharedObjectIdentity;
+  }>;
+}>;
 
 export type BlastDeployment = Readonly<{
   network: BlastNetwork;
@@ -59,7 +62,3 @@ export type BlastDeployment = Readonly<{
 export type BlastDeploymentRegistry = Readonly<
   Partial<Record<BlastNetwork, BlastDeployment>>
 >;
-
-export type LaunchpadDeploymentConstants = LaunchpadDeployment;
-export type BlastSuiDeploymentConstants = BlastSuiDeployment;
-export type MigratorsDeploymentConstants = MigratorsDeployment;

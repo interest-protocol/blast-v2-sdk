@@ -391,7 +391,7 @@ export type PresaleCommitment = { quote: bigint; walletCap: bigint };
 
 export function decodePresaleObject(
   object: PresaleObject,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): PresaleState {
   const [memeType, quoteType] = pairTypes(
     object,
@@ -437,7 +437,7 @@ export function decodePresaleObject(
 
 export function decodePresaleVaultObject(
   object: PresaleObject,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): PresaleVaultState {
   const [memeType, quoteType] = pairTypes(
     object,
@@ -467,7 +467,7 @@ export function decodePresaleVaultObject(
 
 export function decodePresaleRewardRoundObject(
   object: PresaleObject,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): PresaleRewardRoundState {
   const [memeType, quoteType] = pairTypes(
     object,
@@ -528,7 +528,7 @@ export function presaleRewardIsClaimed(
 export async function getPresale(
   client: ClientWithCoreApi,
   objectId: string,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): Promise<PresaleState> {
   return decodePresaleObject(
     await getSharedObject(client, objectId),
@@ -539,7 +539,7 @@ export async function getPresale(
 export async function getPresaleVault(
   client: ClientWithCoreApi,
   objectId: string,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): Promise<PresaleVaultState> {
   return decodePresaleVaultObject(
     await getSharedObject(client, objectId),
@@ -550,7 +550,7 @@ export async function getPresaleVault(
 export async function getPresaleRewardRound(
   client: ClientWithCoreApi,
   objectId: string,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): Promise<PresaleRewardRoundState> {
   return decodePresaleRewardRoundObject(
     await getSharedObject(client, objectId),
@@ -620,22 +620,21 @@ function pairTypes(
   object: PresaleObject,
   module: string,
   name: string,
-  originalPackageId: string | undefined,
+  originalPackageId: string,
 ): [string, string] {
   const tag = parseStructTag(object.type);
+  const [memeType, quoteType, ...extra] = tag.typeParams;
   if (
     tag.module !== module ||
     tag.name !== name ||
-    tag.typeParams.length !== 2 ||
-    (originalPackageId !== undefined &&
-      tag.address !== normalizeSuiAddress(originalPackageId))
+    memeType === undefined ||
+    quoteType === undefined ||
+    extra.length > 0 ||
+    tag.address !== normalizeSuiAddress(originalPackageId)
   ) {
     throw new TypeError(`object ${object.objectId} is not a presale ${name}`);
   }
-  return [
-    normalizeStructTag(tag.typeParams[0]!),
-    normalizeStructTag(tag.typeParams[1]!),
-  ];
+  return [normalizeStructTag(memeType), normalizeStructTag(quoteType)];
 }
 
 function sharedIdentity(

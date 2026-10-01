@@ -49,8 +49,7 @@ export function decodeHolderCheckpoint(
   const target = normalizeStructTag(coinType);
   const changes: { address: string; amount: bigint }[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < checkpoint.transactions.length; i++) {
-    const tx = checkpoint.transactions[i]!;
+  for (const [i, tx] of checkpoint.transactions.entries()) {
     if (
       !tx.digest ||
       tx.digest !== checkpoint.contents.transactions[i]?.transaction ||

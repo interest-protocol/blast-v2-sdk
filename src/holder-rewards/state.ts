@@ -6,6 +6,7 @@ import {
   parseStructTag,
   toHex,
 } from "@mysten/sui/utils";
+import { itemAt } from "../lib/arrays.ts";
 import { suiBalanceBcs, suiIdBcs, suiUidBcs } from "../lib/bcs.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import { MAX_REWARD_LEAVES, rewardAddress } from "./allocations.ts";
@@ -27,18 +28,24 @@ export type RewardRoundObject = SharedObjectReference<true> & {
   content: Uint8Array;
 };
 
-/** Decodes one shared holder-reward round published from an LP vault. */
+/**
+ * Decodes one shared holder-reward round published from an LP vault. Its
+ * checkpoints and manifest digest are in its `RoundPublished` event.
+ */
 export function decodeRewardRound(
   object: RewardRoundObject,
   migratorsOriginalPackageId: string,
 ) {
   const tag = parseStructTag(object.type);
+  const [memeType, quoteType, ...extra] = tag.typeParams;
   if (
     normalizeSuiAddress(tag.address) !==
       rewardAddress(migratorsOriginalPackageId) ||
     tag.module !== "blast_holder_rewards" ||
     tag.name !== "Round" ||
-    tag.typeParams.length !== 2 ||
+    memeType === undefined ||
+    quoteType === undefined ||
+    extra.length > 0 ||
     object.mutable !== true
   ) {
     throw new Error("invalid holder-reward round type");
@@ -59,8 +66,8 @@ export function decodeRewardRound(
   }
   return {
     ...object,
-    memeType: normalizeStructTag(tag.typeParams[0]!),
-    quoteType: normalizeStructTag(tag.typeParams[1]!),
+    memeType: normalizeStructTag(memeType),
+    quoteType: normalizeStructTag(quoteType),
     vaultId: rewardAddress(decoded.vault.bytes),
     number: BigInt(decoded.number),
     root: toHex(Uint8Array.from(decoded.root)),
@@ -78,10 +85,8 @@ export function rewardIsClaimed(
 ): boolean {
   if (!Number.isSafeInteger(index) || index < 0 || index >= round.leafCount)
     throw new RangeError("claim index out of bounds");
-  return (
-    (round.claimed[Math.floor(index / 256)]! & (1n << BigInt(index % 256))) !==
-    0n
-  );
+  const word = itemAt(round.claimed, Math.floor(index / 256));
+  return (word & (1n << BigInt(index % 256))) !== 0n;
 }
 
 export async function getRewardRound(

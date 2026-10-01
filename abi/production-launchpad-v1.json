@@ -20,11 +20,12 @@
       "contracts ADR 0089: start launches in the migration adapter and move every post-migration fee path into the migrators package",
       "contracts ADR 0090: a minimal launchpad surface — trimmed getters, recipient allocation plans, merged config setters and events, renumbered errors, one migration call",
       "contracts ADR 0091: a burn part in the LP-fee split, with admin buyback and burn",
-      "contracts ADR 0092: the creator picks the virtual Quote reserve at creation",
-      "contracts ADR 0093: an optional opening round replaces protected public buys",
-      "contracts ADR 0097: one singleton Blast ACL with typed administrator roles",
-      "contracts ADR 0098: a launch creation fee, and one partner per launch",
-      "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs"
+      "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs",
+      "contracts ADR 0090 (redundancy audit): framework aborts replace duplicate checks; Migrated drops native_supply_burned, the holder-reward Round drops its checkpoints and manifest digest, CreatorClaimMessage drops copy",
+      "contracts ADR 0092: the creator sets the virtual Quote reserve on the initializer; LaunchConfig admits Quotes in a Table and QuoteSet records allowed",
+      "contracts ADR 0093: an optional opening round replaces purchase protection; buy no longer takes the Clock",
+      "contracts ADRs 0094 and 0097: every administrator action takes blast_admin::blast_acl::AdminWitness of its own typed blast_fun_domain role",
+      "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -3961,7 +3962,7 @@
             },
             {
               "name": "reassign_curve_fee_cap",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -4069,7 +4070,7 @@
             },
             {
               "name": "reassign_metadata_cap",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -7010,7 +7011,7 @@
           "functions": [
             {
               "name": "authorize_upgrade",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7092,7 +7093,7 @@
             },
             {
               "name": "commit_upgrade_and_advance",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7170,7 +7171,7 @@
             },
             {
               "name": "make_immutable",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7238,7 +7239,7 @@
             },
             {
               "name": "wrap",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-deployment-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7397,7 +7398,7 @@
           "functions": [
             {
               "name": "set_creator_claim_signer",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7468,7 +7469,7 @@
             },
             {
               "name": "set_protocol_fee_share",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -11265,7 +11266,7 @@
           "functions": [
             {
               "name": "authorize_upgrade",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -11347,7 +11348,7 @@
             },
             {
               "name": "commit_upgrade_and_advance",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -11425,7 +11426,7 @@
             },
             {
               "name": "wrap",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-deployment-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [

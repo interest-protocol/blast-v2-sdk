@@ -146,29 +146,31 @@ test("settles an opening-round pot as one buy, or holds a dust pot whole", () =>
   }
 });
 
-test("delivers opening-round shares rounded down, the last taking the remainder", () => {
-  let round = {
+test("delivers opening-round shares rounded down, the last bid taking the rest", () => {
+  // Alice bid 1 and Bob 2 of 3; the round holds 999 Meme and 10 Quote.
+  const round = {
     openingRoundBids: 3n,
-    openingRoundMeme: 1_000n,
-    openingRoundQuote: 7n,
+    openingRoundMeme: 999n,
+    openingRoundQuote: 10n,
   };
-  const deliveries = [];
-  for (let index = 0; index < 3; index++) {
-    const delivery = previewOpeningRoundDelivery(round, 1n);
-    deliveries.push(delivery);
-    round = {
-      openingRoundBids: round.openingRoundBids - 1n,
-      openingRoundMeme: round.openingRoundMeme - delivery.meme,
-      openingRoundQuote: round.openingRoundQuote - delivery.quote,
-    };
-  }
-  assert.deepEqual(deliveries, [
-    { meme: 333n, quote: 2n },
-    { meme: 333n, quote: 2n },
-    { meme: 334n, quote: 3n },
-  ]);
-  assert.throws(
-    () => previewOpeningRoundDelivery({ ...round, openingRoundBids: 1n }, 2n),
-    /exceeds the undelivered/,
+  const alice = previewOpeningRoundDelivery(round, 1n);
+  assert.deepEqual(alice, { meme: 333n, quote: 3n });
+  assert.deepEqual(
+    previewOpeningRoundDelivery(
+      {
+        openingRoundBids: 2n,
+        openingRoundMeme: 999n - alice.meme,
+        openingRoundQuote: 10n - alice.quote,
+      },
+      2n,
+    ),
+    { meme: 666n, quote: 7n },
   );
+  // Reversed, Bob's floor leaves Alice the remainder: at most dust moves.
+  assert.deepEqual(previewOpeningRoundDelivery(round, 2n), {
+    meme: 666n,
+    quote: 6n,
+  });
+  assert.throws(() => previewOpeningRoundDelivery(round, 4n), /exceeds/);
+  assert.throws(() => previewOpeningRoundDelivery(round, 0n), /positive/);
 });

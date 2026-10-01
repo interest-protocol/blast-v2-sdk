@@ -13,6 +13,7 @@ import type { RewardManifest } from "./allocations.ts";
 import {
   allocateHolderRewards,
   buildRewardManifest,
+  MIGRATOR_REWARD_LEAF_DOMAIN,
   rewardAddress,
 } from "./allocations.ts";
 import {
@@ -42,7 +43,7 @@ type OperatorConfig = {
   deployment: MigratorsDeployment;
   /** The migrated launch's `LpVault`, whose rewards share funds every round. */
   vaultId: string;
-  /** `blast_acl::AdminCap` granted `RewardsAdmin`; it signs in to publish rounds. */
+  /** Blast `blast_acl::AdminCap` holding the launchpad `RewardsAdmin` role; it signs in to publish rounds. */
   adminCapId?: string;
   sender?: string;
   excludedAddresses?: string[];
@@ -235,7 +236,11 @@ async function readConfirmedRound(
     context.values.round,
     context.transactions.call.deployment.originalPackageId,
   );
-  assertRewardRoundMatchesManifest(round, manifest);
+  assertRewardRoundMatchesManifest(
+    round,
+    manifest,
+    MIGRATOR_REWARD_LEAF_DOMAIN,
+  );
   return round;
 }
 async function inspectVault(context: OperatorContext): Promise<void> {
@@ -339,6 +344,7 @@ async function prepareRound(context: OperatorContext): Promise<void> {
     startCheckpoint: BigInt(state.ledger.startCheckpoint),
     endCheckpoint: end,
     allocations: allocation.allocations,
+    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
   });
   const roundDir = join(directory, "rounds", manifest.number);
   await writeOperatorJson(join(roundDir, "accounting.json"), {
@@ -375,12 +381,9 @@ async function advanceRound(context: OperatorContext): Promise<void> {
   const round = await readConfirmedRound(context, manifest);
   const state = await readJson<OperatorState>(statePath);
   assertState(state, config, vault);
-  // Publication sets the vault's last checkpoint to the round's end checkpoint.
-  const end = BigInt(manifest.endCheckpoint);
-  if (
-    vault.lastCheckpoint !== end ||
-    BigInt(state.ledger.nextCheckpoint) - 1n !== end
-  )
+  const end = BigInt(state.ledger.nextCheckpoint) - 1n;
+  // Publication moved the vault's last checkpoint to the round's end.
+  if (end !== BigInt(manifest.endCheckpoint) || vault.lastCheckpoint !== end)
     throw new Error("round does not close this ledger checkpoint");
   // Repeating advance after a crash is safe: resetting a zero-weight interval is idempotent.
   await writeOperatorJson(statePath, {
@@ -398,7 +401,11 @@ async function relayRewards(context: OperatorContext): Promise<void> {
   const { values, transactions, pair, directory, config, client } = context;
   const manifest = await readManifest(context);
   const round = await readConfirmedRound(context, manifest);
-  const pending = pendingRewardAllocations(round, manifest);
+  const pending = pendingRewardAllocations(
+    round,
+    manifest,
+    MIGRATOR_REWARD_LEAF_DOMAIN,
+  );
   const key = values.execute
     ? process.env.HOLDER_REWARDS_RELAYER_KEY
     : undefined;

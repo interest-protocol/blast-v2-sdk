@@ -14,13 +14,13 @@ import { creatorRecipientBcs, decodeCreatorRecipient } from "./state.ts";
 
 type EventFieldDescriptor =
   | "id"
-  | "optionId"
   | "typeName"
   | "address"
   | "u64"
   | "u32"
   | "u8"
   | "bool"
+  | "optionId"
   | "bytes"
   | "string"
   | "creatorRecipient"
@@ -120,13 +120,6 @@ export const launchpadEventSpecs = {
     recipient: "address",
   },
   MigrationWitnessSet: { migration_witness: "typeName", allowed: "bool" },
-  OpeningRoundDelivered: {
-    launch_id: "id",
-    bidder: "address",
-    bid: "u64",
-    meme: "u64",
-    quote: "u64",
-  },
   OpeningRoundJoined: { launch_id: "id", quote: "u64", bids: "u64" },
   OpeningRoundSettled: {
     launch_id: "id",
@@ -134,9 +127,20 @@ export const launchpadEventSpecs = {
     meme: "u64",
     quote: "u64",
   },
+  OpeningRoundDelivered: {
+    launch_id: "id",
+    bidder: "address",
+    bid: "u64",
+    meme: "u64",
+    quote: "u64",
+  },
   PartnerAdded: { partner_id: "id" },
   PartnerRemoved: { partner_id: "id", accepted_until_ms: "u64" },
-  ProtocolAllocationSet: { meme_bps: "u64", quote_bps: "u64" },
+  CreationFeeChanged: { pos0: "u64" },
+  ProtocolAllocationSet: {
+    meme_bps: "u64",
+    quote_bps: "u64",
+  },
   ProtocolFeesAccrued: {
     launch_id: "id",
     meme_amount: "u64",
@@ -152,7 +156,10 @@ export const launchpadEventSpecs = {
     partner_sui_amount: "u64",
   },
   ProtocolFeeShareChanged: { pos0: "u64" },
-  QuoteSet: { quote: "typeName", allowed: "bool" },
+  QuoteSet: {
+    quote: "typeName",
+    allowed: "bool",
+  },
   Sold: {
     launch_id: "id",
     meme_in_gross: "u64",
@@ -163,20 +170,19 @@ export const launchpadEventSpecs = {
     real_quote_reserve: "u64",
   },
   CreatorClaimSignerSet: { pos0: "bytes" },
-  CreationFeeChanged: { pos0: "u64" },
 } as const satisfies Record<string, Record<string, EventFieldDescriptor>>;
 
 export type LaunchpadEventKind = keyof typeof launchpadEventSpecs;
 
 type DescriptorOutputs = {
   id: string;
-  optionId: string | null;
   typeName: string;
   address: string;
   u64: bigint;
   u32: number;
   u8: number;
   bool: boolean;
+  optionId: string | null;
   bytes: Uint8Array;
   string: string;
   creatorRecipient: NonNullable<CreatorRecipient>;
@@ -221,13 +227,13 @@ const EVENT_FIELD_BCS: Record<
   BcsType<unknown, unknown>
 > = {
   id: suiObjectIdBcs as BcsType<unknown, unknown>,
-  optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown, unknown>,
   typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
   address: AddressBcs as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,
   u32: bcs.u32() as BcsType<unknown, unknown>,
   u8: bcs.u8() as BcsType<unknown, unknown>,
   bool: bcs.bool() as BcsType<unknown, unknown>,
+  optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown, unknown>,
   bytes: BytesBcs as BcsType<unknown, unknown>,
   string: bcs.string() as BcsType<unknown, unknown>,
   creatorRecipient: CreatorRecipientBcs as BcsType<unknown, unknown>,
@@ -261,8 +267,8 @@ export const launchpadEventBcs = Object.fromEntries(
  * Launchpad events are authenticated by their type, which names the original
  * package. Sui records the transaction's called package and module on each
  * event, not the emitting module: adapters in the migrators package emit
- * `MigrationAllocationPaid`, `ProtocolFeesAccrued`, and `Migrated`, and a Meme
- * package's publication emits `LaunchTicketCreated`.
+ * `Migrated` and `MigrationAllocationPaid`, and a Meme package's publication
+ * emits `LaunchTicketCreated`.
  */
 export type LaunchpadEventPackageIdentity = {
   originalPackageId: string;
@@ -292,13 +298,14 @@ export function decodeLaunchpadEvent(
   if (
     envelope.address !== originalPackageId ||
     envelope.module !== "blast_events" ||
-    envelope.name !== "Event" ||
-    envelope.typeParams.length !== 1
+    envelope.name !== "Event"
   ) {
     throw new TypeError("launchpad event has an unexpected event package");
   }
-  const payloadTag = envelope.typeParams[0]!;
+  const [payloadTag, ...extra] = envelope.typeParams;
   if (
+    payloadTag === undefined ||
+    extra.length > 0 ||
     typeof payloadTag === "string" ||
     payloadTag.address !== originalPackageId ||
     payloadTag.module !== "events" ||

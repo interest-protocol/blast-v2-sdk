@@ -76,10 +76,9 @@ export type OpeningRoundSettlementPreview = {
 };
 
 /**
- * Mirrors `launch::settle_opening_round`: one purchase with the whole `pot`
- * (the launch's `openingRoundQuote`) at the usual fees and graduation cap. A
- * pot too small to buy one Meme atom buys nothing and is held whole. Atomic
- * units; rounding as in `previewBuy`.
+ * Mirrors `launch::settle_opening_round`: the whole pot buys once from the
+ * curve, exactly like `previewBuy`, except that a pot too small to buy one
+ * Meme atom (or an empty pot) is held whole for refund instead of aborting.
  */
 export function previewOpeningRoundSettlement(
   state: CurveState,
@@ -90,29 +89,6 @@ export function previewOpeningRoundSettlement(
   return bought.memeOutNet === 0n
     ? { bought: null, meme: 0n, quote: pot }
     : { bought, meme: bought.memeOutNet, quote: bought.quoteRefund };
-}
-
-/**
- * Mirrors `launch::deliver_opening_round` for one `bid` of the settled round:
- * its pro-rata share of the held Meme and Quote among the undelivered bids,
- * each rounded down, so the last delivery takes the remainder.
- */
-export function previewOpeningRoundDelivery(
-  round: {
-    openingRoundBids: bigint;
-    openingRoundMeme: bigint;
-    openingRoundQuote: bigint;
-  },
-  bid: bigint,
-): { meme: bigint; quote: bigint } {
-  requirePositiveU64("bid", bid);
-  if (bid > round.openingRoundBids) {
-    throw new RangeError("bid exceeds the undelivered opening-round bids");
-  }
-  return {
-    meme: mulDivDown(round.openingRoundMeme, bid, round.openingRoundBids),
-    quote: mulDivDown(round.openingRoundQuote, bid, round.openingRoundBids),
-  };
 }
 
 /**
@@ -184,6 +160,49 @@ export function previewSell(
   };
 }
 
+/**
+ * Mirrors `launch::deliver_opening_round`: a bidder's share of the Meme and
+ * refunded Quote the settled round holds, each `held * bid / bids` rounded
+ * down. The last undelivered bid (`bid === openingRoundBids`) takes the
+ * remainder, so rounding dust stays with the later deliveries.
+ */
+export function previewOpeningRoundDelivery(
+  round: {
+    openingRoundBids: bigint;
+    openingRoundMeme: bigint;
+    openingRoundQuote: bigint;
+  },
+  bid: bigint,
+): { meme: bigint; quote: bigint } {
+  requirePositiveU64("bid", bid);
+  if (bid > round.openingRoundBids) {
+    throw new RangeError("bid exceeds the undelivered opening-round bids");
+  }
+  return {
+    meme: mulDivDown(round.openingRoundMeme, bid, round.openingRoundBids),
+    quote: mulDivDown(round.openingRoundQuote, bid, round.openingRoundBids),
+  };
+}
+
+function validateCurveState(state: CurveState): void {
+  requirePositiveU64("memeReserve", state.memeReserve);
+  requireU64("realQuoteReserve", state.realQuoteReserve);
+  requirePositiveU64("virtualQuote", state.virtualQuote);
+  requirePositiveU64("graduationTarget", state.graduationTarget);
+  requireBasisPoints("quoteFeeBps", state.quoteFeeBps);
+  requireBasisPoints("memeFeeBps", state.memeFeeBps);
+}
+
+function applyBpsUp(amount: bigint, bps: bigint): bigint {
+  return mulDivUp(amount, bps, BASIS_POINTS_DENOMINATOR);
+}
+
+function requirePositiveOutput(name: string, value: bigint): void {
+  if (value <= 0n) {
+    throw new RangeError(`${name} rounds to zero`);
+  }
+}
+
 /** `curve::cap_buy_quote_input` then `curve::quote_buy`; outputs may be zero. */
 function quoteBuy(state: CurveState, quoteSupplied: bigint): BuyPreview {
   validateCurveState(state);
@@ -237,23 +256,4 @@ function quoteBuy(state: CurveState, quoteSupplied: bigint): BuyPreview {
     realQuoteReserveAfter,
     crossedThreshold: realQuoteReserveAfter >= state.graduationTarget,
   };
-}
-
-function validateCurveState(state: CurveState): void {
-  requirePositiveU64("memeReserve", state.memeReserve);
-  requireU64("realQuoteReserve", state.realQuoteReserve);
-  requirePositiveU64("virtualQuote", state.virtualQuote);
-  requirePositiveU64("graduationTarget", state.graduationTarget);
-  requireBasisPoints("quoteFeeBps", state.quoteFeeBps);
-  requireBasisPoints("memeFeeBps", state.memeFeeBps);
-}
-
-function applyBpsUp(amount: bigint, bps: bigint): bigint {
-  return mulDivUp(amount, bps, BASIS_POINTS_DENOMINATOR);
-}
-
-function requirePositiveOutput(name: string, value: bigint): void {
-  if (value <= 0n) {
-    throw new RangeError(`${name} rounds to zero`);
-  }
 }

@@ -11,45 +11,50 @@ import {
   normalizeSuiAddress,
   normalizeSuiObjectId,
   SUI_FRAMEWORK_ADDRESS,
-  SUI_TYPE_ARG,
 } from "@mysten/sui/utils";
 
+import type { AdminDeployment } from "../admin/transactions.ts";
+import { AdminCalls, normalizeAdminDeployment } from "../admin/transactions.ts";
 import {
   requireBasisPoints,
   requirePositiveU64,
   requireU64,
 } from "../lib/integers.ts";
-import type { SharedObjectReference } from "../lib/sui.ts";
-import { normalizeSharedObjectReference } from "../lib/sui.ts";
+import { deploymentObject, moveResults } from "../lib/ptb.ts";
+import type {
+  SharedObjectIdentity,
+  SharedObjectReference,
+} from "../lib/sui.ts";
+import {
+  normalizeSharedObjectIdentity,
+  normalizeSharedObjectReference,
+  normalizeSuiPackageReference,
+} from "../lib/sui.ts";
 import type { CreatorAllocationPlan, FeeSplit } from "./allocation.ts";
 import { normalizeAllocationPlan, normalizeFeeSplit } from "./allocation.ts";
 import type { MemeTemplateOptions } from "./template.ts";
 import { buildMemePackageBytecode } from "./template.ts";
 
-export type { SharedObjectReference } from "../lib/sui.ts";
-
 export type LaunchpadDeployment = {
   packageId: string;
-  originalPackageId?: string;
-  /** Published `blast_admin` package: it owns `blast_acl::sign_in`. */
-  adminPackageId: string;
-  /** Published `blast_partners` package, a launchpad dependency. */
+  originalPackageId: string;
+  /** `blast_admin`, a transitive Meme publish dependency, and its ACL. */
+  admin: AdminDeployment;
+  /** Published `blast_partners` package, a transitive Meme publish dependency. */
   partnersPackageId: string;
-  /** Published `blast_fun_timelock` package, a dependency of `blast_admin` and `blast_partners`. */
+  /** Published immutable `blast_fun_timelock`, a transitive Meme publish dependency. */
   timelockPackageId: string;
-  packageVersion: SharedObjectReference<false>;
-  launchConfig: SharedObjectReference<false>;
-  runtimeConfig: SharedObjectReference<false>;
-  /** The shared singleton `blast_admin::blast_acl::ACL`. */
-  acl: SharedObjectReference<false>;
+  packageVersion: SharedObjectIdentity;
+  launchConfig: SharedObjectIdentity;
+  runtimeConfig: SharedObjectIdentity;
 };
 
 /**
- * `blast_fun_domain` administrator roles. `blast_acl::sign_in<Role>` returns
- * the `AdminWitness<Role>` the one function family naming that role accepts;
- * the migrators package uses these roles too.
+ * The typed `blast_fun::blast_fun_domain` roles (contracts ADR 0097). Each
+ * administrator action takes the `AdminWitness` of exactly one of them; the
+ * migrators reuse the launchpad's roles.
  */
-export type LaunchpadAdminRole =
+export type BlastFunAdminRole =
   | "UpgradeAdmin"
   | "CreatorAdmin"
   | "BuybackAdmin"
@@ -65,42 +70,38 @@ export type LaunchTypes = {
   quoteType: string;
 };
 
+/** Shortest nonzero opening round `launch::finalize` accepts. */
+export const MIN_OPENING_ROUND_MS = 60_000n;
+/** Longest opening round `launch::finalize` accepts. */
+export const MAX_OPENING_ROUND_MS = 300_000n;
+
 /**
  * The creator's launch settings, applied to a `LaunchInitializer` before
  * `launch::finalize` checks every invariant.
  */
 export type LaunchSettings = {
-  /** Virtual Quote reserve the curve starts from, in Quote atomic units. */
+  /** The virtual Quote reserve the curve starts from; it prices the first purchase. */
   virtualQuote: bigint;
   graduationTarget: bigint;
+  /** The creator's plan; finalization adds Blast's shares. */
   allocationPlan: CreatorAllocationPlan;
   lpFeeSplit: FeeSplit;
-  /** Opening-round length after share; zero or omitted has none. */
+  /** Opening-round length after share; zero or omitted, trading starts at share. */
   openingRoundMs?: bigint;
-  /** The immutable shared `blast_partners::Partner` the launch names for good. */
+  /** A Blast partner `LaunchConfig` accepts; it is the launch's partner for good. */
   partner?: SharedObjectReference<false>;
 };
 
 /**
- * One owned curve purchase made before the launch is shared. Only a launch
- * without an opening round trades before share.
+ * The creator's purchase on the owned launch before it is shared. Without an
+ * opening round it is a curve buy routed to `recipient`. With one it is the
+ * creator's bid in the same pot at the same price: `minMemeOut` and
+ * `recipient` are unused, and delivery pays the sender after settlement.
  */
 export type PreShareBuyInput = {
   quoteAmount: bigint;
   minMemeOut: bigint;
   recipient: string;
-};
-
-/**
- * Everything `addLaunchCompletion` applies after the adapter starts a launch.
- * `creationFee` is the exact `LaunchConfig` creation fee in MIST
- * (`getLaunchConfig`), paid from gas; `openingRoundBid` is the creator's
- * opening-round bid, joined before share.
- */
-export type LaunchCompletionInput = LaunchSettings & {
-  creationFee: bigint;
-  preShareBuy?: PreShareBuyInput;
-  openingRoundBid?: { quoteAmount: bigint };
 };
 
 /**
@@ -113,17 +114,22 @@ export type MemeMetadataUpdate = LaunchTypes & {
   currency: SharedObjectReference<true>;
 };
 
-type NormalizedDeployment = Required<LaunchpadDeployment>;
-type AsAdmin<Options> = Omit<Options, "adminWitness"> & { adminCapId: string };
 export type LaunchInitializerInput = LaunchTypes & {
   initializer: TransactionArgument;
 };
 
 export class LaunchpadCalls {
-  readonly deployment: NormalizedDeployment;
+  readonly deployment: LaunchpadDeployment;
+  readonly admin: AdminCalls;
 
   constructor(deployment: LaunchpadDeployment) {
     this.deployment = normalizeDeployment(deployment);
+    this.admin = new AdminCalls(this.deployment.admin);
+  }
+
+  /** The Move type of one `blast_fun_domain` role, for `AdminCalls.grantRole`. */
+  roleType(role: BlastFunAdminRole): string {
+    return `${this.deployment.originalPackageId}::blast_fun_domain::${role}`;
   }
 
   /** Builds one `bps::Bps` value. */
@@ -214,9 +220,7 @@ export class LaunchpadCalls {
   }
 
   setAllocationPlan(
-    options: LaunchInitializerInput & {
-      allocationPlan: CreatorAllocationPlan;
-    },
+    options: LaunchInitializerInput & { allocationPlan: CreatorAllocationPlan },
   ) {
     const plan = this.allocationPlan(options.allocationPlan);
     return this.#initializerCall("set_allocation_plan", options, (tx) => [
@@ -231,18 +235,21 @@ export class LaunchpadCalls {
     ]);
   }
 
+  /** Zero means no opening round; otherwise one to five minutes. */
   setOpeningRound(
     options: LaunchInitializerInput & { openingRoundMs: bigint },
   ) {
-    requireU64("openingRoundMs", options.openingRoundMs);
+    requireOpeningRoundMs(options.openingRoundMs);
     return this.#initializerCall("set_opening_round", options, (tx) => [
       tx.pure.u64(options.openingRoundMs),
     ]);
   }
 
-  /** Names a partner the `LaunchConfig` accepts now; it is the launch's for good. */
+  /** Names the launch's partner; `launch_config` must accept it now. */
   setPartner(
-    options: LaunchInitializerInput & { partner: SharedObjectReference<false> },
+    options: LaunchInitializerInput & {
+      partner: SharedObjectReference<false>;
+    },
   ) {
     return this.#initializerCall("set_partner", options, (tx) => [
       this.#launchConfig(tx),
@@ -253,7 +260,8 @@ export class LaunchpadCalls {
 
   /**
    * Consumes the initializer, checks every setting, and returns the owned
-   * launch. `creationFee` is a `Coin<SUI>` of exactly the configured fee.
+   * launch. `creationFee` must be a `Coin<SUI>` of exactly the `LaunchConfig`
+   * creation fee.
    */
   finalizeLaunch(
     options: LaunchInitializerInput & {
@@ -275,7 +283,7 @@ export class LaunchpadCalls {
       });
   }
 
-  /** Shares the finalized launch; trading, or the opening round, starts now. */
+  /** Shares the finalized launch; trading or the opening round starts now. */
   shareLaunch(options: LaunchTypes & { launch: TransactionArgument }) {
     const types = normalizeLaunchTypes(options);
     return (tx: Transaction): void => {
@@ -289,11 +297,11 @@ export class LaunchpadCalls {
 
   /**
    * Applies the creator's settings to an adapter-started initializer, finalizes
-   * it, runs the creator's optional purchase or opening-round bid on the owned
-   * launch, and shares the launch. Returns that purchase's
-   * `(Coin<Meme>, Coin<Quote>)` result, if any. The purchase may reach the
-   * graduation target, which makes the launch migration-ready before it is
-   * shared.
+   * it, runs the optional purchase on the owned launch, and shares the launch.
+   * Without an opening round the purchase is a curve buy, which may reach the
+   * graduation target before share, and its `(Coin<Meme>, Coin<Quote>)` result
+   * is returned. With one, the purchase is the creator's bid in the round and
+   * nothing is returned.
    */
   completeLaunch(
     options: LaunchInitializerInput &
@@ -301,15 +309,9 @@ export class LaunchpadCalls {
         currency: SharedObjectReference<true>;
         creationFee: TransactionObjectInput;
         preShareBuy?: { quoteCoin: TransactionObjectInput; minMemeOut: bigint };
-        openingRoundBid?: { quoteCoin: TransactionObjectInput };
       },
   ) {
-    const openingRoundMs = options.openingRoundMs ?? 0n;
-    if (openingRoundMs > 0n ? options.preShareBuy : options.openingRoundBid) {
-      throw new TypeError(
-        "a pre-share purchase needs no opening round; a bid needs one",
-      );
-    }
+    const { openingRoundMs = 0n, partner, preShareBuy } = options;
     const settings = [
       this.setVirtualQuote(options),
       this.setGraduationTarget(options),
@@ -318,44 +320,27 @@ export class LaunchpadCalls {
       ...(openingRoundMs > 0n
         ? [this.setOpeningRound({ ...options, openingRoundMs })]
         : []),
-      ...(options.partner
-        ? [this.setPartner({ ...options, partner: options.partner })]
-        : []),
+      ...(partner ? [this.setPartner({ ...options, partner })] : []),
     ];
+    const purchase = preShareBuy && { ...options, ...preShareBuy };
     return (tx: Transaction): TransactionResult | undefined => {
       for (const setting of settings) tx.add(setting);
       const launch = tx.add(this.finalizeLaunch(options));
-      if (options.openingRoundBid) {
-        tx.add(
-          this.#joinCall(
-            { ...options, ...options.openingRoundBid },
-            () => launch,
-          ),
-        );
+      let bought: TransactionResult | undefined;
+      if (purchase && openingRoundMs > 0n) {
+        tx.add(this.#joinCall(purchase, () => launch));
+      } else if (purchase) {
+        bought = tx.add(this.#buyCall(purchase, () => launch));
       }
-      const bought = options.preShareBuy
-        ? tx.add(
-            this.#buyCall({ ...options, ...options.preShareBuy }, () => launch),
-          )
-        : undefined;
       tx.add(this.shareLaunch({ ...options, launch }));
       return bought;
     };
   }
 
-  buy(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      quoteCoin: TransactionObjectInput;
-      minMemeOut: bigint;
-    },
-  ) {
-    return this.#buyCall(options, (tx) =>
-      sharedObject(tx, "launch", options.launch, true),
-    );
-  }
-
-  /** Adds `quoteCoin` to the sender's bid until the opening round ends. */
+  /**
+   * Adds `quoteCoin` to the sender's opening-round bid until the round ends.
+   * Bids cannot be withdrawn.
+   */
   joinOpeningRound(
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
@@ -367,7 +352,7 @@ export class LaunchpadCalls {
     );
   }
 
-  /** Buys once with the ended round's whole pot; anyone may settle. */
+  /** Settles an ended opening round with one curve purchase; anyone may call it. */
   settleOpeningRound(
     options: LaunchTypes & { launch: SharedObjectReference<true> },
   ) {
@@ -387,8 +372,8 @@ export class LaunchpadCalls {
   }
 
   /**
-   * Sends `bidder` its pro-rata share of the settled round; the contract
-   * transfers to the bidder, never the caller.
+   * Sends `bidder` its pro-rata share of the settled round's Meme and refunded
+   * Quote; anyone may call it, and the coins always go to the bidder.
    */
   deliverOpeningRound(
     options: LaunchTypes & {
@@ -409,6 +394,18 @@ export class LaunchpadCalls {
         ],
       });
     };
+  }
+
+  buy(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      quoteCoin: TransactionObjectInput;
+      minMemeOut: bigint;
+    },
+  ) {
+    return this.#buyCall(options, (tx) =>
+      sharedObject(tx, "launch", options.launch, true),
+    );
   }
 
   sell(
@@ -499,171 +496,253 @@ export class LaunchpadCalls {
     return this.#setMemeMetadata("set_icon_url", options, options.iconUrl);
   }
 
-  /** `blast_acl::sign_in<Role>`: this PTB's `AdminWitness<Role>` for one launchpad role. */
-  signIn(
-    role: LaunchpadAdminRole,
-    options: { adminCap: TransactionObjectInput },
-  ) {
-    return (tx: Transaction): TransactionObjectArgument =>
-      tx.moveCall({
-        target: `${this.deployment.adminPackageId}::blast_acl::sign_in`,
-        typeArguments: [
-          `${this.deployment.originalPackageId}::blast_fun_domain::${role}`,
-        ],
-        arguments: [
-          sharedObject(tx, "acl", this.deployment.acl, false),
-          tx.object(options.adminCap),
-        ],
-      });
+  /** This PTB's `AdminWitness<Role>`; the `AdminCap` must hold `role`. */
+  signIn(options: {
+    adminCap: TransactionObjectInput;
+    role: BlastFunAdminRole;
+  }) {
+    return this.admin.signIn({
+      adminCap: options.adminCap,
+      role: this.roleType(options.role),
+    });
   }
 
   /**
-   * Claims Blast's Meme, Quote, and SUI fees from a launch that names no
-   * partner, with a `TreasuryAdmin` witness.
+   * Claims Blast's Meme, Quote, and SUI fees under a `TreasuryAdmin` witness.
+   * A launch that names a partner needs that `partner`
+   * (`claim_protocol_fees_with_partner`), which is paid its share in the call.
    */
   claimProtocolFees(
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
       adminWitness: TransactionObjectInput;
+      partner?: SharedObjectReference<false> | null;
     },
   ) {
     const types = normalizeLaunchTypes(options);
+    const { partner } = options;
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::launch::claim_protocol_fees`,
+        target: `${this.deployment.packageId}::launch::${partner ? "claim_protocol_fees_with_partner" : "claim_protocol_fees"}`,
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "launch", options.launch, true),
           this.#packageVersion(tx),
           tx.object(options.adminWitness),
+          ...(partner
+            ? [sharedObject(tx, "partner", partner, false), tx.object.clock()]
+            : []),
         ],
       });
   }
 
-  /**
-   * Claims Blast's fees from a launch naming `partner` (its `partnerId`),
-   * paying the partner its share of each in the same call; returns the rest.
-   */
-  claimProtocolFeesWithPartner(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-      partner: SharedObjectReference<false>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::claim_protocol_fees_with_partner`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          this.#packageVersion(tx),
-          tx.object(options.adminWitness),
-          sharedObject(tx, "partner", options.partner, false),
-          tx.object.clock(),
-        ],
-      });
-  }
-
-  /** `TreasuryAdmin`: Blast's one-time shares future launches snapshot. */
+  /** `launch_config::set_protocol_allocation` (`TreasuryAdmin`): Blast's share of future launches. */
   setProtocolAllocation(options: {
-    adminWitness: TransactionArgument;
+    adminWitness: TransactionObjectInput;
     memeBps: bigint;
     quoteBps: bigint;
   }) {
     const meme = this.bps(options.memeBps);
     const quote = this.bps(options.quoteBps);
-    return this.#configCall("set_protocol_allocation", options, (tx) => [
-      tx.add(meme),
-      tx.add(quote),
-    ]);
+    return this.#configCall(
+      "launch_config::set_protocol_allocation",
+      options,
+      (tx) => [tx.add(meme), tx.add(quote)],
+    );
   }
 
-  /** `ListingAdmin`: admits or removes a Meme precision for new launches. */
+  /** `launch_config::set_meme_decimals_allowed` (`ListingAdmin`). */
   setMemeDecimalsAllowed(options: {
-    adminWitness: TransactionArgument;
+    adminWitness: TransactionObjectInput;
     decimals: number;
     allowed: boolean;
   }) {
-    return this.#configCall("set_meme_decimals_allowed", options, (tx) => [
-      tx.pure.u8(options.decimals),
-      tx.pure.bool(options.allowed),
-    ]);
+    return this.#configCall(
+      "launch_config::set_meme_decimals_allowed",
+      options,
+      (tx) => [tx.pure.u8(options.decimals), tx.pure.bool(options.allowed)],
+    );
   }
 
-  /** `ListingAdmin`: admits or removes `quoteType` for new launches. */
+  /** `launch_config::set_quote_allowed<Quote>` (`ListingAdmin`); existing launches keep trading. */
   setQuoteAllowed(options: {
-    adminWitness: TransactionArgument;
+    adminWitness: TransactionObjectInput;
     quoteType: string;
     allowed: boolean;
   }) {
     return this.#configCall(
-      "set_quote_allowed",
+      "launch_config::set_quote_allowed",
       options,
       (tx) => [tx.pure.bool(options.allowed)],
-      normalizeStructTag(options.quoteType),
+      [normalizeStructTag(options.quoteType)],
     );
   }
 
-  /** `FeeAdmin`: the trade fees launches created afterward snapshot. */
+  /** `launch_config::set_trade_fees` (`FeeAdmin`): the fees later launches snapshot. */
   setTradeFees(options: {
-    adminWitness: TransactionArgument;
+    adminWitness: TransactionObjectInput;
     quoteFeeBps: bigint;
     memeFeeBps: bigint;
   }) {
     const quote = this.bps(options.quoteFeeBps);
     const meme = this.bps(options.memeFeeBps);
-    return this.#configCall("set_trade_fees", options, (tx) => [
+    return this.#configCall("launch_config::set_trade_fees", options, (tx) => [
       tx.add(quote),
       tx.add(meme),
     ]);
   }
 
-  /** `FeeAdmin`: the SUI, in MIST, every launch created afterward pays. */
+  /** `launch_config::set_creation_fee` (`FeeAdmin`), in MIST. */
   setCreationFee(options: {
-    adminWitness: TransactionArgument;
+    adminWitness: TransactionObjectInput;
     creationFee: bigint;
   }) {
-    requireU64("creationFee", options.creationFee);
-    return this.#configCall("set_creation_fee", options, (tx) => [
-      tx.pure.u64(options.creationFee),
-    ]);
+    const creationFee = requireU64("creationFee", options.creationFee);
+    return this.#configCall(
+      "launch_config::set_creation_fee",
+      options,
+      (tx) => [tx.pure.u64(creationFee)],
+    );
   }
 
-  /** `FeeAdmin`: lets new launches name `partner` at once. */
+  /** `launch_config::add_partner` (`FeeAdmin`): new launches may name `partner` at once. */
   addPartner(options: {
-    adminWitness: TransactionArgument;
+    adminWitness: TransactionObjectInput;
     partner: SharedObjectReference<false>;
   }) {
-    return this.#configCall("add_partner", options, (tx) => [
+    return this.#configCall("launch_config::add_partner", options, (tx) => [
       sharedObject(tx, "partner", options.partner, false),
     ]);
   }
 
-  /** `FeeAdmin`: stops new launches naming `partner` after the partners notice delay. */
+  /**
+   * `launch_config::remove_partner` (`FeeAdmin`): new launches stop naming
+   * `partner` after `PARTNER_DELAY_MS`; launches that name it keep paying it.
+   */
   removePartner(options: {
-    adminWitness: TransactionArgument;
+    adminWitness: TransactionObjectInput;
     partner: SharedObjectReference<false>;
   }) {
-    return this.#configCall("remove_partner", options, (tx) => [
+    return this.#configCall("launch_config::remove_partner", options, (tx) => [
       sharedObject(tx, "partner", options.partner, false),
       tx.object.clock(),
     ]);
   }
 
-  /** `AdapterAdmin`: admits or removes a migration adapter's witness type. */
+  /**
+   * `launch_config::set_migration_witness_allowed<W>` (`AdapterAdmin`); see
+   * `MigratorCalls.migrationWitnessType`.
+   */
   setMigrationWitnessAllowed(options: {
-    adminWitness: TransactionArgument;
+    adminWitness: TransactionObjectInput;
     migrationWitnessType: string;
     allowed: boolean;
   }) {
     return this.#configCall(
-      "set_migration_witness_allowed",
+      "launch_config::set_migration_witness_allowed",
       options,
       (tx) => [tx.pure.bool(options.allowed)],
-      normalizeStructTag(options.migrationWitnessType),
+      [normalizeStructTag(options.migrationWitnessType)],
     );
+  }
+
+  /**
+   * `runtime_config::set_creator_claim_signer` (`ClaimSignerAdmin`): the
+   * Ed25519 key that signs account claims; empty revokes it.
+   */
+  setCreatorClaimSigner(options: {
+    adminWitness: TransactionObjectInput;
+    signerPublicKey: Uint8Array;
+  }) {
+    return this.#configCall(
+      "runtime_config::set_creator_claim_signer",
+      options,
+      (tx) => [tx.pure.vector("u8", Array.from(options.signerPublicKey))],
+    );
+  }
+
+  /** `runtime_config::set_protocol_fee_share` (`FeeAdmin`): Blast's share of every curve fee. */
+  setProtocolFeeShare(options: {
+    adminWitness: TransactionObjectInput;
+    protocolFeeShareBps: bigint;
+  }) {
+    const share = this.bps(options.protocolFeeShareBps);
+    return this.#configCall(
+      "runtime_config::set_protocol_fee_share",
+      options,
+      (tx) => [tx.add(share)],
+    );
+  }
+
+  /**
+   * `launch::reassign_curve_fee_cap` (`CreatorAdmin`): retires the pending
+   * claim or live cap and sends a fresh `CurveFeeCap` to `recipient`.
+   */
+  reassignCurveFeeCap(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      recipient: string;
+    },
+  ) {
+    return this.#reassign("reassign_curve_fee_cap", options);
+  }
+
+  /** `launch::reassign_metadata_cap` (`CreatorAdmin`), for the `BlastMetadataCap`. */
+  reassignMetadataCap(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      recipient: string;
+    },
+  ) {
+    return this.#reassign("reassign_metadata_cap", options);
+  }
+
+  #configCall(
+    target: `${"launch_config" | "runtime_config"}::${string}`,
+    options: { adminWitness: TransactionObjectInput },
+    extra: (tx: Transaction) => TransactionArgument[],
+    typeArguments: string[] = [],
+  ) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::${target}`,
+        typeArguments,
+        arguments: [
+          target.startsWith("launch_config")
+            ? this.#launchConfig(tx, true)
+            : this.#runtimeConfig(tx, true),
+          this.#packageVersion(tx),
+          tx.object(options.adminWitness),
+          ...extra(tx),
+        ],
+      });
+    };
+  }
+
+  #reassign(
+    functionName: "reassign_curve_fee_cap" | "reassign_metadata_cap",
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      recipient: string;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const recipient = normalizeSuiAddress(options.recipient);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::${functionName}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          this.#packageVersion(tx),
+          tx.object(options.adminWitness),
+          tx.pure.address(recipient),
+        ],
+      });
+    };
   }
 
   #buyCall(
@@ -708,32 +787,6 @@ export class LaunchpadCalls {
     };
   }
 
-  /** One mutable-`LaunchConfig` administrator call, in Move argument order. */
-  #configCall(
-    functionName: string,
-    options: { adminWitness: TransactionArgument },
-    extra: (tx: Transaction) => TransactionArgument[],
-    typeArgument?: string,
-  ) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::${functionName}`,
-        typeArguments: typeArgument ? [typeArgument] : [],
-        arguments: [
-          sharedObject(
-            tx,
-            "launchConfig",
-            { ...this.deployment.launchConfig, mutable: true },
-            true,
-          ),
-          this.#packageVersion(tx),
-          options.adminWitness,
-          ...extra(tx),
-        ],
-      });
-    };
-  }
-
   #initializerCall(
     functionName: string,
     options: LaunchInitializerInput,
@@ -773,31 +826,16 @@ export class LaunchpadCalls {
     };
   }
 
-  #launchConfig(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
-      tx,
-      "launchConfig",
-      this.deployment.launchConfig,
-      false,
-    );
-  }
-
   #packageVersion(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
-      tx,
-      "packageVersion",
-      this.deployment.packageVersion,
-      false,
-    );
+    return deploymentObject(tx, this.deployment.packageVersion, false);
   }
 
-  #runtimeConfig(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
-      tx,
-      "runtimeConfig",
-      this.deployment.runtimeConfig,
-      false,
-    );
+  #launchConfig(tx: Transaction, mutable = false): TransactionObjectArgument {
+    return deploymentObject(tx, this.deployment.launchConfig, mutable);
+  }
+
+  #runtimeConfig(tx: Transaction, mutable = false): TransactionObjectArgument {
+    return deploymentObject(tx, this.deployment.runtimeConfig, mutable);
   }
 }
 
@@ -827,7 +865,7 @@ export class LaunchpadTransactions {
           MOVE_STDLIB_ADDRESS,
           SUI_FRAMEWORK_ADDRESS,
           this.call.deployment.timelockPackageId,
-          this.call.deployment.adminPackageId,
+          this.call.deployment.admin.packageId,
           this.call.deployment.partnersPackageId,
           this.call.deployment.packageId,
         ],
@@ -856,48 +894,9 @@ export class LaunchpadTransactions {
     });
     const buyResult = tx.add(this.call.buy({ ...options, quoteCoin }));
     tx.transferObjects(
-      [buyResult[0]!, buyResult[1]!],
+      moveResults(buyResult, 2),
       normalizeSuiAddress(options.recipient),
     );
-    return tx;
-  }
-
-  /** Joins the opening round with an exact-balance Quote coin. */
-  joinOpeningRound(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      quoteAmount: bigint;
-    },
-  ): Transaction {
-    requirePositiveU64("quoteAmount", options.quoteAmount);
-    const tx = new Transaction();
-    const quoteCoin = tx.coin({
-      type: normalizeStructTag(options.quoteType),
-      balance: options.quoteAmount,
-    });
-    tx.add(this.call.joinOpeningRound({ ...options, quoteCoin }));
-    return tx;
-  }
-
-  settleOpeningRound(
-    options: LaunchTypes & { launch: SharedObjectReference<true> },
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.settleOpeningRound(options));
-    return tx;
-  }
-
-  /** Delivers each bidder's share of the settled round in one PTB. */
-  deliverOpeningRound(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      bidders: readonly string[];
-    },
-  ): Transaction {
-    const tx = new Transaction();
-    for (const bidder of options.bidders) {
-      tx.add(this.call.deliverOpeningRound({ ...options, bidder }));
-    }
     return tx;
   }
 
@@ -930,7 +929,7 @@ export class LaunchpadTransactions {
     const tx = new Transaction();
     const claimResult = tx.add(this.call.claimCreatorCaps(options));
     tx.transferObjects(
-      [claimResult[0]!, claimResult[1]!],
+      moveResults(claimResult, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
@@ -951,7 +950,7 @@ export class LaunchpadTransactions {
       }),
     );
     tx.transferObjects(
-      [claimResult[0]!, claimResult[1]!],
+      moveResults(claimResult, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
@@ -1005,114 +1004,201 @@ export class LaunchpadTransactions {
     return tx;
   }
 
-  /**
-   * Signs in as `TreasuryAdmin`, claims Blast's fees, and routes the Meme,
-   * Quote, and SUI coins. Pass the launch's `partner` when it names one.
-   */
+  /** Pass the launch's `partner` when `LaunchState.partnerId` is set. */
   claimProtocolFees(
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
       adminCapId: string;
-      partner?: SharedObjectReference<false>;
       recipient: string;
+      partner?: SharedObjectReference<false> | null;
     },
   ): Transaction {
     const tx = new Transaction();
     const adminWitness = tx.add(
-      this.call.signIn("TreasuryAdmin", { adminCap: options.adminCapId }),
+      this.call.signIn({ adminCap: options.adminCapId, role: "TreasuryAdmin" }),
     );
     const claimResult = tx.add(
-      options.partner
-        ? this.call.claimProtocolFeesWithPartner({
-            ...options,
-            adminWitness,
-            partner: options.partner,
-          })
-        : this.call.claimProtocolFees({ ...options, adminWitness }),
+      this.call.claimProtocolFees({ ...options, adminWitness }),
     );
     tx.transferObjects(
-      [claimResult[0]!, claimResult[1]!, claimResult[2]!],
+      moveResults(claimResult, 3),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
   }
 
-  setProtocolAllocation(
-    options: AsAdmin<Parameters<LaunchpadCalls["setProtocolAllocation"]>[0]>,
+  /** Adds a bid of `quoteAmount` to the sender's opening-round bid. */
+  joinOpeningRound(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      quoteAmount: bigint;
+    },
   ): Transaction {
-    return this.#asAdmin("TreasuryAdmin", options, (adminWitness) =>
+    requirePositiveU64("quoteAmount", options.quoteAmount);
+    const tx = new Transaction();
+    const quoteCoin = tx.coin({
+      type: normalizeStructTag(options.quoteType),
+      balance: options.quoteAmount,
+    });
+    tx.add(this.call.joinOpeningRound({ ...options, quoteCoin }));
+    return tx;
+  }
+
+  settleOpeningRound(
+    options: LaunchTypes & { launch: SharedObjectReference<true> },
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.settleOpeningRound(options));
+    return tx;
+  }
+
+  /** Delivers each bidder's share of a settled opening round in one PTB. */
+  deliverOpeningRound(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      bidders: readonly string[];
+    },
+  ): Transaction {
+    const tx = new Transaction();
+    for (const bidder of options.bidders) {
+      tx.add(this.call.deliverOpeningRound({ ...options, bidder }));
+    }
+    return tx;
+  }
+
+  setProtocolAllocation(options: {
+    adminCapId: string;
+    memeBps: bigint;
+    quoteBps: bigint;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
       this.call.setProtocolAllocation({ ...options, adminWitness }),
     );
   }
 
-  setMemeDecimalsAllowed(
-    options: AsAdmin<Parameters<LaunchpadCalls["setMemeDecimalsAllowed"]>[0]>,
-  ): Transaction {
-    return this.#asAdmin("ListingAdmin", options, (adminWitness) =>
+  setMemeDecimalsAllowed(options: {
+    adminCapId: string;
+    decimals: number;
+    allowed: boolean;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "ListingAdmin", (adminWitness) =>
       this.call.setMemeDecimalsAllowed({ ...options, adminWitness }),
     );
   }
 
-  setQuoteAllowed(
-    options: AsAdmin<Parameters<LaunchpadCalls["setQuoteAllowed"]>[0]>,
-  ): Transaction {
-    return this.#asAdmin("ListingAdmin", options, (adminWitness) =>
+  setQuoteAllowed(options: {
+    adminCapId: string;
+    quoteType: string;
+    allowed: boolean;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "ListingAdmin", (adminWitness) =>
       this.call.setQuoteAllowed({ ...options, adminWitness }),
     );
   }
 
-  setTradeFees(
-    options: AsAdmin<Parameters<LaunchpadCalls["setTradeFees"]>[0]>,
-  ): Transaction {
-    return this.#asAdmin("FeeAdmin", options, (adminWitness) =>
+  setTradeFees(options: {
+    adminCapId: string;
+    quoteFeeBps: bigint;
+    memeFeeBps: bigint;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.setTradeFees({ ...options, adminWitness }),
     );
   }
 
-  setCreationFee(
-    options: AsAdmin<Parameters<LaunchpadCalls["setCreationFee"]>[0]>,
-  ): Transaction {
-    return this.#asAdmin("FeeAdmin", options, (adminWitness) =>
+  setCreationFee(options: {
+    adminCapId: string;
+    creationFee: bigint;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.setCreationFee({ ...options, adminWitness }),
     );
   }
 
-  addPartner(
-    options: AsAdmin<Parameters<LaunchpadCalls["addPartner"]>[0]>,
-  ): Transaction {
-    return this.#asAdmin("FeeAdmin", options, (adminWitness) =>
+  addPartner(options: {
+    adminCapId: string;
+    partner: SharedObjectReference<false>;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.addPartner({ ...options, adminWitness }),
     );
   }
 
-  removePartner(
-    options: AsAdmin<Parameters<LaunchpadCalls["removePartner"]>[0]>,
-  ): Transaction {
-    return this.#asAdmin("FeeAdmin", options, (adminWitness) =>
+  removePartner(options: {
+    adminCapId: string;
+    partner: SharedObjectReference<false>;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.removePartner({ ...options, adminWitness }),
     );
   }
 
-  setMigrationWitnessAllowed(
-    options: AsAdmin<
-      Parameters<LaunchpadCalls["setMigrationWitnessAllowed"]>[0]
-    >,
-  ): Transaction {
-    return this.#asAdmin("AdapterAdmin", options, (adminWitness) =>
+  setMigrationWitnessAllowed(options: {
+    adminCapId: string;
+    migrationWitnessType: string;
+    allowed: boolean;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
       this.call.setMigrationWitnessAllowed({ ...options, adminWitness }),
     );
   }
 
+  setCreatorClaimSigner(options: {
+    adminCapId: string;
+    signerPublicKey: Uint8Array;
+  }): Transaction {
+    return this.#asAdmin(
+      options.adminCapId,
+      "ClaimSignerAdmin",
+      (adminWitness) =>
+        this.call.setCreatorClaimSigner({ ...options, adminWitness }),
+    );
+  }
+
+  setProtocolFeeShare(options: {
+    adminCapId: string;
+    protocolFeeShareBps: bigint;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.setProtocolFeeShare({ ...options, adminWitness }),
+    );
+  }
+
+  reassignCurveFeeCap(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      adminCapId: string;
+      recipient: string;
+    },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
+      this.call.reassignCurveFeeCap({ ...options, adminWitness }),
+    );
+  }
+
+  reassignMetadataCap(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      adminCapId: string;
+      recipient: string;
+    },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
+      this.call.reassignMetadataCap({ ...options, adminWitness }),
+    );
+  }
+
+  /** Signs in as `role` and runs one administrator call in the same PTB. */
   #asAdmin(
-    role: LaunchpadAdminRole,
-    options: { adminCapId: string },
+    adminCapId: string,
+    role: BlastFunAdminRole,
     call: (
       adminWitness: TransactionObjectArgument,
     ) => (tx: Transaction) => void,
   ): Transaction {
     const tx = new Transaction();
     const adminWitness = tx.add(
-      this.call.signIn(role, { adminCap: options.adminCapId }),
+      this.call.signIn({ adminCap: adminCapId, role }),
     );
     tx.add(call(adminWitness));
     return tx;
@@ -1120,46 +1206,48 @@ export class LaunchpadTransactions {
 }
 
 /**
- * Completes an adapter-started launch in `tx`: applies the settings, pays the
- * exact creation fee from gas, finalizes, runs the creator's optional purchase
- * (routing its coins) or opening-round bid on the owned launch, then shares.
+ * Completes an adapter-started launch in `tx`: pays the exact SUI
+ * `creationFee` from gas, applies the settings, finalizes, runs the optional
+ * purchase or opening-round bid on the owned launch and routes its coins, then
+ * shares.
  */
 export function addLaunchCompletion(
   tx: Transaction,
   calls: LaunchpadCalls,
   options: LaunchInitializerInput &
-    LaunchCompletionInput & { currency: SharedObjectReference<true> },
+    LaunchSettings & {
+      currency: SharedObjectReference<true>;
+      /** `LaunchConfig.creation_fee`, in MIST (`LaunchpadClient.getLaunchConfig`). */
+      creationFee: bigint;
+      preShareBuy?: PreShareBuyInput;
+    },
 ): void {
-  const { preShareBuy, openingRoundBid, ...settings } = options;
-  requireU64("creationFee", options.creationFee);
-  const quoteCoin = (quoteAmount: bigint) => {
-    requirePositiveU64("quoteAmount", quoteAmount);
-    return tx.coin({
-      type: normalizeStructTag(options.quoteType),
-      balance: quoteAmount,
-    });
+  const { preShareBuy, ...rest } = options;
+  const settings = {
+    ...rest,
+    creationFee: tx.coin({
+      type: "0x2::sui::SUI",
+      balance: requireU64("creationFee", options.creationFee),
+    }),
   };
+  if (!preShareBuy) {
+    tx.add(calls.completeLaunch(settings));
+    return;
+  }
+  requirePositiveU64("quoteAmount", preShareBuy.quoteAmount);
+  const quoteCoin = tx.coin({
+    type: normalizeStructTag(options.quoteType),
+    balance: preShareBuy.quoteAmount,
+  });
   const bought = tx.add(
     calls.completeLaunch({
       ...settings,
-      creationFee: tx.coin({
-        type: SUI_TYPE_ARG,
-        balance: options.creationFee,
-      }),
-      ...(preShareBuy && {
-        preShareBuy: {
-          quoteCoin: quoteCoin(preShareBuy.quoteAmount),
-          minMemeOut: preShareBuy.minMemeOut,
-        },
-      }),
-      ...(openingRoundBid && {
-        openingRoundBid: { quoteCoin: quoteCoin(openingRoundBid.quoteAmount) },
-      }),
+      preShareBuy: { quoteCoin, minMemeOut: preShareBuy.minMemeOut },
     }),
   );
-  if (bought && preShareBuy) {
+  if (bought) {
     tx.transferObjects(
-      [bought[0]!, bought[1]!],
+      moveResults(bought, 2),
       normalizeSuiAddress(preShareBuy.recipient),
     );
   }
@@ -1167,33 +1255,36 @@ export function addLaunchCompletion(
 
 function normalizeDeployment(
   deployment: LaunchpadDeployment,
-): NormalizedDeployment {
-  const packageId = normalizeSuiObjectId(deployment.packageId);
+): LaunchpadDeployment {
   return {
-    packageId,
-    originalPackageId: normalizeSuiObjectId(
-      deployment.originalPackageId ?? packageId,
-    ),
-    adminPackageId: normalizeSuiObjectId(deployment.adminPackageId),
+    ...normalizeSuiPackageReference("launchpad", deployment),
+    admin: normalizeAdminDeployment(deployment.admin),
     partnersPackageId: normalizeSuiObjectId(deployment.partnersPackageId),
     timelockPackageId: normalizeSuiObjectId(deployment.timelockPackageId),
-    packageVersion: normalizeSharedObjectReference(
+    packageVersion: normalizeSharedObjectIdentity(
       "packageVersion",
       deployment.packageVersion,
-      false,
     ),
-    launchConfig: normalizeSharedObjectReference(
+    launchConfig: normalizeSharedObjectIdentity(
       "launchConfig",
       deployment.launchConfig,
-      false,
     ),
-    runtimeConfig: normalizeSharedObjectReference(
+    runtimeConfig: normalizeSharedObjectIdentity(
       "runtimeConfig",
       deployment.runtimeConfig,
-      false,
     ),
-    acl: normalizeSharedObjectReference("acl", deployment.acl, false),
   };
+}
+
+function requireOpeningRoundMs(value: bigint): void {
+  if (
+    value !== 0n &&
+    (value < MIN_OPENING_ROUND_MS || value > MAX_OPENING_ROUND_MS)
+  ) {
+    throw new RangeError(
+      "openingRoundMs must be zero or between 60,000 and 300,000",
+    );
+  }
 }
 
 function sharedObject<const Mutable extends boolean>(

@@ -48,7 +48,6 @@ const plan = {
   protocolQuoteBps: 0n,
   recipients: [],
 };
-const protocolAllocation = { memeBps: 0n, quoteBps: 0n };
 
 /**
  * A BCS struct reads its fields in declaration order, so the keys of a parsed
@@ -76,14 +75,23 @@ test("SDK object layouts follow the frozen Move field order", () => {
       "allocation",
       "ProtocolAllocation",
       protocolAllocationBcs as never,
-      protocolAllocation,
+      { memeBps: 0n, quoteBps: 0n },
     ],
     [
       "launchpad",
       "launch_config",
       "LaunchConfig",
       launchConfigBcs as never,
-      launchConfig(),
+      {
+        id: uid("0x1"),
+        meme_decimals: [],
+        quotes: { id: uid("0x2"), size: 0n },
+        quote_fee_bps: 0n,
+        meme_fee_bps: 0n,
+        migration_witnesses: [],
+        protocol_allocation: { memeBps: 0n, quoteBps: 0n },
+        creation_fee: 0n,
+      },
     ],
     ["migrators", "vault", "LpVault", lpVaultBcs as never, vault()],
     [
@@ -167,19 +175,6 @@ function launch() {
     curve_fee_cap_id: null,
     blast_metadata_cap_id: null,
     partner_id: null,
-  };
-}
-
-function launchConfig() {
-  return {
-    id: uid("0x1"),
-    meme_decimals: { contents: [] },
-    quotes: { id: uid("0x2"), size: 0n },
-    quote_fee_bps: 0n,
-    meme_fee_bps: 0n,
-    migration_witnesses: { contents: [] },
-    protocol_allocation: protocolAllocation,
-    creation_fee: 0n,
   };
 }
 
