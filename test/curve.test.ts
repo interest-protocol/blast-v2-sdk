@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { previewBuy, previewSell } from "../src/launchpad/curve.ts";
+import {
+  previewBuy,
+  previewOpeningRoundDelivery,
+  previewOpeningRoundSettlement,
+  previewSell,
+} from "../src/launchpad/curve.ts";
 
 const baseState = {
   memeReserve: 800_000_000_000_000_000n,
@@ -119,4 +124,51 @@ test("applies the maximum burn after the Meme fee", () => {
 
 test("rejects a trade whose net input rounds to zero", () => {
   assert.throws(() => previewBuy(baseState, 1n), /quoteInNet rounds to zero/);
+});
+
+test("settles an opening-round pot as one buy, or holds a dust pot whole", () => {
+  const settled = previewOpeningRoundSettlement(baseState, 1_000_000_000n);
+  assert.deepEqual(settled.bought, previewBuy(baseState, 1_000_000_000n));
+  assert.equal(settled.meme, 791_216_695_471_483n);
+  assert.equal(settled.quote, 0n);
+
+  const capped = previewOpeningRoundSettlement(baseState, 4_000_000_000_000n);
+  assert.equal(capped.bought?.crossedThreshold, true);
+  assert.equal(capped.quote, capped.bought?.quoteRefund);
+  assert.ok(capped.quote > 0n);
+
+  for (const pot of [0n, 1n]) {
+    assert.deepEqual(previewOpeningRoundSettlement(baseState, pot), {
+      bought: null,
+      meme: 0n,
+      quote: pot,
+    });
+  }
+});
+
+test("delivers opening-round shares rounded down, the last taking the remainder", () => {
+  let round = {
+    openingRoundBids: 3n,
+    openingRoundMeme: 1_000n,
+    openingRoundQuote: 7n,
+  };
+  const deliveries = [];
+  for (let index = 0; index < 3; index++) {
+    const delivery = previewOpeningRoundDelivery(round, 1n);
+    deliveries.push(delivery);
+    round = {
+      openingRoundBids: round.openingRoundBids - 1n,
+      openingRoundMeme: round.openingRoundMeme - delivery.meme,
+      openingRoundQuote: round.openingRoundQuote - delivery.quote,
+    };
+  }
+  assert.deepEqual(deliveries, [
+    { meme: 333n, quote: 2n },
+    { meme: 333n, quote: 2n },
+    { meme: 334n, quote: 3n },
+  ]);
+  assert.throws(
+    () => previewOpeningRoundDelivery({ ...round, openingRoundBids: 1n }, 2n),
+    /exceeds the undelivered/,
+  );
 });

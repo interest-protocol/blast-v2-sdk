@@ -13,11 +13,17 @@ import type {
 } from "./types.ts";
 import { BLAST_NETWORKS } from "./types.ts";
 
+const REQUIRED_PACKAGES = [
+  "launchpad",
+  "admin",
+  "partners",
+  "timelock",
+] as const;
 const REQUIRED_SHARED_OBJECTS = [
   "packageVersion",
   "launchConfig",
   "runtimeConfig",
-  "protocolAuthority",
+  "acl",
 ] as const;
 
 /**
@@ -39,11 +45,10 @@ export function defineBlastDeployment(
   if (!chainIdentifier) {
     throw new RangeError("chainIdentifier must not be empty");
   }
-  if (!deployment.packages.launchpad) {
-    throw new TypeError("packages.launchpad is required");
-  }
-  if (!deployment.packages.admin) {
-    throw new TypeError("packages.admin is required");
+  for (const name of REQUIRED_PACKAGES) {
+    if (!deployment.packages[name]) {
+      throw new TypeError(`packages.${name} is required`);
+    }
   }
   for (const name of REQUIRED_SHARED_OBJECTS) {
     if (!deployment.sharedObjects[name]) {
@@ -87,10 +92,12 @@ export function launchpadDeployment(
     packageId: packageReference.packageId,
     originalPackageId: packageReference.originalPackageId,
     adminPackageId: deployment.packages.admin.packageId,
+    partnersPackageId: deployment.packages.partners.packageId,
+    timelockPackageId: deployment.packages.timelock.packageId,
     packageVersion: sharedObjectReference(objects.packageVersion, false),
     launchConfig: sharedObjectReference(objects.launchConfig, false),
     runtimeConfig: sharedObjectReference(objects.runtimeConfig, false),
-    protocolAuthority: sharedObjectReference(objects.protocolAuthority, false),
+    acl: sharedObjectReference(objects.acl, false),
   };
 }
 

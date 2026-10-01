@@ -40,6 +40,8 @@ const samplePlan = {
   curveMemeBps: 8_000n,
   lpMemeBps: 2_000n,
   lpQuoteBps: 10_000n,
+  protocolMemeBps: 0n,
+  protocolQuoteBps: 0n,
   recipients: [],
 };
 

@@ -20,6 +20,8 @@ import { LaunchpadTransactions } from "../src/launchpad/transactions.ts";
 const blastPackageId = normalizeSuiObjectId("0xb1a57");
 const latestBlastPackageId = normalizeSuiObjectId("0xb1a58");
 const adminPackageId = normalizeSuiObjectId("0xad");
+const partnersPackageId = normalizeSuiObjectId("0xae");
+const timelockPackageId = normalizeSuiObjectId("0xaf");
 const options = {
   decimals: 6,
   symbol: "DOG COIN",
@@ -243,11 +245,13 @@ test("keeps constant fields independent when values match placeholders", async (
   }
 });
 
-test("publishes against 0x1, 0x2, blast_admin, and Blast, then makes the package immutable", async () => {
+test("publishes against 0x1, 0x2, the timelock, blast_admin, partners, and Blast, then makes the package immutable", async () => {
   const tx = new LaunchpadTransactions({
     packageId: latestBlastPackageId,
     originalPackageId: blastPackageId,
     adminPackageId,
+    partnersPackageId,
+    timelockPackageId,
     packageVersion: {
       objectId: "0x3",
       initialSharedVersion: "10",
@@ -263,7 +267,7 @@ test("publishes against 0x1, 0x2, blast_admin, and Blast, then makes the package
       initialSharedVersion: "12",
       mutable: false,
     },
-    protocolAuthority: {
+    acl: {
       objectId: "0x6",
       initialSharedVersion: "13",
       mutable: false,
@@ -278,7 +282,9 @@ test("publishes against 0x1, 0x2, blast_admin, and Blast, then makes the package
     assert.deepEqual(commands[0].Publish.dependencies, [
       MOVE_STDLIB_ADDRESS,
       SUI_FRAMEWORK_ADDRESS,
+      timelockPackageId,
       adminPackageId,
+      partnersPackageId,
       latestBlastPackageId,
     ]);
     const publishedModule = Buffer.from(

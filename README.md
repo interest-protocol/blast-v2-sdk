@@ -37,6 +37,8 @@ const client = new SuiGrpcClient({
     packageId: "0x...",
     originalPackageId: "0x...",
     adminPackageId: "0x...", // published blast_admin
+    partnersPackageId: "0x...", // published blast_partners
+    timelockPackageId: "0x...", // published blast_fun_timelock
     packageVersion: {
       objectId: "0x...",
       initialSharedVersion: "...",
@@ -52,7 +54,8 @@ const client = new SuiGrpcClient({
       initialSharedVersion: "...",
       mutable: false,
     },
-    protocolAuthority: {
+    acl: {
+      // the shared blast_acl::ACL singleton
       objectId: "0x...",
       initialSharedVersion: "...",
       mutable: false,
@@ -89,8 +92,19 @@ keep both the current and original package IDs. Shared-object entries keep the
 object ID and initial shared version. Builders add `mutable` from the Move
 function signature because mutability belongs to a transaction argument, not to
 the object itself. `packages.admin` names the published `blast_admin` package,
-which owns `acl::sign_in` and is a transitive publish dependency of every
+which owns `blast_acl::sign_in`; `sharedObjects.acl` is its one shared `ACL`,
+which every Blast package signs in against (contracts ADR 0097).
+`packages.partners` and `packages.timelock` name `blast_partners` and
+`blast_fun_timelock`. All three are transitive publish dependencies of every
 generated Meme package.
+
+Administrator builders sign in once per role:
+`LaunchpadCalls.signIn(role, { adminCap })` returns this transaction's
+`AdminWitness<Role>` for one `blast_fun_domain` role, and each
+`LaunchpadTransactions` administrator method signs in with the role its Move
+function names (`TreasuryAdmin` for protocol fee claims and the protocol
+allocation, `FeeAdmin` for trade fees, the creation fee, and partners,
+`ListingAdmin` for Quotes and decimals, `AdapterAdmin` for migration witnesses).
 
 After a canonical network release is registered, initialize the client without
 copying addresses into the application:
@@ -123,11 +137,23 @@ construction atomically:
    abilities. Cetus derives the fee rate from its own registry and reserves the
    pair's pool creation with the Meme type's `PoolCreationCap`; Bluefin checks
    its own tier bounds.
-2. `set_graduation_target`, `set_allocation_plan`, `set_lp_fee_split`, and the
-   optional `set_protection` record the creator's settings.
-3. `launch::finalize` checks every invariant and fixes the supply mode.
-4. An optional unprotected `buy` runs on the owned launch before public opening.
-5. `launch::share` opens the launch; protection starts now.
+2. `set_virtual_quote`, `set_graduation_target`, `set_allocation_plan`,
+   `set_lp_fee_split`, and the optional `set_opening_round` and `set_partner`
+   record the creator's settings.
+3. `launch::finalize` takes the exact `LaunchConfig` creation fee in SUI (paid
+   from gas), checks every invariant, and fixes the supply mode.
+4. Without an opening round, an optional `buy` runs on the owned launch before
+   public opening. With one, the creator may instead join the opening round.
+5. `launch::share` opens the launch: trading, or the opening round, starts now.
+
+An opening round (contracts ADR 0093) runs one to five minutes after share.
+Anyone joins with Quote (`joinOpeningRound`); nothing trades. After it ends,
+anyone settles it (`settleOpeningRound`): one purchase with the whole pot at
+the usual fees and graduation cap. Anyone then delivers each bidder its
+pro-rata share of the Meme bought and Quote refunded (`deliverOpeningRound`,
+many bidders per transaction). `previewOpeningRoundSettlement` and
+`previewOpeningRoundDelivery` mirror both steps, and the event reducer tracks
+each undelivered bidder.
 
 ```ts
 import { blastMigrators } from "@interest-protocol/blast-sdk/migrators";
@@ -140,6 +166,8 @@ const transaction = client.blastMigrators.tx.createCetusLaunch({
   cetusConfig, // Cetus GlobalConfig, immutable
   cetusPools, // Cetus Pools, mutable
   tickSpacing: 200,
+  creationFee: (await client.blastLaunchpad.getLaunchConfig()).creationFee,
+  virtualQuote: 1_000_000_000_000n,
   graduationTarget: 3_000_000_000_000n,
   // Blast's allocation (here 500 bps of each asset) is added at finalization.
   allocationPlan: {
@@ -155,21 +183,20 @@ const transaction = client.blastMigrators.tx.createCetusLaunch({
     burnBps: 0n,
     recipients: [],
   },
-  protection: {
-    windowMs: 60_000n,
-    cumulativeSenderBps: 100n,
-    perTransactionBps: 50n,
-  },
-  preShareBuy: { quoteAmount: 1_000_000_000n, minMemeOut: 1n, recipient },
+  openingRoundMs: 120_000n,
+  openingRoundBid: { quoteAmount: 1_000_000_000n },
 });
 ```
 
 `createBluefinLaunch` takes `tickSpacing` and `feeRate` instead of the Cetus
 objects. The SDK checks the allocation plan and fee split exactly as the Move
 constructors do and rejects shapes they abort on. The creator's plan excludes
-Blast: `launch::finalize` inserts the `LaunchConfig` protocol allocation as the
-first recipient and requires each asset to sum to 10,000 basis points;
-`addProtocolAllocation` previews that step. `deriveLaunchEconomics`,
+Blast: `launch::finalize` sets the `LaunchConfig` protocol allocation as the
+plan's `protocolMemeBps` and `protocolQuoteBps` and requires each asset to sum
+to 10,000 basis points; `addProtocolAllocation` previews that step. Migration
+accrues Blast's shares to the launch's protocol fees. A launch may name one
+Blast partner at creation; `tx.claimProtocolFees` with that `partner` pays it
+its share of every Blast fee on the launch, the creation fee included. `deriveLaunchEconomics`,
 `apportionMeme`, `apportionQuote`, and `apportionFeeSplit` mirror the
 contract's exact apportionment: Blast's migration allocation rounds up, every
 other part goes by largest remainder.
@@ -200,7 +227,7 @@ Quote, as `<Meme, Quote, CoinA, CoinB>`, to Cetus's single route per operation
   destination (`setLpFeeDefaultShares`, `setLpFeeCoinShares`,
   `clearLpFeeCoinShares`, `setLpFeeProtocolDestination`), claim migration
   residuals (`claimProtocolFees`), and publish holder-reward rounds
-  (`publishHolderRewardRound`). Each composes `blast_admin::acl::sign_in` in
+  (`publishHolderRewardRound`). Each composes `blast_admin::blast_acl::sign_in<Role>` in
   the same transaction.
 
 The client reads `LpVault` objects, the `LpFeePolicy` singleton, a coin's live

@@ -15,8 +15,12 @@ export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
 export type BlastPackages = Readonly<
   Record<string, SuiPackageReference> & {
     launchpad: SuiPackageReference;
-    /** Published `blast_admin` package (`acl::sign_in`, Meme publish dependency). */
+    /** Published `blast_admin` package (`blast_acl::sign_in`, Meme publish dependency). */
     admin: SuiPackageReference;
+    /** Published `blast_partners` package (launchpad and Meme publish dependency). */
+    partners: SuiPackageReference;
+    /** Published `blast_fun_timelock` package (`blast_admin` and `blast_partners` dependency). */
+    timelock: SuiPackageReference;
     blastSui?: SuiPackageReference;
     migrators?: SuiPackageReference;
   }
@@ -34,9 +38,9 @@ export type BlastSharedObjects = Readonly<
     launchConfig: SharedObjectIdentity;
     runtimeConfig: SharedObjectIdentity;
     lpFeePolicy?: SharedObjectIdentity;
-    protocolAuthority: SharedObjectIdentity;
+    /** The one shared `blast_admin::blast_acl::ACL` every Blast package signs in against. */
+    acl: SharedObjectIdentity;
     blastSuiPackageVersion?: SharedObjectIdentity;
-    blastSuiProtocolAuthority?: SharedObjectIdentity;
     blastSuiPackageAdmin?: SharedObjectIdentity;
     blastSuiVault?: SharedObjectIdentity;
     migratorsPackageVersion?: SharedObjectIdentity;

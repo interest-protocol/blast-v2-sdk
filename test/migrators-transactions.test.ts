@@ -26,10 +26,12 @@ const deployment: MigratorsDeployment = {
     packageId: "0x123",
     originalPackageId: "0x122",
     adminPackageId: "0xad",
+    partnersPackageId: "0xae",
+    timelockPackageId: "0xaf",
     packageVersion: shared("0x2", "10", false),
     launchConfig: shared("0x3", "11", false),
     runtimeConfig: shared("0x4", "12", false),
-    protocolAuthority: shared("0x5", "13", false),
+    acl: shared("0xac", "9", false),
   },
   migratorsVersion: shared("0x61", "15", false),
   lpFeePolicy: shared("0x40", "18", false),
@@ -47,7 +49,9 @@ const lpFeeSplit = {
   recipients: [{ destination: "0xf", bps: 1_000n }],
 };
 const settings = {
+  virtualQuote: 1_000n,
   graduationTarget: 3_000n,
+  creationFee: 5n,
   allocationPlan: {
     curveMemeBps: 8_000n,
     lpMemeBps: 1_900n,
@@ -85,6 +89,7 @@ test("starts, configures, finalizes, and shares a Cetus launch in one PTB", () =
   );
   assert.deepEqual(launchCalls, [
     "cetus::new",
+    "launch::set_virtual_quote",
     "launch::set_graduation_target",
     "launch::set_allocation_plan",
     "launch::set_lp_fee_split",
@@ -109,9 +114,10 @@ test("starts, configures, finalizes, and shares a Cetus launch in one PTB", () =
   assert.equal(finalize.package, normalizeSuiObjectId("0x123"));
   assert.deepEqual(argumentKinds(tx, finalize), [
     `Result:${commandIndex(tx, "cetus::new")}`,
-    "shared:0x2",
     "shared-mut:0xd",
     "shared:0x3",
+    // The exact SUI creation fee, split from gas.
+    `Result:${tx.getData().commands.findIndex((command) => command.$kind !== "MoveCall")}`,
   ]);
   assert.equal(tx.getData().commands.at(-1)?.$kind, "TransferObjects");
 });
@@ -124,11 +130,7 @@ test("starts a Bluefin launch at the creator's tier", () => {
     memeCurrency: shared("0xd", "22", true),
     tickSpacing: 200,
     feeRate: 10_000n,
-    protection: {
-      windowMs: 60_000n,
-      cumulativeSenderBps: 100n,
-      perTransactionBps: 0n,
-    },
+    openingRoundMs: 60_000n,
   });
 
   const start = moveCall(tx, "bluefin::new");
@@ -140,7 +142,7 @@ test("starts a Bluefin launch at the creator's tier", () => {
     "pure",
     "pure",
   ]);
-  assert.ok(moveFunctions(tx).includes("launch::set_protection"));
+  assert.ok(moveFunctions(tx).includes("launch::set_opening_round"));
   assert.equal(moveFunctions(tx).at(-1), "launch::share");
   assert.throws(
     () =>
@@ -296,7 +298,7 @@ test("settles and updates the fee split under the live curve-fee cap", () => {
   );
 });
 
-test("buys back and burns under admin sign-in with a minimum Meme out", () => {
+test("buys back and burns under BuybackAdmin sign-in with a minimum Meme out", () => {
   const sdk = new MigratorTransactions(deployment);
   const cetusTx = sdk.buybackAndBurnCetus({
     ...types,
@@ -309,15 +311,22 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
     minMemeOut: 5n,
   });
   assert.deepEqual(moveFunctions(cetusTx), [
-    "acl::sign_in",
+    "blast_acl::sign_in",
     "cetus::buyback_and_burn",
   ]);
+  const signIn = moveCall(cetusTx, "blast_acl::sign_in");
+  assert.equal(signIn.package, normalizeSuiObjectId("0xad"));
+  assert.deepEqual(argumentKinds(cetusTx, signIn), [
+    "shared:0xac",
+    "object:0xad1",
+  ]);
+  assert.equal(signInRole(cetusTx), "BuybackAdmin");
   const buyback = moveCall(cetusTx, "cetus::buyback_and_burn");
   assert.deepEqual(buyback.typeArguments, cetusTypeArguments.b);
   assert.deepEqual(argumentKinds(cetusTx, buyback), [
     "shared-mut:0xc",
     "shared:0x61",
-    `Result:${commandIndex(cetusTx, "acl::sign_in")}`,
+    `Result:${commandIndex(cetusTx, "blast_acl::sign_in")}`,
     "shared-mut:0xd",
     "shared:0x70",
     "shared-mut:0x73",
@@ -339,7 +348,7 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
     [
       "shared-mut:0xc",
       "shared:0x61",
-      `Result:${commandIndex(bluefinTx, "acl::sign_in")}`,
+      `Result:${commandIndex(bluefinTx, "blast_acl::sign_in")}`,
       "shared-mut:0xd",
       "shared:0x80",
       "shared-mut:0x81",
@@ -347,6 +356,7 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
       CLOCK,
     ],
   );
+  assert.equal(signInRole(bluefinTx), "BuybackAdmin");
   assert.throws(
     () =>
       sdk.buybackAndBurnBluefin({
@@ -377,7 +387,7 @@ test("claims creator LP fees with the launch's live curve-fee cap", () => {
   assert.equal(transferObjectCount(tx), 2);
 });
 
-test("composes admin sign-in with residual claims and LP-fee policy changes", () => {
+test("composes role-typed sign-in with residual claims and LP-fee policy changes", () => {
   const sdk = new MigratorTransactions(deployment);
   const claim = sdk.claimProtocolFees({
     ...types,
@@ -386,9 +396,10 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
     recipient: "0xe",
   });
   assert.deepEqual(moveFunctions(claim), [
-    "acl::sign_in",
+    "blast_acl::sign_in",
     "vault::claim_protocol_fees",
   ]);
+  assert.equal(signInRole(claim), "TreasuryAdmin");
 
   const cases = [
     [
@@ -399,6 +410,7 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
         quoteBps: 200n,
       }),
       [],
+      "FeeAdmin",
     ],
     [
       "set_coin_shares",
@@ -409,6 +421,7 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
         quoteBps: 200n,
       }),
       [normalizedType(types.memeType)],
+      "FeeAdmin",
     ],
     [
       "clear_coin_shares",
@@ -417,6 +430,7 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
         adminCapId: "0xad1",
       }),
       [normalizedType(types.memeType)],
+      "FeeAdmin",
     ],
     [
       "set_protocol_destination",
@@ -425,16 +439,18 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
         destination: "0xb",
       }),
       [],
+      "TreasuryAdmin",
     ],
   ] as const;
-  for (const [functionName, tx, typeArguments] of cases) {
+  for (const [functionName, tx, typeArguments, role] of cases) {
+    assert.equal(signInRole(tx), role);
     const call = moveCall(tx, `lp_fee_policy::${functionName}`);
     assert.deepEqual(call.typeArguments, typeArguments);
     const kinds = argumentKinds(tx, call);
     assert.deepEqual(kinds.slice(0, 3), [
       "shared-mut:0x40",
       "shared:0x61",
-      `Result:${commandIndex(tx, "acl::sign_in")}`,
+      `Result:${commandIndex(tx, "blast_acl::sign_in")}`,
     ]);
   }
   assert.throws(
@@ -472,9 +488,10 @@ test("publishes a holder-reward round and relays its claims", () => {
   assert.deepEqual(argumentKinds(publish, call).slice(0, 3), [
     "shared-mut:0xd",
     "shared:0x61",
-    `Result:${commandIndex(publish, "acl::sign_in")}`,
+    `Result:${commandIndex(publish, "blast_acl::sign_in")}`,
   ]);
   assert.equal(call.arguments.length, 11);
+  assert.equal(signInRole(publish), "RewardsAdmin");
   assert.throws(
     () =>
       sdk.publishHolderRewardRound({
@@ -508,6 +525,14 @@ test("publishes a holder-reward round and relays its claims", () => {
     "pure",
   ]);
 });
+
+/** The `blast_fun_domain` role this PTB's single sign-in names. */
+function signInRole(tx: Transaction): string {
+  const [role] = moveCall(tx, "blast_acl::sign_in").typeArguments;
+  const prefix = `${normalizeSuiObjectId("0x122")}::blast_fun_domain::`;
+  if (!role?.startsWith(prefix)) assert.fail(`unexpected role ${role}`);
+  return role.slice(prefix.length);
+}
 
 function moveFunctions(tx: Transaction): string[] {
   return moveCalls(tx).map((call) => `${call.module}::${call.function}`);

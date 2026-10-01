@@ -14,6 +14,7 @@ import { creatorRecipientBcs, decodeCreatorRecipient } from "./state.ts";
 
 type EventFieldDescriptor =
   | "id"
+  | "optionId"
   | "typeName"
   | "address"
   | "u64"
@@ -72,9 +73,9 @@ export const launchpadEventSpecs = {
     quote_fee_bps: "u64",
     meme_fee_bps: "u64",
     allocation_plan: "allocationPlan",
-    protection_window_ms: "u64",
-    cumulative_sender_bps: "u64",
-    per_transaction_bps: "u64",
+    opening_round_ms: "u64",
+    creation_fee: "u64",
+    partner_id: "optionId",
   },
   LaunchShared: {
     launch_id: "id",
@@ -99,7 +100,6 @@ export const launchpadEventSpecs = {
     meme: "u64",
     quote: "u64",
     disposed_meme: "u64",
-    native_supply_burned: "bool",
     total_supply_after: "u64",
   },
   MigrationAllocationPaid: {
@@ -120,21 +120,39 @@ export const launchpadEventSpecs = {
     recipient: "address",
   },
   MigrationWitnessSet: { migration_witness: "typeName", allowed: "bool" },
-  ProtocolAllocationSet: {
-    destination: "address",
-    meme_bps: "u64",
-    quote_bps: "u64",
+  OpeningRoundDelivered: {
+    launch_id: "id",
+    bidder: "address",
+    bid: "u64",
+    meme: "u64",
+    quote: "u64",
+  },
+  OpeningRoundJoined: { launch_id: "id", quote: "u64", bids: "u64" },
+  OpeningRoundSettled: {
+    launch_id: "id",
+    bids: "u64",
+    meme: "u64",
+    quote: "u64",
+  },
+  PartnerAdded: { partner_id: "id" },
+  PartnerRemoved: { partner_id: "id", accepted_until_ms: "u64" },
+  ProtocolAllocationSet: { meme_bps: "u64", quote_bps: "u64" },
+  ProtocolFeesAccrued: {
+    launch_id: "id",
+    meme_amount: "u64",
+    quote_amount: "u64",
   },
   ProtocolFeesClaimed: {
     launch_id: "id",
     meme_amount: "u64",
     quote_amount: "u64",
+    sui_amount: "u64",
+    partner_meme_amount: "u64",
+    partner_quote_amount: "u64",
+    partner_sui_amount: "u64",
   },
   ProtocolFeeShareChanged: { pos0: "u64" },
-  QuoteSet: {
-    quote: "typeName",
-    virtual_quote: "u64",
-  },
+  QuoteSet: { quote: "typeName", allowed: "bool" },
   Sold: {
     launch_id: "id",
     meme_in_gross: "u64",
@@ -145,12 +163,14 @@ export const launchpadEventSpecs = {
     real_quote_reserve: "u64",
   },
   CreatorClaimSignerSet: { pos0: "bytes" },
+  CreationFeeChanged: { pos0: "u64" },
 } as const satisfies Record<string, Record<string, EventFieldDescriptor>>;
 
 export type LaunchpadEventKind = keyof typeof launchpadEventSpecs;
 
 type DescriptorOutputs = {
   id: string;
+  optionId: string | null;
   typeName: string;
   address: string;
   u64: bigint;
@@ -201,6 +221,7 @@ const EVENT_FIELD_BCS: Record<
   BcsType<unknown, unknown>
 > = {
   id: suiObjectIdBcs as BcsType<unknown, unknown>,
+  optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown, unknown>,
   typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
   address: AddressBcs as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,
@@ -240,8 +261,8 @@ export const launchpadEventBcs = Object.fromEntries(
  * Launchpad events are authenticated by their type, which names the original
  * package. Sui records the transaction's called package and module on each
  * event, not the emitting module: adapters in the migrators package emit
- * `Migrated` and `MigrationAllocationPaid`, and a Meme package's publication
- * emits `LaunchTicketCreated`.
+ * `MigrationAllocationPaid`, `ProtocolFeesAccrued`, and `Migrated`, and a Meme
+ * package's publication emits `LaunchTicketCreated`.
  */
 export type LaunchpadEventPackageIdentity = {
   originalPackageId: string;

@@ -4,7 +4,8 @@ Holder rewards live in the migrators package (`blast_holder_rewards`, contracts
 ADR 0089); the separate distributor package, its enrollment, `PublisherCap`,
 and pause switch are gone. Every LP-fee collection credits the creator's
 `FeeSplit` rewards share to the launch's `LpVault`. A Blast administrator
-publishes a Merkle allocation of those funds as a shared `Round`, and anyone can
+holding the `RewardsAdmin` role in the shared `blast_acl::ACL` (contracts ADR
+0097) publishes a Merkle allocation of those funds as a shared `Round`, and anyone can
 relay a proof; each leaf pays its committed beneficiary once.
 
 `@interest-protocol/blast-sdk/holder-rewards` supplies integer holder
@@ -19,7 +20,9 @@ unpublished; supply verified deployment IDs.
 `publish_round` requires the vault's next round number, a checkpoint interval
 that starts where the previous round ended, a 32-byte root and manifest digest,
 1 to 65,536 leaves, and a nonzero budget within the vault's unreserved rewards.
-It reserves that budget into the `Round`. The leaf is the Blake2b-256 hash of
+It reserves that budget into the `Round`, which stores the vault, number, root,
+leaf count, claim bitmap, and balances; the checkpoint interval and manifest
+digest are only in its `RoundPublished` event. The leaf is the Blake2b-256 hash of
 `0x00 || "blast-holder-rewards-v1" || bcs(vault ID, round, index, beneficiary,
 meme, quote)`, internal nodes hash `0x01 || left || right`, and a lone last node
 pairs with itself. `buildRewardManifest` reproduces the contracts' vector
@@ -37,7 +40,7 @@ const publish = client.blastMigrators.tx.publishHolderRewardRound({
   memeType,
   quoteType,
   vault, // the shared LpVault, mutable
-  adminCapId,
+  adminCapId, // a blast_acl::AdminCap granted RewardsAdmin
   manifest,
 });
 const relay = client.blastMigrators.tx.claimHolderRewards({
@@ -64,23 +67,26 @@ Create a JSON config outside the public artifacts:
       "packageId": "0xCALLABLE_LAUNCHPAD_PACKAGE",
       "originalPackageId": "0xORIGINAL_LAUNCHPAD_PACKAGE",
       "adminPackageId": "0xBLAST_ADMIN_PACKAGE",
+      "partnersPackageId": "0xBLAST_PARTNERS_PACKAGE",
+      "timelockPackageId": "0xBLAST_TIMELOCK_PACKAGE",
       "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
       "launchConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
       "runtimeConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-      "protocolAuthority": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false }
+      "acl": { "objectId": "0xBLAST_ACL", "initialSharedVersion": "1", "mutable": false }
     },
     "migratorsVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
     "lpFeePolicy": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
     "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false }
   },
   "vaultId": "0xVERIFIED_LP_VAULT",
-  "adminCapId": "0xBLAST_ADMIN_CAP",
+  "adminCapId": "0xBLAST_ADMIN_CAP_WITH_REWARDS_ADMIN",
   "sender": "0xADMIN_MULTISIG",
   "excludedAddresses": []
 }
 ```
 
-`adminCapId` and `sender` are needed only for `publish-tx`. `deployment` is the
+`adminCapId` and `sender` are needed only for `publish-tx`, which signs in
+with `blast_acl::sign_in<RewardsAdmin>` against `deployment.launchpad.acl`. `deployment` is the
 call-ready `MigratorsDeployment` (`migratorsDeployment(blast)` produces it from
 a registered release). The vault ID must come from verified migration history
 (`VaultCreated`). The provider must serve checkpoints back to coin-package
@@ -135,7 +141,9 @@ beneficial owners of exchange or LP custody. Rounds are limited to 65,536
 payable addresses; exceeding this limit stops preparation rather than silently
 dropping holders.
 
-`advance` checks the confirmed round against the full manifest, resets holding
+`advance` checks the confirmed round against the full manifest (vault, number,
+root, and leaf count) and the vault's last checkpoint against the manifest's end
+checkpoint, resets holding
 weights at the same checkpoint, and allows the next interval. Old manifests and
 rounds remain usable. `relay` reads the on-chain bitmap and emits unsigned
 batches of up to ten unpaid claims. Anyone can run it using a public manifest
@@ -156,8 +164,8 @@ round and its original manifest in order; then resume indexing. Never invent a
 new holder snapshot to skip missing history.
 
 Publish each round's manifest, accounting policy, exclusions, and checkpoint
-journal through durable public storage before signing. The contract stores the
-manifest digest, not its bytes or URL. Availability is necessary for
+journal through durable public storage before signing. `RoundPublished` carries
+the manifest digest, not its bytes or URL. Availability is necessary for
 independent claims.
 
 Publication is trusted allocation: a Blast administrator can allocate rewards
