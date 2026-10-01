@@ -423,9 +423,7 @@ function classifyPresaleFunction(moduleName, functionName) {
   if (presaleBuilders.has(key)) return "builder";
   // `allowlist.ts` mirrors the Merkle tree off chain.
   if (moduleName === "merkle_tree") return "move-composition";
-  if (key === "package_admin::wrap") return "intentional-deployment-exclusion";
-  if (moduleName === "package_admin") return "intentional-admin-exclusion";
-  throw new Error(`unclassified function blast_presale::${key}`);
+  return classifyPackageAdmin("blast_presale", moduleName, functionName);
 }
 
 function classifyMemeTemplateFunction(moduleName, functionName) {
@@ -458,8 +456,33 @@ const migratorBuilders = new Set([
 function classifyMigratorFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
   if (migratorBuilders.has(key)) return "builder";
-  if (moduleName === "package_admin") return "intentional-admin-exclusion";
-  throw new Error(`unclassified function blast_fun_migrators::${key}`);
+  return classifyPackageAdmin("blast_fun_migrators", moduleName, functionName);
+}
+
+/**
+ * Every package's `package_admin` holds its Publisher and UpgradeCap.
+ * Wrapping them is part of publishing, and authorizing, committing,
+ * restricting or sealing an upgrade is CLI publish tooling; neither is SDK
+ * surface.
+ */
+const upgradeCustodyFunctions = new Set([
+  "authorize_upgrade",
+  "commit_upgrade",
+  "commit_upgrade_and_advance",
+  "restrict_to_additive",
+  "make_immutable",
+]);
+
+function classifyPackageAdmin(packageName, moduleName, functionName) {
+  if (moduleName === "package_admin") {
+    if (functionName === "wrap") return "intentional-deployment-exclusion";
+    if (upgradeCustodyFunctions.has(functionName)) {
+      return "intentional-upgrade-exclusion";
+    }
+  }
+  throw new Error(
+    `unclassified function ${packageName}::${moduleName}::${functionName}`,
+  );
 }
 
 const launchpadBuilders = new Set([
@@ -483,6 +506,18 @@ const launchpadBuilders = new Set([
   "launch::set_name",
   "launch::set_description",
   "launch::set_icon_url",
+  "launch::reassign_curve_fee_cap",
+  "launch::reassign_metadata_cap",
+  "launch_config::set_protocol_allocation",
+  "launch_config::set_meme_decimals_allowed",
+  "launch_config::set_quote_allowed",
+  "launch_config::set_trade_fees",
+  "launch_config::set_creation_fee",
+  "launch_config::add_partner",
+  "launch_config::remove_partner",
+  "launch_config::set_migration_witness_allowed",
+  "runtime_config::set_creator_claim_signer",
+  "runtime_config::set_protocol_fee_share",
 ]);
 const launchpadCompositional = new Set([
   "allocation::recipient",
@@ -506,13 +541,10 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
   if (moduleName === "creator_authority" && functionName.startsWith("new_")) {
     return "template-internal";
   }
-  if (isIntentionalAdminExclusion(moduleName, key)) {
-    return "intentional-admin-exclusion";
-  }
   if (isLaunchpadMoveComposition(moduleName, functionName)) {
     return "move-composition";
   }
-  throw new Error(`unclassified function ${packageName}::${key}`);
+  return classifyPackageAdmin(packageName, moduleName, functionName);
 }
 
 const launchGetters = new Set([
@@ -531,16 +563,6 @@ function isLaunchpadMoveComposition(moduleName, functionName) {
   );
 }
 
-function isIntentionalAdminExclusion(moduleName, key) {
-  return (
-    moduleName === "launch_config" ||
-    moduleName === "package_admin" ||
-    moduleName === "runtime_config" ||
-    key === "launch::reassign_curve_fee_cap" ||
-    key === "launch::reassign_metadata_cap"
-  );
-}
-
 const blastSuiBuilders = new Set([
   "vault::mint_fun_sui",
   "vault::redeem_fun_sui",
@@ -551,13 +573,6 @@ const blastSuiBuilders = new Set([
   "vault::donate_sui",
   "vault::redeem_blast_sui",
   "vault::sync",
-]);
-const blastSuiAdminExclusions = new Set([
-  "package_admin::add_capability",
-  "package_admin::authorize_upgrade",
-  "package_admin::commit_upgrade_and_advance",
-  "package_admin::make_immutable",
-  "package_admin::restrict_to_additive",
   "vault::set_redeem_fee",
 ]);
 const blastSuiMoveComposition = new Set(["package_admin::has_upgrade_cap"]);
@@ -568,16 +583,14 @@ function classifyBlastSuiFunction(moduleName, functionName) {
   if (isBlastSuiDeploymentExclusion(key)) {
     return "intentional-deployment-exclusion";
   }
-  if (blastSuiAdminExclusions.has(key)) {
-    return "intentional-admin-exclusion";
-  }
   if (blastSuiMoveComposition.has(key)) return "move-composition";
-  throw new Error(`unclassified function blast_sui::${key}`);
+  return classifyPackageAdmin("blast_sui", moduleName, functionName);
 }
 
 function isBlastSuiDeploymentExclusion(key) {
   return (
     key === "vault::create" ||
+    key === "package_admin::add_capability" ||
     key === "deposit_receipt::create_display" ||
     key === "package_admin::new" ||
     key === "package_admin::share"

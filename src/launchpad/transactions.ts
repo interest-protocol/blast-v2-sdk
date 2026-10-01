@@ -538,6 +538,215 @@ export class LaunchpadCalls {
       });
   }
 
+  /** `launch_config::set_protocol_allocation` (`TreasuryAdmin`): Blast's share of future launches. */
+  setProtocolAllocation(options: {
+    adminWitness: TransactionObjectInput;
+    memeBps: bigint;
+    quoteBps: bigint;
+  }) {
+    const meme = this.bps(options.memeBps);
+    const quote = this.bps(options.quoteBps);
+    return this.#configCall(
+      "launch_config::set_protocol_allocation",
+      options,
+      (tx) => [tx.add(meme), tx.add(quote)],
+    );
+  }
+
+  /** `launch_config::set_meme_decimals_allowed` (`ListingAdmin`). */
+  setMemeDecimalsAllowed(options: {
+    adminWitness: TransactionObjectInput;
+    decimals: number;
+    allowed: boolean;
+  }) {
+    return this.#configCall(
+      "launch_config::set_meme_decimals_allowed",
+      options,
+      (tx) => [tx.pure.u8(options.decimals), tx.pure.bool(options.allowed)],
+    );
+  }
+
+  /** `launch_config::set_quote_allowed<Quote>` (`ListingAdmin`); existing launches keep trading. */
+  setQuoteAllowed(options: {
+    adminWitness: TransactionObjectInput;
+    quoteType: string;
+    allowed: boolean;
+  }) {
+    return this.#configCall(
+      "launch_config::set_quote_allowed",
+      options,
+      (tx) => [tx.pure.bool(options.allowed)],
+      [normalizeStructTag(options.quoteType)],
+    );
+  }
+
+  /** `launch_config::set_trade_fees` (`FeeAdmin`): the fees later launches snapshot. */
+  setTradeFees(options: {
+    adminWitness: TransactionObjectInput;
+    quoteFeeBps: bigint;
+    memeFeeBps: bigint;
+  }) {
+    const quote = this.bps(options.quoteFeeBps);
+    const meme = this.bps(options.memeFeeBps);
+    return this.#configCall("launch_config::set_trade_fees", options, (tx) => [
+      tx.add(quote),
+      tx.add(meme),
+    ]);
+  }
+
+  /** `launch_config::set_creation_fee` (`FeeAdmin`), in MIST. */
+  setCreationFee(options: {
+    adminWitness: TransactionObjectInput;
+    creationFee: bigint;
+  }) {
+    const creationFee = requireU64("creationFee", options.creationFee);
+    return this.#configCall(
+      "launch_config::set_creation_fee",
+      options,
+      (tx) => [tx.pure.u64(creationFee)],
+    );
+  }
+
+  /** `launch_config::add_partner` (`FeeAdmin`): new launches may name `partner` at once. */
+  addPartner(options: {
+    adminWitness: TransactionObjectInput;
+    partner: SharedObjectReference<false>;
+  }) {
+    return this.#configCall("launch_config::add_partner", options, (tx) => [
+      sharedObject(tx, "partner", options.partner, false),
+    ]);
+  }
+
+  /**
+   * `launch_config::remove_partner` (`FeeAdmin`): new launches stop naming
+   * `partner` after `PARTNER_DELAY_MS`; launches that name it keep paying it.
+   */
+  removePartner(options: {
+    adminWitness: TransactionObjectInput;
+    partner: SharedObjectReference<false>;
+  }) {
+    return this.#configCall("launch_config::remove_partner", options, (tx) => [
+      sharedObject(tx, "partner", options.partner, false),
+      tx.object.clock(),
+    ]);
+  }
+
+  /**
+   * `launch_config::set_migration_witness_allowed<W>` (`AdapterAdmin`); see
+   * `MigratorCalls.migrationWitnessType`.
+   */
+  setMigrationWitnessAllowed(options: {
+    adminWitness: TransactionObjectInput;
+    migrationWitnessType: string;
+    allowed: boolean;
+  }) {
+    return this.#configCall(
+      "launch_config::set_migration_witness_allowed",
+      options,
+      (tx) => [tx.pure.bool(options.allowed)],
+      [normalizeStructTag(options.migrationWitnessType)],
+    );
+  }
+
+  /**
+   * `runtime_config::set_creator_claim_signer` (`ClaimSignerAdmin`): the
+   * Ed25519 key that signs account claims; empty revokes it.
+   */
+  setCreatorClaimSigner(options: {
+    adminWitness: TransactionObjectInput;
+    signerPublicKey: Uint8Array;
+  }) {
+    return this.#configCall(
+      "runtime_config::set_creator_claim_signer",
+      options,
+      (tx) => [tx.pure.vector("u8", Array.from(options.signerPublicKey))],
+    );
+  }
+
+  /** `runtime_config::set_protocol_fee_share` (`FeeAdmin`): Blast's share of every curve fee. */
+  setProtocolFeeShare(options: {
+    adminWitness: TransactionObjectInput;
+    protocolFeeShareBps: bigint;
+  }) {
+    const share = this.bps(options.protocolFeeShareBps);
+    return this.#configCall(
+      "runtime_config::set_protocol_fee_share",
+      options,
+      (tx) => [tx.add(share)],
+    );
+  }
+
+  /**
+   * `launch::reassign_curve_fee_cap` (`CreatorAdmin`): retires the pending
+   * claim or live cap and sends a fresh `CurveFeeCap` to `recipient`.
+   */
+  reassignCurveFeeCap(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      recipient: string;
+    },
+  ) {
+    return this.#reassign("reassign_curve_fee_cap", options);
+  }
+
+  /** `launch::reassign_metadata_cap` (`CreatorAdmin`), for the `BlastMetadataCap`. */
+  reassignMetadataCap(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      recipient: string;
+    },
+  ) {
+    return this.#reassign("reassign_metadata_cap", options);
+  }
+
+  #configCall(
+    target: `${"launch_config" | "runtime_config"}::${string}`,
+    options: { adminWitness: TransactionObjectInput },
+    extra: (tx: Transaction) => TransactionArgument[],
+    typeArguments: string[] = [],
+  ) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::${target}`,
+        typeArguments,
+        arguments: [
+          target.startsWith("launch_config")
+            ? this.#launchConfig(tx, true)
+            : this.#runtimeConfig(tx, true),
+          this.#packageVersion(tx),
+          tx.object(options.adminWitness),
+          ...extra(tx),
+        ],
+      });
+    };
+  }
+
+  #reassign(
+    functionName: "reassign_curve_fee_cap" | "reassign_metadata_cap",
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      recipient: string;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const recipient = normalizeSuiAddress(options.recipient);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::${functionName}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          this.#packageVersion(tx),
+          tx.object(options.adminWitness),
+          tx.pure.address(recipient),
+        ],
+      });
+    };
+  }
+
   #buyCall(
     options: LaunchTypes & {
       quoteCoin: TransactionObjectInput;
@@ -856,6 +1065,144 @@ export class LaunchpadTransactions {
     for (const bidder of options.bidders) {
       tx.add(this.call.deliverOpeningRound({ ...options, bidder }));
     }
+    return tx;
+  }
+
+  setProtocolAllocation(options: {
+    adminCapId: string;
+    memeBps: bigint;
+    quoteBps: bigint;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
+      this.call.setProtocolAllocation({ ...options, adminWitness }),
+    );
+  }
+
+  setMemeDecimalsAllowed(options: {
+    adminCapId: string;
+    decimals: number;
+    allowed: boolean;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "ListingAdmin", (adminWitness) =>
+      this.call.setMemeDecimalsAllowed({ ...options, adminWitness }),
+    );
+  }
+
+  setQuoteAllowed(options: {
+    adminCapId: string;
+    quoteType: string;
+    allowed: boolean;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "ListingAdmin", (adminWitness) =>
+      this.call.setQuoteAllowed({ ...options, adminWitness }),
+    );
+  }
+
+  setTradeFees(options: {
+    adminCapId: string;
+    quoteFeeBps: bigint;
+    memeFeeBps: bigint;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.setTradeFees({ ...options, adminWitness }),
+    );
+  }
+
+  setCreationFee(options: {
+    adminCapId: string;
+    creationFee: bigint;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.setCreationFee({ ...options, adminWitness }),
+    );
+  }
+
+  addPartner(options: {
+    adminCapId: string;
+    partner: SharedObjectReference<false>;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.addPartner({ ...options, adminWitness }),
+    );
+  }
+
+  removePartner(options: {
+    adminCapId: string;
+    partner: SharedObjectReference<false>;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.removePartner({ ...options, adminWitness }),
+    );
+  }
+
+  setMigrationWitnessAllowed(options: {
+    adminCapId: string;
+    migrationWitnessType: string;
+    allowed: boolean;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
+      this.call.setMigrationWitnessAllowed({ ...options, adminWitness }),
+    );
+  }
+
+  setCreatorClaimSigner(options: {
+    adminCapId: string;
+    signerPublicKey: Uint8Array;
+  }): Transaction {
+    return this.#asAdmin(
+      options.adminCapId,
+      "ClaimSignerAdmin",
+      (adminWitness) =>
+        this.call.setCreatorClaimSigner({ ...options, adminWitness }),
+    );
+  }
+
+  setProtocolFeeShare(options: {
+    adminCapId: string;
+    protocolFeeShareBps: bigint;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.setProtocolFeeShare({ ...options, adminWitness }),
+    );
+  }
+
+  reassignCurveFeeCap(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      adminCapId: string;
+      recipient: string;
+    },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
+      this.call.reassignCurveFeeCap({ ...options, adminWitness }),
+    );
+  }
+
+  reassignMetadataCap(
+    options: LaunchTypes & {
+      launch: SharedObjectReference<true>;
+      adminCapId: string;
+      recipient: string;
+    },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
+      this.call.reassignMetadataCap({ ...options, adminWitness }),
+    );
+  }
+
+  /** Signs in as `role` and runs one administrator call in the same PTB. */
+  #asAdmin(
+    adminCapId: string,
+    role: BlastFunAdminRole,
+    call: (
+      adminWitness: TransactionObjectArgument,
+    ) => (tx: Transaction) => void,
+  ): Transaction {
+    const tx = new Transaction();
+    const adminWitness = tx.add(
+      this.call.signIn({ adminCap: adminCapId, role }),
+    );
+    tx.add(call(adminWitness));
     return tx;
   }
 }

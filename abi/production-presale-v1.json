@@ -3786,7 +3786,7 @@
           "functions": [
             {
               "name": "authorize_upgrade",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -3853,7 +3853,7 @@
             },
             {
               "name": "commit_upgrade",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [

@@ -29,8 +29,8 @@ export function readAbi(file: string, packageKey: string) {
 }
 
 /**
- * Asserts every Move call `tx` makes into `packageId` is a frozen `builder`
- * function called with its exact type and value arity (`&mut TxContext` is
+ * Asserts every Move call `tx` makes into `packageId` is a frozen builder
+ * (or compositional constructor) called with its exact type and value arity (`&mut TxContext` is
  * implicit), and returns each call's `module::function`.
  */
 export function assertBuildersMatchAbi(
@@ -48,7 +48,10 @@ export function assertBuildersMatchAbi(
       (candidate) => candidate.name === call.function,
     );
     assert.ok(frozen, `${name} is in the frozen ABI`);
-    assert.equal(frozen.sdk, "builder", `${name} is a builder`);
+    assert.ok(
+      frozen.sdk === "builder" || frozen.sdk === "compositional",
+      `${name} is a builder`,
+    );
     assert.equal(call.typeArguments.length, frozen.typeParameters.length, name);
     assert.equal(
       call.arguments.length,

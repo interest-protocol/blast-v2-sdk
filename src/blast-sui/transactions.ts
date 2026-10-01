@@ -162,6 +162,25 @@ export class BlastSuiCalls {
     };
   }
 
+  /** `vault::set_redeem_fee` (`FeeAdmin`): the blastSUI redemption fee. */
+  setRedeemFee(options: {
+    adminWitness: TransactionObjectInput;
+    redeemFeeBps: bigint;
+  }) {
+    const redeemFeeBps = requireU64("redeemFeeBps", options.redeemFeeBps);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::vault::set_redeem_fee`,
+        arguments: [
+          this.vault(tx),
+          this.packageVersion(tx),
+          tx.object(options.adminWitness),
+          tx.pure.u64(redeemFeeBps),
+        ],
+      });
+    };
+  }
+
   private vault(tx: Transaction): TransactionObjectArgument {
     return deploymentObject(tx, this.deployment.vault, true);
   }
@@ -268,6 +287,19 @@ export class BlastSuiTransactions {
   syncVault(): Transaction {
     const tx = new Transaction();
     tx.add(this.call.syncVault());
+    return tx;
+  }
+
+  /** Signs in as `FeeAdmin` and sets the redemption fee in one PTB. */
+  setRedeemFee(options: {
+    adminCapId: string;
+    redeemFeeBps: bigint;
+  }): Transaction {
+    const tx = new Transaction();
+    const adminWitness = tx.add(
+      this.call.signIn({ adminCap: options.adminCapId, role: "FeeAdmin" }),
+    );
+    tx.add(this.call.setRedeemFee({ ...options, adminWitness }));
     return tx;
   }
 }
