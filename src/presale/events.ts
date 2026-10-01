@@ -12,8 +12,16 @@ import {
 import { moveTypeNameBcs, suiObjectIdBcs } from "../lib/bcs.ts";
 import type { SuiEventPosition } from "../lib/events.ts";
 import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
-import type { EligibilityPolicy, UncappedPhase } from "./state.ts";
-import { eligibilityPolicyBcs, uncappedPhaseBcs } from "./state.ts";
+import type {
+  EligibilityPolicy,
+  ProtocolFees,
+  UncappedPhase,
+} from "./state.ts";
+import {
+  eligibilityPolicyBcs,
+  protocolFeesBcs,
+  uncappedPhaseBcs,
+} from "./state.ts";
 
 type PresaleEventFieldDescriptor =
   | "id"
@@ -27,7 +35,8 @@ type PresaleEventFieldDescriptor =
   | "addressVector"
   | "u64Vector"
   | "eligibility"
-  | "optionUncapped";
+  | "optionUncapped"
+  | "protocolFees";
 
 /** Every event `blast_presale` emits, by module, in Move field order. */
 export const presaleEventSpecs = {
@@ -55,6 +64,9 @@ export const presaleEventSpecs = {
       fee_recipients: "addressVector",
       fee_recipient_bps: "u64Vector",
       rewards_fee_bps: "u64",
+      protocol_fees: "protocolFees",
+      protocol_quote: "u64",
+      protocol_tokens: "u64",
     },
     PresaleOpened: {
       presale_id: "id",
@@ -89,6 +101,12 @@ export const presaleEventSpecs = {
       liquidity_tokens: "u64",
       recipient_tokens: "u64",
     },
+    ProtocolFeesPaid: {
+      presale_id: "id",
+      destination: "address",
+      quote: "u64",
+      tokens: "u64",
+    },
     RaiseAllocated: {
       presale_id: "id",
       recipient: "address",
@@ -118,6 +136,8 @@ export const presaleEventSpecs = {
       fee_recipients: "addressVector",
       fee_recipient_bps: "u64Vector",
       rewards_fee_bps: "u64",
+      protocol_lp_meme_bps: "u64",
+      protocol_lp_quote_bps: "u64",
       migration_meme_residual: "u64",
       migration_quote_residual: "u64",
     },
@@ -125,6 +145,9 @@ export const presaleEventSpecs = {
       vault_id: "id",
       gross_meme: "u64",
       gross_quote: "u64",
+      protocol_destination: "address",
+      protocol_meme: "u64",
+      protocol_quote: "u64",
       recipient_meme: "u64Vector",
       recipient_quote: "u64Vector",
       rewards_meme: "u64",
@@ -195,6 +218,7 @@ type DescriptorOutputs = {
   u64Vector: bigint[];
   eligibility: EligibilityPolicy;
   optionUncapped: UncappedPhase | null;
+  protocolFees: ProtocolFees;
 };
 
 export type PresaleEventPayloads = {
@@ -233,6 +257,7 @@ const FIELD_BCS: Record<PresaleEventFieldDescriptor, BcsType<unknown>> = {
   u64Vector: bcs.vector(u64) as BcsType<unknown>,
   eligibility: eligibilityPolicyBcs as BcsType<unknown>,
   optionUncapped: bcs.option(uncappedPhaseBcs) as BcsType<unknown>,
+  protocolFees: protocolFeesBcs as BcsType<unknown>,
 };
 
 /** Kind to Move module, e.g. `FeesCollected` to `presale_vault`. */
@@ -317,4 +342,77 @@ export function decodePresaleEvent(
 
 export function presaleEventId(event: DecodedPresaleEvent): string {
   return suiEventId(event.position);
+}
+
+/** `fee_policy` events. Unlike every other presale event they have no type arguments. */
+export const presaleFeePolicyEventSpecs = {
+  FeesChanged: {
+    raise_bps: "u64",
+    token_bps: "u64",
+    lp_meme_bps: "u64",
+    lp_quote_bps: "u64",
+  },
+  DestinationChanged: { destination: "address" },
+} as const satisfies Record<
+  string,
+  Record<string, PresaleEventFieldDescriptor>
+>;
+
+type FeePolicySpecs = typeof presaleFeePolicyEventSpecs;
+export type PresaleFeePolicyEventKind = keyof FeePolicySpecs;
+
+export type DecodedPresaleFeePolicyEvent = {
+  [Kind in PresaleFeePolicyEventKind]: {
+    source: "presale-fee-policy";
+    kind: Kind;
+    payload: {
+      -readonly [Field in keyof FeePolicySpecs[Kind]]: DescriptorOutputs[Extract<
+        FeePolicySpecs[Kind][Field],
+        PresaleEventFieldDescriptor
+      >];
+    };
+    sender: string;
+    position: SuiEventPosition;
+  };
+}[PresaleFeePolicyEventKind];
+
+const presaleFeePolicyEventBcs = Object.fromEntries(
+  Object.entries(presaleFeePolicyEventSpecs).map(([kind, spec]) => [
+    kind,
+    bcs.struct(
+      kind,
+      Object.fromEntries(
+        Object.entries(spec).map(([field, descriptor]) => [
+          field,
+          FIELD_BCS[descriptor as PresaleEventFieldDescriptor],
+        ]),
+      ),
+    ),
+  ]),
+) as Record<PresaleFeePolicyEventKind, BcsType<unknown>>;
+
+/** Decodes one `<originalPackageId>::fee_policy::<Kind>` event. */
+export function decodePresaleFeePolicyEvent(
+  event: SuiClientTypes.EventEntry,
+  packages: { originalPackageId: string },
+): DecodedPresaleFeePolicyEvent {
+  const tag = parseStructTag(event.eventType);
+  const kind = tag.name as PresaleFeePolicyEventKind;
+  if (
+    tag.address !== normalizeSuiAddress(packages.originalPackageId) ||
+    tag.module !== "fee_policy" ||
+    !Object.hasOwn(presaleFeePolicyEventSpecs, kind) ||
+    tag.typeParams.length !== 0
+  ) {
+    throw new TypeError(
+      `unexpected presale fee-policy event ${event.eventType}`,
+    );
+  }
+  return {
+    source: "presale-fee-policy",
+    kind,
+    payload: presaleFeePolicyEventBcs[kind].parse(event.bcs),
+    sender: normalizeSuiAddress(event.sender),
+    position: normalizeSuiEventPosition(event),
+  } as DecodedPresaleFeePolicyEvent;
 }

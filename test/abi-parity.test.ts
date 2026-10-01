@@ -18,7 +18,7 @@ const expectedEvents = {
   launchpad: 20,
   migrators: 13,
   blastSui: 13,
-  presale: 15,
+  presale: 18,
 };
 
 type Artifact = {
