@@ -11,6 +11,7 @@ import {
 
 import {
   buildRewardManifest,
+  MIGRATOR_REWARD_LEAF_DOMAIN,
   PRESALE_REWARD_LEAF_DOMAIN,
 } from "../src/holder-rewards/allocations.ts";
 import { itemAt } from "../src/lib/arrays.ts";
@@ -405,7 +406,16 @@ test("rejects a manifest from the migrators' leaf domain or another vault", () =
       manifest,
       claimDeadlineMs: 1n,
     });
-  assert.throws(() => publish(buildRewardManifest(options)), /root mismatch/);
+  assert.throws(
+    () =>
+      publish(
+        buildRewardManifest({
+          ...options,
+          leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
+        }),
+      ),
+    /root mismatch/,
+  );
   const presaleManifest = buildRewardManifest({
     ...options,
     leafDomain: PRESALE_REWARD_LEAF_DOMAIN,

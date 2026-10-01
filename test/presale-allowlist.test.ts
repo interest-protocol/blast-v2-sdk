@@ -6,6 +6,7 @@ import { blake2b } from "@noble/hashes/blake2.js";
 
 import {
   buildRewardManifest,
+  MIGRATOR_REWARD_LEAF_DOMAIN,
   PRESALE_REWARD_LEAF_DOMAIN,
   verifyRewardProof,
 } from "../src/holder-rewards/allocations.ts";
@@ -110,5 +111,8 @@ test("builds presale holder-reward manifests in the presale leaf domain", () => 
     verifyRewardProof(manifest, bob, PRESALE_REWARD_LEAF_DOMAIN),
     true,
   );
-  assert.equal(verifyRewardProof(manifest, bob), false);
+  assert.equal(
+    verifyRewardProof(manifest, bob, MIGRATOR_REWARD_LEAF_DOMAIN),
+    false,
+  );
 });

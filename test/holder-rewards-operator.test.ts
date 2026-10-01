@@ -7,7 +7,10 @@ import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { fromHex, normalizeSuiAddress } from "@mysten/sui/utils";
 import type { RewardManifest } from "../src/holder-rewards/allocations.ts";
-import { buildRewardManifest } from "../src/holder-rewards/allocations.ts";
+import {
+  buildRewardManifest,
+  MIGRATOR_REWARD_LEAF_DOMAIN,
+} from "../src/holder-rewards/allocations.ts";
 import type { HolderLedger } from "../src/holder-rewards/holders.ts";
 import {
   createHolderLedger,
@@ -26,6 +29,7 @@ import { rewardRoundBcs } from "../src/holder-rewards/state.ts";
 import { lpVaultBcs } from "../src/migrators/state.ts";
 
 const manifest = buildRewardManifest({
+  leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
   vaultId: "0xd",
   number: 0n,
   startCheckpoint: 1n,
@@ -44,20 +48,33 @@ const round = {
 };
 
 test("keeper resumes only unpaid leaves and rejects manifests for another round", () => {
-  assertRewardRoundMatchesManifest(round, manifest);
+  assertRewardRoundMatchesManifest(
+    round,
+    manifest,
+    MIGRATOR_REWARD_LEAF_DOMAIN,
+  );
   assert.deepEqual(
-    pendingRewardAllocations(round, manifest).map(
+    pendingRewardAllocations(round, manifest, MIGRATOR_REWARD_LEAF_DOMAIN).map(
       (allocation) => allocation.index,
     ),
     ["1"],
   );
   assert.throws(
     () =>
-      pendingRewardAllocations({ ...round, root: "00".repeat(32) }, manifest),
+      pendingRewardAllocations(
+        { ...round, root: "00".repeat(32) },
+        manifest,
+        MIGRATOR_REWARD_LEAF_DOMAIN,
+      ),
     /match/,
   );
   assert.throws(
-    () => pendingRewardAllocations({ ...round, number: 1n }, manifest),
+    () =>
+      pendingRewardAllocations(
+        { ...round, number: 1n },
+        manifest,
+        MIGRATOR_REWARD_LEAF_DOMAIN,
+      ),
     /match/,
   );
 });

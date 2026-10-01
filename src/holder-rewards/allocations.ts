@@ -60,6 +60,10 @@ const manifestBcs = bcs.struct("RewardManifest", {
 export const MIGRATOR_REWARD_LEAF_DOMAIN = "\x00blast-holder-rewards-v1";
 /** Leaf domain of `blast_presale::holder_rewards` rounds; same leaf layout. */
 export const PRESALE_REWARD_LEAF_DOMAIN = "\x00blast-presale-holder-rewards-v1";
+/** The package whose rounds a manifest pays: each hashes leaves under its own domain. */
+export type RewardLeafDomain =
+  | typeof MIGRATOR_REWARD_LEAF_DOMAIN
+  | typeof PRESALE_REWARD_LEAF_DOMAIN;
 
 /** Exact atomic-unit allocations, rounded down. Dust stays in the vault rewards balance. */
 export function allocateHolderRewards(
@@ -101,12 +105,9 @@ export function buildRewardManifest(options: {
   startCheckpoint: bigint;
   endCheckpoint: bigint;
   allocations: readonly RewardAllocation[];
-  /** Defaults to the migrators' domain. */
-  leafDomain?: string;
+  leafDomain: RewardLeafDomain;
 }): RewardManifest {
-  const leafPrefix = new TextEncoder().encode(
-    options.leafDomain ?? MIGRATOR_REWARD_LEAF_DOMAIN,
-  );
+  const leafPrefix = new TextEncoder().encode(options.leafDomain);
   const vaultId = rewardAddress(options.vaultId);
   requireU64("number", options.number);
   requireU64("startCheckpoint", options.startCheckpoint);
@@ -197,7 +198,7 @@ export function buildRewardManifest(options: {
 export function verifyRewardProof(
   manifest: RewardManifest,
   allocation: RewardProof,
-  leafDomain: string = MIGRATOR_REWARD_LEAF_DOMAIN,
+  leafDomain: RewardLeafDomain,
 ): boolean {
   const leafPrefix = new TextEncoder().encode(leafDomain);
   try {
@@ -240,7 +241,7 @@ export function verifyRewardProof(
 /** Rejects edited totals, roots, ordering, proofs and manifests before creating transactions. */
 export function validateRewardManifest(
   manifest: RewardManifest,
-  leafDomain: string = MIGRATOR_REWARD_LEAF_DOMAIN,
+  leafDomain: RewardLeafDomain,
 ): RewardManifest {
   if (manifest.version !== 1) throw new Error("unsupported manifest version");
   const expected = buildRewardManifest({

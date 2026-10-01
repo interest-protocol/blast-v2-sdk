@@ -442,13 +442,14 @@ test("keeps transaction-effects and ownership facts separate from events", () =>
       normalizeSuiObjectId("0x69"),
     ].sort(),
   );
-  assert.deepEqual(
-    returnedClaims.find((fact) => fact.claim === "launchProtocolFees")?.suiCoin,
-    {
-      objectId: normalizeSuiObjectId("0x6b"),
-      recipient: normalizeSuiObjectId("0x69"),
-    },
+  const protocolClaim = returnedClaims.find(
+    (fact) => fact.claim === "launchProtocolFees",
   );
+  assert.ok(protocolClaim?.claim === "launchProtocolFees");
+  assert.deepEqual(protocolClaim.suiCoin, {
+    objectId: normalizeSuiObjectId("0x6b"),
+    recipient: normalizeSuiObjectId("0x69"),
+  });
   assert.equal("creatorCapOwners" in projection.launchpad, false);
   assert.equal("returnedCoinRecipients" in projection.migrators, false);
 });

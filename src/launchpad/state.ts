@@ -15,6 +15,7 @@ import {
   suiUidBcs,
 } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
+import type { SharedObjectReference } from "../lib/sui.ts";
 import type {
   AllocationPlan,
   FeeSplit,
@@ -27,7 +28,6 @@ import {
   protocolAllocationBcs,
 } from "./allocation.ts";
 import type { CurveState } from "./curve.ts";
-import type { SharedObjectReference } from "./transactions.ts";
 
 const LifecycleBcs = bcs.enum("Lifecycle", {
   OpeningRound: null,

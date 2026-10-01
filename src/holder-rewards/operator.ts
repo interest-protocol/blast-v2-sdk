@@ -13,6 +13,7 @@ import type { RewardManifest } from "./allocations.ts";
 import {
   allocateHolderRewards,
   buildRewardManifest,
+  MIGRATOR_REWARD_LEAF_DOMAIN,
   rewardAddress,
 } from "./allocations.ts";
 import {
@@ -235,7 +236,11 @@ async function readConfirmedRound(
     context.values.round,
     context.transactions.call.deployment.originalPackageId,
   );
-  assertRewardRoundMatchesManifest(round, manifest);
+  assertRewardRoundMatchesManifest(
+    round,
+    manifest,
+    MIGRATOR_REWARD_LEAF_DOMAIN,
+  );
   return round;
 }
 async function inspectVault(context: OperatorContext): Promise<void> {
@@ -339,6 +344,7 @@ async function prepareRound(context: OperatorContext): Promise<void> {
     startCheckpoint: BigInt(state.ledger.startCheckpoint),
     endCheckpoint: end,
     allocations: allocation.allocations,
+    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
   });
   const roundDir = join(directory, "rounds", manifest.number);
   await writeOperatorJson(join(roundDir, "accounting.json"), {
@@ -395,7 +401,11 @@ async function relayRewards(context: OperatorContext): Promise<void> {
   const { values, transactions, pair, directory, config, client } = context;
   const manifest = await readManifest(context);
   const round = await readConfirmedRound(context, manifest);
-  const pending = pendingRewardAllocations(round, manifest);
+  const pending = pendingRewardAllocations(
+    round,
+    manifest,
+    MIGRATOR_REWARD_LEAF_DOMAIN,
+  );
   const key = values.execute
     ? process.env.HOLDER_REWARDS_RELAYER_KEY
     : undefined;

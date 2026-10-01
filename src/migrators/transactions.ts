@@ -12,6 +12,7 @@ import type {
   RewardProof,
 } from "../holder-rewards/allocations.ts";
 import {
+  MIGRATOR_REWARD_LEAF_DOMAIN,
   rewardAddress,
   rewardDigest,
   validateRewardManifest,
@@ -573,7 +574,10 @@ export class MigratorCalls {
     },
   ) {
     const types = normalizeLaunchTypes(options);
-    const manifest = validateRewardManifest(options.manifest);
+    const manifest = validateRewardManifest(
+      options.manifest,
+      MIGRATOR_REWARD_LEAF_DOMAIN,
+    );
     if (
       rewardAddress(manifest.vaultId) !== rewardAddress(options.vault.objectId)
     ) {

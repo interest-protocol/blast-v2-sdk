@@ -35,8 +35,6 @@ import { normalizeAllocationPlan, normalizeFeeSplit } from "./allocation.ts";
 import type { MemeTemplateOptions } from "./template.ts";
 import { buildMemePackageBytecode } from "./template.ts";
 
-export type { SharedObjectReference } from "../lib/sui.ts";
-
 export type LaunchpadDeployment = {
   packageId: string;
   originalPackageId: string;

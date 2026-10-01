@@ -311,5 +311,3 @@ function transfer(
 ): void {
   tx.transferObjects([object], normalizeSuiAddress(recipient));
 }
-
-export type { BlastSuiDeployment } from "./types.ts";

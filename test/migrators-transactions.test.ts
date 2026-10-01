@@ -3,7 +3,10 @@ import test from "node:test";
 
 import type { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
-import { buildRewardManifest } from "../src/holder-rewards/allocations.ts";
+import {
+  buildRewardManifest,
+  MIGRATOR_REWARD_LEAF_DOMAIN,
+} from "../src/holder-rewards/allocations.ts";
 import type { SharedObjectReference } from "../src/lib/sui.ts";
 import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
 import {
@@ -461,6 +464,7 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
 test("publishes a holder-reward round and relays its claims", () => {
   const vault = shared("0xd", "20", true);
   const manifest = buildRewardManifest({
+    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
     vaultId: "0xd",
     number: 0n,
     startCheckpoint: 10n,

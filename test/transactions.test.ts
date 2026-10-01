@@ -3,14 +3,12 @@ import test from "node:test";
 
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
-import type {
-  LaunchpadDeployment,
-  SharedObjectReference,
-} from "../src/launchpad/transactions.ts";
+import type { LaunchpadDeployment } from "../src/launchpad/transactions.ts";
 import {
   LaunchpadCalls,
   LaunchpadTransactions,
 } from "../src/launchpad/transactions.ts";
+import type { SharedObjectReference } from "../src/lib/sui.ts";
 import {
   assertBuildersMatchAbi,
   moveCallArguments,
