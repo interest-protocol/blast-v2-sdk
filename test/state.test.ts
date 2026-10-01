@@ -7,7 +7,10 @@ import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 import {
   decodeLaunchObject,
   getLaunch,
+  getLaunchConfig,
+  getOpeningRoundBid,
   launchBcs,
+  launchConfigBcs,
 } from "../src/launchpad/state.ts";
 
 const objectId = "0xc";
@@ -34,6 +37,8 @@ const allocationPlan = {
   curveMemeBps: 8_000n,
   lpMemeBps: 1_900n,
   lpQuoteBps: 9_900n,
+  protocolMemeBps: 0n,
+  protocolQuoteBps: 0n,
   recipients: [
     {
       destination:
@@ -49,10 +54,11 @@ function serializeLaunch(id = objectId): Uint8Array {
     .serialize({
       id: uid(id),
       lifecycle: { MigrationReady: true },
-      protection_end_ms: "61000",
-      protection_window_ms: 60_000n,
-      cumulative_atomic_limit: 10_000n,
-      per_transaction_atomic_limit: 5_000n,
+      public_start_ms: "1000",
+      opening_round_ms: 60_000n,
+      opening_round_bids: 70n,
+      opening_round_quote: balance(5n),
+      opening_round_meme: balance(9_000n),
       sell_burn_bps: 100n,
       virtual_quote: 1_000n,
       graduation_target: 3_000n,
@@ -73,11 +79,13 @@ function serializeLaunch(id = objectId): Uint8Array {
         creator_meme: balance(2n),
         protocol_quote: balance(3n),
         creator_quote: balance(4n),
+        protocol_sui: balance(5_000n),
       },
       metadata_cap: { id: uid(metadataCapId) },
       creator: { Address: creator },
       curve_fee_cap_id: { bytes: "0x12" },
       blast_metadata_cap_id: { bytes: "0x11" },
+      partner_id: { bytes: "0x13" },
     })
     .toBytes();
 }
@@ -102,12 +110,13 @@ test("decodes the complete launch BCS state", () => {
   assert.equal(state.memeType.endsWith("0a::meme::MEME"), true);
   assert.equal(state.quoteType.endsWith("02::sui::SUI"), true);
   assert.equal(state.lifecycle, "MigrationReady");
-  assert.equal(state.protectionEndMs, 61_000n);
-  assert.deepEqual(state.protection, {
-    windowMs: 60_000n,
-    cumulativeAtomicLimit: 10_000n,
-    perTransactionAtomicLimit: 5_000n,
-  });
+  assert.equal(state.publicStartMs, 1_000n);
+  assert.equal(state.openingRoundMs, 60_000n);
+  assert.equal(state.openingRoundBids, 70n);
+  assert.equal(state.openingRoundQuote, 5n);
+  assert.equal(state.openingRoundMeme, 9_000n);
+  assert.equal(state.protocolSuiFees, 5_000n);
+  assert.equal(state.partnerId, normalizeSuiObjectId("0x13"));
   assert.equal(state.graduationTarget, 3_000n);
   assert.equal(state.poolTickSpacing, 200);
   assert.equal(state.poolFeeRate, 10_000n);
@@ -185,4 +194,78 @@ test("rejects a launch object whose embedded UID does not match", () => {
       }),
     /mismatched UID/,
   );
+});
+
+test("decodes the shared launch config, including the creation fee", async () => {
+  const configId = normalizeSuiObjectId("0x3");
+  const client = {
+    core: {
+      getObject: async () => ({
+        object: {
+          objectId: configId,
+          owner: { $kind: "Shared", Shared: { initialSharedVersion: "11" } },
+          type: "0x1::launch_config::LaunchConfig",
+          content: launchConfigBcs
+            .serialize({
+              id: uid(configId),
+              meme_decimals: { contents: [6, 9] },
+              quotes: { id: uid("0x31"), size: 1n },
+              quote_fee_bps: 100n,
+              meme_fee_bps: 50n,
+              migration_witnesses: { contents: [migrationWitness] },
+              protocol_allocation: { memeBps: 100n, quoteBps: 200n },
+              creation_fee: 1_000_000_000n,
+            })
+            .toBytes(),
+        },
+      }),
+    },
+  } as unknown as ClientWithCoreApi;
+
+  const config = await getLaunchConfig(client, configId, "0x1");
+  assert.equal(config.initialSharedVersion, "11");
+  assert.equal(config.mutable, false);
+  assert.deepEqual(config.memeDecimals, [6, 9]);
+  assert.equal(config.quotesTableId, normalizeSuiObjectId("0x31"));
+  assert.equal(config.quoteCount, 1n);
+  assert.equal(config.quoteFeeBps, 100n);
+  assert.deepEqual(config.migrationWitnesses, [
+    normalizeStructTag(migrationWitness),
+  ]);
+  assert.deepEqual(config.protocolAllocation, {
+    memeBps: 100n,
+    quoteBps: 200n,
+  });
+  assert.equal(config.creationFee, 1_000_000_000n);
+  await assert.rejects(
+    getLaunchConfig(client, configId, "0x2"),
+    /is not the launch config/,
+  );
+});
+
+test("reads an opening-round bid by its typed bidder key", async () => {
+  let request: unknown;
+  const client = {
+    core: {
+      getDynamicField: async (input: unknown) => {
+        request = input;
+        return {
+          dynamicField: {
+            value: { bcs: new Uint8Array([7, 0, 0, 0, 0, 0, 0, 0]) },
+          },
+        };
+      },
+    },
+  } as unknown as ClientWithCoreApi;
+
+  assert.equal(await getOpeningRoundBid(client, "0xc", "0xb", "0x1"), 7n);
+  assert.deepEqual(request, {
+    parentId: normalizeSuiObjectId("0xc"),
+    name: {
+      type: `${normalizeSuiObjectId("0x1")}::launch::OpeningRoundBidKey`,
+      bcs: Uint8Array.from(
+        Buffer.from(normalizeSuiObjectId("0xb").slice(2), "hex"),
+      ),
+    },
+  });
 });

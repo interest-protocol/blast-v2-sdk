@@ -18,7 +18,7 @@ import {
 
 const U64_MAX = (1n << 64n) - 1n;
 
-/** A finalized plan: Blast first with `protocol` of both assets, then the pool. */
+/** A finalized plan: Blast's `protocol` of both assets, then the pool. */
 function plan(protocol: bigint, liquidity: bigint): AllocationPlan {
   return addProtocolAllocation(
     {
@@ -27,7 +27,7 @@ function plan(protocol: bigint, liquidity: bigint): AllocationPlan {
       lpQuoteBps: 10_000n - protocol,
       recipients: [],
     },
-    { destination: "0x1", memeBps: protocol, quoteBps: protocol },
+    { memeBps: protocol, quoteBps: protocol },
   );
 }
 
@@ -51,34 +51,43 @@ test("rounds Blast's allocation up and the rest by largest remainder", () => {
   assert.deepEqual(apportionMeme(plan(500n, 2_000n), 1_000_000_000_000_000n), {
     curve: 750_000_000_000_000n,
     lp: 200_000_000_000_000n,
-    recipients: [50_000_000_000_000n],
+    protocol: 50_000_000_000_000n,
+    recipients: [],
   });
   // Curve 4,000, pool 4,000, Blast 2,000: Blast takes its ceiling first.
   const tied = plan(2_000n, 4_000n);
   assert.deepEqual(apportionMeme(tied, 1n), {
     curve: 0n,
     lp: 0n,
-    recipients: [1n],
+    protocol: 1n,
+    recipients: [],
   });
   assert.deepEqual(apportionMeme(tied, 2n), {
     curve: 1n,
     lp: 0n,
-    recipients: [1n],
+    protocol: 1n,
+    recipients: [],
   });
   assert.deepEqual(apportionMeme(tied, 3n), {
     curve: 1n,
     lp: 1n,
-    recipients: [1n],
+    protocol: 1n,
+    recipients: [],
   });
-  assert.deepEqual(apportionQuote(tied, 1n), { lp: 0n, recipients: [1n] });
+  assert.deepEqual(apportionQuote(tied, 1n), {
+    lp: 0n,
+    protocol: 1n,
+    recipients: [],
+  });
   // 7 over 5,714 / 2,857 / 1,429: Blast ceil(1.0003) = 2, floors 3 and 1,
   // and the leftover atom goes to the pool's 9,999 remainder.
   assert.deepEqual(apportionMeme(plan(1_429n, 2_857n), 7n), {
     curve: 3n,
     lp: 2n,
-    recipients: [2n],
+    protocol: 2n,
+    recipients: [],
   });
-  // Later recipients are not rounded up.
+  // Project recipients are not rounded up.
   const shared = addProtocolAllocation(
     {
       curveMemeBps: 5_000n,
@@ -86,15 +95,17 @@ test("rounds Blast's allocation up and the rest by largest remainder", () => {
       lpQuoteBps: 9_000n,
       recipients: [{ destination: "0xc", memeBps: 500n, quoteBps: 500n }],
     },
-    { destination: "0xb", memeBps: 500n, quoteBps: 500n },
+    { memeBps: 500n, quoteBps: 500n },
   );
   assert.deepEqual(apportionQuote(shared, 1n), {
     lp: 0n,
-    recipients: [1n, 0n],
+    protocol: 1n,
+    recipients: [0n],
   });
   assert.deepEqual(apportionQuote(shared, 3n), {
     lp: 2n,
-    recipients: [1n, 0n],
+    protocol: 1n,
+    recipients: [0n],
   });
 });
 
@@ -103,16 +114,22 @@ test("conserves both assets at the u64 maximum", () => {
   const meme = apportionMeme(maximum, U64_MAX);
   const quote = apportionQuote(maximum, U64_MAX);
   assert.equal(
-    meme.recipients.reduce((sum, amount) => sum + amount, meme.curve + meme.lp),
+    meme.recipients.reduce(
+      (sum, amount) => sum + amount,
+      meme.curve + meme.lp + meme.protocol,
+    ),
     U64_MAX,
   );
   assert.equal(
-    quote.recipients.reduce((sum, amount) => sum + amount, quote.lp),
+    quote.recipients.reduce(
+      (sum, amount) => sum + amount,
+      quote.lp + quote.protocol,
+    ),
     U64_MAX,
   );
 });
 
-test("adds Blast first and checks both sums like allocation::add_protocol", () => {
+test("sets Blast's shares and checks both sums like allocation::add_protocol", () => {
   const creator = normalizeAllocationPlan({
     curveMemeBps: 7_000n,
     lpMemeBps: 2_000n,
@@ -120,35 +137,39 @@ test("adds Blast first and checks both sums like allocation::add_protocol", () =
     recipients: [{ destination: "0xc", memeBps: 500n, quoteBps: 0n }],
   });
   const complete = addProtocolAllocation(creator, {
-    destination: "0xb",
     memeBps: 500n,
     quoteBps: 1_000n,
   });
+  assert.equal(complete.protocolMemeBps, 500n);
+  assert.equal(complete.protocolQuoteBps, 1_000n);
   assert.deepEqual(
     complete.recipients.map(({ destination }) => destination),
-    [normalizeSuiAddress("0xb"), normalizeSuiAddress("0xc")],
+    [normalizeSuiAddress("0xc")],
   );
   assert.deepEqual(requireCompletePlan(complete), complete);
   assert.throws(
-    () =>
-      addProtocolAllocation(creator, {
-        destination: "0xb",
-        memeBps: 500n,
-        quoteBps: 500n,
-      }),
+    () => addProtocolAllocation(creator, { memeBps: 500n, quoteBps: 500n }),
     /sum to 10,000/,
+  );
+  // A zero pool Quote share is a valid plan; finalization rejects a zero
+  // pool Quote amount at the graduation target instead.
+  assert.doesNotThrow(() =>
+    addProtocolAllocation(
+      { ...creator, lpQuoteBps: 0n },
+      { memeBps: 500n, quoteBps: 10_000n },
+    ),
   );
   assert.throws(
     () =>
       normalizeAllocationPlan({
         ...creator,
-        recipients: Array.from({ length: 16 }, (_, index) => ({
+        recipients: Array.from({ length: 17 }, (_, index) => ({
           destination: `0x${(index + 1).toString(16)}`,
           memeBps: 0n,
           quoteBps: 0n,
         })),
       }),
-    /at most fifteen/,
+    /sixteen recipients/,
   );
 });
 
@@ -268,7 +289,7 @@ test("rejects plans and splits the Move constructors abort on", () => {
         lpQuoteBps: 10_000n,
         recipients: [],
       }),
-    /positive shares/,
+    /positive Meme shares/,
   );
   assert.throws(
     () =>

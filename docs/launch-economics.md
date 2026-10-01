@@ -44,12 +44,17 @@ DEX opening valuation    = floor(S * N       / L)
 ```
 
 `R` is terminal curve Meme, `B` is Meme released by the curve, `N` is Quote
-handed to the destination pool, and `T - N` is Quote paid to the plan's
-recipients, Blast first. `plan` is the complete plan with Blast's allocation
-included. Apportionment gives Blast its ceiling, every other part its floor,
-and the residue one atom each by descending remainder, earlier parts first on
-ties (curve, pool, then recipients in plan order); `allocation.ts` mirrors it
-exactly.
+handed to the destination pool, and `T - N` is Blast's one-time Quote fee plus
+the Quote paid to the plan's recipients. `plan` is the complete plan with
+Blast's shares set (`protocol_meme_bps`, `protocol_quote_bps`). Apportionment
+gives Blast its ceiling, every other part its floor, and the residue one atom
+each by descending remainder, earlier parts first on ties (curve, pool, then
+recipients in plan order); `allocation.ts` mirrors it exactly. At migration
+Blast's Meme and Quote shares join the launch's protocol fee ledger
+(`ProtocolFeesAccrued`) rather than a payout.
+
+The SUI creation fee paid at `launch::finalize` is held with Blast's fees on
+the launch and does not enter the curve, so it changes none of these figures.
 
 For a Meme/SUI launch, Quote values are MIST. UI formatting divides by SUI's
 decimal scale; no USD price or oracle is involved.

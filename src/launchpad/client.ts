@@ -2,10 +2,19 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
-import type { BuyPreview, SellPreview } from "./curve.ts";
-import { previewBuy, previewSell } from "./curve.ts";
-import type { LaunchState } from "./state.ts";
-import { getLaunch, getProtectedPurchases } from "./state.ts";
+import type {
+  BuyPreview,
+  OpeningRoundSettlementPreview,
+  SellPreview,
+} from "./curve.ts";
+import {
+  previewBuy,
+  previewOpeningRoundDelivery,
+  previewOpeningRoundSettlement,
+  previewSell,
+} from "./curve.ts";
+import type { LaunchConfigState, LaunchState } from "./state.ts";
+import { getLaunch, getLaunchConfig, getOpeningRoundBid } from "./state.ts";
 import type { LaunchpadDeployment } from "./transactions.ts";
 import { LaunchpadCalls, LaunchpadTransactions } from "./transactions.ts";
 
@@ -28,17 +37,52 @@ export class LaunchpadClient {
     );
   }
 
-  /** Gross Meme `sender` bought while protected; compare with `protection.cumulativeAtomicLimit`. */
-  async getProtectedPurchases(
-    launchId: string,
-    sender: string,
-  ): Promise<bigint> {
-    return getProtectedPurchases(
+  /** The deployment's `LaunchConfig`, including the exact `creationFee`. */
+  async getLaunchConfig(): Promise<LaunchConfigState> {
+    return getLaunchConfig(
       this.#client,
-      launchId,
-      sender,
+      this.call.deployment.launchConfig.objectId,
       this.call.deployment.originalPackageId,
     );
+  }
+
+  /** `bidder`'s undelivered opening-round Quote; zero without a bid. */
+  async getOpeningRoundBid(launchId: string, bidder: string): Promise<bigint> {
+    return getOpeningRoundBid(
+      this.#client,
+      launchId,
+      bidder,
+      this.call.deployment.originalPackageId,
+    );
+  }
+
+  /** Previews settling the launch's opening-round pot as it stands. */
+  async previewOpeningRoundSettlement(
+    launchId: string,
+  ): Promise<OpeningRoundSettlementPreview> {
+    const launch = await this.getLaunch(launchId);
+    if (launch.lifecycle !== "OpeningRound") {
+      throw new RangeError(
+        `launch ${launch.objectId} is ${launch.lifecycle}, not OpeningRound`,
+      );
+    }
+    return previewOpeningRoundSettlement(launch, launch.openingRoundQuote);
+  }
+
+  /** Previews `bidder`'s delivery from the settled round; null without a bid. */
+  async previewOpeningRoundDelivery(
+    launchId: string,
+    bidder: string,
+  ): Promise<{ meme: bigint; quote: bigint } | null> {
+    const [launch, bid] = await Promise.all([
+      this.getLaunch(launchId),
+      this.getOpeningRoundBid(launchId, bidder),
+    ]);
+    if (bid === 0n) return null;
+    if (launch.lifecycle === "OpeningRound") {
+      throw new RangeError(`launch ${launch.objectId} is not settled`);
+    }
+    return previewOpeningRoundDelivery(launch, bid);
   }
 
   async previewBuy(launchId: string, quoteAmount: bigint): Promise<BuyPreview> {

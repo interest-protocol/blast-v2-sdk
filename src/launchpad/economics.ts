@@ -10,8 +10,8 @@ export type LaunchEconomicsInput = {
   /** One billion whole tokens at the Meme's decimals. */
   atomicSupply: bigint;
   /**
-   * The complete plan, Blast's allocation included: a launch's
-   * `allocationPlan`, or a creator plan passed through `addProtocolAllocation`.
+   * The complete plan, Blast's shares set: a launch's `allocationPlan`, or a
+   * creator plan passed through `addProtocolAllocation`.
    */
   allocationPlan: AllocationPlan;
   virtualQuote: bigint;
@@ -25,7 +25,10 @@ export type LaunchEconomics = {
   liquidityMeme: bigint;
   /** Quote handed to the adapter for the pool at the graduation target. */
   liquidityQuote: bigint;
-  /** Terminal Quote paid to the plan's recipients, Blast included. */
+  /**
+   * Terminal Quote not handed to the pool: Blast's one-time fee, accrued to the
+   * launch's protocol fees, plus the plan's recipients.
+   */
   allocatedQuote: bigint;
   terminalCurveMeme: bigint;
   curveMemeReleased: bigint;

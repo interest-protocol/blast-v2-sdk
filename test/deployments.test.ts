@@ -22,6 +22,14 @@ const deployment = defineBlastDeployment({
       packageId: "0x111",
       originalPackageId: "0x111",
     },
+    partners: {
+      packageId: "0x112",
+      originalPackageId: "0x112",
+    },
+    timelock: {
+      packageId: "0x113",
+      originalPackageId: "0x113",
+    },
     blastSui: {
       packageId: "0x423",
       originalPackageId: "0x422",
@@ -36,7 +44,7 @@ const deployment = defineBlastDeployment({
     launchConfig: { objectId: "0x3", initialSharedVersion: "11" },
     runtimeConfig: { objectId: "0x4", initialSharedVersion: "12" },
     lpFeePolicy: { objectId: "0x40", initialSharedVersion: "18" },
-    protocolAuthority: { objectId: "0x5", initialSharedVersion: "13" },
+    acl: { objectId: "0x5", initialSharedVersion: "13" },
     blastSuiPackageVersion: { objectId: "0x8", initialSharedVersion: "16" },
     blastSuiVault: { objectId: "0x9", initialSharedVersion: "17" },
     packageAdmin: { objectId: "0x6", initialSharedVersion: "14" },
@@ -66,6 +74,10 @@ test("derives call-specific launchpad shared references", () => {
       "0x0000000000000000000000000000000000000000000000000000000000000122",
     adminPackageId:
       "0x0000000000000000000000000000000000000000000000000000000000000111",
+    partnersPackageId:
+      "0x0000000000000000000000000000000000000000000000000000000000000112",
+    timelockPackageId:
+      "0x0000000000000000000000000000000000000000000000000000000000000113",
     packageVersion: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000002",
@@ -84,7 +96,7 @@ test("derives call-specific launchpad shared references", () => {
       initialSharedVersion: "12",
       mutable: false,
     },
-    protocolAuthority: {
+    acl: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000005",
       initialSharedVersion: "13",
@@ -114,16 +126,18 @@ test("derives current-package blast Sui call references", () => {
   });
 });
 
-test("requires the published blast_admin package", () => {
-  const { admin: _admin, ...withoutAdmin } = deployment.packages;
-  assert.throws(
-    () =>
-      defineBlastDeployment({
-        ...deployment,
-        packages: withoutAdmin as typeof deployment.packages,
-      }),
-    /packages\.admin is required/,
-  );
+test("requires the published launchpad dependency packages", () => {
+  for (const name of ["admin", "partners", "timelock"] as const) {
+    const { [name]: _removed, ...without } = deployment.packages;
+    assert.throws(
+      () =>
+        defineBlastDeployment({
+          ...deployment,
+          packages: without as typeof deployment.packages,
+        }),
+      new RegExp(`packages\\.${name} is required`),
+    );
+  }
 });
 
 test("requires blast Sui deployment constants only when requested", () => {
@@ -139,12 +153,14 @@ test("requires blast Sui deployment constants only when requested", () => {
       packages: {
         launchpad: deployment.packages.launchpad,
         admin: deployment.packages.admin,
+        partners: deployment.packages.partners,
+        timelock: deployment.packages.timelock,
       },
       sharedObjects: {
         packageVersion: deployment.sharedObjects.packageVersion,
         launchConfig: deployment.sharedObjects.launchConfig,
         runtimeConfig: deployment.sharedObjects.runtimeConfig,
-        protocolAuthority: deployment.sharedObjects.protocolAuthority,
+        acl: deployment.sharedObjects.acl,
       },
     }),
   );
@@ -155,6 +171,8 @@ test("requires blast Sui deployment constants only when requested", () => {
         packages: {
           launchpad: deployment.packages.launchpad,
           admin: deployment.packages.admin,
+          partners: deployment.packages.partners,
+          timelock: deployment.packages.timelock,
         },
       }),
     /packages\.blastSui is required/,
@@ -217,7 +235,7 @@ test("requires migrator deployment constants only when requested", () => {
     packageVersion: deployment.sharedObjects.packageVersion,
     launchConfig: deployment.sharedObjects.launchConfig,
     runtimeConfig: deployment.sharedObjects.runtimeConfig,
-    protocolAuthority: deployment.sharedObjects.protocolAuthority,
+    acl: deployment.sharedObjects.acl,
   };
   assert.throws(
     () =>
@@ -226,6 +244,8 @@ test("requires migrator deployment constants only when requested", () => {
         packages: {
           launchpad: deployment.packages.launchpad,
           admin: deployment.packages.admin,
+          partners: deployment.packages.partners,
+          timelock: deployment.packages.timelock,
         },
       }),
     /packages\.migrators is required/,

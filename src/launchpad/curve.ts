@@ -58,64 +58,60 @@ export function previewBuy(
   state: CurveState,
   quoteSupplied: bigint,
 ): BuyPreview {
-  validateCurveState(state);
   requirePositiveU64("quoteSupplied", quoteSupplied);
+  const preview = quoteBuy(state, quoteSupplied);
+  requirePositiveOutput("quoteInNet", preview.quoteInNet);
+  requirePositiveOutput("memeOutGross", preview.memeOutGross);
+  requirePositiveOutput("memeOutNet", preview.memeOutNet);
+  return preview;
+}
 
-  if (state.realQuoteReserve >= state.graduationTarget) {
-    throw new RangeError(
-      "buy preview requires Quote below the graduation target",
-    );
+export type OpeningRoundSettlementPreview = {
+  /** The purchase the pot makes; null when it buys less than one Meme atom. */
+  bought: BuyPreview | null;
+  /** Meme held for the bids: the purchase's net output. */
+  meme: bigint;
+  /** Quote held for refund: past the graduation target, or the whole pot. */
+  quote: bigint;
+};
+
+/**
+ * Mirrors `launch::settle_opening_round`: one purchase with the whole `pot`
+ * (the launch's `openingRoundQuote`) at the usual fees and graduation cap. A
+ * pot too small to buy one Meme atom buys nothing and is held whole. Atomic
+ * units; rounding as in `previewBuy`.
+ */
+export function previewOpeningRoundSettlement(
+  state: CurveState,
+  pot: bigint,
+): OpeningRoundSettlementPreview {
+  requireU64("pot", pot);
+  const bought = quoteBuy(state, pot);
+  return bought.memeOutNet === 0n
+    ? { bought: null, meme: 0n, quote: pot }
+    : { bought, meme: bought.memeOutNet, quote: bought.quoteRefund };
+}
+
+/**
+ * Mirrors `launch::deliver_opening_round` for one `bid` of the settled round:
+ * its pro-rata share of the held Meme and Quote among the undelivered bids,
+ * each rounded down, so the last delivery takes the remainder.
+ */
+export function previewOpeningRoundDelivery(
+  round: {
+    openingRoundBids: bigint;
+    openingRoundMeme: bigint;
+    openingRoundQuote: bigint;
+  },
+  bid: bigint,
+): { meme: bigint; quote: bigint } {
+  requirePositiveU64("bid", bid);
+  if (bid > round.openingRoundBids) {
+    throw new RangeError("bid exceeds the undelivered opening-round bids");
   }
-
-  const quoteRemaining = state.graduationTarget - state.realQuoteReserve;
-  const suppliedFee = applyBpsUp(quoteSupplied, state.quoteFeeBps);
-  const suppliedNet = quoteSupplied - suppliedFee;
-  let quoteInGross = quoteSupplied;
-
-  if (suppliedNet > quoteRemaining) {
-    const feeComplement = BASIS_POINTS_DENOMINATOR - state.quoteFeeBps;
-    if (feeComplement === 0n) {
-      throw new RangeError("quoteFeeBps leaves no net Quote input");
-    }
-    quoteInGross = mulDivUp(
-      quoteRemaining,
-      BASIS_POINTS_DENOMINATOR,
-      feeComplement,
-    );
-  }
-
-  const quoteRefund = quoteSupplied - quoteInGross;
-  const quoteFee = applyBpsUp(quoteInGross, state.quoteFeeBps);
-  const quoteInNet = quoteInGross - quoteFee;
-  requirePositiveOutput("quoteInNet", quoteInNet);
-
-  const effectiveQuoteAfter =
-    state.virtualQuote + state.realQuoteReserve + quoteInNet;
-  const memeOutGross = (state.memeReserve * quoteInNet) / effectiveQuoteAfter;
-  requirePositiveOutput("memeOutGross", memeOutGross);
-
-  const memeFee = applyBpsUp(memeOutGross, state.memeFeeBps);
-  const memeOutNet = memeOutGross - memeFee;
-  requirePositiveOutput("memeOutNet", memeOutNet);
-
-  const realQuoteReserveAfter = checkedAddU64(
-    "realQuoteReserveAfter",
-    state.realQuoteReserve,
-    quoteInNet,
-  );
-
   return {
-    quoteSupplied,
-    quoteInGross,
-    quoteRefund,
-    quoteFee,
-    quoteInNet,
-    memeOutGross,
-    memeFee,
-    memeOutNet,
-    memeReserveAfter: state.memeReserve - memeOutGross,
-    realQuoteReserveAfter,
-    crossedThreshold: realQuoteReserveAfter >= state.graduationTarget,
+    meme: mulDivDown(round.openingRoundMeme, bid, round.openingRoundBids),
+    quote: mulDivDown(round.openingRoundQuote, bid, round.openingRoundBids),
   };
 }
 
@@ -185,6 +181,61 @@ export function previewSell(
     quoteOutNet,
     memeReserveAfter,
     realQuoteReserveAfter: state.realQuoteReserve - quoteOutGross,
+  };
+}
+
+/** `curve::cap_buy_quote_input` then `curve::quote_buy`; outputs may be zero. */
+function quoteBuy(state: CurveState, quoteSupplied: bigint): BuyPreview {
+  validateCurveState(state);
+  if (state.realQuoteReserve >= state.graduationTarget) {
+    throw new RangeError(
+      "buy preview requires Quote below the graduation target",
+    );
+  }
+
+  const quoteRemaining = state.graduationTarget - state.realQuoteReserve;
+  const suppliedFee = applyBpsUp(quoteSupplied, state.quoteFeeBps);
+  const suppliedNet = quoteSupplied - suppliedFee;
+  let quoteInGross = quoteSupplied;
+
+  if (suppliedNet > quoteRemaining) {
+    const feeComplement = BASIS_POINTS_DENOMINATOR - state.quoteFeeBps;
+    if (feeComplement === 0n) {
+      throw new RangeError("quoteFeeBps leaves no net Quote input");
+    }
+    quoteInGross = mulDivUp(
+      quoteRemaining,
+      BASIS_POINTS_DENOMINATOR,
+      feeComplement,
+    );
+  }
+
+  const quoteRefund = quoteSupplied - quoteInGross;
+  const quoteFee = applyBpsUp(quoteInGross, state.quoteFeeBps);
+  const quoteInNet = quoteInGross - quoteFee;
+  const effectiveQuoteAfter =
+    state.virtualQuote + state.realQuoteReserve + quoteInNet;
+  const memeOutGross = (state.memeReserve * quoteInNet) / effectiveQuoteAfter;
+  const memeFee = applyBpsUp(memeOutGross, state.memeFeeBps);
+  const memeOutNet = memeOutGross - memeFee;
+  const realQuoteReserveAfter = checkedAddU64(
+    "realQuoteReserveAfter",
+    state.realQuoteReserve,
+    quoteInNet,
+  );
+
+  return {
+    quoteSupplied,
+    quoteInGross,
+    quoteRefund,
+    quoteFee,
+    quoteInNet,
+    memeOutGross,
+    memeFee,
+    memeOutNet,
+    memeReserveAfter: state.memeReserve - memeOutGross,
+    realQuoteReserveAfter,
+    crossedThreshold: realQuoteReserveAfter >= state.graduationTarget,
   };
 }
 

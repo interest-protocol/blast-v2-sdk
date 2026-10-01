@@ -22,10 +22,10 @@ import {
 } from "../holder-rewards/allocations.ts";
 import type { FeeSplit } from "../launchpad/allocation.ts";
 import type {
+  LaunchCompletionInput,
+  LaunchpadAdminRole,
   LaunchpadDeployment,
-  LaunchSettings,
   LaunchTypes,
-  PreShareBuyInput,
 } from "../launchpad/transactions.ts";
 import {
   addLaunchCompletion,
@@ -65,12 +65,11 @@ export type CetusObjects = {
 
 /** Settings for starting a launch through an adapter in one transaction. */
 export type CreateLaunchOptions = LaunchTypes &
-  LaunchSettings & {
+  LaunchCompletionInput & {
     /** The `LaunchTicket<Meme>` the generated package's initializer transferred to its publisher. */
     ticket: TransactionObjectInput;
     /** The Meme `Currency<Meme>` in the Coin Registry, fixed at finalization. */
     memeCurrency: SharedObjectReference<true>;
-    preShareBuy?: PreShareBuyInput;
   };
 
 /** Maximum Merkle proof depth the holder-reward leaf count (65,536) allows. */
@@ -118,8 +117,15 @@ export class MigratorCalls {
     );
   }
 
-  signIn(options: { adminCap: TransactionObjectInput }) {
-    return this.launchpad.signIn(options);
+  /**
+   * `blast_acl::sign_in<Role>` against the launchpad's ACL. The migrators take
+   * `BuybackAdmin`, `TreasuryAdmin`, `FeeAdmin`, and `RewardsAdmin` witnesses.
+   */
+  signIn(
+    role: LaunchpadAdminRole,
+    options: { adminCap: TransactionObjectInput },
+  ) {
+    return this.launchpad.signIn(role, options);
   }
 
   /**
@@ -397,7 +403,7 @@ export class MigratorCalls {
 
   /**
    * Swaps the vault's whole burn Quote for Meme in its Cetus pool and burns
-   * it, under a buyback-admin witness. Aborts unless the swap returns at least
+   * it, under an `AdminWitness<BuybackAdmin>`. Aborts unless the swap returns at least
    * `minMemeOut`; set it from an off-chain price, since anyone can move the
    * pool's price within a transaction. Unspent Quote waits for the next one.
    */
@@ -489,7 +495,7 @@ export class MigratorCalls {
       });
   }
 
-  /** Claims the protocol-owned migration residuals under admin authority. */
+  /** Claims the protocol-owned migration residuals under `AdminWitness<TreasuryAdmin>`. */
   claimProtocolFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
@@ -509,7 +515,7 @@ export class MigratorCalls {
       });
   }
 
-  /** Changes Blast's default Meme and Quote LP-fee shares for coins without their own pair. */
+  /** Changes Blast's default Meme and Quote LP-fee shares for coins without their own pair (`FeeAdmin`). */
   setLpFeeDefaultShares(options: {
     adminWitness: TransactionObjectInput;
     memeBps: bigint;
@@ -521,7 +527,7 @@ export class MigratorCalls {
     ]);
   }
 
-  /** Sets Blast's LP-fee shares for one original Meme type. */
+  /** Sets Blast's LP-fee shares for one original Meme type (`FeeAdmin`). */
   setLpFeeCoinShares(options: {
     memeType: string;
     adminWitness: TransactionObjectInput;
@@ -539,7 +545,7 @@ export class MigratorCalls {
     );
   }
 
-  /** Removes one Meme type's own pair so its collections use the defaults again. */
+  /** Removes one Meme type's own pair so its collections use the defaults again (`FeeAdmin`). */
   clearLpFeeCoinShares(options: {
     memeType: string;
     adminWitness: TransactionObjectInput;
@@ -552,7 +558,7 @@ export class MigratorCalls {
     );
   }
 
-  /** Redirects every later protocol LP-fee payout. */
+  /** Redirects every later protocol LP-fee payout (`TreasuryAdmin`). */
   setLpFeeProtocolDestination(options: {
     adminWitness: TransactionObjectInput;
     destination: string;
@@ -568,7 +574,8 @@ export class MigratorCalls {
 
   /**
    * Publishes a holder-reward round from a validated manifest, reserving its
-   * budget from the vault's rewards balance, and shares the `Round`.
+   * budget from the vault's rewards balance, and shares the `Round`, under an
+   * `AdminWitness<RewardsAdmin>`.
    */
   publishHolderRewardRound(
     options: LaunchTypes & {
@@ -851,7 +858,7 @@ export class MigratorTransactions {
   ): Transaction {
     const tx = new Transaction();
     const adminWitness = tx.add(
-      this.call.signIn({ adminCap: options.adminCapId }),
+      this.call.signIn("TreasuryAdmin", { adminCap: options.adminCapId }),
     );
     const result = tx.add(
       this.call.claimProtocolFees({ ...options, adminWitness }),
@@ -868,7 +875,7 @@ export class MigratorTransactions {
     memeBps: bigint;
     quoteBps: bigint;
   }): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin("FeeAdmin", options.adminCapId, (adminWitness) =>
       this.call.setLpFeeDefaultShares({ ...options, adminWitness }),
     );
   }
@@ -879,7 +886,7 @@ export class MigratorTransactions {
     memeBps: bigint;
     quoteBps: bigint;
   }): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin("FeeAdmin", options.adminCapId, (adminWitness) =>
       this.call.setLpFeeCoinShares({ ...options, adminWitness }),
     );
   }
@@ -888,7 +895,7 @@ export class MigratorTransactions {
     memeType: string;
     adminCapId: string;
   }): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin("FeeAdmin", options.adminCapId, (adminWitness) =>
       this.call.clearLpFeeCoinShares({ ...options, adminWitness }),
     );
   }
@@ -897,7 +904,7 @@ export class MigratorTransactions {
     adminCapId: string;
     destination: string;
   }): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin("TreasuryAdmin", options.adminCapId, (adminWitness) =>
       this.call.setLpFeeProtocolDestination({ ...options, adminWitness }),
     );
   }
@@ -908,7 +915,7 @@ export class MigratorTransactions {
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin("BuybackAdmin", options.adminCapId, (adminWitness) =>
       this.call.buybackAndBurnCetus({ ...options, adminWitness }),
     );
   }
@@ -919,7 +926,7 @@ export class MigratorTransactions {
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin("BuybackAdmin", options.adminCapId, (adminWitness) =>
       this.call.buybackAndBurnBluefin({ ...options, adminWitness }),
     );
   }
@@ -930,7 +937,7 @@ export class MigratorTransactions {
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
-    return this.#asAdmin(options.adminCapId, (adminWitness) =>
+    return this.#asAdmin("RewardsAdmin", options.adminCapId, (adminWitness) =>
       this.call.publishHolderRewardRound({ ...options, adminWitness }),
     );
   }
@@ -950,13 +957,16 @@ export class MigratorTransactions {
   }
 
   #asAdmin(
+    role: LaunchpadAdminRole,
     adminCapId: string,
     call: (
       adminWitness: TransactionObjectArgument,
     ) => (tx: Transaction) => void,
   ): Transaction {
     const tx = new Transaction();
-    const adminWitness = tx.add(this.call.signIn({ adminCap: adminCapId }));
+    const adminWitness = tx.add(
+      this.call.signIn(role, { adminCap: adminCapId }),
+    );
     tx.add(call(adminWitness));
     return tx;
   }
