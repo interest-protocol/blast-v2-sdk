@@ -37,18 +37,26 @@ import {
   validateFeeRecipient,
   validateRecipientAllocation,
 } from "./math.ts";
-import type { BpsShare, EligibilityPolicy, UncappedPhase } from "./state.ts";
+import type {
+  BpsShare,
+  EligibilityPolicy,
+  ProtocolFees,
+  UncappedPhase,
+} from "./state.ts";
 
 /**
  * The presale package is not published yet, so no deployment is registered;
  * callers pass the IDs the publish and `package_admin::wrap` effects return.
+ * Publication shares `VenueConfig` and `FeePolicy`.
  */
 export type PresaleDeployment = {
   packageId: string;
   originalPackageId?: string;
   /** `venue_config::VenueConfig`, holding each Meme's Cetus `PoolCreationCap`. */
   venueConfig: SharedObjectReference<false>;
-  /** `blast_admin` and its shared `blast_acl::ACL`; only holder-reward rounds need them. */
+  /** `fee_policy::FeePolicy`: creation, migration, and fee collection read it. */
+  feePolicy: SharedObjectReference<false>;
+  /** `blast_admin` and its shared `blast_acl::ACL`; holder-reward rounds and fee-policy updates need them. */
   admin?: { packageId: string; acl: SharedObjectReference<false> };
 };
 
@@ -122,6 +130,11 @@ export class PresaleCalls {
       venueConfig: normalizeSharedObjectReference(
         "venueConfig",
         deployment.venueConfig,
+        false,
+      ),
+      feePolicy: normalizeSharedObjectReference(
+        "feePolicy",
+        deployment.feePolicy,
         false,
       ),
       ...(deployment.admin && {
@@ -417,6 +430,7 @@ export class PresaleCalls {
         typeArguments: cetusTypeArguments(types),
         arguments: [
           this.#presale(tx, options),
+          this.#feePolicy(tx),
           sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "cetusPools", options.cetusPools, true),
@@ -447,6 +461,7 @@ export class PresaleCalls {
         "migrate",
         [
           this.#presale(tx, options),
+          this.#feePolicy(tx),
           sharedObject(tx, "memeCurrency", options.memeCurrency, false),
           sharedObject(tx, "quoteCurrency", options.quoteCurrency, false),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, true),
@@ -459,7 +474,7 @@ export class PresaleCalls {
     };
   }
 
-  /** `cetus::collect_fees`: pays every fee recipient, keeps the holder share. */
+  /** `cetus::collect_fees`: pays Blast and every fee recipient, keeps the holder share. */
   collectCetusFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
@@ -475,6 +490,7 @@ export class PresaleCalls {
         typeArguments: cetusTypeArguments(types),
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
+          this.#feePolicy(tx),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "burnManager", options.burnManager, false),
           sharedObject(tx, "pool", options.pool, true),
@@ -483,7 +499,7 @@ export class PresaleCalls {
     };
   }
 
-  /** `bluefin::collect_fees`: pays every fee recipient, keeps the holder share. */
+  /** `bluefin::collect_fees`: pays Blast and every fee recipient, keeps the holder share. */
   collectBluefinFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
@@ -497,6 +513,7 @@ export class PresaleCalls {
         "collect_fees",
         [
           sharedObject(tx, "vault", options.vault, true),
+          this.#feePolicy(tx),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
           sharedObject(tx, "pool", options.pool, true),
           tx.object.clock(),
@@ -529,16 +546,69 @@ export class PresaleCalls {
 
   /** `blast_acl::sign_in<RewardsAdmin>`: this PTB's `AdminWitness<RewardsAdmin>`. */
   signInRewardsAdmin(options: { adminCap: TransactionObjectInput }) {
-    const admin = this.#admin();
-    return (tx: Transaction): TransactionObjectArgument =>
-      tx.moveCall({
-        target: `${admin.packageId}::blast_acl::sign_in`,
-        typeArguments: [this.#type("blast_presale_domain::RewardsAdmin")],
-        arguments: [
-          sharedObject(tx, "admin.acl", admin.acl, false),
-          tx.object(options.adminCap),
+    return this.#signIn("RewardsAdmin", options.adminCap);
+  }
+
+  /** `blast_acl::sign_in<FeeAdmin>`: this PTB's `AdminWitness<FeeAdmin>`. */
+  signInFeeAdmin(options: { adminCap: TransactionObjectInput }) {
+    return this.#signIn("FeeAdmin", options.adminCap);
+  }
+
+  /** `blast_acl::sign_in<TreasuryAdmin>`: this PTB's `AdminWitness<TreasuryAdmin>`. */
+  signInTreasuryAdmin(options: { adminCap: TransactionObjectInput }) {
+    return this.#signIn("TreasuryAdmin", options.adminCap);
+  }
+
+  /**
+   * `fee_policy::set_fees`: the rates presales created afterward snapshot.
+   * The contract bounds them (raise below 10,000, tokens at most 9,998, each
+   * LP share at most 10,000) and rejects an unchanged set.
+   */
+  setProtocolFees(options: {
+    adminWitness: TransactionArgument;
+    fees: ProtocolFees;
+  }) {
+    const { raiseBps, tokenBps, lpMemeBps, lpQuoteBps } = options.fees;
+    for (const [name, value] of Object.entries(options.fees)) {
+      requireU64(name, value);
+    }
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "set_fees",
+        [
+          this.#feePolicy(tx, true),
+          options.adminWitness,
+          tx.pure.u64(raiseBps),
+          tx.pure.u64(tokenBps),
+          tx.pure.u64(lpMemeBps),
+          tx.pure.u64(lpQuoteBps),
         ],
-      });
+        undefined,
+        "fee_policy",
+      );
+    };
+  }
+
+  /** `fee_policy::set_destination`: redirects every later protocol payout. */
+  setProtocolDestination(options: {
+    adminWitness: TransactionArgument;
+    destination: string;
+  }) {
+    const destination = normalizeSuiAddress(options.destination);
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "set_destination",
+        [
+          this.#feePolicy(tx, true),
+          options.adminWitness,
+          tx.pure.address(destination),
+        ],
+        undefined,
+        "fee_policy",
+      );
+    };
   }
 
   /**
@@ -675,6 +745,7 @@ export class PresaleCalls {
         tx.add(this.uncapped(options.uncapped)),
         tx.add(this.feeRecipients(options.feeRecipients)),
         tx.pure.u64(options.rewardsFeeBps),
+        this.#feePolicy(tx),
         ...venueArguments,
       ],
       options,
@@ -730,6 +801,28 @@ export class PresaleCalls {
     options: { presale: SharedObjectReference<true> },
   ): TransactionObjectArgument {
     return sharedObject(tx, "presale", options.presale, true);
+  }
+
+  #feePolicy(tx: Transaction, mutable = false): TransactionObjectArgument {
+    return sharedObject(
+      tx,
+      "feePolicy",
+      { ...this.deployment.feePolicy, mutable },
+      mutable,
+    );
+  }
+
+  #signIn(role: string, adminCap: TransactionObjectInput) {
+    const admin = this.#admin();
+    return (tx: Transaction): TransactionObjectArgument =>
+      tx.moveCall({
+        target: `${admin.packageId}::blast_acl::sign_in`,
+        typeArguments: [this.#type(`blast_presale_domain::${role}`)],
+        arguments: [
+          sharedObject(tx, "admin.acl", admin.acl, false),
+          tx.object(adminCap),
+        ],
+      });
   }
 
   #type(name: string): string {
@@ -906,6 +999,32 @@ export class PresaleTransactions {
       this.call.signInRewardsAdmin({ adminCap: options.adminCapId }),
     );
     tx.add(this.call.publishHolderRewardRound({ ...options, adminWitness }));
+    return tx;
+  }
+
+  /** Signs in as `FeeAdmin` and sets the rates future presales snapshot, in one PTB. */
+  setProtocolFees(options: {
+    adminCapId: string;
+    fees: ProtocolFees;
+  }): Transaction {
+    const tx = new Transaction();
+    const adminWitness = tx.add(
+      this.call.signInFeeAdmin({ adminCap: options.adminCapId }),
+    );
+    tx.add(this.call.setProtocolFees({ ...options, adminWitness }));
+    return tx;
+  }
+
+  /** Signs in as `TreasuryAdmin` and redirects every later protocol payout, in one PTB. */
+  setProtocolDestination(options: {
+    adminCapId: string;
+    destination: string;
+  }): Transaction {
+    const tx = new Transaction();
+    const adminWitness = tx.add(
+      this.call.signInTreasuryAdmin({ adminCap: options.adminCapId }),
+    );
+    tx.add(this.call.setProtocolDestination({ ...options, adminWitness }));
     return tx;
   }
 

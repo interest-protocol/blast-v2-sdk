@@ -7,6 +7,7 @@ import type {
   EligibilityPolicy,
   PresaleCommitment,
   PresaleState,
+  ProtocolFees,
   RecipientPayout,
   UncappedPhase,
 } from "./state.ts";
@@ -193,24 +194,28 @@ export type SupplyApportionment = {
   tokenAllocation: bigint;
   /** LP-token allocation seeded at migration. */
   liquidityTokenAllocation: bigint;
+  /** Blast's token share, paid on migration. */
+  protocolTokenAllocation: bigint;
   recipientPayouts: RecipientPayout[];
 };
 
 /**
- * Mirrors `blast_presale::apportion_supply`: `[presale, LP, ...recipients]`
- * apportioned over `tokenSupply`. Requires validated allocations
- * (`validateTokenAllocations`).
+ * Mirrors `blast_presale::apportion_supply`: `[presale, LP, Blast,
+ * ...recipients]` apportioned over `tokenSupply`. Requires validated
+ * allocations (`validateTokenAllocations`). Blast's share may be zero atoms.
  */
 export function apportionSupply(
   tokenSupply: bigint,
   tokenAllocationBps: bigint,
   liquidityTokenAllocationBps: bigint,
+  protocolTokenBps: bigint,
   recipientAllocations: readonly BpsShare[],
 ): SupplyApportionment {
   const amounts = apportion(
     [
       tokenAllocationBps,
       liquidityTokenAllocationBps,
+      protocolTokenBps,
       ...recipientAllocations.map((allocation) => allocation.bps),
     ],
     tokenSupply,
@@ -223,29 +228,48 @@ export function apportionSupply(
   return {
     tokenAllocation: amounts[0]!,
     liquidityTokenAllocation: amounts[1]!,
-    recipientPayouts: payouts(recipientAllocations, amounts.slice(2)),
+    protocolTokenAllocation: amounts[2]!,
+    recipientPayouts: payouts(recipientAllocations, amounts.slice(3)),
   };
 }
 
 /**
- * Mirrors `blast_presale::apportion_raise`: raise recipients in order, then the
- * LP's `10,000 - sum(bps)` last, apportioned over `raiseTarget`. Every amount
- * must be positive. `liquidityQuote` seeds the pool.
+ * Mirrors `blast_presale::apportion_raise`: raise recipients in order, then
+ * Blast's `protocolRaiseBps`, then the LP's `10,000 - sum(bps) - Blast's`
+ * last, apportioned over `raiseTarget`. Every recipient amount and the LP's
+ * must be positive; Blast's may be zero. `liquidityQuote` seeds the pool.
  */
 export function apportionRaise(
   raiseAllocations: readonly BpsShare[],
+  protocolRaiseBps: bigint,
   raiseTarget: bigint,
-): { raisePayouts: RecipientPayout[]; liquidityQuote: bigint } {
+): {
+  raisePayouts: RecipientPayout[];
+  protocolQuote: bigint;
+  liquidityQuote: bigint;
+} {
   const shares = raiseAllocations.map((allocation) => allocation.bps);
-  const amounts = apportion([...shares, BPS - sum(shares)], raiseTarget);
+  const allocated = sum(shares) + protocolRaiseBps;
   check(
-    amounts.every((amount) => amount > 0n),
+    allocated < BPS,
+    "EInvalidRaiseAllocation",
+    "raise allocations and Blast's share must leave the LP a share",
+  );
+  const amounts = apportion(
+    [...shares, protocolRaiseBps, BPS - allocated],
+    raiseTarget,
+  );
+  const raisePayouts = payouts(raiseAllocations, amounts);
+  const liquidityQuote = amounts[raiseAllocations.length + 1]!;
+  check(
+    raisePayouts.every((payout) => payout.amount > 0n) && liquidityQuote > 0n,
     "EInvalidRaiseAllocation",
     "every raise share and the LP's must apportion to positive atoms",
   );
   return {
-    raisePayouts: payouts(raiseAllocations, amounts),
-    liquidityQuote: amounts[raiseAllocations.length]!,
+    raisePayouts,
+    protocolQuote: amounts[raiseAllocations.length]!,
+    liquidityQuote,
   };
 }
 
@@ -265,6 +289,24 @@ export function apportionFee(
   );
   const rewards = amounts.pop()!;
   return { recipients: amounts, rewards };
+}
+
+/**
+ * Mirrors `presale_vault::split_fees` for one asset: Blast takes
+ * `ceil(amount * protocolBps / 10,000)` first, then `apportionFee` splits the
+ * rest between the fee recipients and the holder-reward share.
+ */
+export function splitCollectedFee(
+  feeRecipients: readonly BpsShare[],
+  rewardsFeeBps: bigint,
+  protocolBps: bigint,
+  amount: bigint,
+): { protocol: bigint; recipients: bigint[]; rewards: bigint } {
+  const protocol = (amount * protocolBps + BPS - 1n) / BPS;
+  return {
+    protocol,
+    ...apportionFee(feeRecipients, rewardsFeeBps, amount - protocol),
+  };
 }
 
 function payouts(
@@ -320,6 +362,7 @@ export function validateTokenAllocations(
   tokenSupply: bigint,
   tokenAllocationBps: bigint,
   liquidityTokenAllocationBps: bigint,
+  protocolTokenBps: bigint,
   recipientAllocations: readonly BpsShare[],
 ): void {
   check(
@@ -334,10 +377,11 @@ export function validateTokenAllocations(
       distinct(recipientAllocations) &&
       tokenAllocationBps +
         liquidityTokenAllocationBps +
+        protocolTokenBps +
         sum(recipientAllocations.map((allocation) => allocation.bps)) ===
         BPS,
     "EInvalidTokenAllocation",
-    "presale, LP, and distinct recipient BPS must be positive and total exactly 10,000",
+    "presale, LP, and distinct recipient BPS must be positive and total exactly 10,000 with Blast's share",
   );
 }
 
@@ -426,11 +470,15 @@ export type PresaleCreationConfig = {
   uncapped: UncappedPhase | null;
   feeRecipients: readonly BpsShare[];
   rewardsFeeBps: bigint;
+  /** The `FeePolicy` rates now, which `blast_presale::new` snapshots. */
+  protocolFees: ProtocolFees;
 };
 
 export type PresaleCreationPreview = SupplyApportionment & {
   raisePayouts: RecipientPayout[];
-  /** Quote that seeds the pool: the raise less its recipient payouts. */
+  /** Blast's share of the raise, paid on migration. */
+  protocolQuote: bigint;
+  /** Quote that seeds the pool: the raise less Blast's and the recipients' payouts. */
   liquidityQuote: bigint;
   /** floor(sqrt(quote / LP tokens) * 2^64), Meme as coin A. */
   seedSqrtPriceX64: bigint;
@@ -479,6 +527,7 @@ export function previewPresaleCreation(
     config.tokenSupply,
     config.tokenAllocationBps,
     config.liquidityTokenAllocationBps,
+    config.protocolFees.tokenBps,
     config.recipientAllocations,
   );
   validateFeeSplit(config.feeRecipients, config.rewardsFeeBps);
@@ -505,9 +554,14 @@ export function previewPresaleCreation(
     config.tokenSupply,
     config.tokenAllocationBps,
     config.liquidityTokenAllocationBps,
+    config.protocolFees.tokenBps,
     config.recipientAllocations,
   );
-  const raise = apportionRaise(config.raiseAllocations, config.raiseTarget);
+  const raise = apportionRaise(
+    config.raiseAllocations,
+    config.protocolFees.raiseBps,
+    config.raiseTarget,
+  );
   const seedSqrtPriceX64 = sqrtPriceX64(
     supply.liquidityTokenAllocation,
     raise.liquidityQuote,

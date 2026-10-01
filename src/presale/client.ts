@@ -5,6 +5,7 @@ import type {
 
 import type {
   PresaleCommitment,
+  PresaleFeePolicyState,
   PresaleRewardRoundState,
   PresaleState,
   PresaleVaultState,
@@ -12,6 +13,7 @@ import type {
 import {
   getPresale,
   getPresaleCommitment,
+  getPresaleFeePolicy,
   getPresaleRewardRound,
   getPresaleVault,
 } from "./state.ts";
@@ -48,6 +50,15 @@ export class PresaleClient {
 
   async getVault(objectId: string): Promise<PresaleVaultState> {
     return getPresaleVault(this.#client, objectId, this.#originalPackageId);
+  }
+
+  /** The deployment's `FeePolicy`: current rates and payout destination. */
+  async getFeePolicy(): Promise<PresaleFeePolicyState> {
+    return getPresaleFeePolicy(
+      this.#client,
+      this.call.deployment.feePolicy.objectId,
+      this.#originalPackageId,
+    );
   }
 
   async getHolderRewardRound(
