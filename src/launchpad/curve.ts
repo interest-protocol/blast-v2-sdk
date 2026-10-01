@@ -58,65 +58,37 @@ export function previewBuy(
   state: CurveState,
   quoteSupplied: bigint,
 ): BuyPreview {
-  validateCurveState(state);
   requirePositiveU64("quoteSupplied", quoteSupplied);
+  const preview = quoteBuy(state, quoteSupplied);
+  requirePositiveOutput("quoteInNet", preview.quoteInNet);
+  requirePositiveOutput("memeOutGross", preview.memeOutGross);
+  requirePositiveOutput("memeOutNet", preview.memeOutNet);
+  return preview;
+}
 
-  if (state.realQuoteReserve >= state.graduationTarget) {
-    throw new RangeError(
-      "buy preview requires Quote below the graduation target",
-    );
-  }
+export type OpeningRoundSettlementPreview = {
+  /** The purchase the pot makes; null when it buys less than one Meme atom. */
+  bought: BuyPreview | null;
+  /** Meme held for the bids: the purchase's net output. */
+  meme: bigint;
+  /** Quote held for refund: past the graduation target, or the whole pot. */
+  quote: bigint;
+};
 
-  const quoteRemaining = state.graduationTarget - state.realQuoteReserve;
-  const suppliedFee = applyBpsUp(quoteSupplied, state.quoteFeeBps);
-  const suppliedNet = quoteSupplied - suppliedFee;
-  let quoteInGross = quoteSupplied;
-
-  if (suppliedNet > quoteRemaining) {
-    const feeComplement = BASIS_POINTS_DENOMINATOR - state.quoteFeeBps;
-    if (feeComplement === 0n) {
-      throw new RangeError("quoteFeeBps leaves no net Quote input");
-    }
-    quoteInGross = mulDivUp(
-      quoteRemaining,
-      BASIS_POINTS_DENOMINATOR,
-      feeComplement,
-    );
-  }
-
-  const quoteRefund = quoteSupplied - quoteInGross;
-  const quoteFee = applyBpsUp(quoteInGross, state.quoteFeeBps);
-  const quoteInNet = quoteInGross - quoteFee;
-  requirePositiveOutput("quoteInNet", quoteInNet);
-
-  const effectiveQuoteAfter =
-    state.virtualQuote + state.realQuoteReserve + quoteInNet;
-  const memeOutGross = (state.memeReserve * quoteInNet) / effectiveQuoteAfter;
-  requirePositiveOutput("memeOutGross", memeOutGross);
-
-  const memeFee = applyBpsUp(memeOutGross, state.memeFeeBps);
-  const memeOutNet = memeOutGross - memeFee;
-  requirePositiveOutput("memeOutNet", memeOutNet);
-
-  const realQuoteReserveAfter = checkedAddU64(
-    "realQuoteReserveAfter",
-    state.realQuoteReserve,
-    quoteInNet,
-  );
-
-  return {
-    quoteSupplied,
-    quoteInGross,
-    quoteRefund,
-    quoteFee,
-    quoteInNet,
-    memeOutGross,
-    memeFee,
-    memeOutNet,
-    memeReserveAfter: state.memeReserve - memeOutGross,
-    realQuoteReserveAfter,
-    crossedThreshold: realQuoteReserveAfter >= state.graduationTarget,
-  };
+/**
+ * Mirrors `launch::settle_opening_round`: the whole pot buys once from the
+ * curve, exactly like `previewBuy`, except that a pot too small to buy one
+ * Meme atom (or an empty pot) is held whole for refund instead of aborting.
+ */
+export function previewOpeningRoundSettlement(
+  state: CurveState,
+  pot: bigint,
+): OpeningRoundSettlementPreview {
+  requireU64("pot", pot);
+  const bought = quoteBuy(state, pot);
+  return bought.memeOutNet === 0n
+    ? { bought: null, meme: 0n, quote: pot }
+    : { bought, meme: bought.memeOutNet, quote: bought.quoteRefund };
 }
 
 /**
@@ -229,4 +201,59 @@ function requirePositiveOutput(name: string, value: bigint): void {
   if (value <= 0n) {
     throw new RangeError(`${name} rounds to zero`);
   }
+}
+
+/** `curve::cap_buy_quote_input` then `curve::quote_buy`; outputs may be zero. */
+function quoteBuy(state: CurveState, quoteSupplied: bigint): BuyPreview {
+  validateCurveState(state);
+  if (state.realQuoteReserve >= state.graduationTarget) {
+    throw new RangeError(
+      "buy preview requires Quote below the graduation target",
+    );
+  }
+
+  const quoteRemaining = state.graduationTarget - state.realQuoteReserve;
+  const suppliedFee = applyBpsUp(quoteSupplied, state.quoteFeeBps);
+  const suppliedNet = quoteSupplied - suppliedFee;
+  let quoteInGross = quoteSupplied;
+
+  if (suppliedNet > quoteRemaining) {
+    const feeComplement = BASIS_POINTS_DENOMINATOR - state.quoteFeeBps;
+    if (feeComplement === 0n) {
+      throw new RangeError("quoteFeeBps leaves no net Quote input");
+    }
+    quoteInGross = mulDivUp(
+      quoteRemaining,
+      BASIS_POINTS_DENOMINATOR,
+      feeComplement,
+    );
+  }
+
+  const quoteRefund = quoteSupplied - quoteInGross;
+  const quoteFee = applyBpsUp(quoteInGross, state.quoteFeeBps);
+  const quoteInNet = quoteInGross - quoteFee;
+  const effectiveQuoteAfter =
+    state.virtualQuote + state.realQuoteReserve + quoteInNet;
+  const memeOutGross = (state.memeReserve * quoteInNet) / effectiveQuoteAfter;
+  const memeFee = applyBpsUp(memeOutGross, state.memeFeeBps);
+  const memeOutNet = memeOutGross - memeFee;
+  const realQuoteReserveAfter = checkedAddU64(
+    "realQuoteReserveAfter",
+    state.realQuoteReserve,
+    quoteInNet,
+  );
+
+  return {
+    quoteSupplied,
+    quoteInGross,
+    quoteRefund,
+    quoteFee,
+    quoteInNet,
+    memeOutGross,
+    memeFee,
+    memeOutNet,
+    memeReserveAfter: state.memeReserve - memeOutGross,
+    realQuoteReserveAfter,
+    crossedThreshold: realQuoteReserveAfter >= state.graduationTarget,
+  };
 }

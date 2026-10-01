@@ -2,8 +2,16 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
-import type { BuyPreview, SellPreview } from "./curve.ts";
-import { previewBuy, previewSell } from "./curve.ts";
+import type {
+  BuyPreview,
+  OpeningRoundSettlementPreview,
+  SellPreview,
+} from "./curve.ts";
+import {
+  previewBuy,
+  previewOpeningRoundSettlement,
+  previewSell,
+} from "./curve.ts";
 import type { LaunchConfigState, LaunchState } from "./state.ts";
 import { getLaunch, getLaunchConfig, getOpeningRoundBid } from "./state.ts";
 import type { LaunchpadDeployment } from "./transactions.ts";
@@ -26,6 +34,19 @@ export class LaunchpadClient {
       objectId,
       this.call.deployment.originalPackageId,
     );
+  }
+
+  /** Previews settling the launch's opening-round pot as it stands. */
+  async previewOpeningRoundSettlement(
+    launchId: string,
+  ): Promise<OpeningRoundSettlementPreview> {
+    const launch = await this.getLaunch(launchId);
+    if (launch.lifecycle !== "OpeningRound") {
+      throw new RangeError(
+        `launch ${launch.objectId} is ${launch.lifecycle}, not OpeningRound`,
+      );
+    }
+    return previewOpeningRoundSettlement(launch, launch.openingRoundQuote);
   }
 
   /** The creation fee, trade fees, and Blast allocation a new launch snapshots. */
