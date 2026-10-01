@@ -70,6 +70,15 @@ const artifactDeclarations = [
     packages: [["admin", "admin", "blast_admin"]],
   },
   {
+    path: "production-partners-v1.json",
+    // The immutable partner package is new to SDK coverage, frozen at contracts main.
+    baseline: {
+      contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
+      workingTreeDifferedAtFreeze: false,
+    },
+    packages: [["partners", "partners", "blast_partners"]],
+  },
+  {
     path: "production-blast-sui-v1.json",
     packages: [["blastSui", "blast_sui", "blast_sui"]],
     approvedAbiAmendments: [
@@ -299,7 +308,29 @@ const functionClassifiers = {
   blast_sui: classifyBlastSuiFunction,
   blast_presale: classifyPresaleFunction,
   blast_admin: classifyAdminFunction,
+  blast_partners: classifyPartnersFunction,
 };
+
+const partnersBuilders = new Set([
+  "new_cap",
+  "register",
+  "schedule_share",
+  "schedule_cap",
+  "set_recipient",
+  "destroy_cap",
+]);
+
+function classifyPartnersFunction(moduleName, functionName) {
+  if (partnersBuilders.has(functionName)) return "builder";
+  // Products call `pay` with Blast's own fee balance; `delay_ms` is
+  // `PARTNER_DELAY_MS` off chain.
+  if (functionName === "pay" || functionName === "delay_ms") {
+    return "move-composition";
+  }
+  throw new Error(
+    `unclassified function blast_partners::${moduleName}::${functionName}`,
+  );
+}
 
 const aclBuilders = new Set([
   "sign_in",
@@ -572,6 +603,9 @@ const blastSuiEventNames = new Set([
 function isEventStruct(packageName, moduleName, structName) {
   if (packageName === "blast_presale") return presaleEventNames.has(structName);
   if (packageName === "blast_admin") return moduleName === "blast_admin_events";
+  if (packageName === "blast_partners") {
+    return structName === "PartnerUpdated" || structName === "PartnerPaid";
+  }
   if (packageName === "blast_sui" && moduleName === "events") {
     return blastSuiEventNames.has(structName);
   }

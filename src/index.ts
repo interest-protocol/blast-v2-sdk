@@ -6,4 +6,5 @@ export * from "./launchpad/index.ts";
 export * from "./lib/integers.ts";
 export * from "./lib/sui.ts";
 export * from "./migrators/index.ts";
+export * from "./partners/index.ts";
 export * from "./presale/index.ts";

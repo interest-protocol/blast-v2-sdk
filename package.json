@@ -13,6 +13,7 @@
     "./launchpad": "./src/launchpad/index.ts",
     "./launchpad/template": "./src/launchpad/template.ts",
     "./migrators": "./src/migrators/index.ts",
+    "./partners": "./src/partners/index.ts",
     "./presale": "./src/presale/index.ts"
   },
   "engines": {
