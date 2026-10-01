@@ -167,8 +167,9 @@ grouped by action at the mutability each call takes (`create`, `migrate`,
 reasons otherwise. `getBluefinPoolCreationFee(client, deployment)` reads the
 exact SUI pool-creation fee, in MIST, that `bluefin::migrate` requires: the
 recorded Bluefin `GlobalConfig`'s `"pool_creation_fee"` `Table<String, u64>`
-entry for SUI. A missing field or entry, an unexpected type, or a config of
-another lineage is a `BluefinPoolCreationFeeError`; there is no default.
+entry for SUI. A missing config, field, or entry, an unexpected type, or a
+config of another lineage is a `BluefinPoolCreationFeeError`; there is no
+default.
 
 ## Launch creation
 
@@ -276,9 +277,11 @@ facts. Object ownership reads provide the current `CurveFeeCap` and
 `BlastMetadataCap` owners; events record which capability IDs each launch
 honors.
 
-### Trading a migrated launch on Cetus
+### Trading a migrated launch on Cetus or Bluefin
 
-Cetus is the one post-migration venue the SDK trades through. Its adapter
+Cetus and Bluefin Spot are the two post-migration venues the SDK trades
+through, each with one adapter of the same shape. A launch trades only on the
+venue its migration recorded; the caller never picks another. The Cetus adapter
 (`src/migrators/cetus-venue.ts`) never trusts a caller-supplied pool:
 
 1. `getCetusPool` reads a Cetus `pool::Pool`; `resolveCetusVenueRoute` accepts
@@ -300,6 +303,22 @@ Cetus is the one post-migration venue the SDK trades through. Its adapter
    `SwapEvent` in that pool into exact trade facts, and refuses anything else.
 
 Every error is a `CetusVenueError` whose `code` names the failed check.
+
+The Bluefin adapter (`src/migrators/bluefin-venue.ts`) mirrors it one for one:
+`getBluefinPool` and `decodeBluefinPoolObject` (the whole `pool::Pool` layout,
+trailing bytes refused), `decodeBluefinSwapEvent` (`events::AssetSwap`),
+`resolveBluefinVenueRoute` (the vault's `Pool<Meme, Quote>` of the
+deployment's `bluefinSpot` lineage at an admitted Bluefin tier),
+`quoteBluefinSwap` with any `BluefinQuoteTransport` and
+`normalizeBluefinQuote` (which also refuses a paused pool),
+`buildBluefinSwapTransaction`, `reconcileBluefinSwap`, `bluefinVenuePrice`,
+`bluefinVenueTrade`, and `BluefinVenueError` with the same codes. Bluefin
+always holds the Meme as coin A, so a buy is `a2b = false`. The builder calls
+`pool::swap` once with the exact input, `minimumOut` as its `amount_limit`
+(Bluefin aborts below it), and the contracts' swap price limit; it destroys
+the zero input remainder and sends the output to the sender.
+`reconcileBluefinSwap` accepts exactly one `AssetSwap` in the route's pool and
+refuses a `FlashSwap` there.
 
 ## Generated Meme package
 
@@ -386,8 +405,10 @@ results must pass validation again before they regain a Move integer brand.
 `curvePrice`, `formatPrice`, `formatPriceRational`, `liveSupply`,
 `applyLiveSupplyChange`, `marketCap`, and `launchProgressBps` are the exact
 `bigint` formulas the blast-infra indexer serves under `/v1`. `npm test` runs
-every `curve_price`, `venue_price` (through `cetusVenuePrice`),
-`venue_trade` (through `cetusVenueTrade`), `live_supply`, `market_cap`, and
+every `curve_price`, `venue_price` (through `cetusVenuePrice`, and through
+`bluefinVenuePrice` for each Meme-is-coin-A case), `venue_trade` (through
+`cetusVenueTrade`, and `bluefinVenueTrade` likewise), `live_supply`,
+`market_cap`, and
 `progress` case of
 `test/vectors/market-data.json`, the file blast-infra pins by SHA-256
 `1fd14d23e58b6f5901b55adbf1327b39a185ad3d77a4f415f3a56df87ce5c2d4`, and refuses

@@ -156,6 +156,7 @@ function bluefinObjects(deployment: BlastDeployment): BluefinVenueObjects {
 /** Why Bluefin's pool-creation fee could not be read. */
 export type BluefinPoolCreationFeeErrorCode =
   | "venue-unrecorded"
+  | "config-missing"
   | "foreign-lineage"
   | "fee-field-missing"
   | "fee-field-invalid"
@@ -199,7 +200,7 @@ export async function getBluefinPoolCreationFee(
       "the deployment records no Bluefin set",
     );
   }
-  const { object } = await client.core.getObject({ objectId: config.objectId });
+  const object = await recordedConfig(client, config.objectId);
   if (
     normalizeStructTag(object.type) !==
     normalizeStructTag(`${spot.originalPackageId}::config::GlobalConfig`)
@@ -239,6 +240,21 @@ export async function getBluefinPoolCreationFee(
     );
   }
   return BigInt(bcs.u64().parse(entry.bcs));
+}
+
+/** The recorded Bluefin `GlobalConfig`; a missing object is a typed failure. */
+async function recordedConfig(client: ClientWithCoreApi, objectId: string) {
+  try {
+    return (await client.core.getObject({ objectId })).object;
+  } catch (error) {
+    if (error instanceof ObjectError && error.reason === "notFound") {
+      throw new BluefinPoolCreationFeeError(
+        "config-missing",
+        `the recorded Bluefin config ${objectId} does not exist`,
+      );
+    }
+    throw error;
+  }
 }
 
 /** The value of `parentId`'s dynamic field keyed by the Move `String` `key`, or null. */

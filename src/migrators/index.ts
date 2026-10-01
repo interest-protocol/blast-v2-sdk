@@ -1,3 +1,4 @@
+export * from "./bluefin-venue.ts";
 export * from "./cetus-venue.ts";
 export * from "./client.ts";
 export * from "./events.ts";

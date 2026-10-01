@@ -19,6 +19,10 @@ import {
 } from "../src/launchpad/market-data.ts";
 import type { LaunchLifecycle } from "../src/launchpad/state.ts";
 import {
+  bluefinVenuePrice,
+  bluefinVenueTrade,
+} from "../src/migrators/bluefin-venue.ts";
+import {
   cetusVenuePrice,
   cetusVenueTrade,
 } from "../src/migrators/cetus-venue.ts";
@@ -137,6 +141,57 @@ test("runs every venue_trade vector case through the Cetus adapter", () => {
       },
       given.meme_is_coin_a as boolean,
     );
+    assert.deepEqual(
+      {
+        side: trade.side,
+        quote_amount: trade.quoteAmount.toString(),
+        meme_amount: trade.memeAmount.toString(),
+        quote_fee: trade.quoteFee.toString(),
+        meme_fee: trade.memeFee.toString(),
+        price_before: formatPrice(trade.priceBefore),
+        price_after: formatPrice(trade.priceAfter),
+      },
+      vector.expect,
+      vector.name,
+    );
+  }
+});
+
+/** The cases a Bluefin pool produces: the migrators always create `Pool<Meme, Quote>`. */
+const bluefinCasesOf = (kind: string) =>
+  casesOf(kind).filter((vector) => vector.given.meme_is_coin_a === true);
+
+test("runs every Meme-is-coin-A venue_price vector case through the Bluefin adapter", () => {
+  const cases = bluefinCasesOf("venue_price");
+  assert.equal(cases.length, 4);
+  for (const vector of cases) {
+    const price = bluefinVenuePrice(
+      BigInt(vector.given.sqrt_price_x64 as string),
+    );
+    assert.deepEqual(
+      {
+        price: formatPrice(price),
+        price_exact_rational: formatPriceRational(price),
+      },
+      vector.expect,
+      vector.name,
+    );
+  }
+});
+
+test("runs every Meme-is-coin-A venue_trade vector case through the Bluefin adapter", () => {
+  const cases = bluefinCasesOf("venue_trade");
+  assert.equal(cases.length, 2);
+  for (const vector of cases) {
+    const given = vector.given as Record<string, string | boolean>;
+    const trade = bluefinVenueTrade({
+      a2b: given.a_to_b as boolean,
+      amountIn: BigInt(given.amount_in as string),
+      amountOut: BigInt(given.amount_out as string),
+      fee: BigInt(given.fee_amount as string),
+      beforeSqrtPrice: BigInt(given.before_sqrt_price as string),
+      afterSqrtPrice: BigInt(given.after_sqrt_price as string),
+    });
     assert.deepEqual(
       {
         side: trade.side,

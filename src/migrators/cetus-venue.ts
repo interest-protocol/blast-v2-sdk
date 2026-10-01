@@ -13,7 +13,7 @@ import type { ProtocolAccess } from "../deployments/identity.ts";
 import { deploymentFingerprint } from "../deployments/identity.ts";
 import type { BlastDeployment, BlastNetwork } from "../deployments/types.ts";
 import type { ExactPrice } from "../launchpad/market-data.ts";
-import { exactPrice } from "../launchpad/market-data.ts";
+import { exactPrice, priceImpactBps } from "../launchpad/market-data.ts";
 import { suiBalanceBcs, suiObjectIdBcs, suiUidBcs } from "../lib/bcs.ts";
 import {
   BASIS_POINTS_DENOMINATOR,
@@ -25,9 +25,11 @@ import { sharedObjectReference } from "../lib/sui.ts";
 import type { LpVaultState } from "./state.ts";
 
 /**
- * The Cetus CLMM adapter for migrated launches: Cetus is the one maintained
- * post-migration venue this SDK trades through. Units are atomic coin units;
- * prices are exact Quote atoms per Meme atom.
+ * The Cetus CLMM adapter for migrated launches. Cetus and Bluefin Spot
+ * (`bluefin-venue.ts`, the same contract shape) are the two post-migration
+ * venues this SDK trades through; a launch trades only on the venue it
+ * recorded. Units are atomic coin units; prices are exact Quote atoms per Meme
+ * atom.
  */
 
 /**
@@ -588,7 +590,7 @@ export function normalizeCetusQuote(options: {
     priceBefore,
     priceAfter,
     priceImpactBps:
-      priceAfter === null ? null : impactBps(priceBefore, priceAfter),
+      priceAfter === null ? null : priceImpactBps(priceBefore, priceAfter),
     quotedAtMs: provided.quotedAtMs,
     expiresAtMs: provided.quotedAtMs + request.validForMs,
     sender: normalizeSuiAddress(request.sender),
@@ -916,16 +918,6 @@ function sameRoute(left: CetusVenueRoute, right: CetusVenueRoute): boolean {
 /** Coin A goes in when the input coin is coin A: Quote for a buy, Meme for a sell. */
 function swapA2b(route: CetusVenueRoute, side: "buy" | "sell"): boolean {
   return (side === "sell") === route.memeIsCoinA;
-}
-
-function impactBps(before: ExactPrice, after: ExactPrice): bigint {
-  const difference =
-    after.numerator * before.denominator - before.numerator * after.denominator;
-  const magnitude = difference < 0n ? -difference : difference;
-  return (
-    (magnitude * BASIS_POINTS_DENOMINATOR) /
-    (after.denominator * before.numerator)
-  );
 }
 
 function isU64(value: bigint): boolean {

@@ -427,6 +427,7 @@ const suiFee = splitField(BLUEFIN_FEE_SNAPSHOT.suiField);
 const feeTableId = toHex(feeTable.value.slice(0, 32));
 
 type FeeClientOptions = {
+  configMissing?: boolean;
   configType?: string;
   tableField?: boolean;
   tableType?: string;
@@ -469,6 +470,7 @@ function feeClient(options: FeeClientOptions): ClientWithCoreApi {
     core: {
       getObject: async ({ objectId }: { objectId: string }) => {
         assert.equal(objectId, bluefinConfig.objectId);
+        if (options.configMissing) throw missingField();
         return {
           object: {
             objectId,
@@ -502,7 +504,7 @@ test("reads Bluefin's exact SUI pool-creation fee from the recorded config", asy
   );
 });
 
-test("fails with a typed error for a missing field, entry, set, or a foreign config", async () => {
+test("fails with a typed error for a missing config, field, entry, set, or a foreign config", async () => {
   const deployment = defineBlastDeployment(BOTH);
   const fails = async (
     code: string,
@@ -515,6 +517,7 @@ test("fails with a typed error for a missing field, entry, set, or a foreign con
         error instanceof BluefinPoolCreationFeeError && error.code === code,
       code,
     );
+  await fails("config-missing", feeClient({ configMissing: true }));
   await fails("fee-field-missing", feeClient({ tableField: false }));
   await fails("fee-entry-missing", feeClient({ entry: null }));
   await fails(

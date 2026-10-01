@@ -231,6 +231,21 @@ export function exactPrice(numerator: bigint, denominator: bigint): ExactPrice {
   return { numerator: numerator / divisor, denominator: denominator / divisor };
 }
 
+/**
+ * How far a swap moved the price: `floor(|after - before| * 10,000 / before)`
+ * of the exact prices, in basis points, rounding toward zero. `before` must be
+ * positive.
+ */
+export function priceImpactBps(before: ExactPrice, after: ExactPrice): bigint {
+  const difference =
+    after.numerator * before.denominator - before.numerator * after.denominator;
+  const magnitude = difference < 0n ? -difference : difference;
+  return (
+    (magnitude * BASIS_POINTS_DENOMINATOR) /
+    (after.denominator * before.numerator)
+  );
+}
+
 function requirePrice(price: ExactPrice): ExactPrice {
   if (price.denominator <= 0n || price.numerator < 0n) {
     throw new RangeError("a price needs a positive denominator");
