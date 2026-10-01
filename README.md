@@ -15,7 +15,10 @@ It provides:
 - complete migration, permissionless LP-fee collection with auto-LP, creator
   LP-fee claims, settled fee-split updates, LP-fee policy administration, and
   holder-reward rounds for Cetus and Bluefin; and
-- typed BCS event decoding and deterministic launch-to-vault replay.
+- typed BCS event decoding and deterministic launch-to-vault replay; and
+- the standalone `blast_presale` package: creation, commitments, settlement,
+  Cetus and Bluefin migration, claims, LP-fee collection, and holder-reward
+  rounds, with exact previews and event replay.
 
 See [holder rewards](docs/holder-rewards.md) for holder accounting, Merkle
 rounds funded from the vault's rewards share, and permissionless payouts.
@@ -281,6 +284,13 @@ recipient. Curve outputs and valuations round down, so the integer remainder
 stays with the reserve named by the contract formula. Contract objects and
 completed events remain authoritative if transaction history changes after a
 preview.
+
+## Presale
+
+`@interest-protocol/blast-sdk/presale` builds every product route of the
+unpublished `blast_presale` package. It previews creation, commitments, and
+claims exactly as the contract enforces them, and it decodes and replays the
+package's objects and events. See [docs/presale.md](docs/presale.md).
 
 ## Integer helpers
 

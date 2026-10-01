@@ -50,7 +50,10 @@ const manifestBcs = bcs.struct("RewardManifest", {
   end: bcs.u64(),
   leaves: bcs.vector(leafBcs),
 });
-const leafPrefix = new TextEncoder().encode("\x00blast-holder-rewards-v1");
+/** Leaf domain of `blast_fun_migrators` holder-reward rounds. */
+export const MIGRATOR_REWARD_LEAF_DOMAIN = "\x00blast-holder-rewards-v1";
+/** Leaf domain of `blast_presale::holder_rewards` rounds; same leaf layout. */
+export const PRESALE_REWARD_LEAF_DOMAIN = "\x00blast-presale-holder-rewards-v1";
 
 /** Exact atomic-unit allocations, rounded down. Dust stays in the vault rewards balance. */
 export function allocateHolderRewards(
@@ -92,7 +95,12 @@ export function buildRewardManifest(options: {
   startCheckpoint: bigint;
   endCheckpoint: bigint;
   allocations: readonly RewardAllocation[];
+  /** Defaults to the migrators' domain. */
+  leafDomain?: string;
 }): RewardManifest {
+  const leafPrefix = new TextEncoder().encode(
+    options.leafDomain ?? MIGRATOR_REWARD_LEAF_DOMAIN,
+  );
   const vaultId = rewardAddress(options.vaultId);
   requireU64("number", options.number);
   requireU64("startCheckpoint", options.startCheckpoint);
@@ -199,7 +207,9 @@ export function buildRewardManifest(options: {
 export function verifyRewardProof(
   manifest: RewardManifest,
   allocation: RewardProof,
+  leafDomain: string = MIGRATOR_REWARD_LEAF_DOMAIN,
 ): boolean {
+  const leafPrefix = new TextEncoder().encode(leafDomain);
   try {
     let index = Number(requireU64("index", BigInt(allocation.index)));
     const count = manifest.allocations.length;
@@ -240,6 +250,7 @@ export function verifyRewardProof(
 /** Rejects edited totals, roots, ordering, proofs and manifests before creating transactions. */
 export function validateRewardManifest(
   manifest: RewardManifest,
+  leafDomain: string = MIGRATOR_REWARD_LEAF_DOMAIN,
 ): RewardManifest {
   if (manifest.version !== 1) throw new Error("unsupported manifest version");
   const expected = buildRewardManifest({
@@ -252,6 +263,7 @@ export function validateRewardManifest(
       memeAmount: BigInt(allocation.memeAmount),
       quoteAmount: BigInt(allocation.quoteAmount),
     })),
+    leafDomain,
   });
   for (const key of [
     "vaultId",

@@ -18,6 +18,7 @@ const expectedEvents = {
   launchpad: 20,
   migrators: 13,
   blastSui: 13,
+  presale: 15,
 };
 
 type Artifact = {
@@ -94,6 +95,7 @@ test("rejects a Sui CLI version that differs from the frozen artifacts", () => {
 test("freezes every production package and event", () => {
   const launchpad = readArtifact("production-launchpad-v1.json");
   const blastSui = readArtifact("production-blast-sui-v1.json");
+  const presale = readArtifact("production-presale-v1.json");
 
   assert.deepEqual(Object.keys(launchpad.packages).sort(), [
     "launchpad",
@@ -101,14 +103,16 @@ test("freezes every production package and event", () => {
     "migrators",
   ]);
   assert.deepEqual(Object.keys(blastSui.packages), ["blastSui"]);
+  assert.deepEqual(Object.keys(presale.packages), ["presale"]);
   assert.equal(countEvents(launchpad, "launchpad"), expectedEvents.launchpad);
   assert.equal(countEvents(launchpad, "migrators"), expectedEvents.migrators);
   assert.equal(countEvents(blastSui, "blastSui"), expectedEvents.blastSui);
+  assert.equal(countEvents(presale, "presale"), expectedEvents.presale);
   const eventWrapper = blastSui.packages.blastSui?.modules.blast_events;
   assert.ok(eventWrapper);
   assert.ok(eventWrapper.structs.some(({ name }) => name === "Event"));
 
-  for (const artifact of [launchpad, blastSui]) {
+  for (const artifact of [launchpad, blastSui, presale]) {
     assertEveryOperationIsClassified(artifact);
   }
 });
@@ -135,6 +139,26 @@ test("rejects unknown blast_sui function classifications", () => {
       ),
     );
   }
+});
+
+test("rejects unknown blast_presale function classifications", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "scripts/check-contract-abi.mjs",
+      "--classify-function",
+      "blast_presale",
+      "blast_presale",
+      "future_operation",
+    ],
+    { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /unclassified function blast_presale::blast_presale::future_operation/,
+  );
 });
 
 function assertEveryOperationIsClassified(artifact: Artifact) {
