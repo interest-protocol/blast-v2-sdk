@@ -205,7 +205,28 @@ test("replays the ACL from its events", () => {
   assert.deepEqual(cancelled.admins, {});
 });
 
-test("ACL event layouts follow the frozen Move field order", () => {
+test("the ACL and its events follow the frozen Move field order", () => {
+  const acl = abi.blast_acl?.structs.find((struct) => struct.name === "ACL");
+  assert.deepEqual(
+    Object.keys(
+      aclBcs.parse(
+        aclBcs
+          .serialize({
+            id: { id: { bytes: id("0xac") } },
+            super_admin_cap_id: id("0x5a"),
+            admins: [],
+            pending_super_admin: {
+              before: null,
+              after: null,
+              atMs: 0n,
+              delayMs: 1n,
+            },
+          })
+          .toBytes(),
+      ),
+    ),
+    acl?.fields.map((field) => field.name),
+  );
   const decoded = (abi.blast_admin_events?.events ?? []).filter(
     (candidate) => candidate.sdk === "decoder-reducer",
   );
