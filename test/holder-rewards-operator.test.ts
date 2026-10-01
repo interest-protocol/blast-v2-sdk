@@ -123,6 +123,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
       originalPackageId,
       launchpad: {
         packageId: address("0x41"),
+        originalPackageId: address("0x41"),
         partnersPackageId: address("0xae"),
         timelockPackageId: address("0xaf"),
         packageVersion: shared("0x42", false),

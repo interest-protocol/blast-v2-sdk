@@ -2,42 +2,35 @@ import { normalizeSuiObjectId } from "@mysten/sui/utils";
 
 import type { AdminDeployment } from "../admin/transactions.ts";
 import { normalizeAdminDeployment } from "../admin/transactions.ts";
-import type { SharedObjectReference } from "../lib/sui.ts";
+import type { SharedObjectIdentity } from "../lib/sui.ts";
 import {
-  normalizeSharedObjectReference,
+  normalizeSharedObjectIdentity,
   normalizeSuiPackageReference,
 } from "../lib/sui.ts";
 
 /** The package and shared-object identities needed for blast Sui calls. */
 export type BlastSuiDeployment = {
   packageId: string;
-  originalPackageId?: string;
-  packageVersion: SharedObjectReference<false>;
-  vault: SharedObjectReference<true>;
+  originalPackageId: string;
+  packageVersion: SharedObjectIdentity;
+  vault: SharedObjectIdentity;
   admin: AdminDeployment;
 };
 
 /** The typed `blast_sui_domain` roles. */
 export type BlastSuiAdminRole = "UpgradeAdmin" | "FeeAdmin";
 
-type NormalizedBlastSuiDeployment = Required<BlastSuiDeployment>;
-
-/** Normalizes blast Sui identities and enforces each shared object's mutability. */
+/** Normalizes blast Sui package and shared-object identities. */
 export function normalizeBlastSuiDeployment(
   deployment: BlastSuiDeployment,
-): NormalizedBlastSuiDeployment {
-  const packageReference = normalizeSuiPackageReference("blastSui", {
-    packageId: deployment.packageId,
-    originalPackageId: deployment.originalPackageId ?? deployment.packageId,
-  });
+): BlastSuiDeployment {
   return {
-    ...packageReference,
-    packageVersion: normalizeSharedObjectReference(
+    ...normalizeSuiPackageReference("blastSui", deployment),
+    packageVersion: normalizeSharedObjectIdentity(
       "packageVersion",
       deployment.packageVersion,
-      false,
     ),
-    vault: normalizeSharedObjectReference("vault", deployment.vault, true),
+    vault: normalizeSharedObjectIdentity("vault", deployment.vault),
     admin: normalizeAdminDeployment(deployment.admin),
   };
 }

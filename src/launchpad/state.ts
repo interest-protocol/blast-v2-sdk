@@ -154,7 +154,7 @@ export type LaunchObject = SharedObjectReference<true> & {
 /** Decodes one canonical launch object from its BCS content. */
 export function decodeLaunchObject(
   object: LaunchObject,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): LaunchState {
   const tag = parseStructTag(object.type);
   if (tag.module !== "launch" || tag.name !== "Launch") {
@@ -165,10 +165,7 @@ export function decodeLaunchObject(
       `launch ${object.objectId} must have two type arguments`,
     );
   }
-  if (
-    originalPackageId !== undefined &&
-    tag.address !== normalizeSuiAddress(originalPackageId)
-  ) {
+  if (tag.address !== normalizeSuiAddress(originalPackageId)) {
     throw new TypeError(`launch ${object.objectId} has an unexpected package`);
   }
 
@@ -229,7 +226,7 @@ export function decodeLaunchObject(
 export async function getLaunch(
   client: ClientWithCoreApi,
   objectId: string,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): Promise<LaunchState> {
   const { object } = await client.core.getObject({
     objectId,

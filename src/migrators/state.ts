@@ -101,7 +101,7 @@ export type LpFeePolicyState = SharedObjectReference<false> & {
 
 export function decodeLpVaultObject(
   object: LpVaultObject,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): LpVaultState {
   const tag = parseStructTag(object.type);
   if (tag.module !== "vault" || tag.name !== "LpVault") {
@@ -112,10 +112,7 @@ export function decodeLpVaultObject(
       `LP vault ${object.objectId} must have two type arguments`,
     );
   }
-  if (
-    originalPackageId !== undefined &&
-    tag.address !== normalizeSuiAddress(originalPackageId)
-  ) {
+  if (tag.address !== normalizeSuiAddress(originalPackageId)) {
     throw new TypeError(
       `LP vault ${object.objectId} has an unexpected package`,
     );
@@ -160,7 +157,7 @@ export function decodeLpVaultObject(
 export async function getLpVault(
   client: ClientWithCoreApi,
   objectId: string,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): Promise<LpVaultState> {
   const { object } = await client.core.getObject({
     objectId,

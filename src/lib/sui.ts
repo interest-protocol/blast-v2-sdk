@@ -51,13 +51,6 @@ export function normalizeSharedObjectReference<const Mutable extends boolean>(
   };
 }
 
-export function sharedObjectReference<const Mutable extends boolean>(
-  identity: SharedObjectIdentity,
-  mutable: Mutable,
-): SharedObjectReference<Mutable> {
-  return { ...identity, mutable };
-}
-
 export function normalizeSuiPackageReference(
   name: string,
   reference: SuiPackageReference,

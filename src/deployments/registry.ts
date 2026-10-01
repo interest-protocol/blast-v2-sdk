@@ -1,7 +1,6 @@
 import {
   normalizeSharedObjectIdentity,
   normalizeSuiPackageReference,
-  sharedObjectReference,
 } from "../lib/sui.ts";
 import type {
   BlastDeployment,
@@ -97,9 +96,9 @@ export function launchpadDeployment(
     },
     partnersPackageId: deployment.packages.partners.packageId,
     timelockPackageId: deployment.packages.timelock.packageId,
-    packageVersion: sharedObjectReference(objects.packageVersion, false),
-    launchConfig: sharedObjectReference(objects.launchConfig, false),
-    runtimeConfig: sharedObjectReference(objects.runtimeConfig, false),
+    packageVersion: objects.packageVersion,
+    launchConfig: objects.launchConfig,
+    runtimeConfig: objects.runtimeConfig,
   };
 }
 
@@ -122,8 +121,8 @@ export function blastSuiDeployment(
   return {
     packageId: packageReference.packageId,
     originalPackageId: packageReference.originalPackageId,
-    packageVersion: sharedObjectReference(packageVersion, false),
-    vault: sharedObjectReference(vault, true),
+    packageVersion,
+    vault,
     admin: {
       packageId: deployment.packages.admin.packageId,
       acl: deployment.sharedObjects.acl,
@@ -154,9 +153,9 @@ export function migratorsDeployment(
     packageId: packageReference.packageId,
     originalPackageId: packageReference.originalPackageId,
     launchpad: launchpadDeployment(deployment),
-    migratorsVersion: sharedObjectReference(migratorsVersion, false),
-    lpFeePolicy: sharedObjectReference(lpFeePolicy, false),
-    venueConfig: sharedObjectReference(venueConfig, false),
+    migratorsVersion: migratorsVersion,
+    lpFeePolicy: lpFeePolicy,
+    venueConfig: venueConfig,
   };
 }
 

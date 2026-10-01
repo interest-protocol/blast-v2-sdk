@@ -254,17 +254,14 @@ test("publishes against 0x1, 0x2, the timelock, blast_admin, blast_partners, and
     packageVersion: {
       objectId: "0x3",
       initialSharedVersion: "10",
-      mutable: false,
     },
     launchConfig: {
       objectId: "0x4",
       initialSharedVersion: "11",
-      mutable: false,
     },
     runtimeConfig: {
       objectId: "0x5",
       initialSharedVersion: "12",
-      mutable: false,
     },
     admin: {
       packageId: adminPackageId,

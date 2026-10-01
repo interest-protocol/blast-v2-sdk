@@ -20,9 +20,16 @@ import {
   requirePositiveU64,
   requireU64,
 } from "../lib/integers.ts";
-import { moveResults } from "../lib/ptb.ts";
-import type { SharedObjectReference } from "../lib/sui.ts";
-import { normalizeSharedObjectReference } from "../lib/sui.ts";
+import { deploymentObject, moveResults } from "../lib/ptb.ts";
+import type {
+  SharedObjectIdentity,
+  SharedObjectReference,
+} from "../lib/sui.ts";
+import {
+  normalizeSharedObjectIdentity,
+  normalizeSharedObjectReference,
+  normalizeSuiPackageReference,
+} from "../lib/sui.ts";
 import type { CreatorAllocationPlan, FeeSplit } from "./allocation.ts";
 import { normalizeAllocationPlan, normalizeFeeSplit } from "./allocation.ts";
 import type { MemeTemplateOptions } from "./template.ts";
@@ -32,16 +39,16 @@ export type { SharedObjectReference } from "../lib/sui.ts";
 
 export type LaunchpadDeployment = {
   packageId: string;
-  originalPackageId?: string;
+  originalPackageId: string;
   /** `blast_admin`, a transitive Meme publish dependency, and its ACL. */
   admin: AdminDeployment;
   /** Published `blast_partners` package, a transitive Meme publish dependency. */
   partnersPackageId: string;
   /** Published immutable `blast_fun_timelock`, a transitive Meme publish dependency. */
   timelockPackageId: string;
-  packageVersion: SharedObjectReference<false>;
-  launchConfig: SharedObjectReference<false>;
-  runtimeConfig: SharedObjectReference<false>;
+  packageVersion: SharedObjectIdentity;
+  launchConfig: SharedObjectIdentity;
+  runtimeConfig: SharedObjectIdentity;
 };
 
 /**
@@ -109,13 +116,12 @@ export type MemeMetadataUpdate = LaunchTypes & {
   currency: SharedObjectReference<true>;
 };
 
-type NormalizedDeployment = Required<LaunchpadDeployment>;
 export type LaunchInitializerInput = LaunchTypes & {
   initializer: TransactionArgument;
 };
 
 export class LaunchpadCalls {
-  readonly deployment: NormalizedDeployment;
+  readonly deployment: LaunchpadDeployment;
   readonly admin: AdminCalls;
 
   constructor(deployment: LaunchpadDeployment) {
@@ -614,30 +620,15 @@ export class LaunchpadCalls {
   }
 
   #packageVersion(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
-      tx,
-      "packageVersion",
-      this.deployment.packageVersion,
-      false,
-    );
+    return deploymentObject(tx, this.deployment.packageVersion, false);
   }
 
-  #launchConfig(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
-      tx,
-      "launchConfig",
-      this.deployment.launchConfig,
-      false,
-    );
+  #launchConfig(tx: Transaction, mutable = false): TransactionObjectArgument {
+    return deploymentObject(tx, this.deployment.launchConfig, mutable);
   }
 
-  #runtimeConfig(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
-      tx,
-      "runtimeConfig",
-      this.deployment.runtimeConfig,
-      false,
-    );
+  #runtimeConfig(tx: Transaction, mutable = false): TransactionObjectArgument {
+    return deploymentObject(tx, this.deployment.runtimeConfig, mutable);
   }
 }
 
@@ -919,30 +910,23 @@ export function addLaunchCompletion(
 
 function normalizeDeployment(
   deployment: LaunchpadDeployment,
-): NormalizedDeployment {
-  const packageId = normalizeSuiObjectId(deployment.packageId);
+): LaunchpadDeployment {
   return {
-    packageId,
-    originalPackageId: normalizeSuiObjectId(
-      deployment.originalPackageId ?? packageId,
-    ),
+    ...normalizeSuiPackageReference("launchpad", deployment),
     admin: normalizeAdminDeployment(deployment.admin),
     partnersPackageId: normalizeSuiObjectId(deployment.partnersPackageId),
     timelockPackageId: normalizeSuiObjectId(deployment.timelockPackageId),
-    packageVersion: normalizeSharedObjectReference(
+    packageVersion: normalizeSharedObjectIdentity(
       "packageVersion",
       deployment.packageVersion,
-      false,
     ),
-    launchConfig: normalizeSharedObjectReference(
+    launchConfig: normalizeSharedObjectIdentity(
       "launchConfig",
       deployment.launchConfig,
-      false,
     ),
-    runtimeConfig: normalizeSharedObjectReference(
+    runtimeConfig: normalizeSharedObjectIdentity(
       "runtimeConfig",
       deployment.runtimeConfig,
-      false,
     ),
   };
 }

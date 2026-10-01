@@ -22,6 +22,7 @@ function shared<const Mutable extends boolean>(
 
 const deployment: LaunchpadDeployment = {
   packageId: "0x123",
+  originalPackageId: "0x123",
   partnersPackageId: "0xae",
   timelockPackageId: "0xaf",
   packageVersion: shared("0x2", "10", false),

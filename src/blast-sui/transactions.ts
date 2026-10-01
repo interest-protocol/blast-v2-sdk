@@ -7,7 +7,7 @@ import { normalizeSuiAddress, SUI_TYPE_ARG } from "@mysten/sui/utils";
 
 import { AdminCalls } from "../admin/transactions.ts";
 import { requireU64 } from "../lib/integers.ts";
-import type { SharedObjectReference } from "../lib/sui.ts";
+import { deploymentObject } from "../lib/ptb.ts";
 import type { BlastSuiAdminRole, BlastSuiDeployment } from "./types.ts";
 import {
   blastSuiType,
@@ -15,12 +15,8 @@ import {
   normalizeBlastSuiDeployment,
 } from "./types.ts";
 
-type NormalizedBlastSuiDeployment = ReturnType<
-  typeof normalizeBlastSuiDeployment
->;
-
 export class BlastSuiCalls {
-  readonly deployment: NormalizedBlastSuiDeployment;
+  readonly deployment: BlastSuiDeployment;
   readonly admin: AdminCalls;
 
   constructor(deployment: BlastSuiDeployment) {
@@ -167,11 +163,11 @@ export class BlastSuiCalls {
   }
 
   private vault(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(tx, this.deployment.vault);
+    return deploymentObject(tx, this.deployment.vault, true);
   }
 
   private packageVersion(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(tx, this.deployment.packageVersion);
+    return deploymentObject(tx, this.deployment.packageVersion, false);
   }
 }
 
@@ -274,13 +270,6 @@ export class BlastSuiTransactions {
     tx.add(this.call.syncVault());
     return tx;
   }
-}
-
-function sharedObject(
-  tx: Transaction,
-  reference: SharedObjectReference,
-): TransactionObjectArgument {
-  return tx.sharedObjectRef(reference);
 }
 
 function transfer(

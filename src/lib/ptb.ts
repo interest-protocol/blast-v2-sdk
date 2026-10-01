@@ -1,7 +1,10 @@
 import type {
+  Transaction,
   TransactionObjectArgument,
   TransactionResult,
 } from "@mysten/sui/transactions";
+
+import type { SharedObjectIdentity } from "./sui.ts";
 
 type MoveResults<
   Count extends number,
@@ -20,4 +23,13 @@ export function moveResults<const Count extends number>(
     if (!value) throw new RangeError(`Move call has no result ${index}`);
     return value;
   }) as MoveResults<Count>;
+}
+
+/** A deployment's shared object with the mutability this Move call needs. */
+export function deploymentObject(
+  tx: Transaction,
+  identity: SharedObjectIdentity,
+  mutable: boolean,
+): TransactionObjectArgument {
+  return tx.sharedObjectRef({ ...identity, mutable });
 }

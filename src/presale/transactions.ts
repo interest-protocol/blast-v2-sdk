@@ -9,7 +9,6 @@ import {
   fromHex,
   normalizeStructTag,
   normalizeSuiAddress,
-  normalizeSuiObjectId,
   parseStructTag,
 } from "@mysten/sui/utils";
 
@@ -28,9 +27,16 @@ import {
 import type { LaunchTypes } from "../launchpad/transactions.ts";
 import { normalizeLaunchTypes } from "../launchpad/transactions.ts";
 import { requireU64 } from "../lib/integers.ts";
-import { moveResults } from "../lib/ptb.ts";
-import type { SharedObjectReference } from "../lib/sui.ts";
-import { normalizeSharedObjectReference } from "../lib/sui.ts";
+import { deploymentObject, moveResults } from "../lib/ptb.ts";
+import type {
+  SharedObjectIdentity,
+  SharedObjectReference,
+} from "../lib/sui.ts";
+import {
+  normalizeSharedObjectIdentity,
+  normalizeSharedObjectReference,
+  normalizeSuiPackageReference,
+} from "../lib/sui.ts";
 import type { CetusMemeSide } from "../migrators/transactions.ts";
 import type { AllowlistProof } from "./allowlist.ts";
 import {
@@ -48,13 +54,11 @@ import type { BpsShare, EligibilityPolicy, UncappedPhase } from "./state.ts";
  */
 export type PresaleDeployment = {
   packageId: string;
-  originalPackageId?: string;
+  originalPackageId: string;
   /** `venue_config::VenueConfig`, holding each Meme's Cetus `PoolCreationCap`. */
-  venueConfig: SharedObjectReference<false>;
+  venueConfig: SharedObjectIdentity;
   admin: AdminDeployment;
 };
-
-type NormalizedDeployment = Required<PresaleDeployment>;
 
 /** The typed `blast_presale_domain` roles. */
 export type PresaleAdminRole = "UpgradeAdmin" | "RewardsAdmin";
@@ -114,20 +118,15 @@ function cetusTypeName(type: string): string {
 }
 
 export class PresaleCalls {
-  readonly deployment: NormalizedDeployment;
+  readonly deployment: PresaleDeployment;
   readonly admin: AdminCalls;
 
   constructor(deployment: PresaleDeployment) {
-    const packageId = normalizeSuiObjectId(deployment.packageId);
     this.deployment = {
-      packageId,
-      originalPackageId: normalizeSuiObjectId(
-        deployment.originalPackageId ?? packageId,
-      ),
-      venueConfig: normalizeSharedObjectReference(
+      ...normalizeSuiPackageReference("presale", deployment),
+      venueConfig: normalizeSharedObjectIdentity(
         "venueConfig",
         deployment.venueConfig,
-        false,
       ),
       admin: normalizeAdminDeployment(deployment.admin),
     };
@@ -243,12 +242,7 @@ export class PresaleCalls {
     const tickSpacing = requireU32("tickSpacing", options.tickSpacing);
     return (tx: Transaction): TransactionResult =>
       this.#newPresale(tx, "cetus", options, [
-        sharedObject(
-          tx,
-          "venueConfig",
-          { ...this.deployment.venueConfig, mutable: true },
-          true,
-        ),
+        deploymentObject(tx, this.deployment.venueConfig, true),
         sharedObject(tx, "cetusConfig", options.cetusConfig, false),
         sharedObject(tx, "cetusPools", options.cetusPools, true),
         tx.pure.u32(tickSpacing),
@@ -430,7 +424,7 @@ export class PresaleCalls {
         typeArguments: cetusTypeArguments(types),
         arguments: [
           this.#presale(tx, options),
-          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
+          deploymentObject(tx, this.deployment.venueConfig, false),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "cetusPools", options.cetusPools, true),
           sharedObject(tx, "burnManager", options.burnManager, true),

@@ -80,19 +80,16 @@ test("derives call-specific launchpad shared references", () => {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000002",
       initialSharedVersion: "10",
-      mutable: false,
     },
     launchConfig: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000003",
       initialSharedVersion: "11",
-      mutable: false,
     },
     runtimeConfig: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000004",
       initialSharedVersion: "12",
-      mutable: false,
     },
     admin: {
       packageId:
@@ -116,13 +113,11 @@ test("derives current-package blast Sui call references", () => {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000008",
       initialSharedVersion: "16",
-      mutable: false,
     },
     vault: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000009",
       initialSharedVersion: "17",
-      mutable: true,
     },
     admin: {
       packageId:
@@ -220,19 +215,16 @@ test("derives migrator package and shared-object references", () => {
       objectId:
         "0x000000000000000000000000000000000000000000000000000000000000000a",
       initialSharedVersion: "19",
-      mutable: false,
     },
     lpFeePolicy: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000040",
       initialSharedVersion: "18",
-      mutable: false,
     },
     venueConfig: {
       objectId:
         "0x0000000000000000000000000000000000000000000000000000000000000007",
       initialSharedVersion: "15",
-      mutable: false,
     },
   });
 });
