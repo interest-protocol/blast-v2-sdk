@@ -49,6 +49,18 @@ export type BpsShare = { recipient: string; bps: bigint };
 /** `blast_presale::RecipientPayout`: exact atoms apportioned at creation. */
 export type RecipientPayout = { recipient: string; amount: bigint };
 
+/**
+ * `fee_policy::ProtocolFees`: Blast's BPS of the accepted raise, of the token
+ * supply, and of each collected LP-fee asset. A presale snapshots them at
+ * creation.
+ */
+export type ProtocolFees = {
+  raiseBps: bigint;
+  tokenBps: bigint;
+  lpMemeBps: bigint;
+  lpQuoteBps: bigint;
+};
+
 export const PRESALE_LIFECYCLES = [
   "Pending",
   "Open",
@@ -165,6 +177,29 @@ const payoutBcs = bcs
     output: (value): RecipientPayout => value,
   });
 
+/** BCS layout of `fee_policy::ProtocolFees`. */
+export const protocolFeesBcs = bcs
+  .struct("ProtocolFees", {
+    raise_bps: u64,
+    token_bps: u64,
+    lp_meme_bps: u64,
+    lp_quote_bps: u64,
+  })
+  .transform({
+    input: (value: ProtocolFees) => ({
+      raise_bps: value.raiseBps,
+      token_bps: value.tokenBps,
+      lp_meme_bps: value.lpMemeBps,
+      lp_quote_bps: value.lpQuoteBps,
+    }),
+    output: (value): ProtocolFees => ({
+      raiseBps: value.raise_bps,
+      tokenBps: value.token_bps,
+      lpMemeBps: value.lp_meme_bps,
+      lpQuoteBps: value.lp_quote_bps,
+    }),
+  });
+
 /** BCS layout of `blast_presale::Lifecycle`. */
 export const lifecycleBcs = bcs
   .enum("Lifecycle", {
@@ -207,6 +242,9 @@ export const presaleBcs = bcs.struct("Presale", {
   recipient_payouts: bcs.vector(payoutBcs),
   recipient_tokens: suiBalanceBcs,
   raise_payouts: bcs.vector(payoutBcs),
+  protocol_fees: protocolFeesBcs,
+  protocol_quote: u64,
+  protocol_tokens: suiBalanceBcs,
 });
 
 /** BCS layout of `blast_presale::Commitment`, stored under `CommitmentKey(address)`. */
@@ -223,12 +261,20 @@ export const presaleVaultBcs = bcs.struct("PresaleVault", {
   pool_id: suiIdBcs,
   fee_recipients: bcs.vector(bpsShareBcs),
   rewards_fee_bps: u64,
+  protocol_fees: protocolFeesBcs,
   migration_meme_residual: suiBalanceBcs,
   migration_quote_residual: suiBalanceBcs,
   rewards_meme: suiBalanceBcs,
   rewards_quote: suiBalanceBcs,
   next_round: u64,
   last_checkpoint: bcs.option(u64),
+});
+
+/** BCS layout of `fee_policy::FeePolicy`, the package's one shared fee policy. */
+export const feePolicyBcs = bcs.struct("FeePolicy", {
+  id: suiUidBcs,
+  destination: address,
+  fees: protocolFeesBcs,
 });
 
 /** BCS layout of `holder_rewards::Round<Meme, Quote>`. */
@@ -289,6 +335,12 @@ export type PresaleState = SharedObjectReference<true> & {
   recipientPayouts: RecipientPayout[];
   recipientTokens: bigint;
   raisePayouts: RecipientPayout[];
+  /** Blast's rates, snapshotted at creation. */
+  protocolFees: ProtocolFees;
+  /** Blast's share of the raise, paid on migration. */
+  protocolQuote: bigint;
+  /** Blast's token share still in custody: paid on migration, locked forever on cancellation. */
+  protocolTokens: bigint;
 };
 
 export type PresaleVaultState = SharedObjectReference<true> & {
@@ -299,6 +351,8 @@ export type PresaleVaultState = SharedObjectReference<true> & {
   poolId: string;
   feeRecipients: BpsShare[];
   rewardsFeeBps: bigint;
+  /** The presale's snapshotted rates; only the LP-fee shares apply to the vault. */
+  protocolFees: ProtocolFees;
   migrationMemeResidual: bigint;
   migrationQuoteResidual: bigint;
   /** Holder-reward share not yet reserved by a round. */
@@ -321,6 +375,16 @@ export type PresaleRewardRoundState = SharedObjectReference<true> & {
   claimed: bigint[];
   memeRemaining: bigint;
   quoteRemaining: bigint;
+};
+
+/**
+ * `fee_policy::FeePolicy`: the rates new presales snapshot and the address
+ * every protocol payout goes to. A creation must size its allocations against
+ * the current `tokenBps`.
+ */
+export type PresaleFeePolicyState = SharedObjectReference<true> & {
+  destination: string;
+  fees: ProtocolFees;
 };
 
 export type PresaleCommitment = { quote: bigint; walletCap: bigint };
@@ -365,6 +429,9 @@ export function decodePresaleObject(
     recipientPayouts: parsed.recipient_payouts,
     recipientTokens: BigInt(parsed.recipient_tokens.value),
     raisePayouts: parsed.raise_payouts,
+    protocolFees: parsed.protocol_fees,
+    protocolQuote: parsed.protocol_quote,
+    protocolTokens: BigInt(parsed.protocol_tokens.value),
   };
 }
 
@@ -388,6 +455,7 @@ export function decodePresaleVaultObject(
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
     feeRecipients: parsed.fee_recipients,
     rewardsFeeBps: parsed.rewards_fee_bps,
+    protocolFees: parsed.protocol_fees,
     migrationMemeResidual: BigInt(parsed.migration_meme_residual.value),
     migrationQuoteResidual: BigInt(parsed.migration_quote_residual.value),
     rewardsMeme: BigInt(parsed.rewards_meme.value),
@@ -420,6 +488,28 @@ export function decodePresaleRewardRoundObject(
     claimed: parsed.claimed.map(BigInt),
     memeRemaining: BigInt(parsed.meme.value),
     quoteRemaining: BigInt(parsed.quote.value),
+  };
+}
+
+export function decodePresaleFeePolicyObject(
+  object: PresaleObject,
+  originalPackageId?: string,
+): PresaleFeePolicyState {
+  const tag = parseStructTag(object.type);
+  if (
+    tag.module !== "fee_policy" ||
+    tag.name !== "FeePolicy" ||
+    tag.typeParams.length !== 0 ||
+    (originalPackageId !== undefined &&
+      tag.address !== normalizeSuiAddress(originalPackageId))
+  ) {
+    throw new TypeError(`object ${object.objectId} is not a presale FeePolicy`);
+  }
+  const parsed = feePolicyBcs.parse(object.content);
+  return {
+    ...sharedIdentity(object, parsed.id.id.bytes),
+    destination: parsed.destination,
+    fees: parsed.fees,
   };
 }
 
@@ -463,6 +553,17 @@ export async function getPresaleRewardRound(
   originalPackageId: string,
 ): Promise<PresaleRewardRoundState> {
   return decodePresaleRewardRoundObject(
+    await getSharedObject(client, objectId),
+    originalPackageId,
+  );
+}
+
+export async function getPresaleFeePolicy(
+  client: ClientWithCoreApi,
+  objectId: string,
+  originalPackageId?: string,
+): Promise<PresaleFeePolicyState> {
+  return decodePresaleFeePolicyObject(
     await getSharedObject(client, objectId),
     originalPackageId,
   );

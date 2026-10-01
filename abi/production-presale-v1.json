@@ -3,6 +3,9 @@
   "baseline": {
     "contractsCommit": "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
     "workingTreeDifferedAtFreeze": false,
+    "approvedAbiAmendments": [
+      "contracts ADR 0101: admin-set Blast fees on the raise, the token supply, and LP fees, snapshotted at creation"
+    ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
   "packages": {
@@ -1145,6 +1148,43 @@
                       }
                     }
                   }
+                },
+                {
+                  "name": "protocol_fees",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_presale",
+                        "name": "fee_policy"
+                      },
+                      "name": "ProtocolFees",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "protocol_quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_tokens",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "SaleToken"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
             },
@@ -1703,6 +1743,27 @@
                 {
                   "name": "rewards_fee_bps",
                   "type": "u64"
+                },
+                {
+                  "name": "protocol_fees",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_presale",
+                        "name": "fee_policy"
+                      },
+                      "name": "ProtocolFees",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "protocol_quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_tokens",
+                  "type": "u64"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -1873,6 +1934,54 @@
               "sdk": "decoder-reducer"
             },
             {
+              "name": "ProtocolFeesPaid",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "SaleToken",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "presale_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "destination",
+                  "type": "address"
+                },
+                {
+                  "name": "quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "tokens",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
               "name": "RaiseAllocated",
               "abilities": [
                 "Copy",
@@ -1966,7 +2075,31 @@
           "functions": [],
           "structs": [
             {
+              "name": "FeeAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
               "name": "RewardsAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "TreasuryAdmin",
               "abilities": [],
               "typeParameters": [],
               "positional": true,
@@ -2057,6 +2190,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -2178,6 +2326,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -2432,6 +2595,21 @@
                   }
                 },
                 "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
                 "u32",
                 "u64",
                 {
@@ -2583,6 +2761,21 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_presale",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "cetus_clmm",
                           "name": "config"
                         },
@@ -2704,6 +2897,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -2937,6 +3145,21 @@
                 "u64",
                 {
                   "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
                     true,
                     {
                       "Datatype": {
@@ -3104,6 +3327,238 @@
           ],
           "enums": [],
           "events": []
+        },
+        "fee_policy": {
+          "functions": [
+            {
+              "name": "set_destination",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "TreasuryAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "address"
+              ],
+              "returns": []
+            },
+            {
+              "name": "set_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "FeeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "u64",
+                "u64",
+                "u64"
+              ],
+              "returns": []
+            }
+          ],
+          "structs": [
+            {
+              "name": "FeePolicy",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "destination",
+                  "type": "address"
+                },
+                {
+                  "name": "fees",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_presale",
+                        "name": "fee_policy"
+                      },
+                      "name": "ProtocolFees",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProtocolFees",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "raise_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "token_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "lp_meme_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "lp_quote_bps",
+                  "type": "u64"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": [
+            {
+              "name": "DestinationChanged",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "destination",
+                  "type": "address"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "FeesChanged",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "raise_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "token_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "lp_meme_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "lp_quote_bps",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            }
+          ]
         },
         "holder_rewards": {
           "functions": [
@@ -4244,6 +4699,19 @@
                   "type": "u64"
                 },
                 {
+                  "name": "protocol_fees",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_presale",
+                        "name": "fee_policy"
+                      },
+                      "name": "ProtocolFees",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
                   "name": "migration_meme_residual",
                   "type": {
                     "Datatype": {
@@ -4389,6 +4857,18 @@
                 },
                 {
                   "name": "gross_quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_destination",
+                  "type": "address"
+                },
+                {
+                  "name": "protocol_meme",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_quote",
                   "type": "u64"
                 },
                 {
@@ -4553,6 +5033,14 @@
                 },
                 {
                   "name": "rewards_fee_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_lp_meme_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_lp_quote_bps",
                   "type": "u64"
                 },
                 {

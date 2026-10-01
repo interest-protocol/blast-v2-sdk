@@ -42,7 +42,10 @@ export type BlastSharedObjects = Readonly<{
     lpFeePolicy: SharedObjectIdentity;
     venueConfig: SharedObjectIdentity;
   }>;
-  presale: Readonly<{ venueConfig: SharedObjectIdentity }>;
+  presale: Readonly<{
+    venueConfig: SharedObjectIdentity;
+    feePolicy: SharedObjectIdentity;
+  }>;
   blastSui: Readonly<{
     packageVersion: SharedObjectIdentity;
     vault: SharedObjectIdentity;

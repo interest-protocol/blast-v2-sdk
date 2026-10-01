@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { itemAt } from "../src/lib/arrays.ts";
 import { U64_MAX } from "../src/lib/integers.ts";
 import type {
   CommitPreviewInput,
@@ -21,6 +22,7 @@ import {
   previewCommit,
   previewPresaleCreation,
   previewSettlement,
+  splitCollectedFee,
   uncappedForAnyone,
   uncappedForEligible,
   validateBluefinPresaleTier,
@@ -50,6 +52,7 @@ const config: PresaleCreationConfig = {
   uncapped: null,
   feeRecipients,
   rewardsFeeBps: 3_000n,
+  protocolFees: { raiseBps: 0n, tokenBps: 0n, lpMemeBps: 0n, lpQuoteBps: 0n },
 };
 
 function aborts(run: () => unknown, code: string) {
@@ -69,6 +72,82 @@ test("apportions the fixture supply exactly like apportion_supply", () => {
   );
   assert.equal(preview.liquidityQuote, RAISE);
   assert.deepEqual(preview.raisePayouts, []);
+});
+
+test("apportions Blast's snapshotted token and raise shares like blast_presale::new", () => {
+  // `migration_pays_blast_its_snapshotted_shares_at_the_current_destination`.
+  const preview = previewPresaleCreation({
+    ...config,
+    recipientAllocations: [
+      itemAt(recipients, 0),
+      { recipient: "0xb110c", bps: 1_000n },
+    ],
+    raiseAllocations: [{ recipient: "0x5a1e", bps: 2_000n }],
+    protocolFees: {
+      raiseBps: 333n,
+      tokenBps: 500n,
+      lpMemeBps: 0n,
+      lpQuoteBps: 0n,
+    },
+  });
+  assert.deepEqual(
+    [
+      preview.tokenAllocation,
+      preview.liquidityTokenAllocation,
+      preview.protocolTokenAllocation,
+    ],
+    [10_001n, 2_000n, 1_000n],
+  );
+  assert.deepEqual(
+    preview.recipientPayouts.map((payout) => payout.amount),
+    [5_000n, 2_000n],
+  );
+  // 1,000 * [2,000, 333, 7,667] / 10,000: the LP takes the leftover atom.
+  assert.deepEqual(
+    [
+      itemAt(preview.raisePayouts, 0).amount,
+      preview.protocolQuote,
+      preview.liquidityQuote,
+    ],
+    [200n, 33n, 767n],
+  );
+  // `allocations_must_leave_room_for_blasts_token_share`.
+  aborts(
+    () =>
+      previewPresaleCreation({
+        ...config,
+        protocolFees: { ...config.protocolFees, tokenBps: 500n },
+      }),
+    "EInvalidTokenAllocation",
+  );
+  // `raise_allocations_must_leave_the_lp_a_share_after_blasts`.
+  aborts(
+    () => apportionRaise([{ recipient: "0x5a1e", bps: 9_667n }], 333n, RAISE),
+    "EInvalidRaiseAllocation",
+  );
+});
+
+test("takes Blast's LP share first, rounded up, like presale_vault::split_fees", () => {
+  // `collected_fees_pay_blast_its_share_first`.
+  assert.deepEqual(splitCollectedFee(feeRecipients, 3_000n, 1_000n, 101n), {
+    protocol: 11n,
+    recipients: [45n, 18n],
+    rewards: 27n,
+  });
+  assert.deepEqual(splitCollectedFee(feeRecipients, 3_000n, 2_500n, 10n), {
+    protocol: 3n,
+    recipients: [4n, 1n],
+    rewards: 2n,
+  });
+  assert.deepEqual(splitCollectedFee(feeRecipients, 3_000n, 0n, 101n), {
+    protocol: 0n,
+    ...apportionFee(feeRecipients, 3_000n, 101n),
+  });
+  assert.deepEqual(splitCollectedFee([], 10_000n, 10_000n, 7n), {
+    protocol: 7n,
+    recipients: [],
+    rewards: 0n,
+  });
 });
 
 test("hands leftover atoms to the largest remainders, earlier shares on ties", () => {
@@ -104,13 +183,17 @@ test("splits LP fees like presale_vault::fee_shares", () => {
 
 test("apportions raise allocations with the LP keeping the last share", () => {
   // `raise_allocations_are_paid_at_migration_and_the_lp_takes_the_rest`.
-  const raise = apportionRaise([{ recipient: "0x5a1e", bps: 2_000n }], RAISE);
+  const raise = apportionRaise(
+    [{ recipient: "0x5a1e", bps: 2_000n }],
+    0n,
+    RAISE,
+  );
   assert.deepEqual(raise.raisePayouts, [
     { recipient: `0x${"5a1e".padStart(64, "0")}`, amount: 200n },
   ]);
   assert.equal(raise.liquidityQuote, 800n);
   aborts(
-    () => apportionRaise([{ recipient: "0x5a1e", bps: 9_999n }], 5n),
+    () => apportionRaise([{ recipient: "0x5a1e", bps: 9_999n }], 0n, 5n),
     "EInvalidRaiseAllocation",
   );
 });
@@ -516,7 +599,7 @@ test("previews settlement and every claim, the last taking the remainder", () =>
 
 test("apportionSupply rejects a zero presale or LP allocation", () => {
   aborts(
-    () => apportionSupply(1n, 5_000n, 1_000n, recipients),
+    () => apportionSupply(1n, 5_000n, 1_000n, 0n, recipients),
     "EInvalidTokenAllocation",
   );
 });

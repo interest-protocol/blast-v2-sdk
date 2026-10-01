@@ -55,7 +55,10 @@ const input: BlastDeployment = {
       lpFeePolicy: object("0x40", "18"),
       venueConfig: object("0x7", "15"),
     },
-    presale: { venueConfig: object("0x57", "21") },
+    presale: {
+      venueConfig: object("0x57", "21"),
+      feePolicy: object("0x58", "21"),
+    },
     blastSui: {
       packageVersion: object("0x8", "16"),
       vault: object("0x9", "17"),
@@ -110,6 +113,7 @@ test("derives every package's call-ready deployment", () => {
     packageId: id("0x523"),
     originalPackageId: id("0x522"),
     venueConfig: { objectId: id("0x57"), initialSharedVersion: "21" },
+    feePolicy: { objectId: id("0x58"), initialSharedVersion: "21" },
     admin,
   });
   assert.deepEqual(blastSuiDeployment(deployment), {

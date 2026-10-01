@@ -12,9 +12,11 @@ import type {
 } from "../src/presale/events.ts";
 import {
   decodePresaleEvent,
+  decodePresaleFeePolicyEvent,
   presaleEventBcs,
   presaleEventModules,
   presaleEventSpecs,
+  presaleFeePolicyEventSpecs,
 } from "../src/presale/events.ts";
 import { openEligibility, previewClaim } from "../src/presale/math.ts";
 import {
@@ -31,6 +33,8 @@ const VAULT = id("0xba");
 const ROUND = id("0xd0");
 const ALICE = id("0xa11ce");
 const BOB = id("0xb0b");
+const NO_FEES = { raiseBps: 0n, tokenBps: 0n, lpMemeBps: 0n, lpQuoteBps: 0n };
+const TREASURY = id("0x7ea5");
 const u64 = (value: bigint) =>
   Array.from({ length: 8 }, (_, i) => Number((value >> BigInt(8 * i)) & 0xffn));
 
@@ -67,8 +71,11 @@ function decode<Kind extends PresaleEventKind>(
 }
 
 test("event specs match every event frozen in the presale ABI", () => {
-  assert.deepEqual(presaleEventSpecs, readFrozenPresaleEventSpecs());
-  assert.equal(Object.keys(presaleEventModules).length, 15);
+  assert.deepEqual(
+    { ...presaleEventSpecs, fee_policy: presaleFeePolicyEventSpecs },
+    readFrozenPresaleEventSpecs(),
+  );
+  assert.equal(Object.keys(presaleEventModules).length, 16);
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
@@ -149,6 +156,9 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       fee_recipients: [id("0xc0ffee"), id("0xfee")],
       fee_recipient_bps: [5_000n, 2_000n],
       rewards_fee_bps: 3_000n,
+      protocol_fees: NO_FEES,
+      protocol_quote: 0n,
+      protocol_tokens: 0n,
     }),
     decode("PresaleOpened", {
       presale_id: PRESALE,
@@ -204,6 +214,12 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
 
   // Migration, then claims whose amounts the preview predicts from the projection.
   const migration: DecodedPresaleEvent[] = [
+    decode("ProtocolFeesPaid", {
+      presale_id: PRESALE,
+      destination: TREASURY,
+      quote: 0n,
+      tokens: 0n,
+    }),
     decode("RecipientAllocated", {
       presale_id: PRESALE,
       recipient: itemAt(recipients, 0),
@@ -271,6 +287,8 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       fee_recipients: [id("0xc0ffee"), id("0xfee")],
       fee_recipient_bps: [5_000n, 2_000n],
       rewards_fee_bps: 3_000n,
+      protocol_lp_meme_bps: 0n,
+      protocol_lp_quote_bps: 0n,
       migration_meme_residual: 1n,
       migration_quote_residual: 0n,
     }),
@@ -278,6 +296,9 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       vault_id: VAULT,
       gross_meme: 101n,
       gross_quote: 10n,
+      protocol_destination: TREASURY,
+      protocol_meme: 0n,
+      protocol_quote: 0n,
       recipient_meme: [51n, 20n],
       recipient_quote: [5n, 2n],
       rewards_meme: 30n,
@@ -397,6 +418,9 @@ test("a raise allocation leaves custody the migration's overflow", () => {
     fee_recipients: [],
     fee_recipient_bps: [],
     rewards_fee_bps: 10_000n,
+    protocol_fees: NO_FEES,
+    protocol_quote: 0n,
+    protocol_tokens: 0n,
   });
   for (const event of [
     created,
@@ -434,6 +458,183 @@ test("a raise allocation leaves custody the migration's overflow", () => {
     { recipient: id("0x5a1e"), amount: 200n },
   ]);
   assert.deepEqual([presale.quote, presale.liquidityTokens], [200n, 0n]);
+});
+
+test("tracks Blast's snapshotted shares from creation through migration and LP fees", () => {
+  let state = createPresaleEventProjection();
+  const recipients = [id("0xa110c"), id("0xb110c")];
+  for (const event of [
+    // `blast_presale_tests::migration_pays_blast_its_snapshotted_shares_at_the_current_destination`.
+    decode("PresaleCreated", {
+      presale_id: PRESALE,
+      presale_cap_id: id("0xca"),
+      treasury_cap_id: id("0x7c"),
+      token_supply: 20_001n,
+      token_allocation_bps: 5_000n,
+      liquidity_token_allocation_bps: 1_000n,
+      recipients,
+      recipient_bps: [2_500n, 1_000n],
+      burnable: false,
+      raise_target: 1_000n,
+      raise_recipients: [id("0x5a1e")],
+      raise_recipient_bps: [2_000n],
+      duration_ms: 100n,
+      liquidity_window_ms: 50n,
+      eligibility: openEligibility(5_000n, 2n, 500n),
+      uncapped: null,
+      migration_witness: `${pkg}::cetus::Witness`,
+      tick_spacing: 200,
+      fee_rate: 10_000n,
+      fee_recipients: [id("0xc0ffee")],
+      fee_recipient_bps: [7_000n],
+      rewards_fee_bps: 3_000n,
+      protocol_fees: {
+        raiseBps: 333n,
+        tokenBps: 500n,
+        lpMemeBps: 1_000n,
+        lpQuoteBps: 2_500n,
+      },
+      protocol_quote: 33n,
+      protocol_tokens: 1_000n,
+    }),
+    decode("Committed", {
+      presale_id: PRESALE,
+      quote: 4_000n,
+      wallet_commitment: 4_000n,
+      total_commitments: 4_000n,
+      participants: 1n,
+    }),
+  ]) {
+    state = reducePresaleEvent(state, event);
+  }
+  let presale = required(state.presales[PRESALE]);
+  // The reducer re-derives the supply and raise split; it agrees with the event.
+  assert.deepEqual(
+    [presale.tokenAllocation, presale.liquidityTokens, presale.recipientTokens],
+    [10_001n, 2_000n, 7_000n],
+  );
+  assert.deepEqual(
+    [presale.protocolQuote, presale.protocolTokens],
+    [33n, 1_000n],
+  );
+  assert.deepEqual(presale.raisePayouts, [
+    { recipient: id("0x5a1e"), amount: 200n },
+  ]);
+
+  for (const event of [
+    decode("ProtocolFeesPaid", {
+      presale_id: PRESALE,
+      destination: TREASURY,
+      quote: 33n,
+      tokens: 1_000n,
+    }),
+    decode("RaiseAllocated", {
+      presale_id: PRESALE,
+      recipient: id("0x5a1e"),
+      quote: 200n,
+    }),
+    decode("PresaleMigrated", {
+      presale_id: PRESALE,
+      migration_witness: `${pkg}::cetus::Witness`,
+      quote: 767n,
+      liquidity_tokens: 2_000n,
+      recipient_tokens: 7_000n,
+    }),
+    decode("PresaleVaultCreated", {
+      vault_id: VAULT,
+      presale_id: PRESALE,
+      pool_id: id("0x90"),
+      position_id: id("0x91"),
+      liquidity: 1n,
+      fee_recipients: [id("0xc0ffee")],
+      fee_recipient_bps: [7_000n],
+      rewards_fee_bps: 3_000n,
+      protocol_lp_meme_bps: 1_000n,
+      protocol_lp_quote_bps: 2_500n,
+      migration_meme_residual: 0n,
+      migration_quote_residual: 0n,
+    }),
+    decode("FeesCollected", {
+      vault_id: VAULT,
+      gross_meme: 101n,
+      gross_quote: 10n,
+      protocol_destination: TREASURY,
+      protocol_meme: 11n,
+      protocol_quote: 3n,
+      recipient_meme: [63n],
+      recipient_quote: [5n],
+      rewards_meme: 27n,
+      rewards_quote: 2n,
+    }),
+  ]) {
+    state = reducePresaleEvent(state, event);
+  }
+  presale = required(state.presales[PRESALE]);
+  // Only the overflow remains: 4,000 - 33 - 200 - 767.
+  assert.deepEqual(
+    [presale.quote, presale.protocolTokens, presale.protocolDestination],
+    [3_000n, 0n, TREASURY],
+  );
+  const vault = required(state.vaults[VAULT]);
+  assert.deepEqual(
+    [
+      vault.protocolLpMemeBps,
+      vault.protocolLpQuoteBps,
+      vault.protocolMemePaid,
+      vault.protocolQuotePaid,
+    ],
+    [1_000n, 2_500n, 11n, 3n],
+  );
+});
+
+test("decodes fee-policy events, which have no type arguments", () => {
+  const packages = { originalPackageId: pkg };
+  const entry = (
+    eventType: string,
+    bytes: number[],
+  ): SuiClientTypes.EventEntry => ({
+    packageId: pkg,
+    module: "fee_policy",
+    sender: ALICE,
+    eventType,
+    bcs: Uint8Array.from(bytes),
+    json: null,
+    checkpoint: "9",
+    transactionDigest: "fees",
+    eventIndex: 0,
+  });
+  const changed = decodePresaleFeePolicyEvent(
+    entry(`${pkg}::fee_policy::FeesChanged`, [
+      ...u64(333n),
+      ...u64(500n),
+      ...u64(1_000n),
+      ...u64(2_500n),
+    ]),
+    packages,
+  );
+  assert.equal(changed.kind, "FeesChanged");
+  assert.deepEqual(changed.payload, {
+    raise_bps: 333n,
+    token_bps: 500n,
+    lp_meme_bps: 1_000n,
+    lp_quote_bps: 2_500n,
+  });
+  const destination = decodePresaleFeePolicyEvent(
+    entry(`${pkg}::fee_policy::DestinationChanged`, [
+      ...Buffer.from(TREASURY.slice(2), "hex"),
+    ]),
+    packages,
+  );
+  assert.deepEqual(destination.payload, { destination: TREASURY });
+  for (const eventType of [
+    `${id("0x99")}::fee_policy::FeesChanged`,
+    `${pkg}::blast_presale::FeesChanged`,
+    `${pkg}::fee_policy::FeesChanged<${meme}>`,
+  ]) {
+    assert.throws(() =>
+      decodePresaleFeePolicyEvent(entry(eventType, []), packages),
+    );
+  }
 });
 
 function readFrozenPresaleEventSpecs(): Record<
@@ -493,6 +694,7 @@ function descriptor(type: unknown): string {
   if (name === "ID") return "id";
   if (name === "TypeName") return "typeName";
   if (name === "EligibilityPolicy") return "eligibility";
+  if (name === "ProtocolFees") return "protocolFees";
   if (name === "Option") {
     const inner = (
       datatype.type_arguments[0] as { argument: { Datatype: { name: string } } }

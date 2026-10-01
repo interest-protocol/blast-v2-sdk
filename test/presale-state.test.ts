@@ -6,6 +6,7 @@ import { ObjectError } from "@mysten/sui/client";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 import {
+  decodePresaleFeePolicyObject,
   decodePresaleObject,
   decodePresaleRewardRoundObject,
   decodePresaleVaultObject,
@@ -77,6 +78,12 @@ function presaleBytes(): Uint8Array {
     ...vec([[...addr("0xa110c"), ...u64(5_000n)]]), // recipient_payouts
     ...u64(0n), // recipient_tokens
     ...vec([[...addr("0x5a1e"), ...u64(200n)]]), // raise_payouts
+    ...u64(333n), // protocol_fees.raise_bps
+    ...u64(500n), // protocol_fees.token_bps
+    ...u64(1_000n), // protocol_fees.lp_meme_bps
+    ...u64(2_500n), // protocol_fees.lp_quote_bps
+    ...u64(33n), // protocol_quote
+    ...u64(1_000n), // protocol_tokens
   ]);
 }
 
@@ -130,6 +137,13 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
   assert.deepEqual(state.raisePayouts, [
     { recipient: normalizeSuiAddress("0x5a1e"), amount: 200n },
   ]);
+  assert.deepEqual(state.protocolFees, {
+    raiseBps: 333n,
+    tokenBps: 500n,
+    lpMemeBps: 1_000n,
+    lpQuoteBps: 2_500n,
+  });
+  assert.deepEqual([state.protocolQuote, state.protocolTokens], [33n, 1_000n]);
   const parsed = presaleBcs.parse(presaleBytes());
   assert.deepEqual(
     presaleBcs.parse(presaleBcs.serialize(parsed).toBytes()),
@@ -186,6 +200,10 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
     ...addr("0x9001"), // pool_id
     ...vec([[...addr("0xc0ffee"), ...u64(7_000n)]]),
     ...u64(3_000n), // rewards_fee_bps
+    ...u64(0n), // protocol_fees.raise_bps
+    ...u64(0n), // protocol_fees.token_bps
+    ...u64(1_000n), // protocol_fees.lp_meme_bps
+    ...u64(2_500n), // protocol_fees.lp_quote_bps
     ...u64(1n), // migration_meme_residual
     ...u64(0n), // migration_quote_residual
     ...u64(30n), // rewards_meme
@@ -227,6 +245,45 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
       2n,
       99n,
     ],
+  );
+  assert.deepEqual(vault.protocolFees, {
+    raiseBps: 0n,
+    tokenBps: 0n,
+    lpMemeBps: 1_000n,
+    lpQuoteBps: 2_500n,
+  });
+});
+
+test("decodes the FeePolicy from bytes laid out in Move field order", () => {
+  const content = Uint8Array.from([
+    ...addr("0xfe"), // id
+    ...addr("0x7ea5"), // destination
+    ...u64(333n), // fees.raise_bps
+    ...u64(500n), // fees.token_bps
+    ...u64(1_000n), // fees.lp_meme_bps
+    ...u64(1_000n), // fees.lp_quote_bps
+  ]);
+  const policy = decodePresaleFeePolicyObject(
+    object(`${pkg}::fee_policy::FeePolicy`, content, "0xfe"),
+    pkg,
+  );
+  assert.equal(policy.destination, normalizeSuiAddress("0x7ea5"));
+  assert.deepEqual(policy.fees, {
+    raiseBps: 333n,
+    tokenBps: 500n,
+    lpMemeBps: 1_000n,
+    lpQuoteBps: 1_000n,
+  });
+  assert.throws(() =>
+    decodePresaleFeePolicyObject(
+      object(`${pkg}::fee_policy::FeePolicy`, content, "0xfe"),
+      "0x99",
+    ),
+  );
+  assert.throws(() =>
+    decodePresaleFeePolicyObject(
+      object(`${pkg}::fee_policy::Other`, content, "0xfe"),
+    ),
   );
 });
 

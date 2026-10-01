@@ -6,6 +6,7 @@ import type {
   BpsShare,
   EligibilityPolicy,
   PresaleLifecycle,
+  ProtocolFees,
   RecipientPayout,
   UncappedPhase,
 } from "./state.ts";
@@ -55,6 +56,14 @@ export type PresaleProjection = {
   recipientPayouts: RecipientPayout[];
   recipientTokens: bigint;
   raisePayouts: RecipientPayout[];
+  /** Blast's rates, snapshotted at creation. */
+  protocolFees: ProtocolFees;
+  /** Blast's share of the raise, paid on migration. */
+  protocolQuote: bigint;
+  /** Blast's token share still in custody. */
+  protocolTokens: bigint;
+  /** Where migration paid Blast's shares; null until then. */
+  protocolDestination: string | null;
   /** The vault its migration created; null until then. */
   vaultId: string | null;
 };
@@ -70,6 +79,9 @@ export type PresaleVaultProjection = {
   liquidity: bigint;
   feeRecipients: BpsShare[];
   rewardsFeeBps: bigint;
+  /** Blast's snapshotted shares of each collected LP-fee asset. */
+  protocolLpMemeBps: bigint;
+  protocolLpQuoteBps: bigint;
   migrationMemeResidual: bigint;
   migrationQuoteResidual: bigint;
   rewardsMeme: bigint;
@@ -79,6 +91,9 @@ export type PresaleVaultProjection = {
   /** Cumulative LP fees paid to each fee recipient, aligned with `feeRecipients`. */
   recipientMemePaid: bigint[];
   recipientQuotePaid: bigint[];
+  /** Cumulative LP fees paid to Blast. */
+  protocolMemePaid: bigint;
+  protocolQuotePaid: bigint;
 };
 
 export type PresaleRewardRoundProjection = {
@@ -180,7 +195,16 @@ function applyPresaleEvent(
       return updatePresale(state, event.payload.presale_id, () => ({
         lifecycle: "Cancelled",
       }));
-    // Migration emits every RaiseAllocated and RecipientAllocated, then PresaleMigrated.
+    // Migration emits ProtocolFeesPaid, every RaiseAllocated and RecipientAllocated, then
+    // PresaleMigrated.
+    case "ProtocolFeesPaid": {
+      const { payload } = event;
+      return updatePresale(state, payload.presale_id, (presale) => ({
+        quote: presale.quote - payload.quote,
+        protocolTokens: presale.protocolTokens - payload.tokens,
+        protocolDestination: payload.destination,
+      }));
+    }
     case "RaiseAllocated": {
       const { payload } = event;
       return updatePresale(state, payload.presale_id, (presale) => ({
@@ -248,6 +272,8 @@ function applyVaultEvent(
             liquidity: payload.liquidity,
             feeRecipients,
             rewardsFeeBps: payload.rewards_fee_bps,
+            protocolLpMemeBps: payload.protocol_lp_meme_bps,
+            protocolLpQuoteBps: payload.protocol_lp_quote_bps,
             migrationMemeResidual: payload.migration_meme_residual,
             migrationQuoteResidual: payload.migration_quote_residual,
             rewardsMeme: 0n,
@@ -256,6 +282,8 @@ function applyVaultEvent(
             lastCheckpoint: null,
             recipientMemePaid: feeRecipients.map(() => 0n),
             recipientQuotePaid: feeRecipients.map(() => 0n),
+            protocolMemePaid: 0n,
+            protocolQuotePaid: 0n,
           },
         },
       };
@@ -271,6 +299,8 @@ function applyVaultEvent(
         recipientQuotePaid: vault.recipientQuotePaid.map(
           (paid, i) => paid + (payload.recipient_quote[i] ?? 0n),
         ),
+        protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
+        protocolQuotePaid: vault.protocolQuotePaid + payload.protocol_quote,
       }));
     }
     case "MigrationResidualsClaimed":
@@ -352,10 +382,12 @@ function createdPresale(
     payload.token_supply,
     payload.token_allocation_bps,
     payload.liquidity_token_allocation_bps,
+    payload.protocol_fees.tokenBps,
     recipientAllocations,
   );
   const { raisePayouts } = apportionRaise(
     raiseAllocations,
+    payload.protocol_fees.raiseBps,
     payload.raise_target,
   );
   return {
@@ -399,6 +431,10 @@ function createdPresale(
       0n,
     ),
     raisePayouts,
+    protocolFees: payload.protocol_fees,
+    protocolQuote: payload.protocol_quote,
+    protocolTokens: payload.protocol_tokens,
+    protocolDestination: null,
     vaultId: null,
   };
 }

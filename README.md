@@ -89,7 +89,7 @@ launch publishes its own Meme package from the template bytecode, linking the
 timelock, admin, partners, and launchpad packages. `sharedObjects` groups each
 package's singletons (`admin.acl`; `launchpad.packageVersion`, `launchConfig`,
 `runtimeConfig`; `migrators.packageVersion`, `lpFeePolicy`, `venueConfig`;
-`presale.venueConfig`; `blastSui.packageVersion`, `vault`) by object ID and
+`presale.venueConfig`, `feePolicy`; `blastSui.packageVersion`, `vault`) by object ID and
 initial shared version. Builders add `mutable` from the Move function
 signature because mutability belongs to a transaction argument, not to the
 object itself. `adminDeployment`, `partnersDeployment`, `launchpadDeployment`,

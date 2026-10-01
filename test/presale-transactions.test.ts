@@ -39,6 +39,7 @@ const deployment: PresaleDeployment = {
   packageId: "0x5f",
   originalPackageId: "0x5e",
   venueConfig: shared("0x60", false),
+  feePolicy: shared("0x61", false),
   admin: { packageId: "0xad", acl: shared("0xac", false) },
 };
 const tx = new PresaleTransactions(deployment);
@@ -147,6 +148,7 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     `Result:${commandIndex(ptb, "option::some")}`,
     `Result:${commandIndexOf(ptb, "MakeMoveVec", 2)}`,
     "pure",
+    "shared:0x61",
     "shared-mut:0x60",
     "shared:0x70",
     "shared-mut:0x71",
@@ -271,6 +273,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "cetus::migrate",
       [
         "shared-mut:0xab",
+        "shared:0x61",
         "shared:0x60",
         "shared:0x70",
         "shared-mut:0x71",
@@ -290,6 +293,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "bluefin::migrate",
       [
         "shared-mut:0xab",
+        "shared:0x61",
         "shared:0xcc",
         "shared:0xcd",
         "shared-mut:0x80",
@@ -306,7 +310,13 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         pool: shared("0x90", true),
       }),
       "cetus::collect_fees",
-      ["shared-mut:0xba", "shared:0x70", "shared:0x72", "shared-mut:0x90"],
+      [
+        "shared-mut:0xba",
+        "shared:0x61",
+        "shared:0x70",
+        "shared:0x72",
+        "shared-mut:0x90",
+      ],
     ],
     [
       tx.collectBluefinFees({
@@ -316,7 +326,13 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         pool: shared("0x90", true),
       }),
       "bluefin::collect_fees",
-      ["shared-mut:0xba", "shared:0x80", "shared-mut:0x90", CLOCK],
+      [
+        "shared-mut:0xba",
+        "shared:0x61",
+        "shared:0x80",
+        "shared-mut:0x90",
+        CLOCK,
+      ],
     ],
     [
       tx.claimMigrationResiduals({
@@ -353,6 +369,24 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "holder_rewards::close_round",
       ["shared-mut:0xd0", "shared-mut:0xba", CLOCK],
     ],
+    [
+      tx.setProtocolFees({
+        adminCapId: "0xadc",
+        fees: {
+          raiseBps: 333n,
+          tokenBps: 500n,
+          lpMemeBps: 1_000n,
+          lpQuoteBps: 1_000n,
+        },
+      }),
+      "fee_policy::set_fees",
+      ["shared-mut:0x61", "Result:0", ...Array(4).fill("pure")],
+    ],
+    [
+      tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
+      "fee_policy::set_destination",
+      ["shared-mut:0x61", "Result:0", "pure"],
+    ],
   ];
   for (const [ptb, name, kinds] of cases) {
     const call = moveCall(ptb, name);
@@ -384,6 +418,33 @@ test("signs in as the presale RewardsAdmin through blast_acl", () => {
     normalizeStructTag("0x5e::blast_presale_domain::RewardsAdmin"),
   ]);
   assert.deepEqual(argumentKinds(ptb, signIn), ["shared:0xac", "object:0xadc"]);
+});
+
+test("signs in as the presale FeeAdmin and TreasuryAdmin for fee-policy updates", () => {
+  for (const [ptb, role] of [
+    [
+      tx.setProtocolFees({
+        adminCapId: "0xadc",
+        fees: { raiseBps: 0n, tokenBps: 0n, lpMemeBps: 0n, lpQuoteBps: 0n },
+      }),
+      "FeeAdmin",
+    ],
+    [
+      tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
+      "TreasuryAdmin",
+    ],
+  ] as const) {
+    const signIn = moveCall(ptb, "blast_acl::sign_in");
+    assert.deepEqual(signIn.typeArguments, [
+      normalizeStructTag(`0x5e::blast_presale_domain::${role}`),
+    ]);
+  }
+  assert.throws(() =>
+    tx.setProtocolFees({
+      adminCapId: "0xadc",
+      fees: { raiseBps: -1n, tokenBps: 0n, lpMemeBps: 0n, lpQuoteBps: 0n },
+    }),
+  );
 });
 
 test("rejects a manifest from the migrators' leaf domain or another vault", () => {
