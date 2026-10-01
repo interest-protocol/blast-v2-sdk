@@ -137,8 +137,8 @@ export function decodeLpVaultObject(
       object.initialSharedVersion,
     ),
     mutable: true,
-    memeType: normalizeTypeParameter(tag.typeParams[0]!),
-    quoteType: normalizeTypeParameter(tag.typeParams[1]!),
+    memeType: normalizeTypeParameter(tag.typeParams[0]),
+    quoteType: normalizeTypeParameter(tag.typeParams[1]),
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
     protocolMemeResidual: BigInt(parsed.protocol_meme_residual.value),
     protocolQuoteResidual: BigInt(parsed.protocol_quote_residual.value),
@@ -262,9 +262,9 @@ function originalTypeNameText(type: string): string {
 }
 
 function normalizeTypeParameter(
-  type: ReturnType<typeof parseStructTag>["typeParams"][number],
+  type: ReturnType<typeof parseStructTag>["typeParams"][number] | undefined,
 ): string {
-  if (typeof type === "string") {
+  if (type === undefined || typeof type === "string") {
     throw new TypeError("LP vault coin type must be a struct type");
   }
   return normalizeStructTag(type);

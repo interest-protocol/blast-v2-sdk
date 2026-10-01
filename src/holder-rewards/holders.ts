@@ -107,7 +107,8 @@ export function holderWeights(
   ledger: HolderLedger,
   excluded: readonly string[] = [],
 ): HolderWeight[] {
-  if (ledger.timestampMs === null) return [];
+  const { timestampMs } = ledger;
+  if (timestampMs === null) return [];
   const exclusions = new Set([
     normalizeSuiAddress("0x0"),
     ...excluded.map(rewardAddress),
@@ -118,7 +119,7 @@ export function holderWeights(
       const weight =
         BigInt(account.weight) +
         BigInt(account.balance) *
-          (BigInt(ledger.timestampMs!) - BigInt(account.timestampMs));
+          (BigInt(timestampMs) - BigInt(account.timestampMs));
       return !exclusions.has(address) && weight > 0n
         ? [{ address, weight }]
         : [];
@@ -127,8 +128,8 @@ export function holderWeights(
 
 /** Call only after the matching funded round is confirmed; current balances continue unchanged. */
 export function resetHolderWeights(ledger: HolderLedger): HolderLedger {
-  if (ledger.timestampMs === null)
-    throw new Error("cannot reset an empty ledger");
+  const { timestampMs } = ledger;
+  if (timestampMs === null) throw new Error("cannot reset an empty ledger");
   return {
     ...ledger,
     startCheckpoint: (BigInt(ledger.nextCheckpoint) - 1n).toString(),
@@ -140,7 +141,7 @@ export function resetHolderWeights(ledger: HolderLedger): HolderLedger {
           {
             balance: value.balance,
             weight: "0",
-            timestampMs: ledger.timestampMs!,
+            timestampMs,
           },
         ]),
     ),

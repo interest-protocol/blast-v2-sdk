@@ -26,6 +26,7 @@ import {
 import type { LaunchTypes } from "../launchpad/transactions.ts";
 import { normalizeLaunchTypes } from "../launchpad/transactions.ts";
 import { requireU64 } from "../lib/integers.ts";
+import { moveResults } from "../lib/ptb.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import { normalizeSharedObjectReference } from "../lib/sui.ts";
 import type { CetusMemeSide } from "../migrators/transactions.ts";
@@ -884,13 +885,16 @@ export class PresaleTransactions {
     },
   ): Transaction {
     const tx = new Transaction();
-    const [meme, quote] = tx.add(
+    const result = tx.add(
       this.call.claimMigrationResiduals({
         ...options,
         presaleCap: options.presaleCapId,
       }),
     );
-    tx.transferObjects([meme!, quote!], normalizeSuiAddress(options.recipient));
+    tx.transferObjects(
+      moveResults(result, 2),
+      normalizeSuiAddress(options.recipient),
+    );
     return tx;
   }
 
@@ -934,11 +938,9 @@ export class PresaleTransactions {
     created: TransactionResult,
     options: LaunchTypes & { capRecipient: string },
   ): Transaction {
-    tx.add(this.call.share({ ...options, presale: created[0]! }));
-    tx.transferObjects(
-      [created[1]!],
-      normalizeSuiAddress(options.capRecipient),
-    );
+    const [presale, presaleCap] = moveResults(created, 2);
+    tx.add(this.call.share({ ...options, presale }));
+    tx.transferObjects([presaleCap], normalizeSuiAddress(options.capRecipient));
     return tx;
   }
 }

@@ -18,6 +18,7 @@ import {
   requirePositiveU64,
   requireU64,
 } from "../lib/integers.ts";
+import { moveResults } from "../lib/ptb.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import { normalizeSharedObjectReference } from "../lib/sui.ts";
 import type { CreatorAllocationPlan, FeeSplit } from "./allocation.ts";
@@ -701,7 +702,7 @@ export class LaunchpadTransactions {
     });
     const buyResult = tx.add(this.call.buy({ ...options, quoteCoin }));
     tx.transferObjects(
-      [buyResult[0]!, buyResult[1]!],
+      moveResults(buyResult, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
@@ -736,7 +737,7 @@ export class LaunchpadTransactions {
     const tx = new Transaction();
     const claimResult = tx.add(this.call.claimCreatorCaps(options));
     tx.transferObjects(
-      [claimResult[0]!, claimResult[1]!],
+      moveResults(claimResult, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
@@ -757,7 +758,7 @@ export class LaunchpadTransactions {
       }),
     );
     tx.transferObjects(
-      [claimResult[0]!, claimResult[1]!],
+      moveResults(claimResult, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
@@ -828,7 +829,7 @@ export class LaunchpadTransactions {
       this.call.claimProtocolFees({ ...options, adminWitness }),
     );
     tx.transferObjects(
-      [claimResult[0]!, claimResult[1]!, claimResult[2]!],
+      moveResults(claimResult, 3),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
@@ -916,7 +917,7 @@ export function addLaunchCompletion(
   );
   if (bought) {
     tx.transferObjects(
-      [bought[0]!, bought[1]!],
+      moveResults(bought, 2),
       normalizeSuiAddress(preShareBuy.recipient),
     );
   }

@@ -34,6 +34,7 @@ import {
   normalizeLaunchTypes,
 } from "../launchpad/transactions.ts";
 import { requireU64 } from "../lib/integers.ts";
+import { moveResults } from "../lib/ptb.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import { normalizeSharedObjectReference } from "../lib/sui.ts";
 import type { MigratorVenue } from "./state.ts";
@@ -843,7 +844,7 @@ export class MigratorTransactions {
       }),
     );
     tx.transferObjects(
-      [result[0]!, result[1]!],
+      moveResults(result, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
@@ -864,7 +865,7 @@ export class MigratorTransactions {
       this.call.claimProtocolFees({ ...options, adminWitness }),
     );
     tx.transferObjects(
-      [result[0]!, result[1]!],
+      moveResults(result, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;

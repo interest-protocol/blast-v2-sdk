@@ -298,13 +298,14 @@ export function decodeLaunchpadEvent(
   if (
     envelope.address !== originalPackageId ||
     envelope.module !== "blast_events" ||
-    envelope.name !== "Event" ||
-    envelope.typeParams.length !== 1
+    envelope.name !== "Event"
   ) {
     throw new TypeError("launchpad event has an unexpected event package");
   }
-  const payloadTag = envelope.typeParams[0]!;
+  const [payloadTag, ...extra] = envelope.typeParams;
   if (
+    payloadTag === undefined ||
+    extra.length > 0 ||
     typeof payloadTag === "string" ||
     payloadTag.address !== originalPackageId ||
     payloadTag.module !== "events" ||

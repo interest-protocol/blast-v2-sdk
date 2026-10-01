@@ -13,6 +13,7 @@ import {
   buildRewardManifest,
   PRESALE_REWARD_LEAF_DOMAIN,
 } from "../src/holder-rewards/allocations.ts";
+import { itemAt } from "../src/lib/arrays.ts";
 import type { SharedObjectReference } from "../src/lib/sui.ts";
 import { buildAllowlist } from "../src/presale/allowlist.ts";
 import { openEligibility, uncappedForAnyone } from "../src/presale/math.ts";
@@ -205,7 +206,7 @@ test("commits through each route and returns the change to the wallet", () => {
       amount: 250n,
       recipient: "0xa11ce",
       route,
-      allowlist: allowlist.proofs[0]!,
+      allowlist: itemAt(allowlist.proofs, 0),
     });
     const call = moveCall(ptb, `blast_presale::commit_${route}`);
     assert.deepEqual(call.typeArguments, [memeA, sui]);
@@ -483,7 +484,7 @@ function commandIndexOf(ptb: Transaction, kind: string, nth: number): number {
     .commands.flatMap((command, index) =>
       command.$kind === kind ? [index] : [],
     );
-  return indexes[nth]!;
+  return itemAt(indexes, nth);
 }
 
 function moveCall(ptb: Transaction, name: string) {

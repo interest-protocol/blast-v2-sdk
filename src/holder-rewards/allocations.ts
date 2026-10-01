@@ -5,8 +5,14 @@ import {
   normalizeSuiAddress,
   toHex,
 } from "@mysten/sui/utils";
-import { blake2b } from "@noble/hashes/blake2.js";
 import { requireU64 } from "../lib/integers.ts";
+import {
+  blake2b256,
+  merkleLayers,
+  merkleNode,
+  merkleProof,
+  merkleRoot,
+} from "../lib/merkle.ts";
 
 export const MAX_REWARD_LEAVES = 65_536;
 export type HolderWeight = { address: string; weight: bigint };
@@ -139,18 +145,11 @@ export function buildRewardManifest(options: {
     meme: allocation.memeAmount,
     quote: allocation.quoteAmount,
   }));
-  const layers: Uint8Array[][] = [
+  const layers = merkleLayers(
     leaves.map((leaf) =>
-      hash(concat(leafPrefix, leafBcs.serialize(leaf).toBytes())),
+      blake2b256(concat(leafPrefix, leafBcs.serialize(leaf).toBytes())),
     ),
-  ];
-  while (layers[layers.length - 1]!.length > 1) {
-    const layer = layers[layers.length - 1]!;
-    const next: Uint8Array[] = [];
-    for (let i = 0; i < layer.length; i += 2)
-      next.push(nodeHash(layer[i]!, layer[i + 1] ?? layer[i]!));
-    layers.push(next);
-  }
+  );
   const memeAmount = requireU64(
     "total Meme",
     allocations.reduce((sum, item) => sum + item.memeAmount, 0n),
@@ -165,9 +164,9 @@ export function buildRewardManifest(options: {
     number: options.number.toString(),
     startCheckpoint: options.startCheckpoint.toString(),
     endCheckpoint: options.endCheckpoint.toString(),
-    root: toHex(layers[layers.length - 1]![0]!),
+    root: toHex(merkleRoot(layers)),
     manifestDigest: toHex(
-      hash(
+      blake2b256(
         manifestBcs
           .serialize(
             {
@@ -184,22 +183,13 @@ export function buildRewardManifest(options: {
     ),
     memeAmount: memeAmount.toString(),
     quoteAmount: quoteAmount.toString(),
-    allocations: allocations.map((allocation, index) => {
-      let position = index;
-      const proof: string[] = [];
-      for (let level = 0; level < layers.length - 1; level++) {
-        const layer = layers[level]!;
-        proof.push(toHex(layer[position ^ 1] ?? layer[position]!));
-        position = Math.floor(position / 2);
-      }
-      return {
-        index: index.toString(),
-        beneficiary: allocation.beneficiary,
-        memeAmount: allocation.memeAmount.toString(),
-        quoteAmount: allocation.quoteAmount.toString(),
-        proof,
-      };
-    }),
+    allocations: allocations.map((allocation, index) => ({
+      index: index.toString(),
+      beneficiary: allocation.beneficiary,
+      memeAmount: allocation.memeAmount.toString(),
+      quoteAmount: allocation.quoteAmount.toString(),
+      proof: merkleProof(layers, index).map(toHex),
+    })),
   };
 }
 
@@ -220,7 +210,7 @@ export function verifyRewardProof(
       allocation.proof.length !== Math.ceil(Math.log2(count))
     )
       return false;
-    let digest = hash(
+    let digest = blake2b256(
       concat(
         leafPrefix,
         leafBcs
@@ -238,7 +228,7 @@ export function verifyRewardProof(
     for (const sibling of allocation.proof) {
       const bytes = rewardDigest(sibling);
       digest =
-        index % 2 === 0 ? nodeHash(digest, bytes) : nodeHash(bytes, digest);
+        index % 2 === 0 ? merkleNode(digest, bytes) : merkleNode(bytes, digest);
       index = Math.floor(index / 2);
     }
     return toHex(digest) === toHex(rewardDigest(manifest.root));
@@ -278,10 +268,10 @@ export function validateRewardManifest(
     if (manifest[key] !== expected[key])
       throw new Error(`manifest ${key} mismatch`);
   }
-  for (let i = 0; i < expected.allocations.length; i++) {
-    const actual = manifest.allocations[i]!;
-    const wanted = expected.allocations[i]!;
+  for (const [i, wanted] of expected.allocations.entries()) {
+    const actual = manifest.allocations[i];
     if (
+      !actual ||
       actual.index !== wanted.index ||
       actual.beneficiary !== wanted.beneficiary ||
       actual.memeAmount !== wanted.memeAmount ||
@@ -307,12 +297,6 @@ export function rewardDigest(value: string): Uint8Array {
   return fromHex(value);
 }
 
-function hash(bytes: Uint8Array): Uint8Array {
-  return blake2b(bytes, { dkLen: 32 });
-}
 function concat(left: Uint8Array, right: Uint8Array): Uint8Array {
   return new Uint8Array([...left, ...right]);
-}
-function nodeHash(left: Uint8Array, right: Uint8Array): Uint8Array {
-  return hash(new Uint8Array([1, ...left, ...right]));
 }

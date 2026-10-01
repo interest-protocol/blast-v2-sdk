@@ -522,19 +522,19 @@ function pairTypes(
   originalPackageId: string | undefined,
 ): [string, string] {
   const tag = parseStructTag(object.type);
+  const [memeType, quoteType, ...extra] = tag.typeParams;
   if (
     tag.module !== module ||
     tag.name !== name ||
-    tag.typeParams.length !== 2 ||
+    memeType === undefined ||
+    quoteType === undefined ||
+    extra.length > 0 ||
     (originalPackageId !== undefined &&
       tag.address !== normalizeSuiAddress(originalPackageId))
   ) {
     throw new TypeError(`object ${object.objectId} is not a presale ${name}`);
   }
-  return [
-    normalizeStructTag(tag.typeParams[0]!),
-    normalizeStructTag(tag.typeParams[1]!),
-  ];
+  return [normalizeStructTag(memeType), normalizeStructTag(quoteType)];
 }
 
 function sharedIdentity(

@@ -4,7 +4,7 @@ import test from "node:test";
 
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
-
+import { itemAt } from "../src/lib/arrays.ts";
 import type {
   DecodedPresaleEvent,
   PresaleEventKind,
@@ -189,7 +189,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   ];
   let state = createPresaleEventProjection();
   for (const event of events) state = reducePresaleEvent(state, event);
-  let presale = state.presales[PRESALE]!;
+  let presale = required(state.presales[PRESALE]);
   assert.equal(presale.lifecycle, "Funded");
   assert.deepEqual(presale.commitments, { [ALICE]: 1_000n, [BOB]: 3_000n });
   assert.deepEqual(
@@ -206,12 +206,12 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   const migration: DecodedPresaleEvent[] = [
     decode("RecipientAllocated", {
       presale_id: PRESALE,
-      recipient: recipients[0]!,
+      recipient: itemAt(recipients, 0),
       tokens: 5_000n,
     }),
     decode("RecipientAllocated", {
       presale_id: PRESALE,
-      recipient: recipients[1]!,
+      recipient: itemAt(recipients, 1),
       tokens: 3_000n,
     }),
     decode("PresaleMigrated", {
@@ -227,7 +227,10 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     [ALICE, 1_000n],
     [BOB, 3_000n],
   ] as const) {
-    const expected = previewClaim(state.presales[PRESALE]!, commitment);
+    const expected = previewClaim(
+      required(state.presales[PRESALE]),
+      commitment,
+    );
     state = reducePresaleEvent(
       state,
       decode("Claimed", {
@@ -237,11 +240,11 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
         tokens: expected.tokens,
         quote_refund: expected.quoteRefund,
         remaining_commitments:
-          state.presales[PRESALE]!.remainingCommitments - commitment,
+          required(state.presales[PRESALE]).remainingCommitments - commitment,
       }),
     );
   }
-  presale = state.presales[PRESALE]!;
+  presale = required(state.presales[PRESALE]);
   assert.equal(presale.lifecycle, "Migrated");
   assert.deepEqual(presale.commitments, {});
   // `blast_presale_tests`: custody is [4_000, 0, 2, 0, 0, 0, 0] after both claims.
@@ -322,8 +325,8 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     assert.equal(reducePresaleEvent(next, event), next, "replay is a no-op");
     state = next;
   }
-  assert.equal(state.presales[PRESALE]!.vaultId, VAULT);
-  const vault = state.vaults[VAULT]!;
+  assert.equal(required(state.presales[PRESALE]).vaultId, VAULT);
+  const vault = required(state.vaults[VAULT]);
   assert.equal(vault.venueType, normalizeStructTag(`${pkg}::cetus::Venue`));
   assert.deepEqual(
     [
@@ -337,7 +340,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   );
   assert.deepEqual(vault.recipientMemePaid, [51n, 20n]);
   assert.deepEqual(vault.recipientQuotePaid, [5n, 2n]);
-  const round = state.rounds[ROUND]!;
+  const round = required(state.rounds[ROUND]);
   assert.deepEqual(round.paidIndexes, { "1": true });
   assert.equal(round.closed, true);
   assert.equal(round.memeRemaining, 0n);
@@ -349,17 +352,19 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   }
 
   // Cancellation refunds every commitment in full.
-  const cancelled = reducePresaleEvent(
+  const cancelled = required(
     reducePresaleEvent(
-      reducePresaleEvent(createPresaleEventProjection(), events[0]!),
-      events[2]!,
-    ),
-    decode("PresaleCancelled", {
-      presale_id: PRESALE,
-      commitments: 1_000n,
-      refundable_quote: 1_000n,
-    }),
-  ).presales[PRESALE]!;
+      reducePresaleEvent(
+        reducePresaleEvent(createPresaleEventProjection(), itemAt(events, 0)),
+        itemAt(events, 2),
+      ),
+      decode("PresaleCancelled", {
+        presale_id: PRESALE,
+        commitments: 1_000n,
+        refundable_quote: 1_000n,
+      }),
+    ).presales[PRESALE],
+  );
   assert.equal(cancelled.lifecycle, "Cancelled");
   assert.deepEqual(previewClaim(cancelled, 1_000n), {
     tokens: 0n,
@@ -424,7 +429,7 @@ test("a raise allocation leaves custody the migration's overflow", () => {
   ]) {
     state = reducePresaleEvent(state, event);
   }
-  const presale = state.presales[PRESALE]!;
+  const presale = required(state.presales[PRESALE]);
   assert.deepEqual(presale.raisePayouts, [
     { recipient: id("0x5a1e"), amount: 200n },
   ]);
@@ -495,4 +500,9 @@ function descriptor(type: unknown): string {
     if (inner === "UncappedPhase") return "optionUncapped";
   }
   throw new TypeError(`unsupported ABI event field ${JSON.stringify(type)}`);
+}
+
+function required<T>(value: T | undefined): T {
+  assert.ok(value !== undefined);
+  return value;
 }

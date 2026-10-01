@@ -1,5 +1,5 @@
 import { normalizeSuiAddress } from "@mysten/sui/utils";
-
+import { itemAt } from "../lib/arrays.ts";
 import { BASIS_POINTS_DENOMINATOR, U64_MAX } from "../lib/integers.ts";
 import { sqrtPriceX64 } from "../migrators/migration-math.ts";
 import type {
@@ -178,14 +178,19 @@ export function apportion(shares: readonly bigint[], total: bigint): bigint[] {
   const products = shares.map((share) => total * share);
   const amounts = products.map((product) => product / BPS);
   const order = products
-    .map((_, index) => index)
-    .sort((a, b) => {
-      const [left, right] = [products[a]! % BPS, products[b]! % BPS];
-      return left === right ? a - b : left > right ? -1 : 1;
-    });
+    .map((product, index) => ({ index, remainder: product % BPS }))
+    .sort((a, b) =>
+      a.remainder === b.remainder
+        ? a.index - b.index
+        : a.remainder > b.remainder
+          ? -1
+          : 1,
+    );
   const leftover = Number(total - sum(amounts));
-  for (let i = 0; i < leftover; i++) amounts[order[i]!]! += 1n;
-  return amounts;
+  const bumped = new Set(order.slice(0, leftover).map(({ index }) => index));
+  return amounts.map((amount, index) =>
+    bumped.has(index) ? amount + 1n : amount,
+  );
 }
 
 export type SupplyApportionment = {
@@ -215,14 +220,15 @@ export function apportionSupply(
     ],
     tokenSupply,
   );
+  const [tokenAllocation = 0n, liquidityTokenAllocation = 0n] = amounts;
   check(
-    amounts[0]! > 0n && amounts[1]! > 0n,
+    tokenAllocation > 0n && liquidityTokenAllocation > 0n,
     "EInvalidTokenAllocation",
     "the presale and LP allocations must apportion to positive atoms",
   );
   return {
-    tokenAllocation: amounts[0]!,
-    liquidityTokenAllocation: amounts[1]!,
+    tokenAllocation,
+    liquidityTokenAllocation,
     recipientPayouts: payouts(recipientAllocations, amounts.slice(2)),
   };
 }
@@ -245,7 +251,7 @@ export function apportionRaise(
   );
   return {
     raisePayouts: payouts(raiseAllocations, amounts),
-    liquidityQuote: amounts[raiseAllocations.length]!,
+    liquidityQuote: itemAt(amounts, -1),
   };
 }
 
@@ -263,8 +269,7 @@ export function apportionFee(
     [...feeRecipients.map((recipient) => recipient.bps), rewardsFeeBps],
     amount,
   );
-  const rewards = amounts.pop()!;
-  return { recipients: amounts, rewards };
+  return { recipients: amounts.slice(0, -1), rewards: itemAt(amounts, -1) };
 }
 
 function payouts(
@@ -273,7 +278,7 @@ function payouts(
 ): RecipientPayout[] {
   return allocations.map((allocation, index) => ({
     recipient: normalizeSuiAddress(allocation.recipient),
-    amount: amounts[index]!,
+    amount: itemAt(amounts, index),
   }));
 }
 
