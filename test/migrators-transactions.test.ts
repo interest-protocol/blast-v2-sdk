@@ -3,7 +3,10 @@ import test from "node:test";
 
 import type { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
-import { buildRewardManifest } from "../src/holder-rewards/allocations.ts";
+import {
+  buildRewardManifest,
+  MIGRATOR_REWARD_LEAF_DOMAIN,
+} from "../src/holder-rewards/allocations.ts";
 import type { SharedObjectReference } from "../src/lib/sui.ts";
 import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
 import {
@@ -25,13 +28,12 @@ const deployment: MigratorsDeployment = {
   launchpad: {
     packageId: "0x123",
     originalPackageId: "0x122",
-    adminPackageId: "0xad",
     partnersPackageId: "0xae",
     timelockPackageId: "0xaf",
     packageVersion: shared("0x2", "10", false),
     launchConfig: shared("0x3", "11", false),
     runtimeConfig: shared("0x4", "12", false),
-    acl: shared("0x5", "13", false),
+    admin: { packageId: "0xad", acl: shared("0x5", "13", false) },
   },
   migratorsVersion: shared("0x61", "15", false),
   lpFeePolicy: shared("0x40", "18", false),
@@ -462,6 +464,7 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
 test("publishes a holder-reward round and relays its claims", () => {
   const vault = shared("0xd", "20", true);
   const manifest = buildRewardManifest({
+    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
     vaultId: "0xd",
     number: 0n,
     startCheckpoint: 10n,

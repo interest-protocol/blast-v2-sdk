@@ -25,9 +25,12 @@ const deployment: BlastSuiDeployment = {
   packageVersion: {
     objectId: "0x10",
     initialSharedVersion: "8",
-    mutable: false,
   },
-  vault: { objectId: "0x44", initialSharedVersion: "9", mutable: true },
+  vault: { objectId: "0x44", initialSharedVersion: "9" },
+  admin: {
+    packageId: "0xad",
+    acl: { objectId: "0xac", initialSharedVersion: "3" },
+  },
 };
 
 test("registers calls, transactions, and exact Core API state reads", async () => {

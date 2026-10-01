@@ -5,17 +5,14 @@ import type {
   TransactionResult,
 } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
-import {
-  normalizeStructTag,
-  normalizeSuiAddress,
-  normalizeSuiObjectId,
-} from "@mysten/sui/utils";
+import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import type {
   RewardManifest,
   RewardProof,
 } from "../holder-rewards/allocations.ts";
 import {
+  MIGRATOR_REWARD_LEAF_DOMAIN,
   rewardAddress,
   rewardDigest,
   validateRewardManifest,
@@ -34,20 +31,28 @@ import {
   normalizeLaunchTypes,
 } from "../launchpad/transactions.ts";
 import { requireU64 } from "../lib/integers.ts";
-import type { SharedObjectReference } from "../lib/sui.ts";
-import { normalizeSharedObjectReference } from "../lib/sui.ts";
+import { deploymentObject, moveResults } from "../lib/ptb.ts";
+import type {
+  SharedObjectIdentity,
+  SharedObjectReference,
+} from "../lib/sui.ts";
+import {
+  normalizeSharedObjectIdentity,
+  normalizeSharedObjectReference,
+  normalizeSuiPackageReference,
+} from "../lib/sui.ts";
 import type { MigratorVenue } from "./state.ts";
 
 export type MigratorsDeployment = {
   packageId: string;
-  originalPackageId?: string;
+  originalPackageId: string;
   launchpad: LaunchpadDeployment;
   /** Migrators `package_version::PackageVersion` checked by every protected entry. */
-  migratorsVersion: SharedObjectReference<false>;
+  migratorsVersion: SharedObjectIdentity;
   /** Migrators `lp_fee_policy::LpFeePolicy` read by every LP-fee collection. */
-  lpFeePolicy: SharedObjectReference<false>;
+  lpFeePolicy: SharedObjectIdentity;
   /** Migrators `venue_config::VenueConfig`, holding each Meme's Cetus `PoolCreationCap`. */
-  venueConfig: SharedObjectReference<false>;
+  venueConfig: SharedObjectIdentity;
 };
 
 /**
@@ -79,37 +84,26 @@ export type CreateLaunchOptions = LaunchTypes &
 /** Maximum Merkle proof depth the holder-reward leaf count (65,536) allows. */
 export const MAX_HOLDER_REWARD_PROOF_DEPTH = 16;
 
-type NormalizedDeployment = Required<Omit<MigratorsDeployment, "launchpad">> & {
-  launchpad: LaunchpadDeployment;
-};
-
 export class MigratorCalls {
-  readonly deployment: NormalizedDeployment;
+  readonly deployment: MigratorsDeployment;
   readonly launchpad: LaunchpadCalls;
 
   constructor(deployment: MigratorsDeployment) {
-    const packageId = normalizeSuiObjectId(deployment.packageId);
     this.launchpad = new LaunchpadCalls(deployment.launchpad);
     this.deployment = {
-      packageId,
-      originalPackageId: normalizeSuiObjectId(
-        deployment.originalPackageId ?? packageId,
-      ),
+      ...normalizeSuiPackageReference("migrators", deployment),
       launchpad: this.launchpad.deployment,
-      migratorsVersion: normalizeSharedObjectReference(
+      migratorsVersion: normalizeSharedObjectIdentity(
         "migratorsVersion",
         deployment.migratorsVersion,
-        false,
       ),
-      lpFeePolicy: normalizeSharedObjectReference(
+      lpFeePolicy: normalizeSharedObjectIdentity(
         "lpFeePolicy",
         deployment.lpFeePolicy,
-        false,
       ),
-      venueConfig: normalizeSharedObjectReference(
+      venueConfig: normalizeSharedObjectIdentity(
         "venueConfig",
         deployment.venueConfig,
-        false,
       ),
     };
   }
@@ -152,12 +146,7 @@ export class MigratorCalls {
           this.#migratorsVersion(tx),
           this.#launchpadVersion(tx),
           this.#launchConfig(tx),
-          sharedObject(
-            tx,
-            "venueConfig",
-            { ...this.deployment.venueConfig, mutable: true },
-            true,
-          ),
+          deploymentObject(tx, this.deployment.venueConfig, true),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "cetusPools", options.cetusPools, true),
           tx.pure.u32(tickSpacing),
@@ -221,7 +210,7 @@ export class MigratorCalls {
           this.#migratorsVersion(tx),
           this.#launchpadVersion(tx),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          sharedObject(tx, "venueConfig", this.deployment.venueConfig, false),
+          deploymentObject(tx, this.deployment.venueConfig, false),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "cetusPools", options.cetusPools, true),
           sharedObject(tx, "burnManager", options.burnManager, true),
@@ -585,7 +574,10 @@ export class MigratorCalls {
     },
   ) {
     const types = normalizeLaunchTypes(options);
-    const manifest = validateRewardManifest(options.manifest);
+    const manifest = validateRewardManifest(
+      options.manifest,
+      MIGRATOR_REWARD_LEAF_DOMAIN,
+    );
     if (
       rewardAddress(manifest.vaultId) !== rewardAddress(options.vault.objectId)
     ) {
@@ -664,12 +656,7 @@ export class MigratorCalls {
         target: `${this.deployment.packageId}::lp_fee_policy::${functionName}`,
         typeArguments,
         arguments: [
-          sharedObject(
-            tx,
-            "lpFeePolicy",
-            { ...this.deployment.lpFeePolicy, mutable: true },
-            true,
-          ),
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
           this.#migratorsVersion(tx),
           tx.object(options.adminWitness),
           ...extra(tx),
@@ -679,34 +666,23 @@ export class MigratorCalls {
   }
 
   #migratorsVersion(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
-      tx,
-      "migratorsVersion",
-      this.deployment.migratorsVersion,
-      false,
-    );
+    return deploymentObject(tx, this.deployment.migratorsVersion, false);
   }
 
   #launchpadVersion(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
+    return deploymentObject(
       tx,
-      "packageVersion",
       this.deployment.launchpad.packageVersion,
       false,
     );
   }
 
   #launchConfig(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(
-      tx,
-      "launchConfig",
-      this.deployment.launchpad.launchConfig,
-      false,
-    );
+    return deploymentObject(tx, this.deployment.launchpad.launchConfig, false);
   }
 
   #lpFeePolicy(tx: Transaction): TransactionObjectArgument {
-    return sharedObject(tx, "lpFeePolicy", this.deployment.lpFeePolicy, false);
+    return deploymentObject(tx, this.deployment.lpFeePolicy, false);
   }
 }
 
@@ -843,7 +819,7 @@ export class MigratorTransactions {
       }),
     );
     tx.transferObjects(
-      [result[0]!, result[1]!],
+      moveResults(result, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
@@ -864,7 +840,7 @@ export class MigratorTransactions {
       this.call.claimProtocolFees({ ...options, adminWitness }),
     );
     tx.transferObjects(
-      [result[0]!, result[1]!],
+      moveResults(result, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;

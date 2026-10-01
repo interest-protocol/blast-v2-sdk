@@ -3,14 +3,18 @@ import test from "node:test";
 
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
-import type {
-  LaunchpadDeployment,
-  SharedObjectReference,
-} from "../src/launchpad/transactions.ts";
+import type { LaunchpadDeployment } from "../src/launchpad/transactions.ts";
 import {
   LaunchpadCalls,
   LaunchpadTransactions,
 } from "../src/launchpad/transactions.ts";
+import type { SharedObjectReference } from "../src/lib/sui.ts";
+import {
+  assertBuildersMatchAbi,
+  moveCallArguments,
+  moveCallTypeArguments,
+  readAbi,
+} from "./abi.ts";
 
 function shared<const Mutable extends boolean>(
   objectId: string,
@@ -22,13 +26,13 @@ function shared<const Mutable extends boolean>(
 
 const deployment: LaunchpadDeployment = {
   packageId: "0x123",
-  adminPackageId: "0xad",
+  originalPackageId: "0x123",
   partnersPackageId: "0xae",
   timelockPackageId: "0xaf",
   packageVersion: shared("0x2", "10", false),
   launchConfig: shared("0x3", "11", false),
   runtimeConfig: shared("0x4", "12", false),
-  acl: shared("0x5", "13", false),
+  admin: { packageId: "0xad", acl: shared("0x5", "13", false) },
 };
 const types = {
   memeType: "0xa::meme::MEME",
@@ -513,6 +517,132 @@ test("uses a fully qualified immutable Clock reference", () => {
         input.mutable === false,
     ),
   );
+});
+
+test("signs in with each operator role and calls every launchpad setter", () => {
+  const sdk = new LaunchpadTransactions(deployment);
+  const abi = readAbi("production-launchpad-v1.json", "launchpad");
+  const partner = shared("0xb1", "5", false);
+  const launch = shared("0xc", "20", true);
+  const adminCapId = "0xadc";
+  const cases: [Transaction, string, string, string[]][] = [
+    [
+      sdk.setProtocolAllocation({ adminCapId, memeBps: 100n, quoteBps: 200n }),
+      "TreasuryAdmin",
+      "launch_config::set_protocol_allocation",
+      ["shared-mut:0x3", "shared:0x2", "result:0", "result:1", "result:2"],
+    ],
+    [
+      sdk.setMemeDecimalsAllowed({ adminCapId, decimals: 8, allowed: true }),
+      "ListingAdmin",
+      "launch_config::set_meme_decimals_allowed",
+      ["shared-mut:0x3", "shared:0x2", "result:0", "pure", "pure"],
+    ],
+    [
+      sdk.setQuoteAllowed({
+        adminCapId,
+        quoteType: "0x2::sui::SUI",
+        allowed: true,
+      }),
+      "ListingAdmin",
+      "launch_config::set_quote_allowed",
+      ["shared-mut:0x3", "shared:0x2", "result:0", "pure"],
+    ],
+    [
+      sdk.setTradeFees({ adminCapId, quoteFeeBps: 100n, memeFeeBps: 50n }),
+      "FeeAdmin",
+      "launch_config::set_trade_fees",
+      ["shared-mut:0x3", "shared:0x2", "result:0", "result:1", "result:2"],
+    ],
+    [
+      sdk.setCreationFee({ adminCapId, creationFee: 1_000n }),
+      "FeeAdmin",
+      "launch_config::set_creation_fee",
+      ["shared-mut:0x3", "shared:0x2", "result:0", "pure"],
+    ],
+    [
+      sdk.addPartner({ adminCapId, partner }),
+      "FeeAdmin",
+      "launch_config::add_partner",
+      ["shared-mut:0x3", "shared:0x2", "result:0", "shared:0xb1"],
+    ],
+    [
+      sdk.removePartner({ adminCapId, partner }),
+      "FeeAdmin",
+      "launch_config::remove_partner",
+      ["shared-mut:0x3", "shared:0x2", "result:0", "shared:0xb1", "clock"],
+    ],
+    [
+      sdk.setMigrationWitnessAllowed({
+        adminCapId,
+        migrationWitnessType: "0x9::cetus::Witness",
+        allowed: false,
+      }),
+      "AdapterAdmin",
+      "launch_config::set_migration_witness_allowed",
+      ["shared-mut:0x3", "shared:0x2", "result:0", "pure"],
+    ],
+    [
+      sdk.setCreatorClaimSigner({
+        adminCapId,
+        signerPublicKey: new Uint8Array(32),
+      }),
+      "ClaimSignerAdmin",
+      "runtime_config::set_creator_claim_signer",
+      ["shared-mut:0x4", "shared:0x2", "result:0", "pure"],
+    ],
+    [
+      sdk.setProtocolFeeShare({ adminCapId, protocolFeeShareBps: 2_000n }),
+      "FeeAdmin",
+      "runtime_config::set_protocol_fee_share",
+      ["shared-mut:0x4", "shared:0x2", "result:0", "result:1"],
+    ],
+    [
+      sdk.reassignCurveFeeCap({
+        ...types,
+        launch,
+        adminCapId,
+        recipient: "0xd",
+      }),
+      "CreatorAdmin",
+      "launch::reassign_curve_fee_cap",
+      ["shared-mut:0xc", "shared:0x2", "result:0", "pure"],
+    ],
+    [
+      sdk.reassignMetadataCap({
+        ...types,
+        launch,
+        adminCapId,
+        recipient: "0xd",
+      }),
+      "CreatorAdmin",
+      "launch::reassign_metadata_cap",
+      ["shared-mut:0xc", "shared:0x2", "result:0", "pure"],
+    ],
+  ];
+  const covered = new Set<string>();
+  for (const [tx, role, target, args] of cases) {
+    const calls = assertBuildersMatchAbi(tx, abi, deployment.packageId);
+    assert.equal(calls.at(-1), target);
+    covered.add(target);
+    const signIn = moveCallTypeArguments(tx)[0];
+    assert.deepEqual(signIn, [
+      `${normalizeSuiObjectId(deployment.originalPackageId)}::blast_fun_domain::${role}`,
+    ]);
+    assert.deepEqual(moveCallArguments(tx, 0), ["shared:0x5", "object:0xadc"]);
+    assert.deepEqual(moveCallArguments(tx, calls.length), args, target);
+  }
+  const operatorTargets = Object.entries(abi).flatMap(([module, frozen]) =>
+    frozen.functions
+      .filter(
+        (candidate) =>
+          candidate.sdk === "builder" &&
+          (module !== "launch" || candidate.name.startsWith("reassign_")),
+      )
+      .map((candidate) => `${module}::${candidate.name}`)
+      .filter((name) => /^(launch_config|runtime_config|launch)::/.test(name)),
+  );
+  assert.deepEqual([...covered].sort(), operatorTargets.sort());
 });
 
 test("rejects incomplete or incorrectly mutable shared references", () => {

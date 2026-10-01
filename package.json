@@ -6,12 +6,14 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./admin": "./src/admin/index.ts",
     "./blast-sui": "./src/blast-sui/index.ts",
     "./deployments": "./src/deployments/index.ts",
     "./holder-rewards": "./src/holder-rewards/index.ts",
     "./launchpad": "./src/launchpad/index.ts",
     "./launchpad/template": "./src/launchpad/template.ts",
     "./migrators": "./src/migrators/index.ts",
+    "./partners": "./src/partners/index.ts",
     "./presale": "./src/presale/index.ts"
   },
   "engines": {

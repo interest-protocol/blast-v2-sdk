@@ -92,7 +92,7 @@ test("splits LP fees like presale_vault::fee_shares", () => {
     rewards: 3n,
   });
   // `a_remainder_tie_goes_to_the_fee_recipient_before_holders`.
-  assert.deepEqual(apportionFee([feeRecipients[0]!], 5_000n, 3n), {
+  assert.deepEqual(apportionFee(feeRecipients.slice(0, 1), 5_000n, 3n), {
     recipients: [2n],
     rewards: 1n,
   });

@@ -3962,7 +3962,7 @@
             },
             {
               "name": "reassign_curve_fee_cap",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -4070,7 +4070,7 @@
             },
             {
               "name": "reassign_metadata_cap",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -5950,7 +5950,7 @@
           "functions": [
             {
               "name": "add_partner",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -6033,7 +6033,7 @@
             },
             {
               "name": "remove_partner",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -6131,7 +6131,7 @@
             },
             {
               "name": "set_creation_fee",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -6200,7 +6200,7 @@
             },
             {
               "name": "set_meme_decimals_allowed",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -6270,7 +6270,7 @@
             },
             {
               "name": "set_migration_witness_allowed",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -6347,7 +6347,7 @@
             },
             {
               "name": "set_protocol_allocation",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -6435,7 +6435,7 @@
             },
             {
               "name": "set_quote_allowed",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -6510,7 +6510,7 @@
             },
             {
               "name": "set_trade_fees",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7011,7 +7011,7 @@
           "functions": [
             {
               "name": "authorize_upgrade",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7093,7 +7093,7 @@
             },
             {
               "name": "commit_upgrade_and_advance",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7171,7 +7171,7 @@
             },
             {
               "name": "make_immutable",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7239,7 +7239,7 @@
             },
             {
               "name": "wrap",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-deployment-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7398,7 +7398,7 @@
           "functions": [
             {
               "name": "set_creator_claim_signer",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7469,7 +7469,7 @@
             },
             {
               "name": "set_protocol_fee_share",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -11266,7 +11266,7 @@
           "functions": [
             {
               "name": "authorize_upgrade",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -11348,7 +11348,7 @@
             },
             {
               "name": "commit_upgrade_and_advance",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -11426,7 +11426,7 @@
             },
             {
               "name": "wrap",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-deployment-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [

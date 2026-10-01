@@ -1,8 +1,14 @@
 import { bcs } from "@mysten/sui/bcs";
 import { fromHex, normalizeSuiAddress, toHex } from "@mysten/sui/utils";
-import { blake2b } from "@noble/hashes/blake2.js";
 
 import { requirePositiveU64 } from "../lib/integers.ts";
+import {
+  blake2b256,
+  merkleLayers,
+  merkleNode,
+  merkleProof,
+  merkleRoot,
+} from "../lib/merkle.ts";
 import { MAX_PRESALE_PARTICIPANTS } from "./math.ts";
 
 export type AllowlistEntry = { wallet: string; walletCap: bigint };
@@ -37,7 +43,7 @@ export function allowlistLeaf(
   wallet: string,
   walletCap: bigint,
 ): Uint8Array {
-  return hash(
+  return blake2b256(
     concat(
       LEAF_DOMAIN,
       leafBcs
@@ -73,26 +79,15 @@ export function buildAllowlist(entries: readonly AllowlistEntry[]): Allowlist {
       requirePositiveU64("walletCap", entry.walletCap),
     ),
   );
-  const layers = [leaves];
-  while (layers.at(-1)!.length > 1) {
-    const below = layers.at(-1)!;
-    const layer: Uint8Array[] = [];
-    for (let i = 0; i < below.length; i += 2) {
-      layer.push(node(below[i]!, below[i + 1] ?? below[i]!));
-    }
-    layers.push(layer);
-  }
+  const layers = merkleLayers(leaves);
   return {
-    root: toHex(layers.at(-1)![0]!),
+    root: toHex(merkleRoot(layers)),
     leafCount: BigInt(entries.length),
     proofs: entries.map((entry, index) => ({
       index: BigInt(index),
-      wallet: wallets[index]!,
+      wallet: normalizeSuiAddress(entry.wallet),
       walletCap: entry.walletCap,
-      proof: layers.slice(0, -1).map((layer, level) => {
-        const position = index >> level;
-        return toHex(layer[position ^ 1] ?? layer[position]!);
-      }),
+      proof: merkleProof(layers, index).map(toHex),
     })),
   };
 }
@@ -112,19 +107,13 @@ export function verifyAllowlistProof(
   for (const sibling of proof) {
     const bytes = fromHex(sibling);
     if (bytes.length !== 32) return false;
-    digest = position % 2n === 0n ? node(digest, bytes) : node(bytes, digest);
+    digest =
+      position % 2n === 0n
+        ? merkleNode(digest, bytes)
+        : merkleNode(bytes, digest);
     position /= 2n;
   }
   return toHex(digest) === root;
-}
-
-/** Mirrors `merkle_tree::node`: `blake2b256(0x01 || left || right)`. */
-function node(left: Uint8Array, right: Uint8Array): Uint8Array {
-  return hash(concat(Uint8Array.of(1), concat(left, right)));
-}
-
-function hash(bytes: Uint8Array): Uint8Array {
-  return blake2b(bytes, { dkLen: 32 });
 }
 
 function concat(left: Uint8Array, right: Uint8Array): Uint8Array {

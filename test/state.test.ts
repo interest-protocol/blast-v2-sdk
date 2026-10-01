@@ -184,13 +184,16 @@ test("rejects a launch object whose embedded UID does not match", () => {
 
   assert.throws(
     () =>
-      decodeLaunchObject({
-        objectId,
-        initialSharedVersion: "7",
-        mutable: true,
-        type: "0x1::launch::Launch<0xa::meme::MEME, 0x2::sui::SUI>",
-        content,
-      }),
+      decodeLaunchObject(
+        {
+          objectId,
+          initialSharedVersion: "7",
+          mutable: true,
+          type: "0x1::launch::Launch<0xa::meme::MEME, 0x2::sui::SUI>",
+          content,
+        },
+        "0x1",
+      ),
     /mismatched UID/,
   );
 });

@@ -15,12 +15,19 @@ import {
 } from "../src/blast-sui/transactions.ts";
 import type { BlastSuiDeployment } from "../src/blast-sui/types.ts";
 import type { SharedObjectReference } from "../src/lib/sui.ts";
+import {
+  assertBuildersMatchAbi,
+  moveCallArguments,
+  moveCallTypeArguments,
+  readAbi,
+} from "./abi.ts";
 
 const deployment: BlastSuiDeployment = {
   packageId: "0x123",
   originalPackageId: "0x122",
   packageVersion: shared("0x10", "8", false),
   vault: shared("0x11", "9", true),
+  admin: { packageId: "0xad", acl: shared("0xac", "3", false) },
 };
 const recipient = "0xbeef";
 
@@ -383,3 +390,24 @@ function shared<const Mutable extends boolean>(
 ): SharedObjectReference<Mutable> {
   return { objectId, initialSharedVersion, mutable };
 }
+
+test("signs in as the blast Sui FeeAdmin to set the redeem fee", () => {
+  const tx = new BlastSuiTransactions(deployment).setRedeemFee({
+    adminCapId: "0xadc",
+    redeemFeeBps: 25n,
+  });
+  const abi = readAbi("production-blast-sui-v1.json", "blastSui");
+  assert.deepEqual(assertBuildersMatchAbi(tx, abi, deployment.packageId), [
+    "vault::set_redeem_fee",
+  ]);
+  assert.deepEqual(moveCallTypeArguments(tx)[0], [
+    `${normalizeSuiObjectId(deployment.originalPackageId)}::blast_sui_domain::FeeAdmin`,
+  ]);
+  assert.deepEqual(moveCallArguments(tx, 0), ["shared:0xac", "object:0xadc"]);
+  assert.deepEqual(moveCallArguments(tx, 1), [
+    "shared-mut:0x11",
+    "shared:0x10",
+    "result:0",
+    "pure",
+  ]);
+});

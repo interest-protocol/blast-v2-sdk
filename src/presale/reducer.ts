@@ -1,3 +1,4 @@
+import { itemAt } from "../lib/arrays.ts";
 import type { DecodedPresaleEvent, PresaleEventKind } from "./events.ts";
 import { presaleEventId, presaleEventModules } from "./events.ts";
 import { apportionRaise, apportionSupply } from "./math.ts";
@@ -227,7 +228,7 @@ function applyVaultEvent(
       const { payload } = event;
       const feeRecipients = payload.fee_recipients.map((recipient, i) => ({
         recipient,
-        bps: payload.fee_recipient_bps[i]!,
+        bps: itemAt(payload.fee_recipient_bps, i),
       }));
       const linked = updatePresale(state, payload.presale_id, () => ({
         vaultId: payload.vault_id,
@@ -241,7 +242,7 @@ function applyVaultEvent(
             presaleId: payload.presale_id,
             poolId: payload.pool_id,
             positionId: payload.position_id,
-            venueType: event.venueType ?? "",
+            venueType: event.venueType,
             memeType: event.memeType,
             quoteType: event.quoteType,
             liquidity: payload.liquidity,
@@ -338,7 +339,7 @@ function createdPresale(
 ): PresaleProjection {
   const { payload } = event;
   const shares = (recipients: string[], bps: bigint[]) =>
-    recipients.map((recipient, i) => ({ recipient, bps: bps[i]! }));
+    recipients.map((recipient, i) => ({ recipient, bps: itemAt(bps, i) }));
   const recipientAllocations = shares(
     payload.recipients,
     payload.recipient_bps,

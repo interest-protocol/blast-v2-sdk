@@ -1,4 +1,4 @@
-import type { RewardManifest } from "./allocations.ts";
+import type { RewardLeafDomain, RewardManifest } from "./allocations.ts";
 import { validateRewardManifest } from "./allocations.ts";
 import type { RewardRoundState } from "./state.ts";
 import { rewardIsClaimed } from "./state.ts";
@@ -16,8 +16,9 @@ type RoundCommitment = Pick<
 export function assertRewardRoundMatchesManifest(
   round: RoundCommitment,
   manifest: RewardManifest,
+  leafDomain: RewardLeafDomain,
 ): void {
-  validateRewardManifest(manifest);
+  validateRewardManifest(manifest, leafDomain);
   if (
     round.vaultId !== manifest.vaultId ||
     round.number !== BigInt(manifest.number) ||
@@ -31,8 +32,9 @@ export function assertRewardRoundMatchesManifest(
 export function pendingRewardAllocations(
   round: RoundCommitment & Pick<RewardRoundState, "claimed">,
   manifest: RewardManifest,
+  leafDomain: RewardLeafDomain,
 ) {
-  assertRewardRoundMatchesManifest(round, manifest);
+  assertRewardRoundMatchesManifest(round, manifest, leafDomain);
   return manifest.allocations.filter(
     (allocation) => !rewardIsClaimed(round, Number(allocation.index)),
   );

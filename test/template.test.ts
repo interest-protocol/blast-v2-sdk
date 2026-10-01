@@ -249,28 +249,23 @@ test("publishes against 0x1, 0x2, the timelock, blast_admin, blast_partners, and
   const tx = new LaunchpadTransactions({
     packageId: latestBlastPackageId,
     originalPackageId: blastPackageId,
-    adminPackageId,
     partnersPackageId,
     timelockPackageId,
     packageVersion: {
       objectId: "0x3",
       initialSharedVersion: "10",
-      mutable: false,
     },
     launchConfig: {
       objectId: "0x4",
       initialSharedVersion: "11",
-      mutable: false,
     },
     runtimeConfig: {
       objectId: "0x5",
       initialSharedVersion: "12",
-      mutable: false,
     },
-    acl: {
-      objectId: "0x6",
-      initialSharedVersion: "13",
-      mutable: false,
+    admin: {
+      packageId: adminPackageId,
+      acl: { objectId: "0x6", initialSharedVersion: "13" },
     },
   }).publishMeme(options);
 

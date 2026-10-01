@@ -1162,7 +1162,7 @@
           "functions": [
             {
               "name": "add_capability",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-deployment-exclusion",
               "entry": false,
               "typeParameters": [
                 {
@@ -1242,7 +1242,7 @@
             },
             {
               "name": "authorize_upgrade",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -1324,7 +1324,7 @@
             },
             {
               "name": "commit_upgrade_and_advance",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -1428,7 +1428,7 @@
             },
             {
               "name": "make_immutable",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -1551,7 +1551,7 @@
             },
             {
               "name": "restrict_to_additive",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -2568,7 +2568,7 @@
             },
             {
               "name": "set_redeem_fee",
-              "sdk": "intentional-admin-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [

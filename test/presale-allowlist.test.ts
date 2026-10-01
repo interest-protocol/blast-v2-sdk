@@ -6,9 +6,11 @@ import { blake2b } from "@noble/hashes/blake2.js";
 
 import {
   buildRewardManifest,
+  MIGRATOR_REWARD_LEAF_DOMAIN,
   PRESALE_REWARD_LEAF_DOMAIN,
   verifyRewardProof,
 } from "../src/holder-rewards/allocations.ts";
+import { itemAt } from "../src/lib/arrays.ts";
 import {
   allowlistLeaf,
   buildAllowlist,
@@ -35,12 +37,12 @@ test("hashes allowlist leaves and nodes exactly like the Move package", () => {
   ]);
   assert.equal(allowlist.root, ROOT);
   assert.equal(allowlist.leafCount, 2n);
-  assert.deepEqual(allowlist.proofs[0]!.proof, [BOB_LEAF]);
-  assert.deepEqual(allowlist.proofs[1]!.proof, [ALICE_LEAF]);
+  assert.deepEqual(itemAt(allowlist.proofs, 0).proof, [BOB_LEAF]);
+  assert.deepEqual(itemAt(allowlist.proofs, 1).proof, [ALICE_LEAF]);
   for (const proof of allowlist.proofs) {
     assert.equal(verifyAllowlistProof(ROOT, 2n, proof), true);
   }
-  const alice = allowlist.proofs[0]!;
+  const alice = itemAt(allowlist.proofs, 0);
   assert.equal(
     verifyAllowlistProof(ROOT, 2n, { ...alice, walletCap: 501n }),
     false,
@@ -58,7 +60,10 @@ test("proves every leaf of odd-sized allowlists", () => {
         walletCap: BigInt(100 + i),
       })),
     );
-    assert.equal(allowlist.proofs[0]!.proof.length, Math.ceil(Math.log2(size)));
+    assert.equal(
+      itemAt(allowlist.proofs, 0).proof.length,
+      Math.ceil(Math.log2(size)),
+    );
     for (const proof of allowlist.proofs) {
       assert.equal(
         verifyAllowlistProof(allowlist.root, allowlist.leafCount, proof),
@@ -90,11 +95,15 @@ test("builds presale holder-reward manifests in the presale leaf domain", () => 
     ],
     leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
   });
-  const bob = manifest.allocations[1]!;
+  const bob = itemAt(manifest.allocations, 1);
   assert.equal(bob.index, "1");
   // Index 1 is the right child: root = node(sibling, holder_rewards::leaf).
   const root = blake2b(
-    Uint8Array.from([1, ...fromHex(bob.proof[0]!), ...fromHex(REWARD_LEAF)]),
+    Uint8Array.from([
+      1,
+      ...fromHex(itemAt(bob.proof, 0)),
+      ...fromHex(REWARD_LEAF),
+    ]),
     { dkLen: 32 },
   );
   assert.equal(manifest.root, toHex(root));
@@ -102,5 +111,8 @@ test("builds presale holder-reward manifests in the presale leaf domain", () => 
     verifyRewardProof(manifest, bob, PRESALE_REWARD_LEAF_DOMAIN),
     true,
   );
-  assert.equal(verifyRewardProof(manifest, bob), false);
+  assert.equal(
+    verifyRewardProof(manifest, bob, MIGRATOR_REWARD_LEAF_DOMAIN),
+    false,
+  );
 });

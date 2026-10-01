@@ -15,10 +15,17 @@ It provides:
 - complete migration, permissionless LP-fee collection with auto-LP, creator
   LP-fee claims, settled fee-split updates, LP-fee policy administration, and
   holder-reward rounds for Cetus and Bluefin; and
-- typed BCS event decoding and deterministic launch-to-vault replay; and
+- typed BCS event decoding and deterministic launch-to-vault replay;
 - the standalone `blast_presale` package: creation, commitments, settlement,
   Cetus and Bluefin migration, claims, LP-fee collection, and holder-reward
-  rounds, with exact previews and event replay.
+  rounds, with exact previews and event replay;
+- operator transactions for every administrator action: the shared
+  `blast_admin` ACL (admins, roles, the timelocked root transfer), the
+  `LaunchConfig` and `RuntimeConfig` setters, creator-cap reassignment,
+  LP-fee policy, buybacks, and the blastSUI redeem fee, each signed in with its
+  typed role in the same transaction; and
+- the `blast_partners` package: partner caps, registration, timelocked share
+  and cap schedules, recipients, payment previews, and replay.
 
 See [holder rewards](docs/holder-rewards.md) for holder accounting, Merkle
 rounds funded from the vault's rewards share, and permissionless payouts.
@@ -34,32 +41,17 @@ const client = new SuiGrpcClient({
   baseUrl: "https://fullnode.testnet.sui.io:443",
 }).$extend(
   blastLaunchpad({
-    packageId: "0x...",
-    originalPackageId: "0x...",
-    adminPackageId: "0x...", // published blast_admin
+    packageId: "0x...", // current launchpad package
+    originalPackageId: "0x...", // first publication; names every type
+    admin: {
+      packageId: "0x...", // published blast_admin
+      acl: { objectId: "0x...", initialSharedVersion: "..." }, // its ACL
+    },
     partnersPackageId: "0x...", // published blast_partners
     timelockPackageId: "0x...", // published immutable blast_fun_timelock
-    packageVersion: {
-      objectId: "0x...",
-      initialSharedVersion: "...",
-      mutable: false,
-    },
-    launchConfig: {
-      objectId: "0x...",
-      initialSharedVersion: "...",
-      mutable: false,
-    },
-    runtimeConfig: {
-      objectId: "0x...",
-      initialSharedVersion: "...",
-      mutable: false,
-    },
-    acl: {
-      // the singleton blast_admin::blast_acl::ACL
-      objectId: "0x...",
-      initialSharedVersion: "...",
-      mutable: false,
-    },
+    packageVersion: { objectId: "0x...", initialSharedVersion: "..." },
+    launchConfig: { objectId: "0x...", initialSharedVersion: "..." },
+    runtimeConfig: { objectId: "0x...", initialSharedVersion: "..." },
   }),
 );
 
@@ -79,24 +71,30 @@ const transaction = client.blastLaunchpad.tx.buy({
 });
 ```
 
-Every shared-object input is a fully qualified reference with `objectId`,
-`initialSharedVersion`, and `mutable`. The SDK validates the expected
-mutability for each Move argument. `getLaunch` returns these fields, so its
-result can be passed directly as the `launch` transaction input.
+A deployment's shared singletons are identities (`objectId`,
+`initialSharedVersion`); each call adds the mutability its Move signature
+needs. Every per-call shared-object input is a fully qualified reference that
+also carries `mutable`, and the SDK validates it against the Move argument.
+`getLaunch` returns these fields, so its result can be passed directly as the
+`launch` transaction input.
 
 ## Deployments
 
 `@interest-protocol/blast-sdk/deployments` is the single TypeScript registry for
-Blast package lineage and singleton shared-object identities. Package entries
-keep both the current and original package IDs. Shared-object entries keep the
-object ID and initial shared version. Builders add `mutable` from the Move
-function signature because mutability belongs to a transaction argument, not to
-the object itself. `packages.admin` names the published `blast_admin` package,
-which owns `blast_acl::sign_in` and is a transitive publish dependency of every
-generated Meme package; `sharedObjects.acl` is its singleton `ACL`.
-`packages.partners` and `packages.timelock` name the `blast_partners` and
-`blast_fun_timelock` packages the launchpad links; both are further Meme
-publish dependencies.
+Blast package lineage and singleton shared-object identities. A
+`BlastDeployment` names every published package, each with its current and
+original package IDs: `timelock`, `admin`, `partners`, `launchpad`,
+`migrators`, `presale`, and `blastSui`. `meme_template` has no entry: each
+launch publishes its own Meme package from the template bytecode, linking the
+timelock, admin, partners, and launchpad packages. `sharedObjects` groups each
+package's singletons (`admin.acl`; `launchpad.packageVersion`, `launchConfig`,
+`runtimeConfig`; `migrators.packageVersion`, `lpFeePolicy`, `venueConfig`;
+`presale.venueConfig`; `blastSui.packageVersion`, `vault`) by object ID and
+initial shared version. Builders add `mutable` from the Move function
+signature because mutability belongs to a transaction argument, not to the
+object itself. `adminDeployment`, `partnersDeployment`, `launchpadDeployment`,
+`migratorsDeployment`, `presaleDeployment`, and `blastSuiDeployment` derive
+each product's call-ready deployment.
 
 After a canonical network release is registered, initialize the client without
 copying addresses into the application:
@@ -248,6 +246,68 @@ Transaction effects provide package publication and returned-coin recipient
 facts. Object ownership reads provide the current `CurveFeeCap` and
 `BlastMetadataCap` owners; events record which capability IDs each launch
 honors.
+
+## Administration
+
+`@interest-protocol/blast-sdk/admin` builds the shared `blast_admin::blast_acl`
+calls. The root `SuperAdminCap` grants and revokes `AdminCap`s and their
+roles (`grantAdmin`, `revokeAdmin`, `grantRole`, `revokeRole`) and nominates
+its successor, who accepts after seven days (`beginSuperAdminTransfer`,
+`cancelSuperAdminTransfer`, `acceptSuperAdminTransfer`,
+`destroyRetiredSuperAdminCap`); an administrator can delete its own cap
+(`destroyAdminCap`). A role is a Move type its consumer package declares, so
+each product names its own with `roleType`:
+
+```ts
+import { AdminTransactions } from "@interest-protocol/blast-sdk/admin";
+
+const admin = new AdminTransactions(adminDeployment(blast));
+const launchpad = new LaunchpadTransactions(launchpadDeployment(blast));
+const grant = admin.grantRole({
+  superAdminCapId,
+  adminCapId,
+  role: launchpad.call.roleType("FeeAdmin"),
+});
+```
+
+Every administrator transaction signs in with
+`blast_acl::sign_in<Role>` and makes its call in the same PTB; the `AdminCap`
+must hold that role:
+
+| Package | Transactions | Role |
+| --- | --- | --- |
+| launchpad `LaunchConfig` | `setTradeFees`, `setCreationFee`, `addPartner`, `removePartner` | `FeeAdmin` |
+| launchpad `LaunchConfig` | `setProtocolAllocation` | `TreasuryAdmin` |
+| launchpad `LaunchConfig` | `setQuoteAllowed`, `setMemeDecimalsAllowed` | `ListingAdmin` |
+| launchpad `LaunchConfig` | `setMigrationWitnessAllowed` | `AdapterAdmin` |
+| launchpad `RuntimeConfig` | `setProtocolFeeShare` | `FeeAdmin` |
+| launchpad `RuntimeConfig` | `setCreatorClaimSigner` | `ClaimSignerAdmin` |
+| launchpad `Launch` | `reassignCurveFeeCap`, `reassignMetadataCap` | `CreatorAdmin` |
+| launchpad `Launch` | `claimProtocolFees` | `TreasuryAdmin` |
+| migrators | `setLpFeeDefaultShares`, `setLpFeeCoinShares`, `clearLpFeeCoinShares` | `FeeAdmin` |
+| migrators | `setLpFeeProtocolDestination`, `claimProtocolFees` | `TreasuryAdmin` |
+| migrators | `buybackAndBurnCetus`, `buybackAndBurnBluefin` | `BuybackAdmin` |
+| migrators | `publishHolderRewardRound` | `RewardsAdmin` |
+| presale | `publishHolderRewardRound` | `blast_presale_domain::RewardsAdmin` |
+| blast SUI | `setRedeemFee` | `blast_sui_domain::FeeAdmin` |
+| partners | `register`, `scheduleShare`, `scheduleCap` | `blast_partners::PartnerAdmin` |
+
+`decodeAclObject`/`getAcl` read the ACL, and `decodeAclEvent` with
+`reduceAclEvent` replays its nine membership and root-transfer events. Package
+upgrades (`package_admin` custody and the generic upgrade events) stay with the
+CLI publish tooling.
+
+## Partners
+
+`@interest-protocol/blast-sdk/partners` covers `blast_partners`. Anyone mints a
+`PartnerCap` (`newCap`); the `PartnerAdmin` registers a partner under a cap
+with its share of Blast's fee and schedules later share and cap changes, which
+take effect after `PARTNER_DELAY_MS` (seven days); the live cap's holder sets
+the recipient at once (`setRecipient`). `decodePartnerObject`/`getPartner`
+read the timelocked terms, `partnerPayment` mirrors `blast_partners::pay`
+(rounded down; Blast keeps the remainder), and `reducePartnerEvent` replays
+`PartnerUpdated` terms and `PartnerPaid` totals per coin type. `LaunchConfig`
+accepts a partner for new launches through `addPartner` and `removePartner`.
 
 ## Generated Meme package
 

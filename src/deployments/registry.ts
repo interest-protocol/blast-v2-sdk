@@ -1,30 +1,39 @@
+import type { AdminDeployment } from "../admin/transactions.ts";
+import type { BlastSuiDeployment } from "../blast-sui/types.ts";
+import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
+import type { SharedObjectIdentity, SuiPackageReference } from "../lib/sui.ts";
 import {
   normalizeSharedObjectIdentity,
   normalizeSuiPackageReference,
-  sharedObjectReference,
 } from "../lib/sui.ts";
+import type { MigratorsDeployment } from "../migrators/transactions.ts";
+import type { PartnersDeployment } from "../partners/transactions.ts";
+import type { PresaleDeployment } from "../presale/transactions.ts";
 import type {
   BlastDeployment,
   BlastDeploymentRegistry,
   BlastNetwork,
-  BlastSuiDeploymentConstants,
-  LaunchpadDeploymentConstants,
-  MigratorsDeploymentConstants,
+  BlastPackages,
 } from "./types.ts";
 import { BLAST_NETWORKS } from "./types.ts";
 
-const REQUIRED_PACKAGES = [
-  "launchpad",
+const PACKAGES = [
+  "timelock",
   "admin",
   "partners",
-  "timelock",
-] as const;
-const REQUIRED_SHARED_OBJECTS = [
-  "packageVersion",
-  "launchConfig",
-  "runtimeConfig",
-  "acl",
-] as const;
+  "launchpad",
+  "migrators",
+  "presale",
+  "blastSui",
+] as const satisfies readonly (keyof BlastPackages)[];
+
+const SHARED_OBJECTS = {
+  admin: ["acl"],
+  launchpad: ["packageVersion", "launchConfig", "runtimeConfig"],
+  migrators: ["packageVersion", "lpFeePolicy", "venueConfig"],
+  presale: ["venueConfig"],
+  blastSui: ["packageVersion", "vault"],
+} as const;
 
 /**
  * Canonical released deployments. Release tooling adds entries only after it
@@ -32,6 +41,7 @@ const REQUIRED_SHARED_OBJECTS = [
  */
 export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({});
 
+/** Normalizes and freezes one complete deployment of every Blast package. */
 export function defineBlastDeployment(
   deployment: BlastDeployment,
 ): BlastDeployment {
@@ -45,34 +55,55 @@ export function defineBlastDeployment(
   if (!chainIdentifier) {
     throw new RangeError("chainIdentifier must not be empty");
   }
-  for (const name of REQUIRED_PACKAGES) {
-    if (!deployment.packages[name]) {
-      throw new TypeError(`packages.${name} is required`);
-    }
-  }
-  for (const name of REQUIRED_SHARED_OBJECTS) {
-    if (!deployment.sharedObjects[name]) {
-      throw new TypeError(`sharedObjects.${name} is required`);
-    }
-  }
-
-  const packages = normalizeRecord(
-    "packages",
-    deployment.packages,
-    normalizeSuiPackageReference,
+  const packages = Object.fromEntries(
+    PACKAGES.map((name) => [
+      name,
+      Object.freeze(
+        normalizeSuiPackageReference(
+          `packages.${name}`,
+          required<SuiPackageReference>(deployment.packages, "packages", name),
+        ),
+      ),
+    ]),
   );
-  const sharedObjects = normalizeRecord(
-    "sharedObjects",
-    deployment.sharedObjects,
-    normalizeSharedObjectIdentity,
+  const sharedObjects = Object.fromEntries(
+    Object.entries(SHARED_OBJECTS).map(([owner, names]) => {
+      const objects = required<object>(
+        deployment.sharedObjects,
+        "sharedObjects",
+        owner,
+      );
+      return [
+        owner,
+        Object.freeze(
+          Object.fromEntries(
+            names.map((name) => {
+              const label = `sharedObjects.${owner}.${name}`;
+              return [
+                name,
+                Object.freeze(
+                  normalizeSharedObjectIdentity(
+                    label,
+                    required<SharedObjectIdentity>(
+                      objects,
+                      `sharedObjects.${owner}`,
+                      name,
+                    ),
+                  ),
+                ),
+              ];
+            }),
+          ),
+        ),
+      ];
+    }),
   );
-
   return Object.freeze({
     network: deployment.network,
     chainIdentifier,
-    packages,
-    sharedObjects,
-  }) as BlastDeployment;
+    packages: Object.freeze(packages),
+    sharedObjects: Object.freeze(sharedObjects),
+  }) as unknown as BlastDeployment;
 }
 
 export function getBlastDeployment(network: BlastNetwork): BlastDeployment {
@@ -83,88 +114,76 @@ export function getBlastDeployment(network: BlastNetwork): BlastDeployment {
   return deployment;
 }
 
-export function launchpadDeployment(
-  deployment: BlastDeployment,
-): LaunchpadDeploymentConstants {
-  const packageReference = deployment.packages.launchpad;
-  const objects = deployment.sharedObjects;
+export function adminDeployment(deployment: BlastDeployment): AdminDeployment {
   return {
-    packageId: packageReference.packageId,
-    originalPackageId: packageReference.originalPackageId,
-    adminPackageId: deployment.packages.admin.packageId,
-    partnersPackageId: deployment.packages.partners.packageId,
-    timelockPackageId: deployment.packages.timelock.packageId,
-    packageVersion: sharedObjectReference(objects.packageVersion, false),
-    launchConfig: sharedObjectReference(objects.launchConfig, false),
-    runtimeConfig: sharedObjectReference(objects.runtimeConfig, false),
-    acl: sharedObjectReference(objects.acl, false),
+    packageId: deployment.packages.admin.packageId,
+    acl: deployment.sharedObjects.admin.acl,
   };
 }
 
-/** Returns the call-ready blast Sui identities from a canonical deployment. */
-export function blastSuiDeployment(
+export function partnersDeployment(
   deployment: BlastDeployment,
-): BlastSuiDeploymentConstants {
-  const packageReference = deployment.packages.blastSui;
-  if (!packageReference) {
-    throw new TypeError("packages.blastSui is required");
-  }
-  const packageVersion = deployment.sharedObjects.blastSuiPackageVersion;
-  if (!packageVersion) {
-    throw new TypeError("sharedObjects.blastSuiPackageVersion is required");
-  }
-  const vault = deployment.sharedObjects.blastSuiVault;
-  if (!vault) {
-    throw new TypeError("sharedObjects.blastSuiVault is required");
-  }
+): PartnersDeployment {
   return {
-    packageId: packageReference.packageId,
-    originalPackageId: packageReference.originalPackageId,
-    packageVersion: sharedObjectReference(packageVersion, false),
-    vault: sharedObjectReference(vault, true),
+    packageId: deployment.packages.partners.packageId,
+    admin: adminDeployment(deployment),
+  };
+}
+
+export function launchpadDeployment(
+  deployment: BlastDeployment,
+): LaunchpadDeployment {
+  const { packages } = deployment;
+  return {
+    ...packages.launchpad,
+    admin: adminDeployment(deployment),
+    partnersPackageId: packages.partners.packageId,
+    timelockPackageId: packages.timelock.packageId,
+    ...deployment.sharedObjects.launchpad,
   };
 }
 
 export function migratorsDeployment(
   deployment: BlastDeployment,
-): MigratorsDeploymentConstants {
-  const packageReference = deployment.packages.migrators;
-  if (!packageReference) {
-    throw new TypeError("packages.migrators is required");
-  }
-  const migratorsVersion = deployment.sharedObjects.migratorsPackageVersion;
-  if (!migratorsVersion) {
-    throw new TypeError("sharedObjects.migratorsPackageVersion is required");
-  }
-  const lpFeePolicy = deployment.sharedObjects.lpFeePolicy;
-  if (!lpFeePolicy) {
-    throw new TypeError("sharedObjects.lpFeePolicy is required");
-  }
-  const venueConfig = deployment.sharedObjects.venueConfig;
-  if (!venueConfig) {
-    throw new TypeError("sharedObjects.venueConfig is required");
-  }
+): MigratorsDeployment {
+  const objects = deployment.sharedObjects.migrators;
   return {
-    packageId: packageReference.packageId,
-    originalPackageId: packageReference.originalPackageId,
+    ...deployment.packages.migrators,
     launchpad: launchpadDeployment(deployment),
-    migratorsVersion: sharedObjectReference(migratorsVersion, false),
-    lpFeePolicy: sharedObjectReference(lpFeePolicy, false),
-    venueConfig: sharedObjectReference(venueConfig, false),
+    migratorsVersion: objects.packageVersion,
+    lpFeePolicy: objects.lpFeePolicy,
+    venueConfig: objects.venueConfig,
   };
 }
 
-function normalizeRecord<Value, Normalized>(
+export function presaleDeployment(
+  deployment: BlastDeployment,
+): PresaleDeployment {
+  return {
+    ...deployment.packages.presale,
+    venueConfig: deployment.sharedObjects.presale.venueConfig,
+    admin: adminDeployment(deployment),
+  };
+}
+
+export function blastSuiDeployment(
+  deployment: BlastDeployment,
+): BlastSuiDeployment {
+  return {
+    ...deployment.packages.blastSui,
+    ...deployment.sharedObjects.blastSui,
+    admin: adminDeployment(deployment),
+  };
+}
+
+function required<Value>(
+  values: object,
   namespace: string,
-  values: Readonly<Record<string, Value>>,
-  normalize: (name: string, value: Value) => Normalized,
-): Readonly<Record<string, Normalized>> {
-  return Object.freeze(
-    Object.fromEntries(
-      Object.entries(values).map(([name, value]) => [
-        name,
-        Object.freeze(normalize(`${namespace}.${name}`, value)),
-      ]),
-    ),
-  );
+  name: string,
+): Value {
+  const value = (values as Record<string, Value | undefined>)[name];
+  if (value === undefined) {
+    throw new TypeError(`${namespace}.${name} is required`);
+  }
+  return value;
 }

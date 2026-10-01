@@ -3,14 +3,25 @@
 ## Baseline
 
 The frozen production ABI uses contracts commit
-`a5ed34ad49c6c001af2db5b9cbcb206075704412`. The two parity artifacts are:
+`a5ed34ad49c6c001af2db5b9cbcb206075704412`. The parity artifacts are:
 
 - `abi/production-launchpad-v1.json` for `launchpad`, `meme_template`, and the
   migrators package (Cetus and Bluefin adapters, LP vault, LP-fee policy, and
-  holder rewards); and
-- `abi/production-blast-sui-v1.json` for `blast_sui`.
+  holder rewards);
+- `abi/production-blast-sui-v1.json` for `blast_sui`;
+- `abi/production-presale-v1.json` for `blast_presale` (see
+  [presale](presale.md));
+- `abi/production-admin-v1.json` for `blast_admin`, the ACL every package
+  signs in to; and
+- `abi/production-partners-v1.json` for `blast_partners`.
 
-Both artifacts record Sui CLI `1.77.2-51d177ad7d65`. The checker verifies
+The presale, admin, and partners artifacts are frozen at their first SDK
+coverage, contracts `442116a`, with no amendment ledger yet. `blast_admin` and
+`blast_partners` are separate artifacts because they are separately published,
+immutable packages that every product links, not part of the launchpad's
+upgrade lineage.
+
+Every artifact records Sui CLI `1.77.2-51d177ad7d65`. The checker verifies
 the installed `sui --version` against those artifact values before it runs a
 Move summary. The contracts working tree differed from the ABI commit when the
 artifacts were frozen. The only
@@ -49,7 +60,9 @@ original package ID. The deployment model stores both IDs.
 | `launch::claim_protocol_fees`, `claim_protocol_fees_with_partner` | `LaunchpadCalls.claimProtocolFees`; `LaunchpadTransactions.claimProtocolFees` (with `partner` for a partnered launch) | `test/transactions.test.ts` | Composes `blast_admin::blast_acl::sign_in<TreasuryAdmin>` and routes the returned Meme, Quote, and SUI coins. |
 | `launch::new`, `treasury_cap_mut`, `migrate` | Adapter entries | `test/migrators-transactions.test.ts` | Adapter composition: only the adapter module can construct its witness. |
 | Launch getters (`pool_tier`, `lp_fee_split`, `assert_curve_fee_cap`), `bps::*`, `creator_authority::destroy_*` | `decodeLaunchObject`, `getLaunchConfig`, reducers | `test/state.test.ts`, `test/migrators-state.test.ts` | Move-composition; the SDK reads BCS state instead. |
-| `launch::reassign_curve_fee_cap`, `reassign_metadata_cap`; `launch_config::*` (including `set_creation_fee`, `add_partner`, `remove_partner`); `runtime_config::*`; `package_admin::*` | None | ABI classifier | Intentional administration exclusions; replay uses their events (`CreationFeeChanged`, `PartnerAdded`, `PartnerRemoved`, and the rest). |
+| `launch_config::set_protocol_allocation`, `set_meme_decimals_allowed`, `set_quote_allowed`, `set_trade_fees`, `set_creation_fee`, `add_partner`, `remove_partner`, `set_migration_witness_allowed`; `runtime_config::set_creator_claim_signer`, `set_protocol_fee_share` | `LaunchpadCalls` and `LaunchpadTransactions` setters of the same names | `test/transactions.test.ts` | Operator builders composing `sign_in<Role>` with the role each Move function takes (`TreasuryAdmin`, `ListingAdmin`, `FeeAdmin`, `AdapterAdmin`, `ClaimSignerAdmin`) and the mutable config. |
+| `launch::reassign_curve_fee_cap`, `reassign_metadata_cap` | `reassignCurveFeeCap`, `reassignMetadataCap` | `test/transactions.test.ts` | Operator builders composing `sign_in<CreatorAdmin>`. |
+| Launchpad `package_admin::wrap`; `authorize_upgrade`, `commit_upgrade_and_advance`, `make_immutable` | None | ABI classifier | Deployment and upgrade-custody exclusions: publish tooling. |
 | `launch_ticket::new` | Compiled Meme template and `LaunchpadTransactions.publishMeme` | `test/template.test.ts`, `test/transactions.test.ts` | The template initializer constructs the ticket at the selected decimals; publication effects identify the transferred ticket. |
 | `creator_authority::new_address`, `new_account` | Compiled Meme template | `test/template.test.ts` | Template-internal constructors. |
 | Cetus `migrate`, `collect_fees`, `settle_and_update_fee_split` (type arguments `<Meme, Quote, CoinA, CoinB>`, ADR 0100) | `migrateCetus`, `collectCetusFees`, `settleAndUpdateCetusFeeSplit` with `memeSide` | `test/migrators-transactions.test.ts` | Migration takes the mutable LP Burn `BurnManager`; collection and split updates take it immutably with the `Clock`, and the mutable Meme `Currency` to burn the burn share. |
@@ -59,7 +72,7 @@ original package ID. The deployment model stores both IDs.
 | `lp_fee_policy::set_default_shares`, `set_coin_shares`, `clear_coin_shares`, `set_protocol_destination` | `setLpFeeDefaultShares`, `setLpFeeCoinShares`, `clearLpFeeCoinShares`, `setLpFeeProtocolDestination` | `test/migrators-transactions.test.ts` | Admin builders composing `sign_in<FeeAdmin>` (shares) or `sign_in<TreasuryAdmin>` (destination) with the mutable `LpFeePolicy`. |
 | `blast_holder_rewards::publish_round`, `claim` | `publishHolderRewardRound`, `claimHolderReward`, `claimHolderRewards` | `test/migrators-transactions.test.ts`, `test/holder-rewards-operator.test.ts` | Publication composes `sign_in<RewardsAdmin>` and validates the manifest and its vault; relays carry positional proofs. |
 | `vault` and `lp_fee_policy` state (no public getters) | `decodeLpVaultObject`, `getLpFeePolicy`, `getLpFeeShares` | `test/migrators-state.test.ts` | The SDK reads BCS state. |
-| Migrators `package_admin::*` | None | ABI classifier | Intentional administration exclusions. |
+| Migrators `package_admin::wrap`; `authorize_upgrade`, `commit_upgrade_and_advance` | None | ABI classifier | Deployment and upgrade-custody exclusions: publish tooling. |
 
 The SDK provides `sqrtPriceX64` and `autoLpFixedSide` as exact preview mirrors
 of the package-only `migration_math` functions; `test/migration-math.test.ts`
@@ -78,6 +91,7 @@ verifies them against the contract vectors.
 | `vault::donate_sui` | `BlastSuiCalls.donateSui`; `BlastSuiTransactions.donateSui` | No returned object and no synthetic transfer. | `test/blast-sui-transactions.test.ts` |
 | `vault::redeem_blast_sui` | `BlastSuiCalls.redeemBlastSui`; `BlastSuiTransactions.redeemBlastSui` | Returns SUI and transfers it to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
 | `vault::sync` | `BlastSuiCalls.syncVault`; `BlastSuiTransactions.syncVault` | No returned object and no synthetic transfer. | `test/blast-sui-transactions.test.ts` |
+| `vault::set_redeem_fee` | `BlastSuiCalls.setRedeemFee`; `BlastSuiTransactions.setRedeemFee` | Composes `sign_in<blast_sui_domain::FeeAdmin>`; no returned object. | `test/blast-sui-transactions.test.ts` |
 
 Every Blast SUI call targets the current package, uses the mutable framework
 `SuiSystemState`, mutable `Vault`, and immutable `PackageVersion` required by
@@ -85,6 +99,16 @@ its Move signature, and adds no type argument that the ABI does not define.
 Transaction tests inspect the exact argument order and shared mutability for
 all nine calls. They also pin the exact `Result` or `NestedResult`, normalized
 recipient, and request-result-to-`keep` routing for every returned object.
+
+### blast_admin and blast_partners
+
+| Contract surface | SDK implementation | Verification | Status or reason |
+| --- | --- | --- | --- |
+| `blast_acl::grant_admin`, `revoke_admin`, `grant_role<Role>`, `revoke_role<Role>`, `destroy_admin_cap`, `begin_super_admin_transfer`, `cancel_super_admin_transfer`, `accept_super_admin_transfer`, `destroy_retired_super_admin_cap` | `AdminCalls` and `AdminTransactions` methods of the same names | `test/admin.test.ts` | Root and administrator builders; each product's `roleType` names a role type. |
+| `blast_acl::sign_in<Role>` | `AdminCalls.signIn`, wrapped by every product's typed `signIn` | `test/admin.test.ts` and every admin transaction test | Composed in the same PTB as the administrator call. |
+| `upgrade_custody::*`, `operational_version::*` | None | ABI classifier | Move-composition: only consumers' `package_admin` and `package_version` modules hold the values. |
+| `blast_partners::new_cap`, `register`, `schedule_share`, `schedule_cap`, `set_recipient`, `destroy_cap` | `PartnersCalls` and `PartnersTransactions` | `test/partners.test.ts` | `PartnerAdmin` builders sign in in the same PTB; `setRecipient` takes the live `PartnerCap`. |
+| `blast_partners::pay`, `delay_ms` | `partnerPayment`, `PARTNER_DELAY_MS` | `test/partners.test.ts` (the contracts' payment vectors) | Move-composition: products call `pay` with Blast's fee; the SDK mirrors it. |
 
 ## Object, type, read, and deployment coverage
 
@@ -99,14 +123,16 @@ recipient, and request-result-to-`keep` routing for every returned object.
 | `LpFeePolicy` shared singleton and its per-coin table | `lpFeePolicyBcs`, `getLpFeePolicy`, `getLpFeeShares` | `test/migrators-state.test.ts` |
 | `blast_holder_rewards::Round<Meme, Quote>` shared object | `rewardRoundBcs`, `decodeRewardRound`, `getRewardRound` | `test/holder-rewards-chain.test.ts` |
 | `VenueConfig` (Cetus `PoolCreationCap` custody) | `migratorsDeployment`; mutable in `cetus::new`, immutable at migration | `test/deployments.test.ts`, `test/migrators-transactions.test.ts` |
-| Launchpad, `blast_admin`, `blast_partners`, `blast_fun_timelock`, and migrators package identities; the singleton `blast_acl::ACL` and the other shared objects | `launchpadDeployment`, `migratorsDeployment` | `test/deployments.test.ts` |
+| `blast_acl::ACL` shared singleton (`VecMap` of admins to role `TypeName`s, `Timelocked` root nomination) | `aclBcs`, `decodeAclObject`, `getAcl` | `test/admin.test.ts` |
+| `blast_partners::Partner` shared object (`Timelocked` share and cap) | `partnerBcs`, `decodePartnerObject`, `getPartner` | `test/partners.test.ts` |
+| Every published package (`timelock`, `admin`, `partners`, `launchpad`, `migrators`, `presale`, `blastSui`) and each package's shared singletons | `defineBlastDeployment`; `adminDeployment`, `partnersDeployment`, `launchpadDeployment`, `migratorsDeployment`, `presaleDeployment`, `blastSuiDeployment` | `test/deployments.test.ts` |
 | Venue `Witness` | `MigratorCalls.migrationWitnessType` | original-package witness type |
 | Blast SUI `vault::Vault` shared mutable object | `blastSuiVaultBcs`, `decodeBlastSuiVaultObject`, `getBlastSuiVault`, `BlastSuiClient.getVault` | `test/blast-sui-state.test.ts` pins independent literal BCS bytes to the contracts baseline and Sui revision; `test/blast-sui-client.test.ts` reuses that golden. |
 | `deposit_receipt::BlastSuiDepositReceipt` address-owned object | `blastSuiDepositReceiptBcs`, `decodeBlastSuiDepositReceiptObject`, `getBlastSuiDepositReceipt`, `BlastSuiClient.getDepositReceipt` | `test/blast-sui-state.test.ts` pins independent literal BCS bytes to the contracts baseline and Sui revision; `test/blast-sui-client.test.ts` reuses that golden. |
 | `fun_sui::FUN_SUI` original-package type | `funSuiType` and transaction coin selection | `test/blast-sui-math.test.ts`, `test/blast-sui-transactions.test.ts` |
 | `blast_sui::BLAST_SUI` original-package type | `blastSuiType` and transaction coin selection | `test/blast-sui-math.test.ts`, `test/blast-sui-transactions.test.ts` |
 | Deposit-receipt original-package type | `blastSuiDepositReceiptType` and state/event validation | `test/blast-sui-math.test.ts`, `test/blast-sui-state.test.ts` |
-| Blast SUI package, `PackageVersion`, `PackageAdmin`, and `Vault` identity slots (administration signs in to the shared `blast_acl::ACL`) | optional `BlastPackages.blastSui` and distinctly named optional shared identities; `blastSuiDeployment` returns the call-ready immutable version and mutable vault | `test/deployments.test.ts`, `test/blast-sui-math.test.ts` |
+| Blast SUI package, `PackageVersion`, and `Vault` identities (administration signs in to the shared `blast_acl::ACL`) | `BlastPackages.blastSui`, `sharedObjects.blastSui`; `blastSuiDeployment` | `test/deployments.test.ts`, `test/blast-sui-math.test.ts` |
 | Framework `SuiSystemState` | native system-object helper with initial shared version 1 and mutable input | `test/blast-sui-transactions.test.ts` |
 
 `BLAST_DEPLOYMENTS` remains empty. Deployment helpers validate caller-supplied
@@ -142,6 +168,14 @@ Launchpad and migrator decoders authenticate an event by its type, which names
 the original package. Sui records the transaction's called package and module on
 each event rather than the emitting module, and adapters emit the launchpad's
 `Migrated` and `MigrationAllocationPaid` from their own migrators entries.
+
+### ACL and partner events
+
+| Frozen event surface | SDK implementation | Verification |
+| --- | --- | --- |
+| Nine `blast_admin_events` ACL payloads: `AdminGranted`, `AdminRevoked`, `AdminRoleGranted`, `AdminRoleRevoked`, `AdminDestroyed`, `SuperAdminTransferStarted`, `SuperAdminTransferCancelled`, `SuperAdminTransferred`, `SuperAdminCapDestroyed` | `aclEventBcs`, `decodeAclEvent`, `reduceAclEvent` | `test/admin.test.ts` checks names, ordered fields, decoding, and replay of admins, roles, and the root transfer. |
+| `blast_admin_events` `OperationalVersionAdvanced<P>`, `UpgradeCustodyCreated<P>`, `UpgradeAuthorized<P>`, `UpgradeCommitted<P>`, `UpgradePolicyRestricted<P>`, `UpgradeCapDestroyed<P>` | None (`intentional-upgrade-exclusion`) | Emitted by package upgrades, which publish tooling drives. |
+| `blast_partners` `PartnerUpdated`, `PartnerPaid<T>` | `partnerEventBcs`, `decodePartnerEvent`, `reducePartnerEvent` | `test/partners.test.ts` checks ordered fields, decoding, and replay of terms and per-coin payouts. |
 
 ### Blast SUI wrapped events
 
@@ -193,12 +227,8 @@ that fact.
 
 | Frozen surface or proposed layer | Status and reason |
 | --- | --- |
-| All `launch_config` administration (Quote and adapter admission, trade and creation fees, Blast's allocation, accepted partners); `runtime_config` setters (an empty signer key revokes); launch cap reassignment | Intentional routine-administration exclusion. Product transactions do not need these calls. Their event schemas remain frozen and decoded. |
-| `blast_admin` (grant and revoke admins and roles, root transfer) and `blast_partners` (register, schedule, pay) | Outside the frozen artifacts. The SDK only calls `blast_acl::sign_in<Role>` and passes a `Partner` object by reference; role grants and partner deals are root and partner-administrator operations. |
-| All launchpad and migrators `package_admin` functions | Intentional package-upgrade exclusion. |
-| Blast SUI `package_admin::{new,share,add_capability,authorize_upgrade,commit_upgrade_and_advance,restrict_to_additive,make_immutable}` | Intentional package-bootstrap/upgrade exclusion. Administration signs in to the singleton `blast_admin::blast_acl::ACL` as `blast_sui_domain::UpgradeAdmin` (and `FeeAdmin` for the redeem fee); the Blast SUI package has no ACL module or ACL/upgrade events of its own. `PackageCapabilityAdded` remains decoded. |
-| Blast SUI `vault::set_redeem_fee` | Intentional routine-administration exclusion. The live fee is available in vault state and events. |
-| Blast SUI `vault::create` and `deposit_receipt::create_display` | Intentional deployment-bootstrap exclusions. No deployment transaction is built or executed. |
+| Every package's `package_admin` upgrade custody (`authorize_upgrade`, `commit_upgrade`, `commit_upgrade_and_advance`, `restrict_to_additive`, `make_immutable`) and blast_admin's generic upgrade events | `intentional-upgrade-exclusion`: CLI publish tooling, not SDK. |
+| `package_admin::wrap`; Blast SUI `package_admin::{new,share,add_capability}`, `vault::create`, `deposit_receipt::create_display` | `intentional-deployment-exclusion`: publish-time bootstrap. No deployment transaction is built or executed. `PackageCapabilityAdded` remains decoded. |
 | Contract changes for SDK convenience | Excluded. This slice changes no Move logic. |
 | Deployment/publish/upgrade/configuration actions and placeholder IDs | Excluded. The registry has no deployment record or placeholder identity. |
 | Indexer process, database, API, backend, frontend wiring, and duplicated API formulas | Excluded. Protocol arithmetic remains in this SDK. |
