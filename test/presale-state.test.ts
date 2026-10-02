@@ -6,6 +6,7 @@ import { ObjectError } from "@mysten/sui/client";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 import {
+  decodePresaleCreationPolicyObject,
   decodePresaleFeePolicyObject,
   decodePresaleObject,
   decodePresaleRewardRoundObject,
@@ -62,12 +63,12 @@ function presaleBytes(): Uint8Array {
     ...u64(1_050n), // uncapped_from_ms
     ...ascii(witness), // migration_witness
     ...u32(200), // tick_spacing
-    ...u64(10_000n), // fee_rate
+    ...u64(10_000n), // pool_fee_rate
     ...vec([
       [...addr("0xc0ffee"), ...u64(5_000n)],
       [...addr("0xfee"), ...u64(2_000n)],
-    ]),
-    ...u64(3_000n), // rewards_fee_bps
+    ]), // fee_recipients: RecipientShare { recipient, bps: Bps(u64) }
+    ...u64(3_000n), // holder_rewards_bps: Bps(u64)
     ...u64(4_000n), // total_commitments
     ...u64(3_000n), // remaining_commitments
     ...u64(2n), // participants
@@ -80,8 +81,8 @@ function presaleBytes(): Uint8Array {
     ...vec([[...addr("0x5a1e"), ...u64(200n)]]), // raise_payouts
     ...u64(333n), // protocol_fees.raise_bps
     ...u64(500n), // protocol_fees.token_bps
-    ...u64(1_000n), // protocol_fees.lp_meme_bps
-    ...u64(2_500n), // protocol_fees.lp_quote_bps
+    ...u64(1_000n), // protocol_fees.lp_fee_meme_bps
+    ...u64(2_500n), // protocol_fees.lp_fee_quote_bps
     ...u64(33n), // protocol_quote
     ...u64(1_000n), // protocol_tokens
   ]);
@@ -117,6 +118,8 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
   });
   assert.equal(state.migrationWitness, `0x${witness}`);
   assert.equal(state.tickSpacing, 200);
+  assert.equal(state.poolFeeRate, 10_000n);
+  assert.equal(state.holderRewardsBps, 3_000n);
   assert.deepEqual(state.feeRecipients, [
     { recipient: normalizeSuiAddress("0xc0ffee"), bps: 5_000n },
     { recipient: normalizeSuiAddress("0xfee"), bps: 2_000n },
@@ -140,8 +143,8 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
   assert.deepEqual(state.protocolFees, {
     raiseBps: 333n,
     tokenBps: 500n,
-    lpMemeBps: 1_000n,
-    lpQuoteBps: 2_500n,
+    lpFeeMemeBps: 1_000n,
+    lpFeeQuoteBps: 2_500n,
   });
   assert.deepEqual([state.protocolQuote, state.protocolTokens], [33n, 1_000n]);
   const parsed = presaleBcs.parse(presaleBytes());
@@ -198,16 +201,16 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
     ...addr("0xab"), // presale_id
     ...addr("0xca"), // presale_cap_id
     ...addr("0x9001"), // pool_id
-    ...vec([[...addr("0xc0ffee"), ...u64(7_000n)]]),
-    ...u64(3_000n), // rewards_fee_bps
+    ...vec([[...addr("0xc0ffee"), ...u64(7_000n)]]), // fee_recipients
+    ...u64(3_000n), // holder_rewards_bps
     ...u64(0n), // protocol_fees.raise_bps
     ...u64(0n), // protocol_fees.token_bps
-    ...u64(1_000n), // protocol_fees.lp_meme_bps
-    ...u64(2_500n), // protocol_fees.lp_quote_bps
+    ...u64(1_000n), // protocol_fees.lp_fee_meme_bps
+    ...u64(2_500n), // protocol_fees.lp_fee_quote_bps
     ...u64(1n), // migration_meme_residual
     ...u64(0n), // migration_quote_residual
-    ...u64(30n), // rewards_meme
-    ...u64(3n), // rewards_quote
+    ...u64(30n), // holder_rewards_meme
+    ...u64(3n), // holder_rewards_quote
     ...u64(2n), // next_round
     ...u8(1), // last_checkpoint: Some
     ...u64(99n),
@@ -225,11 +228,11 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
       vault.presaleId,
       vault.presaleCapId,
       vault.poolId,
-      vault.rewardsFeeBps,
+      vault.holderRewardsBps,
       vault.migrationMemeResidual,
       vault.migrationQuoteResidual,
-      vault.rewardsMeme,
-      vault.rewardsQuote,
+      vault.holderRewardsMeme,
+      vault.holderRewardsQuote,
       vault.nextRound,
       vault.lastCheckpoint,
     ],
@@ -249,8 +252,8 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
   assert.deepEqual(vault.protocolFees, {
     raiseBps: 0n,
     tokenBps: 0n,
-    lpMemeBps: 1_000n,
-    lpQuoteBps: 2_500n,
+    lpFeeMemeBps: 1_000n,
+    lpFeeQuoteBps: 2_500n,
   });
 });
 
@@ -260,8 +263,8 @@ test("decodes the FeePolicy from bytes laid out in Move field order", () => {
     ...addr("0x7ea5"), // destination
     ...u64(333n), // fees.raise_bps
     ...u64(500n), // fees.token_bps
-    ...u64(1_000n), // fees.lp_meme_bps
-    ...u64(1_000n), // fees.lp_quote_bps
+    ...u64(1_000n), // fees.lp_fee_meme_bps
+    ...u64(1_000n), // fees.lp_fee_quote_bps
   ]);
   const policy = decodePresaleFeePolicyObject(
     object(`${pkg}::fee_policy::FeePolicy`, content, "0xfe"),
@@ -271,8 +274,8 @@ test("decodes the FeePolicy from bytes laid out in Move field order", () => {
   assert.deepEqual(policy.fees, {
     raiseBps: 333n,
     tokenBps: 500n,
-    lpMemeBps: 1_000n,
-    lpQuoteBps: 1_000n,
+    lpFeeMemeBps: 1_000n,
+    lpFeeQuoteBps: 1_000n,
   });
   assert.throws(() =>
     decodePresaleFeePolicyObject(
@@ -287,15 +290,35 @@ test("decodes the FeePolicy from bytes laid out in Move field order", () => {
   );
 });
 
+test("decodes the CreationPolicy's allowed Quote types and migrators", () => {
+  const suiName = `${"2".padStart(64, "0")}::sui::SUI`;
+  const content = Uint8Array.from([
+    ...addr("0xcf"), // id
+    ...vec([ascii(suiName)]), // allowed_quotes: VecSet<TypeName>
+    ...vec([ascii(witness)]), // allowed_migration_witnesses
+  ]);
+  const policy = decodePresaleCreationPolicyObject(
+    object(`${pkg}::creation_policy::CreationPolicy`, content, "0xcf"),
+    pkg,
+  );
+  assert.deepEqual(policy.allowedQuotes, [`0x${suiName}`]);
+  assert.deepEqual(policy.allowedMigrationWitnesses, [`0x${witness}`]);
+  assert.throws(() =>
+    decodePresaleCreationPolicyObject(
+      object(`${pkg}::fee_policy::FeePolicy`, content, "0xcf"),
+    ),
+  );
+});
+
 test("decodes a holder-reward Round and its claim bitmap", () => {
   const content = Uint8Array.from([
     ...addr("0xd0"), // id
-    ...addr("0xba"), // vault
+    ...addr("0xba"), // vault_id
     ...u64(1n), // number
     ...u64(5_000n), // claim_deadline_ms
     ...bytes(root),
     ...u64(300n), // leaf_count
-    ...vec([le(1n << 5n, 32), le(1n, 32)]), // claimed: leaves 5 and 256
+    ...vec([le(1n << 5n, 32), le(1n, 32)]), // claimed_bitmap: leaves 5 and 256
     ...u64(40n), // meme
     ...u64(5n), // quote
   ]);

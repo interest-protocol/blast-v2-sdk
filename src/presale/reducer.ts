@@ -35,9 +35,9 @@ export type PresaleProjection = {
   uncapped: UncappedPhase | null;
   migrationWitness: string;
   tickSpacing: number;
-  feeRate: bigint;
+  poolFeeRate: bigint;
   feeRecipients: BpsShare[];
-  rewardsFeeBps: bigint;
+  holderRewardsBps: bigint;
   /** Zero until `PresaleOpened`. */
   startMs: bigint;
   endMs: bigint;
@@ -78,19 +78,20 @@ export type PresaleVaultProjection = {
   quoteType: string;
   liquidity: bigint;
   feeRecipients: BpsShare[];
-  rewardsFeeBps: bigint;
+  holderRewardsBps: bigint;
   /** Blast's snapshotted shares of each collected LP-fee asset. */
-  protocolLpMemeBps: bigint;
-  protocolLpQuoteBps: bigint;
+  protocolLpFeeMemeBps: bigint;
+  protocolLpFeeQuoteBps: bigint;
   migrationMemeResidual: bigint;
   migrationQuoteResidual: bigint;
-  rewardsMeme: bigint;
-  rewardsQuote: bigint;
+  /** Holder-reward share not yet reserved by a round. */
+  holderRewardsMeme: bigint;
+  holderRewardsQuote: bigint;
   nextRound: bigint;
   lastCheckpoint: bigint | null;
   /** Cumulative LP fees paid to each fee recipient, aligned with `feeRecipients`. */
-  recipientMemePaid: bigint[];
-  recipientQuotePaid: bigint[];
+  feeRecipientMemePaid: bigint[];
+  feeRecipientQuotePaid: bigint[];
   /** Cumulative LP fees paid to Blast. */
   protocolMemePaid: bigint;
   protocolQuotePaid: bigint;
@@ -221,7 +222,7 @@ function applyPresaleEvent(
       const { payload } = event;
       return updatePresale(state, payload.presale_id, (presale) => ({
         lifecycle: "Migrated",
-        quote: presale.quote - payload.quote,
+        quote: presale.quote - payload.liquidity_quote,
         liquidityTokens: presale.liquidityTokens - payload.liquidity_tokens,
       }));
     }
@@ -271,17 +272,17 @@ function applyVaultEvent(
             quoteType: event.quoteType,
             liquidity: payload.liquidity,
             feeRecipients,
-            rewardsFeeBps: payload.rewards_fee_bps,
-            protocolLpMemeBps: payload.protocol_lp_meme_bps,
-            protocolLpQuoteBps: payload.protocol_lp_quote_bps,
+            holderRewardsBps: payload.holder_rewards_bps,
+            protocolLpFeeMemeBps: payload.protocol_lp_fee_meme_bps,
+            protocolLpFeeQuoteBps: payload.protocol_lp_fee_quote_bps,
             migrationMemeResidual: payload.migration_meme_residual,
             migrationQuoteResidual: payload.migration_quote_residual,
-            rewardsMeme: 0n,
-            rewardsQuote: 0n,
+            holderRewardsMeme: 0n,
+            holderRewardsQuote: 0n,
             nextRound: 0n,
             lastCheckpoint: null,
-            recipientMemePaid: feeRecipients.map(() => 0n),
-            recipientQuotePaid: feeRecipients.map(() => 0n),
+            feeRecipientMemePaid: feeRecipients.map(() => 0n),
+            feeRecipientQuotePaid: feeRecipients.map(() => 0n),
             protocolMemePaid: 0n,
             protocolQuotePaid: 0n,
           },
@@ -291,13 +292,15 @@ function applyVaultEvent(
     case "FeesCollected": {
       const { payload } = event;
       return updateVault(state, payload.vault_id, (vault) => ({
-        rewardsMeme: vault.rewardsMeme + payload.rewards_meme,
-        rewardsQuote: vault.rewardsQuote + payload.rewards_quote,
-        recipientMemePaid: vault.recipientMemePaid.map(
-          (paid, i) => paid + (payload.recipient_meme[i] ?? 0n),
+        holderRewardsMeme:
+          vault.holderRewardsMeme + payload.holder_rewards_meme,
+        holderRewardsQuote:
+          vault.holderRewardsQuote + payload.holder_rewards_quote,
+        feeRecipientMemePaid: vault.feeRecipientMemePaid.map(
+          (paid, i) => paid + (payload.fee_recipient_meme[i] ?? 0n),
         ),
-        recipientQuotePaid: vault.recipientQuotePaid.map(
-          (paid, i) => paid + (payload.recipient_quote[i] ?? 0n),
+        feeRecipientQuotePaid: vault.feeRecipientQuotePaid.map(
+          (paid, i) => paid + (payload.fee_recipient_quote[i] ?? 0n),
         ),
         protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
         protocolQuotePaid: vault.protocolQuotePaid + payload.protocol_quote,
@@ -311,8 +314,8 @@ function applyVaultEvent(
     case "RoundPublished": {
       const { payload } = event;
       const updated = updateVault(state, payload.vault_id, () => ({
-        rewardsMeme: payload.meme_unallocated,
-        rewardsQuote: payload.quote_unallocated,
+        holderRewardsMeme: payload.meme_unallocated,
+        holderRewardsQuote: payload.quote_unallocated,
         nextRound: payload.number + 1n,
         lastCheckpoint: payload.end_checkpoint,
       }));
@@ -349,8 +352,8 @@ function applyVaultEvent(
     case "RoundClosed": {
       const { payload } = event;
       const returned = updateVault(state, payload.vault_id, (vault) => ({
-        rewardsMeme: vault.rewardsMeme + payload.meme_returned,
-        rewardsQuote: vault.rewardsQuote + payload.quote_returned,
+        holderRewardsMeme: vault.holderRewardsMeme + payload.meme_returned,
+        holderRewardsQuote: vault.holderRewardsQuote + payload.quote_returned,
       }));
       return updateRound(returned, payload.round_id, () => ({
         memeRemaining: 0n,
@@ -378,16 +381,22 @@ function createdPresale(
     payload.raise_recipients,
     payload.raise_recipient_bps,
   );
+  const protocolFees: ProtocolFees = {
+    raiseBps: payload.protocol_raise_bps,
+    tokenBps: payload.protocol_token_bps,
+    lpFeeMemeBps: payload.protocol_lp_fee_meme_bps,
+    lpFeeQuoteBps: payload.protocol_lp_fee_quote_bps,
+  };
   const supply = apportionSupply(
     payload.token_supply,
     payload.token_allocation_bps,
     payload.liquidity_token_allocation_bps,
-    payload.protocol_fees.tokenBps,
+    protocolFees.tokenBps,
     recipientAllocations,
   );
   const { raisePayouts } = apportionRaise(
     raiseAllocations,
-    payload.protocol_fees.raiseBps,
+    protocolFees.raiseBps,
     payload.raise_target,
   );
   return {
@@ -410,9 +419,9 @@ function createdPresale(
     uncapped: payload.uncapped,
     migrationWitness: payload.migration_witness,
     tickSpacing: payload.tick_spacing,
-    feeRate: payload.fee_rate,
+    poolFeeRate: payload.pool_fee_rate,
     feeRecipients: shares(payload.fee_recipients, payload.fee_recipient_bps),
-    rewardsFeeBps: payload.rewards_fee_bps,
+    holderRewardsBps: payload.holder_rewards_bps,
     startMs: 0n,
     endMs: 0n,
     liquidityDeadlineMs: 0n,
@@ -431,7 +440,7 @@ function createdPresale(
       0n,
     ),
     raisePayouts,
-    protocolFees: payload.protocol_fees,
+    protocolFees,
     protocolQuote: payload.protocol_quote,
     protocolTokens: payload.protocol_tokens,
     protocolDestination: null,

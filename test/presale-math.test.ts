@@ -51,8 +51,13 @@ const config: PresaleCreationConfig = {
   eligibility: openEligibility(5_000n, 2n, RAISE / 2n),
   uncapped: null,
   feeRecipients,
-  rewardsFeeBps: 3_000n,
-  protocolFees: { raiseBps: 0n, tokenBps: 0n, lpMemeBps: 0n, lpQuoteBps: 0n },
+  holderRewardsBps: 3_000n,
+  protocolFees: {
+    raiseBps: 0n,
+    tokenBps: 0n,
+    lpFeeMemeBps: 0n,
+    lpFeeQuoteBps: 0n,
+  },
 };
 
 function aborts(run: () => unknown, code: string) {
@@ -86,8 +91,8 @@ test("apportions Blast's snapshotted token and raise shares like blast_presale::
     protocolFees: {
       raiseBps: 333n,
       tokenBps: 500n,
-      lpMemeBps: 0n,
-      lpQuoteBps: 0n,
+      lpFeeMemeBps: 0n,
+      lpFeeQuoteBps: 0n,
     },
   });
   assert.deepEqual(
@@ -132,12 +137,12 @@ test("takes Blast's LP share first, rounded up, like presale_vault::split_fees",
   assert.deepEqual(splitCollectedFee(feeRecipients, 3_000n, 1_000n, 101n), {
     protocol: 11n,
     recipients: [45n, 18n],
-    rewards: 27n,
+    holderRewards: 27n,
   });
   assert.deepEqual(splitCollectedFee(feeRecipients, 3_000n, 2_500n, 10n), {
     protocol: 3n,
     recipients: [4n, 1n],
-    rewards: 2n,
+    holderRewards: 2n,
   });
   assert.deepEqual(splitCollectedFee(feeRecipients, 3_000n, 0n, 101n), {
     protocol: 0n,
@@ -146,7 +151,7 @@ test("takes Blast's LP share first, rounded up, like presale_vault::split_fees",
   assert.deepEqual(splitCollectedFee([], 10_000n, 10_000n, 7n), {
     protocol: 7n,
     recipients: [],
-    rewards: 0n,
+    holderRewards: 0n,
   });
 });
 
@@ -164,20 +169,20 @@ test("splits LP fees like presale_vault::fee_shares", () => {
   // `collected_fees_pay_recipients_and_keep_the_holder_share`.
   assert.deepEqual(apportionFee(feeRecipients, 3_000n, 101n), {
     recipients: [51n, 20n],
-    rewards: 30n,
+    holderRewards: 30n,
   });
   assert.deepEqual(apportionFee(feeRecipients, 3_000n, 10n), {
     recipients: [5n, 2n],
-    rewards: 3n,
+    holderRewards: 3n,
   });
   // `a_remainder_tie_goes_to_the_fee_recipient_before_holders`.
   assert.deepEqual(apportionFee(feeRecipients.slice(0, 1), 5_000n, 3n), {
     recipients: [2n],
-    rewards: 1n,
+    holderRewards: 1n,
   });
   assert.deepEqual(apportionFee([], 10_000n, 7n), {
     recipients: [],
-    rewards: 7n,
+    holderRewards: 7n,
   });
 });
 
@@ -224,9 +229,14 @@ test("rejects every creation shape blast_presale::new aborts on", () => {
       "EInvalidTokenAllocation",
     ],
     [{ tokenSupply: 1n }, "EInvalidTokenAllocation"],
-    [{ liquidityTokenAllocationBps: U64_MAX }, "EInvalidTokenAllocation"],
-    [{ rewardsFeeBps: 2_999n }, "EInvalidFeeSplit"],
-    [{ rewardsFeeBps: U64_MAX }, "EInvalidFeeSplit"],
+    // `bps::new` rejects a rate above 10,000 before `new` runs.
+    [{ liquidityTokenAllocationBps: U64_MAX }, "EInvalidBps"],
+    [
+      { raiseAllocations: [{ recipient: "0x5a1e", bps: 10_001n }] },
+      "EInvalidBps",
+    ],
+    [{ holderRewardsBps: 2_999n }, "EInvalidFeeSplit"],
+    [{ holderRewardsBps: U64_MAX }, "EInvalidBps"],
     [
       {
         feeRecipients: [

@@ -53,15 +53,13 @@ const artifactDeclarations = [
   },
   {
     path: "production-presale-v1.json",
-    // The presale package is new, frozen at its first contracts main commit.
+    // The presale package is unpublished, so it is frozen at the contracts main
+    // commit it follows (ADRs 0099 through 0102).
     baseline: {
-      contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
+      contractsCommit: "d47562392104d7b13abd0677781b826657bba8f5",
       workingTreeDifferedAtFreeze: false,
     },
     packages: [["presale", "presale", "blast_presale"]],
-    approvedAbiAmendments: [
-      "contracts ADR 0101: admin-set Blast fees on the raise, the token supply, and LP fees, snapshotted at creation",
-    ],
   },
   {
     path: "production-admin-v1.json",
@@ -382,8 +380,7 @@ const presaleBuilders = new Set([
   "blast_presale::allowlisted_eligibility",
   "blast_presale::uncapped_for_eligible",
   "blast_presale::uncapped_for_anyone",
-  "blast_presale::recipient_allocation",
-  "blast_presale::fee_recipient",
+  "blast_presale::recipient_share",
   "blast_presale::share",
   "blast_presale::commit_open",
   "blast_presale::commit_allowlisted",
@@ -394,6 +391,8 @@ const presaleBuilders = new Set([
   "blast_presale::destroy_cap",
   "fee_policy::set_fees",
   "fee_policy::set_destination",
+  "creation_policy::set_quote_allowed",
+  "creation_policy::set_migration_witness_allowed",
   "cetus::new",
   "cetus::migrate",
   "cetus::collect_fees",
@@ -421,6 +420,8 @@ const presaleEventNames = new Set([
   "MigrationResidualsClaimed",
   "FeesChanged",
   "DestinationChanged",
+  "QuoteSet",
+  "MigrationWitnessSet",
   "RoundPublished",
   "RoundClosed",
   "RewardClaimed",
@@ -429,8 +430,12 @@ const presaleEventNames = new Set([
 function classifyPresaleFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
   if (presaleBuilders.has(key)) return "builder";
-  // `allowlist.ts` mirrors the Merkle tree off chain.
-  if (moduleName === "merkle_tree") return "move-composition";
+  // Every rate argument is a `bps::Bps` built in the PTB.
+  if (key === "bps::new") return "compositional";
+  // `allowlist.ts` mirrors the Merkle tree and `math.ts` the BPS arithmetic off chain.
+  if (moduleName === "merkle_tree" || moduleName === "bps") {
+    return "move-composition";
+  }
   return classifyPackageAdmin("blast_presale", moduleName, functionName);
 }
 

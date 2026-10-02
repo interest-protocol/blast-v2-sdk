@@ -34,6 +34,7 @@ export const PRESALE_MAX_SQRT_PRICE_X64 =
   79_226_673_515_401_279_992_447_579_055n;
 
 export type PresaleAbortCode =
+  | "EInvalidBps"
   | "EInvalidRaiseTarget"
   | "EInvalidTokenAllocation"
   | "EInvalidWindow"
@@ -79,18 +80,19 @@ function isU64(value: bigint): boolean {
   return value >= 0n && value <= U64_MAX;
 }
 
-function distinct(shares: readonly BpsShare[]): boolean {
+/**
+ * Mirrors `blast_presale::valid_shares`: at most `max` shares, each naming a
+ * distinct nonzero recipient and taking positive BPS.
+ */
+function validShares(shares: readonly BpsShare[], max: number): boolean {
   const recipients = shares.map((share) =>
     normalizeSuiAddress(share.recipient),
   );
-  return new Set(recipients).size === recipients.length;
-}
-
-function isValidShare(share: BpsShare): boolean {
   return (
-    BigInt(normalizeSuiAddress(share.recipient)) !== 0n &&
-    share.bps > 0n &&
-    share.bps <= BPS
+    shares.length <= max &&
+    shares.every((share) => share.bps > 0n && share.bps <= BPS) &&
+    recipients.every((recipient) => BigInt(recipient) !== 0n) &&
+    new Set(recipients).size === recipients.length
   );
 }
 
@@ -99,6 +101,16 @@ function sum(values: readonly bigint[]): bigint {
 }
 
 // === Constructors ===
+
+/** Mirrors `bps::new`, which every rate reaches `blast_presale::new` through. */
+export function validateBps(value: bigint): bigint {
+  check(
+    value >= 0n && value <= BPS,
+    "EInvalidBps",
+    "a basis-points rate must be at most 10,000",
+  );
+  return value;
+}
 
 /** Mirrors `blast_presale::open_eligibility`. */
 export function openEligibility(
@@ -207,7 +219,8 @@ export type SupplyApportionment = {
 /**
  * Mirrors `blast_presale::apportion_supply`: `[presale, LP, Blast,
  * ...recipients]` apportioned over `tokenSupply`. Requires validated
- * allocations (`validateTokenAllocations`). Blast's share may be zero atoms.
+ * allocations (`validateTokenAllocations`). The presale, the LP, and every
+ * recipient must get positive atoms; Blast's share may be zero.
  */
 export function apportionSupply(
   tokenSupply: bigint,
@@ -230,16 +243,19 @@ export function apportionSupply(
     liquidityTokenAllocation = 0n,
     protocolTokenAllocation = 0n,
   ] = amounts;
+  const recipientPayouts = payouts(recipientAllocations, amounts.slice(3));
   check(
-    tokenAllocation > 0n && liquidityTokenAllocation > 0n,
+    tokenAllocation > 0n &&
+      liquidityTokenAllocation > 0n &&
+      recipientPayouts.every((payout) => payout.amount > 0n),
     "EInvalidTokenAllocation",
-    "the presale and LP allocations must apportion to positive atoms",
+    "the presale, LP, and every recipient allocation must apportion to positive atoms",
   );
   return {
     tokenAllocation,
     liquidityTokenAllocation,
     protocolTokenAllocation,
-    recipientPayouts: payouts(recipientAllocations, amounts.slice(3)),
+    recipientPayouts,
   };
 }
 
@@ -290,31 +306,35 @@ export function apportionRaise(
  */
 export function apportionFee(
   feeRecipients: readonly BpsShare[],
-  rewardsFeeBps: bigint,
+  holderRewardsBps: bigint,
   amount: bigint,
-): { recipients: bigint[]; rewards: bigint } {
+): { recipients: bigint[]; holderRewards: bigint } {
   const amounts = apportion(
-    [...feeRecipients.map((recipient) => recipient.bps), rewardsFeeBps],
+    [...feeRecipients.map((recipient) => recipient.bps), holderRewardsBps],
     amount,
   );
-  return { recipients: amounts.slice(0, -1), rewards: itemAt(amounts, -1) };
+  return {
+    recipients: amounts.slice(0, -1),
+    holderRewards: itemAt(amounts, -1),
+  };
 }
 
 /**
  * Mirrors `presale_vault::split_fees` for one asset: Blast takes
- * `ceil(amount * protocolBps / 10,000)` first, then `apportionFee` splits the
- * rest between the fee recipients and the holder-reward share.
+ * `bps::apply_up`, `ceil(amount * protocolBps / 10,000)`, first, then
+ * `apportionFee` splits the rest between the fee recipients and the
+ * holder-reward share.
  */
 export function splitCollectedFee(
   feeRecipients: readonly BpsShare[],
-  rewardsFeeBps: bigint,
+  holderRewardsBps: bigint,
   protocolBps: bigint,
   amount: bigint,
-): { protocol: bigint; recipients: bigint[]; rewards: bigint } {
+): { protocol: bigint; recipients: bigint[]; holderRewards: bigint } {
   const protocol = (amount * protocolBps + BPS - 1n) / BPS;
   return {
     protocol,
-    ...apportionFee(feeRecipients, rewardsFeeBps, amount - protocol),
+    ...apportionFee(feeRecipients, holderRewardsBps, amount - protocol),
   };
 }
 
@@ -330,39 +350,18 @@ function payouts(
 
 // === Creation validation ===
 
-/** Mirrors `blast_presale::recipient_allocation`. */
-export function validateRecipientAllocation(allocation: BpsShare): BpsShare {
-  check(
-    isValidShare(allocation),
-    "EInvalidTokenAllocation",
-    "a recipient allocation needs a nonzero address and 1..=10,000 BPS",
-  );
-  return allocation;
-}
-
-/** Mirrors `blast_presale::fee_recipient`. */
-export function validateFeeRecipient(recipient: BpsShare): BpsShare {
-  check(
-    isValidShare(recipient),
-    "EInvalidFeeSplit",
-    "a fee recipient needs a nonzero address and 1..=10,000 BPS",
-  );
-  return recipient;
-}
-
 /** Mirrors `blast_presale::assert_raise_allocations`. */
 export function validateRaiseAllocations(
   raiseAllocations: readonly BpsShare[],
+  protocolRaiseBps: bigint,
 ): void {
   check(
-    raiseAllocations.length <= MAX_PRESALE_RECIPIENTS &&
-      raiseAllocations.every(
-        (allocation) => isValidShare(allocation) && allocation.bps < BPS,
-      ) &&
-      distinct(raiseAllocations) &&
-      sum(raiseAllocations.map((allocation) => allocation.bps)) < BPS,
+    validShares(raiseAllocations, MAX_PRESALE_RECIPIENTS) &&
+      sum(raiseAllocations.map((allocation) => allocation.bps)) +
+        protocolRaiseBps <
+        BPS,
     "EInvalidRaiseAllocation",
-    "raise allocations must be at most 64 distinct recipients leaving the LP a share",
+    "raise allocations must be at most 64 distinct recipients leaving the LP a share after Blast's",
   );
 }
 
@@ -381,9 +380,7 @@ export function validateTokenAllocations(
       tokenAllocationBps <= BPS &&
       liquidityTokenAllocationBps > 0n &&
       liquidityTokenAllocationBps <= BPS &&
-      recipientAllocations.length <= MAX_PRESALE_RECIPIENTS &&
-      recipientAllocations.every(isValidShare) &&
-      distinct(recipientAllocations) &&
+      validShares(recipientAllocations, MAX_PRESALE_RECIPIENTS) &&
       tokenAllocationBps +
         liquidityTokenAllocationBps +
         protocolTokenBps +
@@ -397,15 +394,14 @@ export function validateTokenAllocations(
 /** Mirrors `blast_presale::assert_fee_split`. */
 export function validateFeeSplit(
   feeRecipients: readonly BpsShare[],
-  rewardsFeeBps: bigint,
+  holderRewardsBps: bigint,
 ): void {
   check(
-    feeRecipients.length <= MAX_PRESALE_FEE_RECIPIENTS &&
-      rewardsFeeBps >= 0n &&
-      rewardsFeeBps <= BPS &&
-      feeRecipients.every(isValidShare) &&
-      distinct(feeRecipients) &&
-      rewardsFeeBps + sum(feeRecipients.map((recipient) => recipient.bps)) ===
+    holderRewardsBps >= 0n &&
+      holderRewardsBps <= BPS &&
+      validShares(feeRecipients, MAX_PRESALE_FEE_RECIPIENTS) &&
+      holderRewardsBps +
+        sum(feeRecipients.map((recipient) => recipient.bps)) ===
         BPS,
     "EInvalidFeeSplit",
     "at most 16 distinct fee recipients and the holder share must total 10,000 BPS",
@@ -478,7 +474,7 @@ export type PresaleCreationConfig = {
   eligibility: EligibilityPolicy;
   uncapped: UncappedPhase | null;
   feeRecipients: readonly BpsShare[];
-  rewardsFeeBps: bigint;
+  holderRewardsBps: bigint;
   /** The `FeePolicy` rates now, which `blast_presale::new` snapshots. */
   protocolFees: ProtocolFees;
 };
@@ -495,17 +491,24 @@ export type PresaleCreationPreview = SupplyApportionment & {
 
 /**
  * Mirrors the checks of `blast_presale::new` in its abort order, after the
- * constructors `PresaleCalls` runs first in this order (`recipient_allocation`
- * for token then raise recipients, `open_eligibility` /
- * `allowlisted_eligibility`, `uncapped_for_anyone`, `fee_recipient`), and
- * returns the exact amounts it apportions. Does not check what only the chain
- * knows: distinct coin types, a zero-supply `TreasuryCap`, or a Cetus tier.
+ * constructors `PresaleCalls` runs first in Move argument order (`bps::new`
+ * for each rate, `recipient_share` for token then raise recipients,
+ * `open_eligibility` / `allowlisted_eligibility`, `uncapped_for_anyone`, then
+ * the fee recipients and holder share), and returns the exact amounts it
+ * apportions. Does not check what only the chain knows: the `CreationPolicy`
+ * (`PresaleClient.getCreationPolicy`), distinct coin types, a zero-supply
+ * `TreasuryCap`, or a Cetus tier.
  */
 export function previewPresaleCreation(
   config: PresaleCreationConfig,
 ): PresaleCreationPreview {
-  config.recipientAllocations.forEach(validateRecipientAllocation);
-  config.raiseAllocations.forEach(validateRecipientAllocation);
+  const shareBps = (shares: readonly BpsShare[]) => {
+    for (const share of shares) validateBps(share.bps);
+  };
+  validateBps(config.tokenAllocationBps);
+  validateBps(config.liquidityTokenAllocationBps);
+  shareBps(config.recipientAllocations);
+  shareBps(config.raiseAllocations);
   const { eligibility, uncapped } = config;
   if (eligibility.kind === "open") {
     openEligibility(
@@ -524,14 +527,18 @@ export function previewPresaleCreation(
       uncapped.hardCap,
     );
   }
-  config.feeRecipients.forEach(validateFeeRecipient);
+  shareBps(config.feeRecipients);
+  validateBps(config.holderRewardsBps);
 
   check(
     config.raiseTarget > 0n && isU64(config.raiseTarget),
     "EInvalidRaiseTarget",
     "the raise target must be a positive u64",
   );
-  validateRaiseAllocations(config.raiseAllocations);
+  validateRaiseAllocations(
+    config.raiseAllocations,
+    config.protocolFees.raiseBps,
+  );
   validateTokenAllocations(
     config.tokenSupply,
     config.tokenAllocationBps,
@@ -539,7 +546,7 @@ export function previewPresaleCreation(
     config.protocolFees.tokenBps,
     config.recipientAllocations,
   );
-  validateFeeSplit(config.feeRecipients, config.rewardsFeeBps);
+  validateFeeSplit(config.feeRecipients, config.holderRewardsBps);
   check(
     config.durationMs > 0n && config.liquidityWindowMs > 0n,
     "EInvalidWindow",
@@ -580,11 +587,6 @@ export function previewPresaleCreation(
     isSeedable(seedSqrtPriceX64),
     "EUnseedablePrice",
     "the raise and LP-token allocation give a seed price the venues cannot pool",
-  );
-  check(
-    supply.recipientPayouts.every((payout) => payout.amount > 0n),
-    "EInvalidTokenAllocation",
-    "every recipient allocation must apportion to positive atoms",
   );
   return { ...supply, ...raise, seedSqrtPriceX64 };
 }

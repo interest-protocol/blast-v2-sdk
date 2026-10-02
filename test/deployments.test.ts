@@ -57,6 +57,7 @@ const input: BlastDeployment = {
     },
     presale: {
       venueConfig: object("0x57", "21"),
+      creationPolicy: object("0x59", "21"),
       feePolicy: object("0x58", "21"),
     },
     blastSui: {
@@ -113,6 +114,7 @@ test("derives every package's call-ready deployment", () => {
     packageId: id("0x523"),
     originalPackageId: id("0x522"),
     venueConfig: { objectId: id("0x57"), initialSharedVersion: "21" },
+    creationPolicy: { objectId: id("0x59"), initialSharedVersion: "21" },
     feePolicy: { objectId: id("0x58"), initialSharedVersion: "21" },
     admin,
   });
