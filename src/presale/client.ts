@@ -5,6 +5,7 @@ import type {
 
 import type {
   PresaleCommitment,
+  PresaleCreationPolicyState,
   PresaleFeePolicyState,
   PresaleRewardRoundState,
   PresaleState,
@@ -13,6 +14,7 @@ import type {
 import {
   getPresale,
   getPresaleCommitment,
+  getPresaleCreationPolicy,
   getPresaleFeePolicy,
   getPresaleRewardRound,
   getPresaleVault,
@@ -57,6 +59,15 @@ export class PresaleClient {
     return getPresaleFeePolicy(
       this.#client,
       this.call.deployment.feePolicy.objectId,
+      this.#originalPackageId,
+    );
+  }
+
+  /** The deployment's `CreationPolicy`: the Quote types and migrators new presales may use. */
+  async getCreationPolicy(): Promise<PresaleCreationPolicyState> {
+    return getPresaleCreationPolicy(
+      this.#client,
+      this.call.deployment.creationPolicy.objectId,
       this.#originalPackageId,
     );
   }

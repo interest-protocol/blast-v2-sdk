@@ -12,16 +12,8 @@ import {
 import { moveTypeNameBcs, suiObjectIdBcs } from "../lib/bcs.ts";
 import type { SuiEventPosition } from "../lib/events.ts";
 import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
-import type {
-  EligibilityPolicy,
-  ProtocolFees,
-  UncappedPhase,
-} from "./state.ts";
-import {
-  eligibilityPolicyBcs,
-  protocolFeesBcs,
-  uncappedPhaseBcs,
-} from "./state.ts";
+import type { EligibilityPolicy, UncappedPhase } from "./state.ts";
+import { eligibilityPolicyBcs, uncappedPhaseBcs } from "./state.ts";
 
 type PresaleEventFieldDescriptor =
   | "id"
@@ -35,8 +27,7 @@ type PresaleEventFieldDescriptor =
   | "addressVector"
   | "u64Vector"
   | "eligibility"
-  | "optionUncapped"
-  | "protocolFees";
+  | "optionUncapped";
 
 /** Every event `blast_presale` emits, by module, in Move field order. */
 export const presaleEventSpecs = {
@@ -60,11 +51,14 @@ export const presaleEventSpecs = {
       uncapped: "optionUncapped",
       migration_witness: "typeName",
       tick_spacing: "u32",
-      fee_rate: "u64",
+      pool_fee_rate: "u64",
       fee_recipients: "addressVector",
       fee_recipient_bps: "u64Vector",
-      rewards_fee_bps: "u64",
-      protocol_fees: "protocolFees",
+      holder_rewards_bps: "u64",
+      protocol_raise_bps: "u64",
+      protocol_token_bps: "u64",
+      protocol_lp_fee_meme_bps: "u64",
+      protocol_lp_fee_quote_bps: "u64",
       protocol_quote: "u64",
       protocol_tokens: "u64",
     },
@@ -84,20 +78,20 @@ export const presaleEventSpecs = {
     },
     PresaleFunded: {
       presale_id: "id",
-      commitments: "u64",
+      total_commitments: "u64",
       accepted_quote: "u64",
       refundable_quote: "u64",
       token_allocation: "u64",
     },
     PresaleCancelled: {
       presale_id: "id",
-      commitments: "u64",
+      total_commitments: "u64",
       refundable_quote: "u64",
     },
     PresaleMigrated: {
       presale_id: "id",
       migration_witness: "typeName",
-      quote: "u64",
+      liquidity_quote: "u64",
       liquidity_tokens: "u64",
       recipient_tokens: "u64",
     },
@@ -120,7 +114,7 @@ export const presaleEventSpecs = {
     Claimed: {
       presale_id: "id",
       participant: "address",
-      commitment: "u64",
+      wallet_commitment: "u64",
       tokens: "u64",
       quote_refund: "u64",
       remaining_commitments: "u64",
@@ -135,9 +129,9 @@ export const presaleEventSpecs = {
       liquidity: "u128",
       fee_recipients: "addressVector",
       fee_recipient_bps: "u64Vector",
-      rewards_fee_bps: "u64",
-      protocol_lp_meme_bps: "u64",
-      protocol_lp_quote_bps: "u64",
+      holder_rewards_bps: "u64",
+      protocol_lp_fee_meme_bps: "u64",
+      protocol_lp_fee_quote_bps: "u64",
       migration_meme_residual: "u64",
       migration_quote_residual: "u64",
     },
@@ -148,10 +142,10 @@ export const presaleEventSpecs = {
       protocol_destination: "address",
       protocol_meme: "u64",
       protocol_quote: "u64",
-      recipient_meme: "u64Vector",
-      recipient_quote: "u64Vector",
-      rewards_meme: "u64",
-      rewards_quote: "u64",
+      fee_recipient_meme: "u64Vector",
+      fee_recipient_quote: "u64Vector",
+      holder_rewards_meme: "u64",
+      holder_rewards_quote: "u64",
     },
     MigrationResidualsClaimed: {
       vault_id: "id",
@@ -218,7 +212,6 @@ type DescriptorOutputs = {
   u64Vector: bigint[];
   eligibility: EligibilityPolicy;
   optionUncapped: UncappedPhase | null;
-  protocolFees: ProtocolFees;
 };
 
 export type PresaleEventPayloads = {
@@ -257,7 +250,6 @@ const FIELD_BCS: Record<PresaleEventFieldDescriptor, BcsType<unknown>> = {
   u64Vector: bcs.vector(u64) as BcsType<unknown>,
   eligibility: eligibilityPolicyBcs as BcsType<unknown>,
   optionUncapped: bcs.option(uncappedPhaseBcs) as BcsType<unknown>,
-  protocolFees: protocolFeesBcs as BcsType<unknown>,
 };
 
 /** Kind to Move module, e.g. `FeesCollected` to `presale_vault`. */
@@ -344,75 +336,92 @@ export function presaleEventId(event: DecodedPresaleEvent): string {
   return suiEventId(event.position);
 }
 
-/** `fee_policy` events. Unlike every other presale event they have no type arguments. */
-export const presaleFeePolicyEventSpecs = {
-  FeesChanged: {
-    raise_bps: "u64",
-    token_bps: "u64",
-    lp_meme_bps: "u64",
-    lp_quote_bps: "u64",
+/**
+ * The `fee_policy` and `creation_policy` events, by module. Unlike every other
+ * presale event they have no type arguments.
+ */
+export const presalePolicyEventSpecs = {
+  fee_policy: {
+    FeesChanged: {
+      raise_bps: "u64",
+      token_bps: "u64",
+      lp_fee_meme_bps: "u64",
+      lp_fee_quote_bps: "u64",
+    },
+    DestinationChanged: { destination: "address" },
   },
-  DestinationChanged: { destination: "address" },
+  creation_policy: {
+    QuoteSet: { quote: "typeName", allowed: "bool" },
+    MigrationWitnessSet: { migration_witness: "typeName", allowed: "bool" },
+  },
 } as const satisfies Record<
   string,
-  Record<string, PresaleEventFieldDescriptor>
+  Record<string, Record<string, PresaleEventFieldDescriptor>>
 >;
 
-type FeePolicySpecs = typeof presaleFeePolicyEventSpecs;
-export type PresaleFeePolicyEventKind = keyof FeePolicySpecs;
+type PolicySpecs = typeof presalePolicyEventSpecs;
+type FlatPolicySpecs = PolicySpecs["fee_policy"] &
+  PolicySpecs["creation_policy"];
+export type PresalePolicyEventKind = keyof FlatPolicySpecs;
 
-export type DecodedPresaleFeePolicyEvent = {
-  [Kind in PresaleFeePolicyEventKind]: {
-    source: "presale-fee-policy";
+export type DecodedPresalePolicyEvent = {
+  [Kind in PresalePolicyEventKind]: {
+    source: "presale-policy";
     kind: Kind;
     payload: {
-      -readonly [Field in keyof FeePolicySpecs[Kind]]: DescriptorOutputs[Extract<
-        FeePolicySpecs[Kind][Field],
+      -readonly [Field in keyof FlatPolicySpecs[Kind]]: DescriptorOutputs[Extract<
+        FlatPolicySpecs[Kind][Field],
         PresaleEventFieldDescriptor
       >];
     };
     sender: string;
     position: SuiEventPosition;
   };
-}[PresaleFeePolicyEventKind];
+}[PresalePolicyEventKind];
 
-const presaleFeePolicyEventBcs = Object.fromEntries(
-  Object.entries(presaleFeePolicyEventSpecs).map(([kind, spec]) => [
-    kind,
-    bcs.struct(
+const presalePolicyEventModules = Object.fromEntries(
+  Object.entries(presalePolicyEventSpecs).flatMap(([module, events]) =>
+    Object.keys(events).map((kind) => [kind, module]),
+  ),
+) as Record<PresalePolicyEventKind, keyof PolicySpecs>;
+
+const presalePolicyEventBcs = Object.fromEntries(
+  Object.values(presalePolicyEventSpecs).flatMap((events) =>
+    Object.entries(events).map(([kind, spec]) => [
       kind,
-      Object.fromEntries(
-        Object.entries(spec).map(([field, descriptor]) => [
-          field,
-          FIELD_BCS[descriptor as PresaleEventFieldDescriptor],
-        ]),
+      bcs.struct(
+        kind,
+        Object.fromEntries(
+          Object.entries(spec).map(([field, descriptor]) => [
+            field,
+            FIELD_BCS[descriptor as PresaleEventFieldDescriptor],
+          ]),
+        ),
       ),
-    ),
-  ]),
-) as Record<PresaleFeePolicyEventKind, BcsType<unknown>>;
+    ]),
+  ),
+) as Record<PresalePolicyEventKind, BcsType<unknown>>;
 
-/** Decodes one `<originalPackageId>::fee_policy::<Kind>` event. */
-export function decodePresaleFeePolicyEvent(
+/** Decodes one `<originalPackageId>::fee_policy::<Kind>` or `creation_policy::<Kind>` event. */
+export function decodePresalePolicyEvent(
   event: SuiClientTypes.EventEntry,
   packages: { originalPackageId: string },
-): DecodedPresaleFeePolicyEvent {
+): DecodedPresalePolicyEvent {
   const tag = parseStructTag(event.eventType);
-  const kind = tag.name as PresaleFeePolicyEventKind;
+  const kind = tag.name as PresalePolicyEventKind;
   if (
     tag.address !== normalizeSuiAddress(packages.originalPackageId) ||
-    tag.module !== "fee_policy" ||
-    !Object.hasOwn(presaleFeePolicyEventSpecs, kind) ||
+    !Object.hasOwn(presalePolicyEventModules, kind) ||
+    presalePolicyEventModules[kind] !== tag.module ||
     tag.typeParams.length !== 0
   ) {
-    throw new TypeError(
-      `unexpected presale fee-policy event ${event.eventType}`,
-    );
+    throw new TypeError(`unexpected presale policy event ${event.eventType}`);
   }
   return {
-    source: "presale-fee-policy",
+    source: "presale-policy",
     kind,
-    payload: presaleFeePolicyEventBcs[kind].parse(event.bcs),
+    payload: presalePolicyEventBcs[kind].parse(event.bcs),
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
-  } as DecodedPresaleFeePolicyEvent;
+  } as DecodedPresalePolicyEvent;
 }

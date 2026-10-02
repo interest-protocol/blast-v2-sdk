@@ -43,7 +43,7 @@ export type UncappedPhase = {
   hardCap: boolean;
 };
 
-/** `blast_presale::RecipientAllocation` and `FeeRecipient`: a BPS share for an address. */
+/** `blast_presale::RecipientShare`: a BPS share of the supply, the raise, or LP fees for an address. */
 export type BpsShare = { recipient: string; bps: bigint };
 
 /** `blast_presale::RecipientPayout`: exact atoms apportioned at creation. */
@@ -57,8 +57,8 @@ export type RecipientPayout = { recipient: string; amount: bigint };
 export type ProtocolFees = {
   raiseBps: bigint;
   tokenBps: bigint;
-  lpMemeBps: bigint;
-  lpQuoteBps: bigint;
+  lpFeeMemeBps: bigint;
+  lpFeeQuoteBps: bigint;
 };
 
 export const PRESALE_LIFECYCLES = [
@@ -83,6 +83,15 @@ const address = bcs.Address.transform({
 const digest = bcs.vector(bcs.u8()).transform({
   input: (value: string) => Array.from(fromHex(value)),
   output: (value) => toHex(Uint8Array.from(value)),
+});
+/** `bps::Bps(u64)`: a validated rate, laid out as its one `u64`. */
+const bps = bcs.struct("Bps", { pos0: u64 }).transform({
+  input: (value: bigint) => ({ pos0: value }),
+  output: (value) => value.pos0,
+});
+/** `sui::vec_set::VecSet<TypeName>` as normalized type strings. */
+const typeNameSet = bcs.struct("VecSet", {
+  contents: bcs.vector(moveTypeNameBcs),
 });
 
 /** BCS layout of `blast_presale::EligibilityPolicy`. */
@@ -165,7 +174,7 @@ export const uncappedPhaseBcs = bcs
   });
 
 const bpsShareBcs = bcs
-  .struct("BpsShare", { recipient: address, bps: u64 })
+  .struct("RecipientShare", { recipient: address, bps })
   .transform({
     input: (value: BpsShare) => value,
     output: (value): BpsShare => value,
@@ -180,23 +189,23 @@ const payoutBcs = bcs
 /** BCS layout of `fee_policy::ProtocolFees`. */
 export const protocolFeesBcs = bcs
   .struct("ProtocolFees", {
-    raise_bps: u64,
-    token_bps: u64,
-    lp_meme_bps: u64,
-    lp_quote_bps: u64,
+    raise_bps: bps,
+    token_bps: bps,
+    lp_fee_meme_bps: bps,
+    lp_fee_quote_bps: bps,
   })
   .transform({
     input: (value: ProtocolFees) => ({
       raise_bps: value.raiseBps,
       token_bps: value.tokenBps,
-      lp_meme_bps: value.lpMemeBps,
-      lp_quote_bps: value.lpQuoteBps,
+      lp_fee_meme_bps: value.lpFeeMemeBps,
+      lp_fee_quote_bps: value.lpFeeQuoteBps,
     }),
     output: (value): ProtocolFees => ({
       raiseBps: value.raise_bps,
       tokenBps: value.token_bps,
-      lpMemeBps: value.lp_meme_bps,
-      lpQuoteBps: value.lp_quote_bps,
+      lpFeeMemeBps: value.lp_fee_meme_bps,
+      lpFeeQuoteBps: value.lp_fee_quote_bps,
     }),
   });
 
@@ -229,9 +238,9 @@ export const presaleBcs = bcs.struct("Presale", {
   uncapped_from_ms: u64,
   migration_witness: moveTypeNameBcs,
   tick_spacing: bcs.u32(),
-  fee_rate: u64,
+  pool_fee_rate: u64,
   fee_recipients: bcs.vector(bpsShareBcs),
-  rewards_fee_bps: u64,
+  holder_rewards_bps: bps,
   total_commitments: u64,
   remaining_commitments: u64,
   participants: u64,
@@ -260,12 +269,12 @@ export const presaleVaultBcs = bcs.struct("PresaleVault", {
   presale_cap_id: suiIdBcs,
   pool_id: suiIdBcs,
   fee_recipients: bcs.vector(bpsShareBcs),
-  rewards_fee_bps: u64,
+  holder_rewards_bps: bps,
   protocol_fees: protocolFeesBcs,
   migration_meme_residual: suiBalanceBcs,
   migration_quote_residual: suiBalanceBcs,
-  rewards_meme: suiBalanceBcs,
-  rewards_quote: suiBalanceBcs,
+  holder_rewards_meme: suiBalanceBcs,
+  holder_rewards_quote: suiBalanceBcs,
   next_round: u64,
   last_checkpoint: bcs.option(u64),
 });
@@ -277,15 +286,22 @@ export const feePolicyBcs = bcs.struct("FeePolicy", {
   fees: protocolFeesBcs,
 });
 
+/** BCS layout of `creation_policy::CreationPolicy`, the package's one shared creation policy. */
+export const creationPolicyBcs = bcs.struct("CreationPolicy", {
+  id: suiUidBcs,
+  allowed_quotes: typeNameSet,
+  allowed_migration_witnesses: typeNameSet,
+});
+
 /** BCS layout of `holder_rewards::Round<Meme, Quote>`. */
 export const presaleRewardRoundBcs = bcs.struct("Round", {
   id: suiUidBcs,
-  vault: suiIdBcs,
+  vault_id: suiIdBcs,
   number: u64,
   claim_deadline_ms: u64,
   root: digest,
   leaf_count: u64,
-  claimed: bcs.vector(bcs.u256()),
+  claimed_bitmap: bcs.vector(bcs.u256()),
   meme: suiBalanceBcs,
   quote: suiBalanceBcs,
 });
@@ -318,9 +334,9 @@ export type PresaleState = SharedObjectReference<true> & {
   uncappedFromMs: bigint;
   migrationWitness: string;
   tickSpacing: number;
-  feeRate: bigint;
+  poolFeeRate: bigint;
   feeRecipients: BpsShare[];
-  rewardsFeeBps: bigint;
+  holderRewardsBps: bigint;
   totalCommitments: bigint;
   /** Commitments not yet claimed. */
   remainingCommitments: bigint;
@@ -350,14 +366,14 @@ export type PresaleVaultState = SharedObjectReference<true> & {
   presaleCapId: string;
   poolId: string;
   feeRecipients: BpsShare[];
-  rewardsFeeBps: bigint;
+  holderRewardsBps: bigint;
   /** The presale's snapshotted rates; only the LP-fee shares apply to the vault. */
   protocolFees: ProtocolFees;
   migrationMemeResidual: bigint;
   migrationQuoteResidual: bigint;
   /** Holder-reward share not yet reserved by a round. */
-  rewardsMeme: bigint;
-  rewardsQuote: bigint;
+  holderRewardsMeme: bigint;
+  holderRewardsQuote: bigint;
   nextRound: bigint;
   /** Checkpoint the next round must start at; null before the first round. */
   lastCheckpoint: bigint | null;
@@ -372,7 +388,7 @@ export type PresaleRewardRoundState = SharedObjectReference<true> & {
   root: string;
   leafCount: bigint;
   /** Claim bitmap, 256 leaves per word; see `presaleRewardIsClaimed`. */
-  claimed: bigint[];
+  claimedBitmap: bigint[];
   memeRemaining: bigint;
   quoteRemaining: bigint;
 };
@@ -385,6 +401,16 @@ export type PresaleRewardRoundState = SharedObjectReference<true> & {
 export type PresaleFeePolicyState = SharedObjectReference<true> & {
   destination: string;
   fees: ProtocolFees;
+};
+
+/**
+ * `creation_policy::CreationPolicy`: the Quote types and migration witnesses
+ * (`PresaleCalls.migrationWitnessType`) new presales may use, as normalized
+ * type strings. Checked once, at creation; existing sales are unaffected.
+ */
+export type PresaleCreationPolicyState = SharedObjectReference<true> & {
+  allowedQuotes: string[];
+  allowedMigrationWitnesses: string[];
 };
 
 export type PresaleCommitment = { quote: bigint; walletCap: bigint };
@@ -416,9 +442,9 @@ export function decodePresaleObject(
     uncappedFromMs: parsed.uncapped_from_ms,
     migrationWitness: parsed.migration_witness,
     tickSpacing: parsed.tick_spacing,
-    feeRate: parsed.fee_rate,
+    poolFeeRate: parsed.pool_fee_rate,
     feeRecipients: parsed.fee_recipients,
-    rewardsFeeBps: parsed.rewards_fee_bps,
+    holderRewardsBps: parsed.holder_rewards_bps,
     totalCommitments: parsed.total_commitments,
     remainingCommitments: parsed.remaining_commitments,
     participants: parsed.participants,
@@ -454,12 +480,12 @@ export function decodePresaleVaultObject(
     presaleCapId: normalizeSuiObjectId(parsed.presale_cap_id.bytes),
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
     feeRecipients: parsed.fee_recipients,
-    rewardsFeeBps: parsed.rewards_fee_bps,
+    holderRewardsBps: parsed.holder_rewards_bps,
     protocolFees: parsed.protocol_fees,
     migrationMemeResidual: BigInt(parsed.migration_meme_residual.value),
     migrationQuoteResidual: BigInt(parsed.migration_quote_residual.value),
-    rewardsMeme: BigInt(parsed.rewards_meme.value),
-    rewardsQuote: BigInt(parsed.rewards_quote.value),
+    holderRewardsMeme: BigInt(parsed.holder_rewards_meme.value),
+    holderRewardsQuote: BigInt(parsed.holder_rewards_quote.value),
     nextRound: parsed.next_round,
     lastCheckpoint: parsed.last_checkpoint,
   };
@@ -480,12 +506,12 @@ export function decodePresaleRewardRoundObject(
     ...sharedIdentity(object, parsed.id.id.bytes),
     memeType,
     quoteType,
-    vaultId: normalizeSuiObjectId(parsed.vault.bytes),
+    vaultId: normalizeSuiObjectId(parsed.vault_id.bytes),
     number: parsed.number,
     claimDeadlineMs: parsed.claim_deadline_ms,
     root: parsed.root,
     leafCount: parsed.leaf_count,
-    claimed: parsed.claimed.map(BigInt),
+    claimedBitmap: parsed.claimed_bitmap.map(BigInt),
     memeRemaining: BigInt(parsed.meme.value),
     quoteRemaining: BigInt(parsed.quote.value),
   };
@@ -495,16 +521,7 @@ export function decodePresaleFeePolicyObject(
   object: PresaleObject,
   originalPackageId?: string,
 ): PresaleFeePolicyState {
-  const tag = parseStructTag(object.type);
-  if (
-    tag.module !== "fee_policy" ||
-    tag.name !== "FeePolicy" ||
-    tag.typeParams.length !== 0 ||
-    (originalPackageId !== undefined &&
-      tag.address !== normalizeSuiAddress(originalPackageId))
-  ) {
-    throw new TypeError(`object ${object.objectId} is not a presale FeePolicy`);
-  }
+  assertSingletonType(object, "fee_policy", "FeePolicy", originalPackageId);
   const parsed = feePolicyBcs.parse(object.content);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
@@ -513,15 +530,33 @@ export function decodePresaleFeePolicyObject(
   };
 }
 
+export function decodePresaleCreationPolicyObject(
+  object: PresaleObject,
+  originalPackageId?: string,
+): PresaleCreationPolicyState {
+  assertSingletonType(
+    object,
+    "creation_policy",
+    "CreationPolicy",
+    originalPackageId,
+  );
+  const parsed = creationPolicyBcs.parse(object.content);
+  return {
+    ...sharedIdentity(object, parsed.id.id.bytes),
+    allowedQuotes: parsed.allowed_quotes.contents,
+    allowedMigrationWitnesses: parsed.allowed_migration_witnesses.contents,
+  };
+}
+
 /** Mirrors `holder_rewards::claim_bit`: whether leaf `index` was already paid. */
 export function presaleRewardIsClaimed(
-  round: Pick<PresaleRewardRoundState, "leafCount" | "claimed">,
+  round: Pick<PresaleRewardRoundState, "leafCount" | "claimedBitmap">,
   index: bigint,
 ): boolean {
   if (index < 0n || index >= round.leafCount) {
     throw new RangeError("claim index out of bounds");
   }
-  const word = round.claimed[Number(index / 256n)] ?? 0n;
+  const word = round.claimedBitmap[Number(index / 256n)] ?? 0n;
   return (word & (1n << (index % 256n))) !== 0n;
 }
 
@@ -564,6 +599,17 @@ export async function getPresaleFeePolicy(
   originalPackageId?: string,
 ): Promise<PresaleFeePolicyState> {
   return decodePresaleFeePolicyObject(
+    await getSharedObject(client, objectId),
+    originalPackageId,
+  );
+}
+
+export async function getPresaleCreationPolicy(
+  client: ClientWithCoreApi,
+  objectId: string,
+  originalPackageId?: string,
+): Promise<PresaleCreationPolicyState> {
+  return decodePresaleCreationPolicyObject(
     await getSharedObject(client, objectId),
     originalPackageId,
   );
@@ -635,6 +681,25 @@ function pairTypes(
     throw new TypeError(`object ${object.objectId} is not a presale ${name}`);
   }
   return [normalizeStructTag(memeType), normalizeStructTag(quoteType)];
+}
+
+/** The package's shared singletons have no type arguments. */
+function assertSingletonType(
+  object: PresaleObject,
+  module: string,
+  name: string,
+  originalPackageId?: string,
+): void {
+  const tag = parseStructTag(object.type);
+  if (
+    tag.module !== module ||
+    tag.name !== name ||
+    tag.typeParams.length !== 0 ||
+    (originalPackageId !== undefined &&
+      tag.address !== normalizeSuiAddress(originalPackageId))
+  ) {
+    throw new TypeError(`object ${object.objectId} is not a presale ${name}`);
+  }
 }
 
 function sharedIdentity(

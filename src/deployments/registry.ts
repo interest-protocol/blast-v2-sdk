@@ -31,7 +31,7 @@ const SHARED_OBJECTS = {
   admin: ["acl"],
   launchpad: ["packageVersion", "launchConfig", "runtimeConfig"],
   migrators: ["packageVersion", "lpFeePolicy", "venueConfig"],
-  presale: ["venueConfig", "feePolicy"],
+  presale: ["venueConfig", "creationPolicy", "feePolicy"],
   blastSui: ["packageVersion", "vault"],
 } as const;
 

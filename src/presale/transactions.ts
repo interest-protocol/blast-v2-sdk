@@ -43,8 +43,7 @@ import {
   allowlistedEligibility,
   openEligibility,
   uncappedForAnyone,
-  validateFeeRecipient,
-  validateRecipientAllocation,
+  validateBps,
 } from "./math.ts";
 import type {
   BpsShare,
@@ -56,13 +55,15 @@ import type {
 /**
  * The presale package is not published yet, so no deployment is registered;
  * callers pass the IDs the publish and `package_admin::wrap` effects return.
- * Publication shares `VenueConfig` and `FeePolicy`.
+ * Publication shares `VenueConfig`, `CreationPolicy`, and `FeePolicy`.
  */
 export type PresaleDeployment = {
   packageId: string;
   originalPackageId: string;
   /** `venue_config::VenueConfig`, holding each Meme's Cetus `PoolCreationCap`. */
   venueConfig: SharedObjectIdentity;
+  /** `creation_policy::CreationPolicy`: the Quote types and migrators creation admits. */
+  creationPolicy: SharedObjectIdentity;
   /** `fee_policy::FeePolicy`: creation, migration, and fee collection read it. */
   feePolicy: SharedObjectIdentity;
   admin: AdminDeployment;
@@ -97,7 +98,7 @@ export type PresaleTerms = LaunchTypes & {
   eligibility: EligibilityPolicy;
   uncapped: UncappedPhase | null;
   feeRecipients: readonly BpsShare[];
-  rewardsFeeBps: bigint;
+  holderRewardsBps: bigint;
 };
 
 export type CetusPresaleObjects = {
@@ -139,6 +140,10 @@ export class PresaleCalls {
       venueConfig: normalizeSharedObjectIdentity(
         "venueConfig",
         deployment.venueConfig,
+      ),
+      creationPolicy: normalizeSharedObjectIdentity(
+        "creationPolicy",
+        deployment.creationPolicy,
       ),
       feePolicy: normalizeSharedObjectIdentity(
         "feePolicy",
@@ -233,18 +238,29 @@ export class PresaleCalls {
     };
   }
 
-  /** `vector<RecipientAllocation>` from `recipient_allocation` calls. */
-  recipientAllocations(allocations: readonly BpsShare[]) {
-    return this.#shares(
-      allocations,
-      "recipient_allocation",
-      "RecipientAllocation",
-    );
+  /** One `bps::Bps` through `bps::new`. */
+  bps(value: bigint) {
+    validateBps(value);
+    return (tx: Transaction): TransactionResult =>
+      this.#presaleCall(tx, "new", [tx.pure.u64(value)], undefined, "bps");
   }
 
-  /** `vector<FeeRecipient>` from `fee_recipient` calls. */
-  feeRecipients(recipients: readonly BpsShare[]) {
-    return this.#shares(recipients, "fee_recipient", "FeeRecipient");
+  /** `vector<RecipientShare>` from `recipient_share` calls, each rate through `bps::new`. */
+  recipientShares(shares: readonly BpsShare[]) {
+    const normalized = shares.map((share) => ({
+      recipient: normalizeSuiAddress(share.recipient),
+      bps: validateBps(share.bps),
+    }));
+    return (tx: Transaction): TransactionResult =>
+      tx.makeMoveVec({
+        type: this.#type("blast_presale::RecipientShare"),
+        elements: normalized.map((share) =>
+          this.#presaleCall(tx, "recipient_share", [
+            tx.pure.address(share.recipient),
+            tx.add(this.bps(share.bps)),
+          ]),
+        ),
+      });
   }
 
   /**
@@ -563,10 +579,10 @@ export class PresaleCalls {
     adminWitness: TransactionArgument;
     fees: ProtocolFees;
   }) {
-    const { raiseBps, tokenBps, lpMemeBps, lpQuoteBps } = options.fees;
-    for (const [name, value] of Object.entries(options.fees)) {
-      requireU64(name, value);
-    }
+    const { raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps } = options.fees;
+    const rates = [raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps].map(
+      (rate) => this.bps(rate),
+    );
     return (tx: Transaction): void => {
       this.#presaleCall(
         tx,
@@ -574,14 +590,35 @@ export class PresaleCalls {
         [
           this.#feePolicy(tx, true),
           options.adminWitness,
-          tx.pure.u64(raiseBps),
-          tx.pure.u64(tokenBps),
-          tx.pure.u64(lpMemeBps),
-          tx.pure.u64(lpQuoteBps),
+          ...rates.map((rate) => tx.add(rate)),
         ],
         undefined,
         "fee_policy",
       );
+    };
+  }
+
+  /** `creation_policy::set_quote_allowed<Quote>`: whether presales created afterward may raise it. */
+  setQuoteAllowed(options: {
+    adminWitness: TransactionArgument;
+    quoteType: string;
+    allowed: boolean;
+  }) {
+    const quoteType = normalizeStructTag(options.quoteType);
+    return (tx: Transaction): void => {
+      this.#setAllowed(tx, "set_quote_allowed", quoteType, options);
+    };
+  }
+
+  /** `creation_policy::set_migration_witness_allowed`: whether `venue` may create presales afterward. */
+  setMigrationWitnessAllowed(options: {
+    adminWitness: TransactionArgument;
+    venue: PresaleVenue;
+    allowed: boolean;
+  }) {
+    const witness = this.migrationWitnessType(options.venue);
+    return (tx: Transaction): void => {
+      this.#setAllowed(tx, "set_migration_witness_allowed", witness, options);
     };
   }
 
@@ -728,18 +765,19 @@ export class PresaleCalls {
         tx.object(options.treasuryCap),
         sharedObject(tx, "memeCurrency", options.memeCurrency, true),
         tx.pure.u64(options.tokenSupply),
-        tx.pure.u64(options.tokenAllocationBps),
-        tx.pure.u64(options.liquidityTokenAllocationBps),
-        tx.add(this.recipientAllocations(options.recipientAllocations)),
+        tx.add(this.bps(options.tokenAllocationBps)),
+        tx.add(this.bps(options.liquidityTokenAllocationBps)),
+        tx.add(this.recipientShares(options.recipientAllocations)),
         tx.pure.bool(options.burnable),
         tx.pure.u64(options.raiseTarget),
-        tx.add(this.recipientAllocations(options.raiseAllocations)),
+        tx.add(this.recipientShares(options.raiseAllocations)),
         tx.pure.u64(options.durationMs),
         tx.pure.u64(options.liquidityWindowMs),
         tx.add(this.eligibility(options.eligibility)),
         tx.add(this.uncapped(options.uncapped)),
-        tx.add(this.feeRecipients(options.feeRecipients)),
-        tx.pure.u64(options.rewardsFeeBps),
+        tx.add(this.recipientShares(options.feeRecipients)),
+        tx.add(this.bps(options.holderRewardsBps)),
+        this.#creationPolicy(tx),
         this.#feePolicy(tx),
         ...venueArguments,
       ],
@@ -748,29 +786,21 @@ export class PresaleCalls {
     );
   }
 
-  #shares(
-    shares: readonly BpsShare[],
-    functionName: "recipient_allocation" | "fee_recipient",
-    typeName: string,
-  ) {
-    const validate =
-      functionName === "fee_recipient"
-        ? validateFeeRecipient
-        : validateRecipientAllocation;
-    const normalized = shares.map((share) => {
-      validate(share);
-      return { ...share, recipient: normalizeSuiAddress(share.recipient) };
+  #setAllowed(
+    tx: Transaction,
+    functionName: string,
+    typeArgument: string,
+    options: { adminWitness: TransactionArgument; allowed: boolean },
+  ): void {
+    tx.moveCall({
+      target: `${this.deployment.packageId}::creation_policy::${functionName}`,
+      typeArguments: [typeArgument],
+      arguments: [
+        this.#creationPolicy(tx, true),
+        options.adminWitness,
+        tx.pure.bool(options.allowed),
+      ],
     });
-    return (tx: Transaction): TransactionResult =>
-      tx.makeMoveVec({
-        type: this.#type(`blast_presale::${typeName}`),
-        elements: normalized.map((share) =>
-          this.#presaleCall(tx, functionName, [
-            tx.pure.address(share.recipient),
-            tx.pure.u64(share.bps),
-          ]),
-        ),
-      });
   }
 
   /** Calls `module::functionName` of this package, typed `<Meme, Quote>` when given. */
@@ -800,6 +830,10 @@ export class PresaleCalls {
 
   #feePolicy(tx: Transaction, mutable = false): TransactionObjectArgument {
     return deploymentObject(tx, this.deployment.feePolicy, mutable);
+  }
+
+  #creationPolicy(tx: Transaction, mutable = false): TransactionObjectArgument {
+    return deploymentObject(tx, this.deployment.creationPolicy, mutable);
   }
 
   #type(name: string): string {
@@ -967,12 +1001,9 @@ export class PresaleTransactions {
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
-    const tx = new Transaction();
-    const adminWitness = tx.add(
-      this.call.signIn({ adminCap: options.adminCapId, role: "RewardsAdmin" }),
+    return this.#signedIn("RewardsAdmin", options.adminCapId, (adminWitness) =>
+      this.call.publishHolderRewardRound({ ...options, adminWitness }),
     );
-    tx.add(this.call.publishHolderRewardRound({ ...options, adminWitness }));
-    return tx;
   }
 
   /** Signs in as `FeeAdmin` and sets the rates future presales snapshot, in one PTB. */
@@ -980,12 +1011,31 @@ export class PresaleTransactions {
     adminCapId: string;
     fees: ProtocolFees;
   }): Transaction {
-    const tx = new Transaction();
-    const adminWitness = tx.add(
-      this.call.signIn({ adminCap: options.adminCapId, role: "FeeAdmin" }),
+    return this.#signedIn("FeeAdmin", options.adminCapId, (adminWitness) =>
+      this.call.setProtocolFees({ ...options, adminWitness }),
     );
-    tx.add(this.call.setProtocolFees({ ...options, adminWitness }));
-    return tx;
+  }
+
+  /** Signs in as `FeeAdmin` and lists or delists a Quote type for new presales, in one PTB. */
+  setQuoteAllowed(options: {
+    adminCapId: string;
+    quoteType: string;
+    allowed: boolean;
+  }): Transaction {
+    return this.#signedIn("FeeAdmin", options.adminCapId, (adminWitness) =>
+      this.call.setQuoteAllowed({ ...options, adminWitness }),
+    );
+  }
+
+  /** Signs in as `FeeAdmin` and lists or delists a venue for new presales, in one PTB. */
+  setMigrationWitnessAllowed(options: {
+    adminCapId: string;
+    venue: PresaleVenue;
+    allowed: boolean;
+  }): Transaction {
+    return this.#signedIn("FeeAdmin", options.adminCapId, (adminWitness) =>
+      this.call.setMigrationWitnessAllowed({ ...options, adminWitness }),
+    );
   }
 
   /** Signs in as `TreasuryAdmin` and redirects every later protocol payout, in one PTB. */
@@ -993,15 +1043,9 @@ export class PresaleTransactions {
     adminCapId: string;
     destination: string;
   }): Transaction {
-    const tx = new Transaction();
-    const adminWitness = tx.add(
-      this.call.signIn({
-        adminCap: options.adminCapId,
-        role: "TreasuryAdmin",
-      }),
+    return this.#signedIn("TreasuryAdmin", options.adminCapId, (adminWitness) =>
+      this.call.setProtocolDestination({ ...options, adminWitness }),
     );
-    tx.add(this.call.setProtocolDestination({ ...options, adminWitness }));
-    return tx;
   }
 
   /** Relays up to `allocations.length` proofs of one round in a single PTB. */
@@ -1022,6 +1066,20 @@ export class PresaleTransactions {
     options: Parameters<PresaleCalls["closeHolderRewardRound"]>[0],
   ): Transaction {
     return single(this.call.closeHolderRewardRound(options));
+  }
+
+  /** One PTB that signs in as `role` and runs `call` with the witness. */
+  #signedIn(
+    role: PresaleAdminRole,
+    adminCapId: string,
+    call: (adminWitness: TransactionArgument) => (tx: Transaction) => void,
+  ): Transaction {
+    const tx = new Transaction();
+    const adminWitness = tx.add(
+      this.call.signIn({ adminCap: adminCapId, role }),
+    );
+    tx.add(call(adminWitness));
+    return tx;
   }
 
   #shareAndKeepCap(

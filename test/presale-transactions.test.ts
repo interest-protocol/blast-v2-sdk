@@ -40,6 +40,7 @@ const deployment: PresaleDeployment = {
   originalPackageId: "0x5e",
   venueConfig: shared("0x60", false),
   feePolicy: shared("0x61", false),
+  creationPolicy: shared("0x62", false),
   admin: { packageId: "0xad", acl: shared("0xac", false) },
 };
 const tx = new PresaleTransactions(deployment);
@@ -71,8 +72,10 @@ const terms: PresaleTerms = {
   eligibility: openEligibility(500n, 4n, 250n),
   uncapped: uncappedForAnyone(50n, 4n, 250n, true),
   feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
-  rewardsFeeBps: 3_000n,
+  holderRewardsBps: 3_000n,
 };
+/** One `RecipientShare`: its rate, then the constructor. */
+const recipientShare = ["bps::new", "blast_presale::recipient_share"];
 const cetus = {
   cetusConfig: shared("0x70", false),
   cetusPools: shared("0x71", true),
@@ -120,24 +123,29 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     capRecipient: "0xc0",
   });
   assert.deepEqual(moveFunctions(ptb), [
-    "blast_presale::recipient_allocation",
-    "blast_presale::recipient_allocation",
-    "blast_presale::recipient_allocation",
+    "bps::new", // token_allocation_bps
+    "bps::new", // liquidity_token_allocation_bps
+    ...recipientShare,
+    ...recipientShare, // recipient_allocations
+    ...recipientShare, // raise_allocations
     "blast_presale::open_eligibility",
     "blast_presale::uncapped_for_anyone",
     "option::some",
-    "blast_presale::fee_recipient",
+    ...recipientShare, // fee_recipients
+    "bps::new", // holder_rewards_bps
     "cetus::new",
     "blast_presale::share",
   ]);
+  const firstShare = moveCall(ptb, "blast_presale::recipient_share");
+  assert.deepEqual(argumentKinds(ptb, firstShare), ["pure", "Result:2"]);
   const created = moveCall(ptb, "cetus::new");
   assert.deepEqual(created.typeArguments, [memeA, sui]);
   assert.deepEqual(argumentKinds(ptb, created), [
     "object:0x7c",
     "shared-mut:0xcc",
     "pure",
-    "pure",
-    "pure",
+    "Result:0",
+    "Result:1",
     `Result:${commandIndexOf(ptb, "MakeMoveVec", 0)}`,
     "pure",
     "pure",
@@ -147,7 +155,8 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     `Result:${commandIndex(ptb, "blast_presale::open_eligibility")}`,
     `Result:${commandIndex(ptb, "option::some")}`,
     `Result:${commandIndexOf(ptb, "MakeMoveVec", 2)}`,
-    "pure",
+    `Result:${commandIndex(ptb, "cetus::new") - 1}`,
+    "shared:0x62",
     "shared:0x61",
     "shared-mut:0x60",
     "shared:0x70",
@@ -165,11 +174,10 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     .commands.flatMap((command) =>
       command.$kind === "MakeMoveVec" ? [command.MakeMoveVec.type] : [],
     );
-  assert.deepEqual(vectors, [
-    normalizeStructTag("0x5e::blast_presale::RecipientAllocation"),
-    normalizeStructTag("0x5e::blast_presale::RecipientAllocation"),
-    normalizeStructTag("0x5e::blast_presale::FeeRecipient"),
-  ]);
+  assert.deepEqual(
+    vectors,
+    Array(3).fill(normalizeStructTag("0x5e::blast_presale::RecipientShare")),
+  );
 });
 
 test("creates a Bluefin presale without an uncapped phase", () => {
@@ -375,12 +383,37 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         fees: {
           raiseBps: 333n,
           tokenBps: 500n,
-          lpMemeBps: 1_000n,
-          lpQuoteBps: 1_000n,
+          lpFeeMemeBps: 1_000n,
+          lpFeeQuoteBps: 1_000n,
         },
       }),
       "fee_policy::set_fees",
-      ["shared-mut:0x61", "Result:0", ...Array(4).fill("pure")],
+      [
+        "shared-mut:0x61",
+        "Result:0",
+        "Result:1",
+        "Result:2",
+        "Result:3",
+        "Result:4",
+      ],
+    ],
+    [
+      tx.setQuoteAllowed({
+        adminCapId: "0xadc",
+        quoteType: sui,
+        allowed: true,
+      }),
+      "creation_policy::set_quote_allowed",
+      ["shared-mut:0x62", "Result:0", "pure"],
+    ],
+    [
+      tx.setMigrationWitnessAllowed({
+        adminCapId: "0xadc",
+        venue: "bluefin",
+        allowed: false,
+      }),
+      "creation_policy::set_migration_witness_allowed",
+      ["shared-mut:0x62", "Result:0", "pure"],
     ],
     [
       tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
@@ -420,15 +453,27 @@ test("signs in as the presale RewardsAdmin through blast_acl", () => {
   assert.deepEqual(argumentKinds(ptb, signIn), ["shared:0xac", "object:0xadc"]);
 });
 
-test("signs in as the presale FeeAdmin and TreasuryAdmin for fee-policy updates", () => {
+test("signs in as the presale FeeAdmin and TreasuryAdmin for policy updates", () => {
+  const noFees = {
+    raiseBps: 0n,
+    tokenBps: 0n,
+    lpFeeMemeBps: 0n,
+    lpFeeQuoteBps: 0n,
+  };
+  const listQuote = tx.setQuoteAllowed({
+    adminCapId: "0xadc",
+    quoteType: sui,
+    allowed: true,
+  });
+  const listVenue = tx.setMigrationWitnessAllowed({
+    adminCapId: "0xadc",
+    venue: "cetus",
+    allowed: true,
+  });
   for (const [ptb, role] of [
-    [
-      tx.setProtocolFees({
-        adminCapId: "0xadc",
-        fees: { raiseBps: 0n, tokenBps: 0n, lpMemeBps: 0n, lpQuoteBps: 0n },
-      }),
-      "FeeAdmin",
-    ],
+    [tx.setProtocolFees({ adminCapId: "0xadc", fees: noFees }), "FeeAdmin"],
+    [listQuote, "FeeAdmin"],
+    [listVenue, "FeeAdmin"],
     [
       tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
       "TreasuryAdmin",
@@ -439,12 +484,23 @@ test("signs in as the presale FeeAdmin and TreasuryAdmin for fee-policy updates"
       normalizeStructTag(`0x5e::blast_presale_domain::${role}`),
     ]);
   }
-  assert.throws(() =>
-    tx.setProtocolFees({
-      adminCapId: "0xadc",
-      fees: { raiseBps: -1n, tokenBps: 0n, lpMemeBps: 0n, lpQuoteBps: 0n },
-    }),
+  assert.deepEqual(
+    moveCall(listQuote, "creation_policy::set_quote_allowed").typeArguments,
+    [sui],
   );
+  assert.deepEqual(
+    moveCall(listVenue, "creation_policy::set_migration_witness_allowed")
+      .typeArguments,
+    [normalizeStructTag("0x5e::cetus::Witness")],
+  );
+  for (const raiseBps of [-1n, 10_001n]) {
+    assert.throws(() =>
+      tx.setProtocolFees({
+        adminCapId: "0xadc",
+        fees: { ...noFees, raiseBps },
+      }),
+    );
+  }
 });
 
 test("rejects a manifest from the migrators' leaf domain or another vault", () => {

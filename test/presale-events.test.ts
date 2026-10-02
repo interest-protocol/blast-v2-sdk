@@ -12,11 +12,11 @@ import type {
 } from "../src/presale/events.ts";
 import {
   decodePresaleEvent,
-  decodePresaleFeePolicyEvent,
+  decodePresalePolicyEvent,
   presaleEventBcs,
   presaleEventModules,
   presaleEventSpecs,
-  presaleFeePolicyEventSpecs,
+  presalePolicyEventSpecs,
 } from "../src/presale/events.ts";
 import { openEligibility, previewClaim } from "../src/presale/math.ts";
 import {
@@ -33,7 +33,12 @@ const VAULT = id("0xba");
 const ROUND = id("0xd0");
 const ALICE = id("0xa11ce");
 const BOB = id("0xb0b");
-const NO_FEES = { raiseBps: 0n, tokenBps: 0n, lpMemeBps: 0n, lpQuoteBps: 0n };
+const NO_FEES = {
+  protocol_raise_bps: 0n,
+  protocol_token_bps: 0n,
+  protocol_lp_fee_meme_bps: 0n,
+  protocol_lp_fee_quote_bps: 0n,
+};
 const TREASURY = id("0x7ea5");
 const u64 = (value: bigint) =>
   Array.from({ length: 8 }, (_, i) => Number((value >> BigInt(8 * i)) & 0xffn));
@@ -72,7 +77,7 @@ function decode<Kind extends PresaleEventKind>(
 
 test("event specs match every event frozen in the presale ABI", () => {
   assert.deepEqual(
-    { ...presaleEventSpecs, fee_policy: presaleFeePolicyEventSpecs },
+    { ...presaleEventSpecs, ...presalePolicyEventSpecs },
     readFrozenPresaleEventSpecs(),
   );
   assert.equal(Object.keys(presaleEventModules).length, 16);
@@ -152,11 +157,11 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       uncapped: null,
       migration_witness: `${pkg}::cetus::Witness`,
       tick_spacing: 200,
-      fee_rate: 10_000n,
+      pool_fee_rate: 10_000n,
       fee_recipients: [id("0xc0ffee"), id("0xfee")],
       fee_recipient_bps: [5_000n, 2_000n],
-      rewards_fee_bps: 3_000n,
-      protocol_fees: NO_FEES,
+      holder_rewards_bps: 3_000n,
+      ...NO_FEES,
       protocol_quote: 0n,
       protocol_tokens: 0n,
     }),
@@ -191,7 +196,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     ),
     decode("PresaleFunded", {
       presale_id: PRESALE,
-      commitments: 4_000n,
+      total_commitments: 4_000n,
       accepted_quote: 1_000n,
       refundable_quote: 3_000n,
       token_allocation: 10_001n,
@@ -233,7 +238,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     decode("PresaleMigrated", {
       presale_id: PRESALE,
       migration_witness: `${pkg}::cetus::Witness`,
-      quote: 1_000n,
+      liquidity_quote: 1_000n,
       liquidity_tokens: 2_000n,
       recipient_tokens: 8_000n,
     }),
@@ -252,7 +257,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       decode("Claimed", {
         presale_id: PRESALE,
         participant,
-        commitment,
+        wallet_commitment: commitment,
         tokens: expected.tokens,
         quote_refund: expected.quoteRefund,
         remaining_commitments:
@@ -286,9 +291,9 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       liquidity: 1_234n,
       fee_recipients: [id("0xc0ffee"), id("0xfee")],
       fee_recipient_bps: [5_000n, 2_000n],
-      rewards_fee_bps: 3_000n,
-      protocol_lp_meme_bps: 0n,
-      protocol_lp_quote_bps: 0n,
+      holder_rewards_bps: 3_000n,
+      protocol_lp_fee_meme_bps: 0n,
+      protocol_lp_fee_quote_bps: 0n,
       migration_meme_residual: 1n,
       migration_quote_residual: 0n,
     }),
@@ -299,10 +304,10 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       protocol_destination: TREASURY,
       protocol_meme: 0n,
       protocol_quote: 0n,
-      recipient_meme: [51n, 20n],
-      recipient_quote: [5n, 2n],
-      rewards_meme: 30n,
-      rewards_quote: 3n,
+      fee_recipient_meme: [51n, 20n],
+      fee_recipient_quote: [5n, 2n],
+      holder_rewards_meme: 30n,
+      holder_rewards_quote: 3n,
     }),
     decode("MigrationResidualsClaimed", {
       vault_id: VAULT,
@@ -351,16 +356,16 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   assert.equal(vault.venueType, normalizeStructTag(`${pkg}::cetus::Venue`));
   assert.deepEqual(
     [
-      vault.rewardsMeme,
-      vault.rewardsQuote,
+      vault.holderRewardsMeme,
+      vault.holderRewardsQuote,
       vault.nextRound,
       vault.lastCheckpoint,
       vault.migrationMemeResidual,
     ],
     [10n, 1n, 1n, 10n, 0n],
   );
-  assert.deepEqual(vault.recipientMemePaid, [51n, 20n]);
-  assert.deepEqual(vault.recipientQuotePaid, [5n, 2n]);
+  assert.deepEqual(vault.feeRecipientMemePaid, [51n, 20n]);
+  assert.deepEqual(vault.feeRecipientQuotePaid, [5n, 2n]);
   const round = required(state.rounds[ROUND]);
   assert.deepEqual(round.paidIndexes, { "1": true });
   assert.equal(round.closed, true);
@@ -381,7 +386,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       ),
       decode("PresaleCancelled", {
         presale_id: PRESALE,
-        commitments: 1_000n,
+        total_commitments: 1_000n,
         refundable_quote: 1_000n,
       }),
     ).presales[PRESALE],
@@ -414,11 +419,11 @@ test("a raise allocation leaves custody the migration's overflow", () => {
     uncapped: null,
     migration_witness: `${pkg}::bluefin::Witness`,
     tick_spacing: 60,
-    fee_rate: 3_000n,
+    pool_fee_rate: 3_000n,
     fee_recipients: [],
     fee_recipient_bps: [],
-    rewards_fee_bps: 10_000n,
-    protocol_fees: NO_FEES,
+    holder_rewards_bps: 10_000n,
+    ...NO_FEES,
     protocol_quote: 0n,
     protocol_tokens: 0n,
   });
@@ -433,7 +438,7 @@ test("a raise allocation leaves custody the migration's overflow", () => {
     }),
     decode("PresaleFunded", {
       presale_id: PRESALE,
-      commitments: 1_200n,
+      total_commitments: 1_200n,
       accepted_quote: 1_000n,
       refundable_quote: 200n,
       token_allocation: 10_001n,
@@ -446,7 +451,7 @@ test("a raise allocation leaves custody the migration's overflow", () => {
     decode("PresaleMigrated", {
       presale_id: PRESALE,
       migration_witness: `${pkg}::bluefin::Witness`,
-      quote: 800n,
+      liquidity_quote: 800n,
       liquidity_tokens: 10_000n,
       recipient_tokens: 0n,
     }),
@@ -484,16 +489,14 @@ test("tracks Blast's snapshotted shares from creation through migration and LP f
       uncapped: null,
       migration_witness: `${pkg}::cetus::Witness`,
       tick_spacing: 200,
-      fee_rate: 10_000n,
+      pool_fee_rate: 10_000n,
       fee_recipients: [id("0xc0ffee")],
       fee_recipient_bps: [7_000n],
-      rewards_fee_bps: 3_000n,
-      protocol_fees: {
-        raiseBps: 333n,
-        tokenBps: 500n,
-        lpMemeBps: 1_000n,
-        lpQuoteBps: 2_500n,
-      },
+      holder_rewards_bps: 3_000n,
+      protocol_raise_bps: 333n,
+      protocol_token_bps: 500n,
+      protocol_lp_fee_meme_bps: 1_000n,
+      protocol_lp_fee_quote_bps: 2_500n,
       protocol_quote: 33n,
       protocol_tokens: 1_000n,
     }),
@@ -536,7 +539,7 @@ test("tracks Blast's snapshotted shares from creation through migration and LP f
     decode("PresaleMigrated", {
       presale_id: PRESALE,
       migration_witness: `${pkg}::cetus::Witness`,
-      quote: 767n,
+      liquidity_quote: 767n,
       liquidity_tokens: 2_000n,
       recipient_tokens: 7_000n,
     }),
@@ -548,9 +551,9 @@ test("tracks Blast's snapshotted shares from creation through migration and LP f
       liquidity: 1n,
       fee_recipients: [id("0xc0ffee")],
       fee_recipient_bps: [7_000n],
-      rewards_fee_bps: 3_000n,
-      protocol_lp_meme_bps: 1_000n,
-      protocol_lp_quote_bps: 2_500n,
+      holder_rewards_bps: 3_000n,
+      protocol_lp_fee_meme_bps: 1_000n,
+      protocol_lp_fee_quote_bps: 2_500n,
       migration_meme_residual: 0n,
       migration_quote_residual: 0n,
     }),
@@ -561,10 +564,10 @@ test("tracks Blast's snapshotted shares from creation through migration and LP f
       protocol_destination: TREASURY,
       protocol_meme: 11n,
       protocol_quote: 3n,
-      recipient_meme: [63n],
-      recipient_quote: [5n],
-      rewards_meme: 27n,
-      rewards_quote: 2n,
+      fee_recipient_meme: [63n],
+      fee_recipient_quote: [5n],
+      holder_rewards_meme: 27n,
+      holder_rewards_quote: 2n,
     }),
   ]) {
     state = reducePresaleEvent(state, event);
@@ -578,8 +581,8 @@ test("tracks Blast's snapshotted shares from creation through migration and LP f
   const vault = required(state.vaults[VAULT]);
   assert.deepEqual(
     [
-      vault.protocolLpMemeBps,
-      vault.protocolLpQuoteBps,
+      vault.protocolLpFeeMemeBps,
+      vault.protocolLpFeeQuoteBps,
       vault.protocolMemePaid,
       vault.protocolQuotePaid,
     ],
@@ -587,14 +590,14 @@ test("tracks Blast's snapshotted shares from creation through migration and LP f
   );
 });
 
-test("decodes fee-policy events, which have no type arguments", () => {
+test("decodes fee-policy and creation-policy events, which have no type arguments", () => {
   const packages = { originalPackageId: pkg };
   const entry = (
     eventType: string,
     bytes: number[],
   ): SuiClientTypes.EventEntry => ({
     packageId: pkg,
-    module: "fee_policy",
+    module: eventType.split("::")[1] ?? "",
     sender: ALICE,
     eventType,
     bcs: Uint8Array.from(bytes),
@@ -603,7 +606,7 @@ test("decodes fee-policy events, which have no type arguments", () => {
     transactionDigest: "fees",
     eventIndex: 0,
   });
-  const changed = decodePresaleFeePolicyEvent(
+  const changed = decodePresalePolicyEvent(
     entry(`${pkg}::fee_policy::FeesChanged`, [
       ...u64(333n),
       ...u64(500n),
@@ -616,23 +619,46 @@ test("decodes fee-policy events, which have no type arguments", () => {
   assert.deepEqual(changed.payload, {
     raise_bps: 333n,
     token_bps: 500n,
-    lp_meme_bps: 1_000n,
-    lp_quote_bps: 2_500n,
+    lp_fee_meme_bps: 1_000n,
+    lp_fee_quote_bps: 2_500n,
   });
-  const destination = decodePresaleFeePolicyEvent(
+  const destination = decodePresalePolicyEvent(
     entry(`${pkg}::fee_policy::DestinationChanged`, [
       ...Buffer.from(TREASURY.slice(2), "hex"),
     ]),
     packages,
   );
   assert.deepEqual(destination.payload, { destination: TREASURY });
+  const witness = `${pkg.slice(2)}::cetus::Witness`;
+  const typeName = (name: string) => [name.length, ...Buffer.from(name)];
+  const listed = decodePresalePolicyEvent(
+    entry(`${pkg}::creation_policy::MigrationWitnessSet`, [
+      ...typeName(witness),
+      1,
+    ]),
+    packages,
+  );
+  assert.equal(listed.kind, "MigrationWitnessSet");
+  assert.deepEqual(listed.payload, {
+    migration_witness: `0x${witness}`,
+    allowed: true,
+  });
+  const delisted = decodePresalePolicyEvent(
+    entry(`${pkg}::creation_policy::QuoteSet`, [
+      ...typeName(quote.slice(2)),
+      0,
+    ]),
+    packages,
+  );
+  assert.deepEqual(delisted.payload, { quote, allowed: false });
   for (const eventType of [
     `${id("0x99")}::fee_policy::FeesChanged`,
     `${pkg}::blast_presale::FeesChanged`,
+    `${pkg}::fee_policy::QuoteSet`,
     `${pkg}::fee_policy::FeesChanged<${meme}>`,
   ]) {
     assert.throws(() =>
-      decodePresaleFeePolicyEvent(entry(eventType, []), packages),
+      decodePresalePolicyEvent(entry(eventType, []), packages),
     );
   }
 });
@@ -694,7 +720,6 @@ function descriptor(type: unknown): string {
   if (name === "ID") return "id";
   if (name === "TypeName") return "typeName";
   if (name === "EligibilityPolicy") return "eligibility";
-  if (name === "ProtocolFees") return "protocolFees";
   if (name === "Option") {
     const inner = (
       datatype.type_arguments[0] as { argument: { Datatype: { name: string } } }
