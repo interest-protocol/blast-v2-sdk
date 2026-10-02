@@ -1,0 +1,50 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: sdk
+    env:
+      # Fine-grained PAT with contents:read on interest-protocol/blast-v2-contracts.
+      # Without it the contracts are not checked out and the ABI parity test skips.
+      CONTRACTS_READ_TOKEN: ${{ secrets.CONTRACTS_READ_TOKEN }}
+      SUI_RELEASE: mainnet-v1.77.2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: sdk
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: sdk/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Check out the contracts commit the ABI is frozen at
+        if: env.CONTRACTS_READ_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: interest-protocol/blast-v2-contracts
+          # Bump with every `npm run check:abi:write`.
+          ref: d47562392104d7b13abd0677781b826657bba8f5
+          token: ${{ secrets.CONTRACTS_READ_TOKEN }}
+          path: contracts
+      - name: Install the pinned Sui CLI
+        if: env.CONTRACTS_READ_TOKEN != ''
+        run: |
+          curl -fsSL -o sui.tgz \
+            "https://github.com/MystenLabs/sui/releases/download/${SUI_RELEASE}/sui-${SUI_RELEASE}-ubuntu-x86_64.tgz"
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf sui.tgz -C "$HOME/.local/bin" ./sui
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: npm test
