@@ -37,7 +37,8 @@ const CHECKPOINT_BATCH_SIZE = 100;
 
 type OperatorConfig = {
   grpcUrl: string;
-  network: "mainnet" | "testnet" | "devnet" | "localnet";
+  /** Blast deploys to Sui mainnet only. */
+  network: "mainnet";
   chainId: string;
   /** Call-ready migrators deployment, including its launchpad deployment. */
   deployment: MigratorsDeployment;
@@ -136,7 +137,7 @@ export async function runHolderRewardsOperator(args: string[]): Promise<void> {
     !config.grpcUrl ||
     !config.deployment ||
     !config.vaultId ||
-    !["mainnet", "testnet", "devnet", "localnet"].includes(config.network)
+    config.network !== "mainnet"
   )
     throw new Error(
       "config needs grpcUrl, network, expected genesis chainId, deployment and vaultId",

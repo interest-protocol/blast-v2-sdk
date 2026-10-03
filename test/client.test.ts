@@ -7,8 +7,8 @@ import { blastLaunchpad, LaunchpadClient } from "../src/launchpad/client.ts";
 
 test("registers the typed launchpad client extension", () => {
   const client = new SuiGrpcClient({
-    network: "testnet",
-    baseUrl: "https://fullnode.testnet.sui.io:443",
+    network: "mainnet",
+    baseUrl: "https://fullnode.mainnet.sui.io:443",
   }).$extend(
     blastLaunchpad({
       packageId: "0x123",

@@ -62,7 +62,7 @@ Create a JSON config outside the public artifacts:
 ```json
 {
   "grpcUrl": "https://YOUR-ARCHIVAL-SUI-GRPC-ENDPOINT",
-  "network": "testnet",
+  "network": "mainnet",
   "chainId": "EXPECTED-GENESIS-DIGEST",
   "deployment": {
     "packageId": "0xCALLABLE_MIGRATORS_PACKAGE",

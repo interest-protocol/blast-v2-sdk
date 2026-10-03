@@ -32,8 +32,8 @@ const object = (objectId: string, initialSharedVersion: string) => ({
   initialSharedVersion,
 });
 const input: BlastDeployment = {
-  network: "testnet",
-  chainIdentifier: " 4c78adac ",
+  network: "mainnet",
+  chainIdentifier: " 35834a8a ",
   packages: {
     timelock: pkg("0x113"),
     admin: pkg("0x111"),
@@ -70,7 +70,7 @@ const input: BlastDeployment = {
 const deployment = defineBlastDeployment(input);
 
 test("normalizes and freezes one complete deployment manifest", () => {
-  assert.equal(deployment.chainIdentifier, "4c78adac");
+  assert.equal(deployment.chainIdentifier, "35834a8a");
   assert.equal(deployment.packages.launchpad.packageId, id("0x123"));
   assert.equal(
     deployment.sharedObjects.presale.venueConfig.objectId,
@@ -161,11 +161,24 @@ test("requires every package and shared object", () => {
   );
 });
 
+test("accepts only mainnet deployments", () => {
+  for (const network of ["testnet", "devnet", "localnet"]) {
+    assert.throws(
+      () =>
+        defineBlastDeployment({
+          ...input,
+          network: network as BlastDeployment["network"],
+        }),
+      /unsupported Blast network/,
+    );
+  }
+});
+
 test("does not invent constants before a canonical release", () => {
   assert.deepEqual(BLAST_DEPLOYMENTS, {});
   assert.throws(
-    () => getBlastDeployment("testnet"),
-    /Blast V2 is not deployed on Sui testnet/,
+    () => getBlastDeployment("mainnet"),
+    /Blast V2 is not deployed on Sui mainnet/,
   );
 });
 

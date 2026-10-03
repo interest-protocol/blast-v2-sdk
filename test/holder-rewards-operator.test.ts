@@ -133,7 +133,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
     ]);
   await writeOperatorJson(configPath, {
     grpcUrl: "http://127.0.0.1:0",
-    network: "localnet",
+    network: "mainnet",
     chainId: "test-genesis",
     deployment: {
       packageId,
@@ -164,7 +164,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
   });
   const client = new SuiGrpcClient({
     baseUrl: "http://127.0.0.1:0",
-    network: "localnet",
+    network: "mainnet",
   });
   const ledgerPrototype = Object.getPrototypeOf(client.ledgerService);
   const requested: bigint[] = [];

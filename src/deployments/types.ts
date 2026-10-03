@@ -1,11 +1,7 @@
 import type { SharedObjectIdentity, SuiPackageReference } from "../lib/sui.ts";
 
-export const BLAST_NETWORKS = [
-  "mainnet",
-  "testnet",
-  "devnet",
-  "localnet",
-] as const;
+/** Blast deploys to Sui mainnet only (contracts ADR 0103). */
+export const BLAST_NETWORKS = ["mainnet"] as const;
 
 export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
 
