@@ -31,7 +31,7 @@ const SHARED_OBJECTS = {
   admin: ["acl"],
   launchpad: ["packageVersion", "launchConfig", "runtimeConfig"],
   migrators: ["packageVersion", "lpFeePolicy", "venueConfig"],
-  presale: ["venueConfig", "creationPolicy", "feePolicy"],
+  presale: ["venueConfig", "creationPolicy", "feePolicy", "adminRegistry"],
   blastSui: ["packageVersion", "vault"],
 } as const;
 
@@ -162,7 +162,6 @@ export function presaleDeployment(
   return {
     ...deployment.packages.presale,
     ...deployment.sharedObjects.presale,
-    admin: adminDeployment(deployment),
   };
 }
 

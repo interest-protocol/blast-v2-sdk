@@ -13,6 +13,7 @@ import {
   apportionRaise,
   apportionSupply,
   isSeedable,
+  MAX_PRESALE_VESTING_DURATION_MS,
   openEligibility,
   PRESALE_MAX_SQRT_PRICE_X64,
   PRESALE_MIN_SQRT_PRICE_X64,
@@ -27,6 +28,7 @@ import {
   uncappedForEligible,
   validateBluefinPresaleTier,
   validateFeeSplit,
+  vestingTerms,
 } from "../src/presale/math.ts";
 
 // Fixture values of `blast_presale_tests.move`.
@@ -194,7 +196,7 @@ test("apportions raise allocations with the LP keeping the last share", () => {
     RAISE,
   );
   assert.deepEqual(raise.raisePayouts, [
-    { recipient: `0x${"5a1e".padStart(64, "0")}`, amount: 200n },
+    { recipient: `0x${"5a1e".padStart(64, "0")}`, amount: 200n, vesting: null },
   ]);
   assert.equal(raise.liquidityQuote, 800n);
   aborts(
@@ -611,5 +613,48 @@ test("apportionSupply rejects a zero presale or LP allocation", () => {
   aborts(
     () => apportionSupply(1n, 5_000n, 1_000n, 0n, recipients),
     "EInvalidTokenAllocation",
+  );
+});
+
+test("vesting terms mirror blast_presale::vesting_terms", () => {
+  assert.deepEqual(vestingTerms(0n, 1n, 1n), {
+    cliffMs: 0n,
+    periodMs: 1n,
+    periods: 1n,
+  });
+  const max = MAX_PRESALE_VESTING_DURATION_MS;
+  assert.deepEqual(vestingTerms(max, max, 1n).periodMs, max);
+  for (const [cliffMs, periodMs, periods] of [
+    [0n, 0n, 1n],
+    [0n, 1n, 0n],
+    [0n, max + 1n, 1n],
+    [0n, max / 2n + 1n, 2n],
+    [201n, 50n, 4n],
+  ] as const) {
+    assert.throws(
+      () => vestingTerms(cliffMs, periodMs, periods),
+      /EInvalidVestingTerms/,
+    );
+  }
+});
+
+test("fee recipients cannot vest; token and raise recipients can", () => {
+  const vesting = { cliffMs: 0n, periodMs: 10n, periods: 2n };
+  assert.throws(
+    () =>
+      validateFeeSplit(
+        [{ recipient: "0xc0ffee", bps: 7_000n, vesting }],
+        3_000n,
+      ),
+    /EInvalidFeeSplit/,
+  );
+  const { raisePayouts } = apportionRaise(
+    [{ recipient: "0x5a1e", bps: 2_000n, vesting }],
+    0n,
+    1_000n,
+  );
+  assert.deepEqual(
+    raisePayouts.map((payout) => payout.vesting),
+    [vesting],
   );
 });

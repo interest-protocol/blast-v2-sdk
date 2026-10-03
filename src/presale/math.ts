@@ -10,6 +10,7 @@ import type {
   ProtocolFees,
   RecipientPayout,
   UncappedPhase,
+  VestingTerms,
 } from "./state.ts";
 
 // Every amount here is atomic units (`u64`) of the named asset, every share is
@@ -28,6 +29,11 @@ export const MAX_PRESALE_FEE_RECIPIENTS = 16;
 export const BLUEFIN_PRESALE_MAX_TICK_SPACING = 400;
 export const BLUEFIN_PRESALE_MAX_FEE_RATE = 20_000n;
 export const BLUEFIN_PRESALE_MAX_SYMBOL_BYTES = 32;
+/**
+ * `blast_presale::MAX_VESTING_DURATION_MS`: the technical bound on a schedule's
+ * steps and cliff. Product limits on vesting belong to creation tooling.
+ */
+export const MAX_PRESALE_VESTING_DURATION_MS = 1n << 63n;
 /** `migration_math` sqrt-price bounds shared by Cetus v15 and Bluefin v17. */
 export const PRESALE_MIN_SQRT_PRICE_X64 = 4_295_048_016n;
 export const PRESALE_MAX_SQRT_PRICE_X64 =
@@ -56,7 +62,8 @@ export type PresaleAbortCode =
   | "EPresaleFilled"
   | "EInvalidRaiseAllocation"
   | "EInvalidTier"
-  | "ESymbolTooLong";
+  | "ESymbolTooLong"
+  | "EInvalidVestingTerms";
 
 /** A preview found the abort the contract would raise. */
 export class PresaleAbortError extends RangeError {
@@ -173,6 +180,26 @@ export function uncappedForAnyone(
     access: { kind: "anyone", maxParticipants, minCommitment },
     hardCap,
   };
+}
+
+/** Mirrors `blast_presale::vesting_terms`. */
+export function vestingTerms(
+  cliffMs: bigint,
+  periodMs: bigint,
+  periods: bigint,
+): VestingTerms {
+  check(
+    isU64(cliffMs) &&
+      isU64(periodMs) &&
+      isU64(periods) &&
+      periodMs > 0n &&
+      periods > 0n &&
+      periodMs <= MAX_PRESALE_VESTING_DURATION_MS / periods &&
+      cliffMs <= periodMs * periods,
+    "EInvalidVestingTerms",
+    "vesting needs a positive period and period count, a cliff within its duration, and a duration of at most 2^63 milliseconds",
+  );
+  return { cliffMs, periodMs, periods };
 }
 
 // === Apportionment ===
@@ -345,6 +372,7 @@ function payouts(
   return allocations.map((allocation, index) => ({
     recipient: normalizeSuiAddress(allocation.recipient),
     amount: itemAt(amounts, index),
+    vesting: allocation.vesting ?? null,
   }));
 }
 
@@ -400,11 +428,12 @@ export function validateFeeSplit(
     holderRewardsBps >= 0n &&
       holderRewardsBps <= BPS &&
       validShares(feeRecipients, MAX_PRESALE_FEE_RECIPIENTS) &&
+      feeRecipients.every((recipient) => recipient.vesting == null) &&
       holderRewardsBps +
         sum(feeRecipients.map((recipient) => recipient.bps)) ===
         BPS,
     "EInvalidFeeSplit",
-    "at most 16 distinct fee recipients and the holder share must total 10,000 BPS",
+    "at most 16 distinct unvested fee recipients and the holder share must total 10,000 BPS",
   );
 }
 
@@ -492,7 +521,8 @@ export type PresaleCreationPreview = SupplyApportionment & {
 /**
  * Mirrors the checks of `blast_presale::new` in its abort order, after the
  * constructors `PresaleCalls` runs first in Move argument order (`bps::new`
- * for each rate, `recipient_share` for token then raise recipients,
+ * for each rate, `recipient_share` or `vesting_terms` and
+ * `vested_recipient_share` for token then raise recipients,
  * `open_eligibility` / `allowlisted_eligibility`, `uncapped_for_anyone`, then
  * the fee recipients and holder share), and returns the exact amounts it
  * apportions. Does not check what only the chain knows: the `CreationPolicy`
@@ -503,7 +533,13 @@ export function previewPresaleCreation(
   config: PresaleCreationConfig,
 ): PresaleCreationPreview {
   const shareBps = (shares: readonly BpsShare[]) => {
-    for (const share of shares) validateBps(share.bps);
+    for (const share of shares) {
+      validateBps(share.bps);
+      const { vesting } = share;
+      if (vesting) {
+        vestingTerms(vesting.cliffMs, vesting.periodMs, vesting.periods);
+      }
+    }
   };
   validateBps(config.tokenAllocationBps);
   validateBps(config.liquidityTokenAllocationBps);

@@ -3,11 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { Transaction } from "@mysten/sui/transactions";
-import {
-  normalizeStructTag,
-  normalizeSuiObjectId,
-  SUI_CLOCK_OBJECT_ID,
-} from "@mysten/sui/utils";
+import { normalizeStructTag, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
 
 import {
   buildRewardManifest,
@@ -41,7 +37,7 @@ const deployment: PresaleDeployment = {
   venueConfig: shared("0x60", false),
   feePolicy: shared("0x61", false),
   creationPolicy: shared("0x62", false),
-  admin: { packageId: "0xad", acl: shared("0xac", false) },
+  adminRegistry: shared("0x63", false),
 };
 const tx = new PresaleTransactions(deployment);
 const memeA = normalizeStructTag("0xa::meme::MEME");
@@ -74,6 +70,8 @@ const terms: PresaleTerms = {
   feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
   holderRewardsBps: 3_000n,
 };
+/** The `&AdminRegistry, &AdminCap` pair every administrator call takes. */
+const ADMIN = ["shared:0x63", "object:0xadc"];
 /** One `RecipientShare`: its rate, then the constructor. */
 const recipientShare = ["bps::new", "blast_presale::recipient_share"];
 const cetus = {
@@ -361,7 +359,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         claimDeadlineMs: 9_000n,
       }),
       "holder_rewards::publish_round",
-      ["shared-mut:0xba", "Result:0", ...Array(9).fill("pure"), CLOCK],
+      ["shared-mut:0xba", ...ADMIN, ...Array(9).fill("pure"), CLOCK],
     ],
     [
       tx.claimHolderRewards({
@@ -390,11 +388,11 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "fee_policy::set_fees",
       [
         "shared-mut:0x61",
+        ...ADMIN,
         "Result:0",
         "Result:1",
         "Result:2",
         "Result:3",
-        "Result:4",
       ],
     ],
     [
@@ -404,7 +402,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         allowed: true,
       }),
       "creation_policy::set_quote_allowed",
-      ["shared-mut:0x62", "Result:0", "pure"],
+      ["shared-mut:0x62", ...ADMIN, "pure"],
     ],
     [
       tx.setMigrationWitnessAllowed({
@@ -413,12 +411,27 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         allowed: false,
       }),
       "creation_policy::set_migration_witness_allowed",
-      ["shared-mut:0x62", "Result:0", "pure"],
+      ["shared-mut:0x62", ...ADMIN, "pure"],
+    ],
+    [
+      tx.replaceAdminCap({ superAdminCapId: "0x5ad", recipient: "0xc0" }),
+      "blast_presale_admin::replace_admin_cap",
+      ["shared-mut:0x63", "object:0x5ad"],
+    ],
+    [
+      tx.revokeAdminCap({ superAdminCapId: "0x5ad" }),
+      "blast_presale_admin::revoke_admin_cap",
+      ["shared-mut:0x63", "object:0x5ad"],
+    ],
+    [
+      tx.transferSuperAdmin({ superAdminCapId: "0x5ad", recipient: "0xc01d" }),
+      "blast_presale_admin::transfer_super_admin",
+      ["object:0x5ad", "pure"],
     ],
     [
       tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
       "fee_policy::set_destination",
-      ["shared-mut:0x61", "Result:0", "pure"],
+      ["shared-mut:0x61", ...ADMIN, "pure"],
     ],
   ];
   for (const [ptb, name, kinds] of cases) {
@@ -430,30 +443,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
   }
 });
 
-test("signs in as the presale RewardsAdmin through blast_acl", () => {
-  const ptb = tx.publishHolderRewardRound({
-    ...types,
-    vault: shared("0xba", true),
-    adminCapId: "0xadc",
-    manifest: buildRewardManifest({
-      vaultId: "0xba",
-      number: 0n,
-      startCheckpoint: 1n,
-      endCheckpoint: 2n,
-      allocations: [{ beneficiary: "0xb0b", memeAmount: 1n, quoteAmount: 0n }],
-      leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
-    }),
-    claimDeadlineMs: 9_000n,
-  });
-  const signIn = moveCall(ptb, "blast_acl::sign_in");
-  assert.equal(signIn.package, normalizeSuiObjectId("0xad"));
-  assert.deepEqual(signIn.typeArguments, [
-    normalizeStructTag("0x5e::blast_presale_domain::RewardsAdmin"),
-  ]);
-  assert.deepEqual(argumentKinds(ptb, signIn), ["shared:0xac", "object:0xadc"]);
-});
-
-test("signs in as the presale FeeAdmin and TreasuryAdmin for policy updates", () => {
+test("administers with the presale AdminCap and never signs in to blast_acl", () => {
   const noFees = {
     raiseBps: 0n,
     tokenBps: 0n,
@@ -470,19 +460,13 @@ test("signs in as the presale FeeAdmin and TreasuryAdmin for policy updates", ()
     venue: "cetus",
     allowed: true,
   });
-  for (const [ptb, role] of [
-    [tx.setProtocolFees({ adminCapId: "0xadc", fees: noFees }), "FeeAdmin"],
-    [listQuote, "FeeAdmin"],
-    [listVenue, "FeeAdmin"],
-    [
-      tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
-      "TreasuryAdmin",
-    ],
-  ] as const) {
-    const signIn = moveCall(ptb, "blast_acl::sign_in");
-    assert.deepEqual(signIn.typeArguments, [
-      normalizeStructTag(`0x5e::blast_presale_domain::${role}`),
-    ]);
+  for (const ptb of [
+    tx.setProtocolFees({ adminCapId: "0xadc", fees: noFees }),
+    listQuote,
+    listVenue,
+    tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
+  ]) {
+    assert.ok(!moveFunctions(ptb).some((name) => name.startsWith("blast_acl")));
   }
   assert.deepEqual(
     moveCall(listQuote, "creation_policy::set_quote_allowed").typeArguments,
@@ -503,6 +487,94 @@ test("signs in as the presale FeeAdmin and TreasuryAdmin for policy updates", ()
   }
 });
 
+test("replacing the AdminCap sends the new cap to its recipient", () => {
+  const ptb = tx.replaceAdminCap({
+    superAdminCapId: "0x5ad",
+    recipient: "0xc0",
+  });
+  const replace = commandIndex(ptb, "blast_presale_admin::replace_admin_cap");
+  const transfer = ptb.getData().commands.at(-1);
+  assert.ok(transfer?.$kind === "TransferObjects");
+  assert.deepEqual(transfer.TransferObjects.objects, [
+    { $kind: "Result", Result: replace },
+  ]);
+});
+
+test("vested token and raise shares build their terms; fee shares cannot vest", () => {
+  const vesting = { cliffMs: 100n, periodMs: 50n, periods: 4n };
+  const ptb = tx.createCetusPresale({
+    ...terms,
+    ...cetus,
+    recipientAllocations: [
+      { recipient: "0xa110c", bps: 2_500n, vesting },
+      { recipient: "0xb110c", bps: 1_500n },
+    ],
+    raiseAllocations: [{ recipient: "0x5a1e", bps: 2_000n, vesting }],
+    tickSpacing: 200,
+    capRecipient: "0xc0",
+  });
+  const vestedShare = [
+    "bps::new",
+    "blast_presale::vesting_terms",
+    "blast_presale::vested_recipient_share",
+  ];
+  assert.deepEqual(moveFunctions(ptb).slice(0, 11), [
+    "bps::new",
+    "bps::new",
+    ...vestedShare,
+    ...recipientShare,
+    ...vestedShare,
+    "blast_presale::open_eligibility",
+  ]);
+  const terms0 = moveCall(ptb, "blast_presale::vesting_terms");
+  assert.deepEqual(argumentKinds(ptb, terms0), ["pure", "pure", "pure"]);
+  const vested = moveCall(ptb, "blast_presale::vested_recipient_share");
+  assert.deepEqual(argumentKinds(ptb, vested), [
+    "pure",
+    `Result:${commandIndex(ptb, "blast_presale::vesting_terms") - 1}`,
+    `Result:${commandIndex(ptb, "blast_presale::vesting_terms")}`,
+  ]);
+  for (const [module, fn] of [
+    ["blast_presale", "vesting_terms"],
+    ["blast_presale", "vested_recipient_share"],
+  ] as const) {
+    assert.equal(
+      moveCall(ptb, `${module}::${fn}`).arguments.length,
+      abiArity(module, fn),
+    );
+  }
+
+  assert.throws(
+    () =>
+      tx.createCetusPresale({
+        ...terms,
+        ...cetus,
+        recipientAllocations: [
+          {
+            recipient: "0xa110c",
+            bps: 2_500n,
+            vesting: { ...vesting, periods: 0n },
+          },
+          { recipient: "0xb110c", bps: 1_500n },
+        ],
+        tickSpacing: 200,
+        capRecipient: "0xc0",
+      }),
+    /EInvalidVestingTerms/,
+  );
+  assert.throws(
+    () =>
+      tx.createCetusPresale({
+        ...terms,
+        ...cetus,
+        feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n, vesting }],
+        tickSpacing: 200,
+        capRecipient: "0xc0",
+      }),
+    /fee recipients cannot vest/,
+  );
+});
+
 test("rejects a manifest from the migrators' leaf domain or another vault", () => {
   const options = {
     vaultId: "0xba",
@@ -519,7 +591,7 @@ test("rejects a manifest from the migrators' leaf domain or another vault", () =
     call.publishHolderRewardRound({
       ...types,
       vault: shared(vault, true),
-      adminWitness: { $kind: "Input", Input: 0, type: "object" },
+      adminCap: "0xadc",
       manifest,
       claimDeadlineMs: 1n,
     });

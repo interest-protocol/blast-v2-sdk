@@ -53,10 +53,11 @@ const artifactDeclarations = [
   },
   {
     path: "production-presale-v1.json",
-    // The presale package is unpublished, so it is frozen at the contracts main
-    // commit it follows (ADRs 0099 through 0102).
+    // The presale package is unpublished, so it is frozen at the contracts
+    // commit it follows: ADRs 0099 through 0102, team vesting, and the
+    // package's own two-tier administration (contracts PR 45).
     baseline: {
-      contractsCommit: "d47562392104d7b13abd0677781b826657bba8f5",
+      contractsCommit: "db753931f7f530ccc5ba9783ac16c6e6b8ea8b97",
       workingTreeDifferedAtFreeze: false,
     },
     packages: [["presale", "presale", "blast_presale"]],
@@ -381,6 +382,8 @@ const presaleBuilders = new Set([
   "blast_presale::uncapped_for_eligible",
   "blast_presale::uncapped_for_anyone",
   "blast_presale::recipient_share",
+  "blast_presale::vested_recipient_share",
+  "blast_presale::vesting_terms",
   "blast_presale::share",
   "blast_presale::commit_open",
   "blast_presale::commit_allowlisted",
@@ -403,6 +406,9 @@ const presaleBuilders = new Set([
   "holder_rewards::publish_round",
   "holder_rewards::claim",
   "holder_rewards::close_round",
+  "blast_presale_admin::replace_admin_cap",
+  "blast_presale_admin::revoke_admin_cap",
+  "blast_presale_admin::transfer_super_admin",
 ]);
 const presaleEventNames = new Set([
   "PresaleCreated",
@@ -425,6 +431,8 @@ const presaleEventNames = new Set([
   "RoundPublished",
   "RoundClosed",
   "RewardClaimed",
+  "AdminCapReplaced",
+  "AdminCapRevoked",
 ]);
 
 function classifyPresaleFunction(moduleName, functionName) {

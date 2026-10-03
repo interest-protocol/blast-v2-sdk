@@ -9,6 +9,7 @@ import type {
   ProtocolFees,
   RecipientPayout,
   UncappedPhase,
+  VestingTerms,
 } from "./state.ts";
 
 /**
@@ -56,6 +57,13 @@ export type PresaleProjection = {
   recipientPayouts: RecipientPayout[];
   recipientTokens: bigint;
   raisePayouts: RecipientPayout[];
+  /**
+   * The `blast_fun_linear_vesting::Vesting` schedule migration created for
+   * each vesting token recipient, by recipient address.
+   */
+  recipientVestingIds: Readonly<Record<string, string>>;
+  /** The schedule migration created for each vesting raise recipient. */
+  raiseVestingIds: Readonly<Record<string, string>>;
   /** Blast's rates, snapshotted at creation. */
   protocolFees: ProtocolFees;
   /** Blast's share of the raise, paid on migration. */
@@ -210,12 +218,26 @@ function applyPresaleEvent(
       const { payload } = event;
       return updatePresale(state, payload.presale_id, (presale) => ({
         quote: presale.quote - payload.quote,
+        raiseVestingIds:
+          payload.vesting_id === null
+            ? presale.raiseVestingIds
+            : {
+                ...presale.raiseVestingIds,
+                [payload.recipient]: payload.vesting_id,
+              },
       }));
     }
     case "RecipientAllocated": {
       const { payload } = event;
       return updatePresale(state, payload.presale_id, (presale) => ({
         recipientTokens: presale.recipientTokens - payload.tokens,
+        recipientVestingIds:
+          payload.vesting_id === null
+            ? presale.recipientVestingIds
+            : {
+                ...presale.recipientVestingIds,
+                [payload.recipient]: payload.vesting_id,
+              },
       }));
     }
     case "PresaleMigrated": {
@@ -254,6 +276,7 @@ function applyVaultEvent(
       const feeRecipients = payload.fee_recipients.map((recipient, i) => ({
         recipient,
         bps: itemAt(payload.fee_recipient_bps, i),
+        vesting: null,
       }));
       const linked = updatePresale(state, payload.presale_id, () => ({
         vaultId: payload.vault_id,
@@ -371,15 +394,25 @@ function createdPresale(
   event: Extract<DecodedPresaleEvent, { kind: "PresaleCreated" }>,
 ): PresaleProjection {
   const { payload } = event;
-  const shares = (recipients: string[], bps: bigint[]) =>
-    recipients.map((recipient, i) => ({ recipient, bps: itemAt(bps, i) }));
+  const shares = (
+    recipients: string[],
+    bps: bigint[],
+    vesting: readonly (VestingTerms | null)[] = [],
+  ): BpsShare[] =>
+    recipients.map((recipient, i) => ({
+      recipient,
+      bps: itemAt(bps, i),
+      vesting: vesting[i] ?? null,
+    }));
   const recipientAllocations = shares(
     payload.recipients,
     payload.recipient_bps,
+    payload.recipient_vesting,
   );
   const raiseAllocations = shares(
     payload.raise_recipients,
     payload.raise_recipient_bps,
+    payload.raise_recipient_vesting,
   );
   const protocolFees: ProtocolFees = {
     raiseBps: payload.protocol_raise_bps,
@@ -440,6 +473,8 @@ function createdPresale(
       0n,
     ),
     raisePayouts,
+    recipientVestingIds: {},
+    raiseVestingIds: {},
     protocolFees,
     protocolQuote: payload.protocol_quote,
     protocolTokens: payload.protocol_tokens,
