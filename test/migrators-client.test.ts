@@ -15,8 +15,8 @@ function shared<const Mutable extends boolean>(
 
 test("registers the typed migrators client extension", () => {
   const client = new SuiGrpcClient({
-    network: "testnet",
-    baseUrl: "https://fullnode.testnet.sui.io:443",
+    network: "mainnet",
+    baseUrl: "https://fullnode.mainnet.sui.io:443",
   }).$extend(
     blastMigrators({
       packageId: "0x321",

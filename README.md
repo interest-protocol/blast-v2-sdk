@@ -37,8 +37,8 @@ import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { blastLaunchpad } from "@interest-protocol/blast-sdk/launchpad";
 
 const client = new SuiGrpcClient({
-  network: "testnet",
-  baseUrl: "https://fullnode.testnet.sui.io:443",
+  network: "mainnet",
+  baseUrl: "https://fullnode.mainnet.sui.io:443",
 }).$extend(
   blastLaunchpad({
     packageId: "0x...", // current launchpad package
@@ -106,11 +106,11 @@ import {
   launchpadDeployment,
 } from "@interest-protocol/blast-sdk/deployments";
 
-const blast = getBlastDeployment("testnet");
+const blast = getBlastDeployment("mainnet");
 const launchpadExtension = blastLaunchpad(launchpadDeployment(blast));
 ```
 
-For local or unreleased deployments, validate one manifest with
+For an unreleased mainnet deployment, validate one manifest with
 `defineBlastDeployment`, then pass it through the matching deployment helper. The
 built-in registry remains empty until publish output supplies real IDs; the SDK
 does not ship placeholder addresses.
