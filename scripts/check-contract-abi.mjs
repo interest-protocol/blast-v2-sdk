@@ -49,6 +49,7 @@ const artifactDeclarations = [
       "contracts ADR 0093: an optional opening round replaces purchase protection; buy no longer takes the Clock",
       "contracts ADRs 0094 and 0097: every administrator action takes blast_admin::blast_acl::AdminWitness of its own typed blast_fun_domain role",
       "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation",
+      "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
     ],
   },
   {
@@ -69,6 +70,9 @@ const artifactDeclarations = [
       contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
       workingTreeDifferedAtFreeze: false,
     },
+    approvedAbiAmendments: [
+      "contracts ADR 0097 (amended 2026-10-02, admin package review): upgrade_custody::publisher borrows the sealed Publisher, operational_version::new takes the package's one-time witness, and advance takes the versioned object's UID",
+    ],
     packages: [["admin", "admin", "blast_admin"]],
   },
   {
@@ -90,6 +94,7 @@ const artifactDeclarations = [
       "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody",
       "contracts ADR 0085: name every explorer-visible type after Blast",
       "contracts ADR 0097: package custody and the redeem fee take blast_admin::blast_acl::AdminWitness of the typed UpgradeAdmin and FeeAdmin roles",
+      "contracts ADR 0097 (amended 2026-10-02): PackageVersion lives in the one-time-witness module as blast_sui_package::PackageVersion, seeded from that witness",
     ],
   },
 ];
@@ -351,7 +356,7 @@ function classifyAdminFunction(moduleName, functionName) {
   if (moduleName === "blast_acl" && aclBuilders.has(functionName)) {
     return "builder";
   }
-  // Consumers' own package_admin and package_version modules call these on
+  // Consumers' own package_admin and one-time-witness modules call these on
   // values they wrap; no transaction can reach them directly.
   if (
     moduleName === "upgrade_custody" ||

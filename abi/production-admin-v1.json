@@ -3,6 +3,9 @@
   "baseline": {
     "contractsCommit": "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
     "workingTreeDifferedAtFreeze": false,
+    "approvedAbiAmendments": [
+      "contracts ADR 0097 (amended 2026-10-02, admin package review): upgrade_custody::publisher borrows the sealed Publisher, operational_version::new takes the package's one-time witness, and advance takes the versioned object's UID"
+    ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
   "packages": {
@@ -1451,14 +1454,19 @@
                   ]
                 },
                 {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "object"
-                    },
-                    "name": "ID",
-                    "type_arguments": []
-                  }
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "object"
+                        },
+                        "name": "UID",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 "u64"
               ],
@@ -1557,7 +1565,16 @@
                   ]
                 }
               ],
-              "parameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "NamedTypeParameter": "PackageMarker"
+                    }
+                  ]
+                }
+              ],
               "returns": [
                 {
                   "Datatype": {
@@ -1882,6 +1899,61 @@
                       }
                     ]
                   }
+                }
+              ]
+            },
+            {
+              "name": "publisher",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "PackageMarker",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "upgrade_custody"
+                        },
+                        "name": "UpgradeCustody",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "PackageMarker"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "package"
+                        },
+                        "name": "Publisher",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 }
               ]
             },

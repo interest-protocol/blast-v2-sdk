@@ -25,7 +25,8 @@
       "contracts ADR 0092: the creator sets the virtual Quote reserve on the initializer; LaunchConfig admits Quotes in a Table and QuoteSet records allowed",
       "contracts ADR 0093: an optional opening round replaces purchase protection; buy no longer takes the Clock",
       "contracts ADRs 0094 and 0097: every administrator action takes blast_admin::blast_acl::AdminWitness of its own typed blast_fun_domain role",
-      "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation"
+      "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation",
+      "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -675,6 +676,56 @@
                 {
                   "name": "dummy_field",
                   "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "PackageVersion",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "generation",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "operational_version"
+                      },
+                      "name": "OperationalVersion",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_fun",
+                                "name": "blast_fun"
+                              },
+                              "name": "BLAST_FUN",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
             }
@@ -2519,7 +2570,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2665,7 +2716,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2825,7 +2876,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2960,7 +3011,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -3126,7 +3177,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -3322,7 +3373,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -3544,7 +3595,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -3720,7 +3771,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -3854,7 +3905,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4012,7 +4063,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4120,7 +4171,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4228,7 +4279,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4415,7 +4466,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4581,7 +4632,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4756,7 +4807,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -5064,7 +5115,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -5976,7 +6027,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6059,7 +6110,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6157,7 +6208,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6226,7 +6277,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6304,7 +6355,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6373,7 +6424,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6467,7 +6518,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6536,7 +6587,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -7037,7 +7088,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -7119,7 +7170,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -7197,7 +7248,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -7337,63 +7388,6 @@
           "enums": [],
           "events": []
         },
-        "package_version": {
-          "functions": [],
-          "structs": [
-            {
-              "name": "PackageVersion",
-              "abilities": [
-                "Key"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "generation",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_admin",
-                        "name": "operational_version"
-                      },
-                      "name": "OperationalVersion",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_fun",
-                                "name": "blast_fun"
-                              },
-                              "name": "BLAST_FUN",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": true
-                        }
-                      ]
-                    }
-                  }
-                }
-              ]
-            }
-          ],
-          "enums": [],
-          "events": []
-        },
         "runtime_config": {
           "functions": [
             {
@@ -7424,7 +7418,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -7495,7 +7489,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -8443,6 +8437,56 @@
                   "type": "bool"
                 }
               ]
+            },
+            {
+              "name": "PackageVersion",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "generation",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "operational_version"
+                      },
+                      "name": "OperationalVersion",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_fun_migrators",
+                                "name": "blast_fun_migrators"
+                              },
+                              "name": "BLAST_FUN_MIGRATORS",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
             }
           ],
           "enums": [],
@@ -8502,7 +8546,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -8589,7 +8633,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -8823,7 +8867,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9011,7 +9055,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9184,7 +9228,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9199,7 +9243,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9364,7 +9408,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9379,7 +9423,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9483,7 +9527,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9762,7 +9806,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9960,7 +10004,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10158,7 +10202,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10173,7 +10217,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10337,7 +10381,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10352,7 +10396,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "package_version"
+                          "name": "blast_fun"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10525,7 +10569,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10835,7 +10879,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10909,7 +10953,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10997,7 +11041,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -11085,7 +11129,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -11292,7 +11336,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -11374,7 +11418,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -11524,63 +11568,6 @@
           "enums": [],
           "events": []
         },
-        "package_version": {
-          "functions": [],
-          "structs": [
-            {
-              "name": "PackageVersion",
-              "abilities": [
-                "Key"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "generation",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_admin",
-                        "name": "operational_version"
-                      },
-                      "name": "OperationalVersion",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_fun_migrators",
-                                "name": "blast_fun_migrators"
-                              },
-                              "name": "BLAST_FUN_MIGRATORS",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": true
-                        }
-                      ]
-                    }
-                  }
-                }
-              ]
-            }
-          ],
-          "enums": [],
-          "events": []
-        },
         "vault": {
           "functions": [
             {
@@ -11635,7 +11622,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -11798,7 +11785,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "package_version"
+                          "name": "blast_fun_migrators"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
