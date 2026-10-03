@@ -47,7 +47,7 @@ export type MigratorsDeployment = {
   packageId: string;
   originalPackageId: string;
   launchpad: LaunchpadDeployment;
-  /** Migrators `package_version::PackageVersion` checked by every protected entry. */
+  /** Migrators `blast_fun_migrators::PackageVersion` checked by every protected entry. */
   migratorsVersion: SharedObjectIdentity;
   /** Migrators `lp_fee_policy::LpFeePolicy` read by every LP-fee collection. */
   lpFeePolicy: SharedObjectIdentity;

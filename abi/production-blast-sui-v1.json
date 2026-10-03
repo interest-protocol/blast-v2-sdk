@@ -13,7 +13,8 @@
       "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody",
       "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody",
       "contracts ADR 0085: name every explorer-visible type after Blast",
-      "contracts ADR 0097: package custody and the redeem fee take blast_admin::blast_acl::AdminWitness of the typed UpgradeAdmin and FeeAdmin roles"
+      "contracts ADR 0097: package custody and the redeem fee take blast_admin::blast_acl::AdminWitness of the typed UpgradeAdmin and FeeAdmin roles",
+      "contracts ADR 0097 (amended 2026-10-02): PackageVersion lives in the one-time-witness module as blast_sui_package::PackageVersion, seeded from that witness"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -120,6 +121,56 @@
                 {
                   "name": "dummy_field",
                   "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "PackageVersion",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "generation",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "operational_version"
+                      },
+                      "name": "OperationalVersion",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_sui",
+                                "name": "blast_sui_package"
+                              },
+                              "name": "BLAST_SUI_PACKAGE",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
             }
@@ -312,7 +363,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -1197,7 +1248,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -1268,7 +1319,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -1350,7 +1401,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -1454,7 +1505,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -1577,7 +1628,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -1714,63 +1765,6 @@
           "enums": [],
           "events": []
         },
-        "package_version": {
-          "functions": [],
-          "structs": [
-            {
-              "name": "PackageVersion",
-              "abilities": [
-                "Key"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "generation",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_admin",
-                        "name": "operational_version"
-                      },
-                      "name": "OperationalVersion",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_sui",
-                                "name": "blast_sui_package"
-                              },
-                              "name": "BLAST_SUI_PACKAGE",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": true
-                        }
-                      ]
-                    }
-                  }
-                }
-              ]
-            }
-          ],
-          "enums": [],
-          "events": []
-        },
         "vault": {
           "functions": [
             {
@@ -1801,7 +1795,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -1891,7 +1885,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2042,7 +2036,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2135,7 +2129,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2253,7 +2247,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2372,7 +2366,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2490,7 +2484,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2594,7 +2588,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2663,7 +2657,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_version"
+                          "name": "blast_sui_package"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []

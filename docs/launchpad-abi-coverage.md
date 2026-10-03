@@ -15,8 +15,10 @@ The frozen production ABI uses contracts commit
   signs in to; and
 - `abi/production-partners-v1.json` for `blast_partners`.
 
-The presale, admin, and partners artifacts are frozen at their first SDK
-coverage, contracts `442116a`, with no amendment ledger yet. `blast_admin` and
+The admin and partners artifacts are frozen at their first SDK coverage,
+contracts `442116a`; the admin artifact's amendment ledger records the ADR 0097
+admin package review (2026-10-02). The presale artifact follows the unpublished
+package's latest contracts commit instead (see [presale](presale.md)). `blast_admin` and
 `blast_partners` are separate artifacts because they are separately published,
 immutable packages that every product links, not part of the launchpad's
 upgrade lineage.
@@ -35,8 +37,11 @@ Both artifacts carry an `approvedAbiAmendments` list: every contracts ADR that
 changed the production ABI after the baseline commit, most recently ADRs 0090
 (redundancy audit), 0092 (creator-chosen virtual Quote), 0093 (opening round),
 0094 and 0097 (the `blast_acl` singleton with typed roles), and 0098 (creation
-fee and launch partners). The artifacts were regenerated against contracts
-`442116a` for those amendments.
+fee and launch partners), and the 2026-10-02 ADR 0097 amendment that moves each
+`PackageVersion` into its package's one-time-witness module
+(`blast_fun::PackageVersion`, `blast_fun_migrators::PackageVersion`,
+`blast_sui_package::PackageVersion`). The artifacts were regenerated against
+contracts `79013f5` for those amendments.
 
 Move calls use the current package ID. Type names, event types, object schemas,
 migration witnesses, venue markers, and venue-tier dynamic-field keys use the
@@ -106,7 +111,7 @@ recipient, and request-result-to-`keep` routing for every returned object.
 | --- | --- | --- | --- |
 | `blast_acl::grant_admin`, `revoke_admin`, `grant_role<Role>`, `revoke_role<Role>`, `destroy_admin_cap`, `begin_super_admin_transfer`, `cancel_super_admin_transfer`, `accept_super_admin_transfer`, `destroy_retired_super_admin_cap` | `AdminCalls` and `AdminTransactions` methods of the same names | `test/admin.test.ts` | Root and administrator builders; each product's `roleType` names a role type. |
 | `blast_acl::sign_in<Role>` | `AdminCalls.signIn`, wrapped by every product's typed `signIn` | `test/admin.test.ts` and every admin transaction test | Composed in the same PTB as the administrator call. |
-| `upgrade_custody::*`, `operational_version::*` | None | ABI classifier | Move-composition: only consumers' `package_admin` and `package_version` modules hold the values. |
+| `upgrade_custody::*`, `operational_version::*` | None | ABI classifier | Move-composition: only consumers' `package_admin` and one-time-witness modules hold the values. |
 | `blast_partners::new_cap`, `register`, `schedule_share`, `schedule_cap`, `set_recipient`, `destroy_cap` | `PartnersCalls` and `PartnersTransactions` | `test/partners.test.ts` | `PartnerAdmin` builders sign in in the same PTB; `setRecipient` takes the live `PartnerCap`. |
 | `blast_partners::pay`, `delay_ms` | `partnerPayment`, `PARTNER_DELAY_MS` | `test/partners.test.ts` (the contracts' payment vectors) | Move-composition: products call `pay` with Blast's fee; the SDK mirrors it. |
 
