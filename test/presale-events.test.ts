@@ -147,10 +147,12 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       liquidity_token_allocation_bps: 1_000n,
       recipients,
       recipient_bps: [2_500n, 1_500n],
+      recipient_vesting: [null, null],
       burnable: false,
       raise_target: 1_000n,
       raise_recipients: [],
       raise_recipient_bps: [],
+      raise_recipient_vesting: [],
       duration_ms: 100n,
       liquidity_window_ms: 50n,
       eligibility: openEligibility(5_000n, 2n, 500n),
@@ -229,11 +231,13 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       presale_id: PRESALE,
       recipient: itemAt(recipients, 0),
       tokens: 5_000n,
+      vesting_id: null,
     }),
     decode("RecipientAllocated", {
       presale_id: PRESALE,
       recipient: itemAt(recipients, 1),
       tokens: 3_000n,
+      vesting_id: null,
     }),
     decode("PresaleMigrated", {
       presale_id: PRESALE,
@@ -409,10 +413,12 @@ test("a raise allocation leaves custody the migration's overflow", () => {
     liquidity_token_allocation_bps: 5_000n,
     recipients: [],
     recipient_bps: [],
+    recipient_vesting: [],
     burnable: true,
     raise_target: 1_000n,
     raise_recipients: [id("0x5a1e")],
     raise_recipient_bps: [2_000n],
+    raise_recipient_vesting: [null],
     duration_ms: 100n,
     liquidity_window_ms: 50n,
     eligibility: openEligibility(5_000n, 1n, 1_000n),
@@ -447,6 +453,7 @@ test("a raise allocation leaves custody the migration's overflow", () => {
       presale_id: PRESALE,
       recipient: id("0x5a1e"),
       quote: 200n,
+      vesting_id: null,
     }),
     decode("PresaleMigrated", {
       presale_id: PRESALE,
@@ -460,7 +467,7 @@ test("a raise allocation leaves custody the migration's overflow", () => {
   }
   const presale = required(state.presales[PRESALE]);
   assert.deepEqual(presale.raisePayouts, [
-    { recipient: id("0x5a1e"), amount: 200n },
+    { recipient: id("0x5a1e"), amount: 200n, vesting: null },
   ]);
   assert.deepEqual([presale.quote, presale.liquidityTokens], [200n, 0n]);
 });
@@ -479,10 +486,12 @@ test("tracks Blast's snapshotted shares from creation through migration and LP f
       liquidity_token_allocation_bps: 1_000n,
       recipients,
       recipient_bps: [2_500n, 1_000n],
+      recipient_vesting: [null, null],
       burnable: false,
       raise_target: 1_000n,
       raise_recipients: [id("0x5a1e")],
       raise_recipient_bps: [2_000n],
+      raise_recipient_vesting: [null],
       duration_ms: 100n,
       liquidity_window_ms: 50n,
       eligibility: openEligibility(5_000n, 2n, 500n),
@@ -521,7 +530,7 @@ test("tracks Blast's snapshotted shares from creation through migration and LP f
     [33n, 1_000n],
   );
   assert.deepEqual(presale.raisePayouts, [
-    { recipient: id("0x5a1e"), amount: 200n },
+    { recipient: id("0x5a1e"), amount: 200n, vesting: null },
   ]);
 
   for (const event of [
@@ -535,6 +544,7 @@ test("tracks Blast's snapshotted shares from creation through migration and LP f
       presale_id: PRESALE,
       recipient: id("0x5a1e"),
       quote: 200n,
+      vesting_id: null,
     }),
     decode("PresaleMigrated", {
       presale_id: PRESALE,
@@ -587,6 +597,140 @@ test("tracks Blast's snapshotted shares from creation through migration and LP f
       vault.protocolQuotePaid,
     ],
     [1_000n, 2_500n, 11n, 3n],
+  );
+});
+
+test("carries vesting terms from creation and schedule IDs from migration", () => {
+  const vesting = { cliffMs: 100n, periodMs: 50n, periods: 4n };
+  const recipients = [id("0xa110c"), id("0xb110c")];
+  const SCHEDULE = id("0x5c4ed");
+  const RAISE_SCHEDULE = id("0x5c4ee");
+  let state = createPresaleEventProjection();
+  for (const event of [
+    decode("PresaleCreated", {
+      presale_id: PRESALE,
+      presale_cap_id: id("0xca"),
+      treasury_cap_id: id("0x7c"),
+      token_supply: 20_001n,
+      token_allocation_bps: 5_000n,
+      liquidity_token_allocation_bps: 1_000n,
+      recipients,
+      recipient_bps: [2_500n, 1_500n],
+      recipient_vesting: [vesting, null],
+      burnable: false,
+      raise_target: 1_000n,
+      raise_recipients: [id("0x5a1e")],
+      raise_recipient_bps: [2_000n],
+      raise_recipient_vesting: [vesting],
+      duration_ms: 100n,
+      liquidity_window_ms: 50n,
+      eligibility: openEligibility(5_000n, 2n, 500n),
+      uncapped: null,
+      migration_witness: `${pkg}::cetus::Witness`,
+      tick_spacing: 200,
+      pool_fee_rate: 10_000n,
+      fee_recipients: [id("0xc0ffee")],
+      fee_recipient_bps: [7_000n],
+      holder_rewards_bps: 3_000n,
+      ...NO_FEES,
+      protocol_quote: 0n,
+      protocol_tokens: 0n,
+    }),
+    decode("RaiseAllocated", {
+      presale_id: PRESALE,
+      recipient: id("0x5a1e"),
+      quote: 200n,
+      vesting_id: RAISE_SCHEDULE,
+    }),
+    decode("RecipientAllocated", {
+      presale_id: PRESALE,
+      recipient: itemAt(recipients, 0),
+      tokens: 5_000n,
+      vesting_id: SCHEDULE,
+    }),
+    decode("RecipientAllocated", {
+      presale_id: PRESALE,
+      recipient: itemAt(recipients, 1),
+      tokens: 3_000n,
+      vesting_id: null,
+    }),
+  ]) {
+    state = reducePresaleEvent(state, event);
+  }
+  const presale = required(state.presales[PRESALE]);
+  assert.deepEqual(
+    presale.recipientAllocations.map((share) => share.vesting),
+    [vesting, null],
+  );
+  assert.deepEqual(
+    presale.recipientPayouts.map((payout) => payout.vesting),
+    [vesting, null],
+  );
+  assert.deepEqual(presale.raisePayouts, [
+    { recipient: id("0x5a1e"), amount: 200n, vesting },
+  ]);
+  assert.deepEqual(presale.feeRecipients, [
+    { recipient: id("0xc0ffee"), bps: 7_000n, vesting: null },
+  ]);
+  assert.deepEqual(presale.recipientVestingIds, {
+    [itemAt(recipients, 0)]: SCHEDULE,
+  });
+  assert.deepEqual(presale.raiseVestingIds, { [id("0x5a1e")]: RAISE_SCHEDULE });
+});
+
+test("decodes AdminCap replacements and revocations, which have no type arguments", () => {
+  const packages = { originalPackageId: pkg };
+  const entry = (
+    eventType: string,
+    bytes: number[],
+  ): SuiClientTypes.EventEntry => ({
+    packageId: pkg,
+    module: "blast_presale_admin",
+    sender: ALICE,
+    eventType,
+    bcs: Uint8Array.from(bytes),
+    json: null,
+    checkpoint: "9",
+    transactionDigest: "admin",
+    eventIndex: 0,
+  });
+  const address = (value: string) => [...Buffer.from(value.slice(2), "hex")];
+  const OLD = id("0xadc");
+  const NEW = id("0xadd");
+  const replaced = decodePresalePolicyEvent(
+    entry(`${pkg}::blast_presale_admin::AdminCapReplaced`, [
+      1,
+      ...address(OLD),
+      ...address(NEW),
+    ]),
+    packages,
+  );
+  assert.equal(replaced.kind, "AdminCapReplaced");
+  assert.deepEqual(replaced.payload, {
+    previous_admin_cap_id: OLD,
+    admin_cap_id: NEW,
+  });
+  const afterRevocation = decodePresalePolicyEvent(
+    entry(`${pkg}::blast_presale_admin::AdminCapReplaced`, [
+      0,
+      ...address(NEW),
+    ]),
+    packages,
+  );
+  assert.deepEqual(afterRevocation.payload, {
+    previous_admin_cap_id: null,
+    admin_cap_id: NEW,
+  });
+  const revoked = decodePresalePolicyEvent(
+    entry(`${pkg}::blast_presale_admin::AdminCapRevoked`, address(NEW)),
+    packages,
+  );
+  assert.deepEqual(revoked.payload, { admin_cap_id: NEW });
+  assert.throws(() =>
+    decodePresalePolicyEvent(
+      entry(`${pkg}::fee_policy::AdminCapRevoked`, address(NEW)),
+      packages,
+    ),
   );
 });
 
@@ -712,6 +856,10 @@ function descriptor(type: unknown): string {
   if (record.vector === "u8") return "bytes";
   if (record.vector === "u64") return "u64Vector";
   if (record.vector === "address") return "addressVector";
+  const vector = JSON.stringify(record.vector ?? null);
+  if (vector.includes('"Option"') && vector.includes('"VestingTerms"')) {
+    return "vestingVector";
+  }
   const datatype = record.Datatype as {
     name: string;
     type_arguments: unknown[];
@@ -725,6 +873,7 @@ function descriptor(type: unknown): string {
       datatype.type_arguments[0] as { argument: { Datatype: { name: string } } }
     ).argument.Datatype.name;
     if (inner === "UncappedPhase") return "optionUncapped";
+    if (inner === "ID") return "optionId";
   }
   throw new TypeError(`unsupported ABI event field ${JSON.stringify(type)}`);
 }

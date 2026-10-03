@@ -6,6 +6,7 @@ import { ObjectError } from "@mysten/sui/client";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 import {
+  decodePresaleAdminRegistryObject,
   decodePresaleCreationPolicyObject,
   decodePresaleFeePolicyObject,
   decodePresaleObject,
@@ -65,9 +66,9 @@ function presaleBytes(): Uint8Array {
     ...u32(200), // tick_spacing
     ...u64(10_000n), // pool_fee_rate
     ...vec([
-      [...addr("0xc0ffee"), ...u64(5_000n)],
-      [...addr("0xfee"), ...u64(2_000n)],
-    ]), // fee_recipients: RecipientShare { recipient, bps: Bps(u64) }
+      [...addr("0xc0ffee"), ...u64(5_000n), ...u8(0)],
+      [...addr("0xfee"), ...u64(2_000n), ...u8(0)],
+    ]), // fee_recipients: RecipientShare { recipient, bps: Bps(u64), vesting: None }
     ...u64(3_000n), // holder_rewards_bps: Bps(u64)
     ...u64(4_000n), // total_commitments
     ...u64(3_000n), // remaining_commitments
@@ -76,9 +77,18 @@ function presaleBytes(): Uint8Array {
     ...u64(10_001n), // token_allocation
     ...u64(7_501n), // sale_tokens
     ...u64(0n), // liquidity_tokens
-    ...vec([[...addr("0xa110c"), ...u64(5_000n)]]), // recipient_payouts
+    ...vec([
+      [
+        ...addr("0xa110c"),
+        ...u64(5_000n),
+        ...u8(1), // vesting: Some
+        ...u64(100n), // cliff_ms
+        ...u64(50n), // period_ms
+        ...u64(4n), // periods
+      ],
+    ]), // recipient_payouts
     ...u64(0n), // recipient_tokens
-    ...vec([[...addr("0x5a1e"), ...u64(200n)]]), // raise_payouts
+    ...vec([[...addr("0x5a1e"), ...u64(200n), ...u8(0)]]), // raise_payouts
     ...u64(333n), // protocol_fees.raise_bps
     ...u64(500n), // protocol_fees.token_bps
     ...u64(1_000n), // protocol_fees.lp_fee_meme_bps
@@ -121,8 +131,15 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
   assert.equal(state.poolFeeRate, 10_000n);
   assert.equal(state.holderRewardsBps, 3_000n);
   assert.deepEqual(state.feeRecipients, [
-    { recipient: normalizeSuiAddress("0xc0ffee"), bps: 5_000n },
-    { recipient: normalizeSuiAddress("0xfee"), bps: 2_000n },
+    { recipient: normalizeSuiAddress("0xc0ffee"), bps: 5_000n, vesting: null },
+    { recipient: normalizeSuiAddress("0xfee"), bps: 2_000n, vesting: null },
+  ]);
+  assert.deepEqual(state.recipientPayouts, [
+    {
+      recipient: normalizeSuiAddress("0xa110c"),
+      amount: 5_000n,
+      vesting: { cliffMs: 100n, periodMs: 50n, periods: 4n },
+    },
   ]);
   assert.deepEqual(
     [
@@ -138,7 +155,7 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
     [4_000n, 3_000n, 2n, 3_000n, 10_001n, 7_501n, 0n, 0n],
   );
   assert.deepEqual(state.raisePayouts, [
-    { recipient: normalizeSuiAddress("0x5a1e"), amount: 200n },
+    { recipient: normalizeSuiAddress("0x5a1e"), amount: 200n, vesting: null },
   ]);
   assert.deepEqual(state.protocolFees, {
     raiseBps: 333n,
@@ -201,7 +218,7 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
     ...addr("0xab"), // presale_id
     ...addr("0xca"), // presale_cap_id
     ...addr("0x9001"), // pool_id
-    ...vec([[...addr("0xc0ffee"), ...u64(7_000n)]]), // fee_recipients
+    ...vec([[...addr("0xc0ffee"), ...u64(7_000n), ...u8(0)]]), // fee_recipients
     ...u64(3_000n), // holder_rewards_bps
     ...u64(0n), // protocol_fees.raise_bps
     ...u64(0n), // protocol_fees.token_bps
@@ -287,6 +304,29 @@ test("decodes the FeePolicy from bytes laid out in Move field order", () => {
     decodePresaleFeePolicyObject(
       object(`${pkg}::fee_policy::Other`, content, "0xfe"),
     ),
+  );
+});
+
+test("decodes the AdminRegistry's accepted AdminCap, or none after a revocation", () => {
+  const type = `${pkg}::blast_presale_admin::AdminRegistry`;
+  const accepting = Uint8Array.from([
+    ...addr("0xad"), // id
+    ...u8(1), // admin_cap_id: Some
+    ...addr("0xadc"),
+  ]);
+  assert.equal(
+    decodePresaleAdminRegistryObject(object(type, accepting, "0xad"), pkg)
+      .adminCapId,
+    normalizeSuiAddress("0xadc"),
+  );
+  const revoked = Uint8Array.from([...addr("0xad"), ...u8(0)]);
+  assert.equal(
+    decodePresaleAdminRegistryObject(object(type, revoked, "0xad"), pkg)
+      .adminCapId,
+    null,
+  );
+  assert.throws(() =>
+    decodePresaleAdminRegistryObject(object(type, accepting, "0xad"), "0x99"),
   );
 });
 

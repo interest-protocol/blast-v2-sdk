@@ -4,6 +4,7 @@ import type {
 } from "@mysten/sui/client";
 
 import type {
+  PresaleAdminRegistryState,
   PresaleCommitment,
   PresaleCreationPolicyState,
   PresaleFeePolicyState,
@@ -13,6 +14,7 @@ import type {
 } from "./state.ts";
 import {
   getPresale,
+  getPresaleAdminRegistry,
   getPresaleCommitment,
   getPresaleCreationPolicy,
   getPresaleFeePolicy,
@@ -68,6 +70,15 @@ export class PresaleClient {
     return getPresaleCreationPolicy(
       this.#client,
       this.call.deployment.creationPolicy.objectId,
+      this.#originalPackageId,
+    );
+  }
+
+  /** The deployment's `AdminRegistry`: the one `AdminCap` administrator calls accept. */
+  async getAdminRegistry(): Promise<PresaleAdminRegistryState> {
+    return getPresaleAdminRegistry(
+      this.#client,
+      this.call.deployment.adminRegistry.objectId,
       this.#originalPackageId,
     );
   }

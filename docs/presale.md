@@ -4,8 +4,9 @@
 package (contracts ADRs 0099 through 0102): overflow presales with capped
 commitments, one common fill rate, migration-gated claims, full refunds when a
 sale does not migrate, permissionless Cetus or Bluefin migration into a
-`PresaleVault`, Blast's protocol fees and creation allowlists, LP-fee splits,
-and holder-reward rounds.
+`PresaleVault`, vesting token and raise shares, Blast's protocol fees and
+creation allowlists, LP-fee splits, holder-reward rounds, and the package's own
+two-tier administration.
 
 The package is not published, so no release is registered. Once one is,
 `presaleDeployment(getBlastDeployment(network))` returns the deployment; until
@@ -20,8 +21,8 @@ const presale = new PresaleTransactions({
   creationPolicy: { objectId, initialSharedVersion },
   // Shared by publication; creation, migration, and fee collection read it.
   feePolicy: { objectId, initialSharedVersion },
-  // blast_admin and its shared ACL, for RewardsAdmin, FeeAdmin, and TreasuryAdmin sign-in.
-  admin: { packageId: adminPackageId, acl: { objectId, initialSharedVersion } },
+  // Shared by publication; every administrator call checks its AdminCap here.
+  adminRegistry: { objectId, initialSharedVersion },
 });
 ```
 
@@ -35,20 +36,55 @@ mutability its Move signature needs.
 
 | Step | Builder | Notes |
 | --- | --- | --- |
-| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: every rate through `bps::new`, the `RecipientShare` vectors through `recipient_share`, the eligibility policy, `Option<UncappedPhase>`, the venue's `new`, `share`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. |
+| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: every rate through `bps::new`, the `RecipientShare` vectors through `recipient_share` (or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), the eligibility policy, `Option<UncappedPhase>`, the venue's `new`, `share`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. |
 | Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except in a hard-capped uncapped phase. |
 | Settle | `settle`, `cancelUnlaunched` | Anyone may call. |
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. |
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. |
 | Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, then every fee recipient. The holder-reward share stays in the vault. |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
-| Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication signs in as `blast_presale_domain::RewardsAdmin` (`PresaleCalls.signIn`) in the same PTB; `roleType` names the role for `AdminTransactions.grantRole`. |
+| Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication takes the `AdminCap` (`adminCapId`). |
 | Cap | `destroyCap` | After cancellation only. |
-| Blast's rates | `setProtocolFees` | Signs in as `FeeAdmin`. Applies to presales created afterward. |
-| Blast's payout address | `setProtocolDestination` | Signs in as `TreasuryAdmin`. Applies to every later payout. |
-| Listing | `setQuoteAllowed`, `setMigrationWitnessAllowed` | Signs in as `FeeAdmin`. Which Quote types and venues presales created afterward may use; existing sales are unaffected. |
+| Blast's rates | `setProtocolFees` | Takes the `AdminCap`. Applies to presales created afterward. |
+| Blast's payout address | `setProtocolDestination` | Takes the `AdminCap`. Applies to every later payout. |
+| Listing | `setQuoteAllowed`, `setMigrationWitnessAllowed` | Takes the `AdminCap`. Which Quote types and venues presales created afterward may use; existing sales are unaffected. |
+| Administration | `replaceAdminCap`, `revokeAdminCap`, `transferSuperAdmin` | Take the `SuperAdminCap` (`superAdminCapId`). See [Administration](#administration). |
 
 `PresaleCalls` exposes each Move call separately for composition.
+
+## Administration
+
+The package does not link `blast_admin`. Publication sends the publisher a
+key-only `SuperAdminCap` and one `AdminCap`, and shares an `AdminRegistry`
+recording the accepted cap. Every administrator builder passes
+`&AdminRegistry` from the deployment and the `AdminCap`; the contract aborts
+with `EInvalidAdminCap` unless that cap is the registered one.
+
+The `SuperAdminCap` cannot administer anything itself. `replaceAdminCap` mints a
+new `AdminCap`, sends it to `recipient`, and stops the old cap in the same
+transaction; `revokeAdminCap` stops all administration until the next
+replacement. The `SuperAdminCap` has no `store`, so `transferSuperAdmin` is the
+only way to move it. `PresaleClient.getAdminRegistry` reads the accepted cap ID
+(null after a revocation), and `decodePresalePolicyEvent` decodes
+`AdminCapReplaced` and `AdminCapRevoked`.
+
+## Vesting
+
+A token or raise share may carry `vesting: { cliffMs, periodMs, periods }`.
+Migration then locks that share in an irrevocable `blast_fun_vesting` linear
+schedule starting at migration instead of paying it: nothing before
+`cliffMs`, then a step every `periodMs` until all `periods` have elapsed.
+`vestingTerms` mirrors `blast_presale::vesting_terms` (`EInvalidVestingTerms`:
+positive period and count, a cliff within the duration, and a duration of at
+most 2^63 ms). Fee recipients cannot vest: the builders throw, and
+`validateFeeSplit` throws `EInvalidFeeSplit`. Product limits on vesting
+durations belong to creation tooling.
+
+Decoded shares and payouts always carry `vesting` (null when unvested).
+`PresaleCreated` carries `recipient_vesting` and `raise_recipient_vesting`,
+aligned with their recipients; `RecipientAllocated` and `RaiseAllocated` carry
+the created schedule's `vesting_id`, which the reducer keeps in
+`recipientVestingIds` and `raiseVestingIds`.
 
 ## Blast's fees
 
@@ -72,7 +108,7 @@ A cancelled sale pays Blast nothing, and its token share stays locked.
 
 `creation_policy::CreationPolicy` lists the Quote types and the migration
 witnesses (`cetus::Witness`, `bluefin::Witness`) new presales may use; both
-sets are empty at publication, so `FeeAdmin` must allow at least one of each
+sets are empty at publication, so the `AdminCap` must allow at least one of each
 before any sale can be created. Creation checks it once
 (`EQuoteNotAllowed`, `EMigrationWitnessNotAllowed`); a later delisting never
 touches a live sale. Read it with `PresaleClient.getCreationPolicy` before
@@ -116,21 +152,24 @@ const manifest = buildRewardManifest({ ...round, leafDomain: PRESALE_REWARD_LEAF
 
 `PresaleClient` (`blastPresale()` extension) reads a `Presale`, a wallet's
 `Commitment` dynamic field, a `PresaleVault`, a reward `Round`, the
-`FeePolicy`, and the `CreationPolicy`. `decodePresaleEvent` decodes the 16
+`FeePolicy`, the `CreationPolicy`, and the `AdminRegistry`.
+`decodePresaleEvent` decodes the 16
 events generic over `<SaleToken, Quote>`. `PresaleVaultCreated` adds a `Venue`
 type argument. `decodePresalePolicyEvent` decodes `FeesChanged`,
-`DestinationChanged`, `QuoteSet`, and `MigrationWitnessSet`, which have no type
-arguments.
+`DestinationChanged`, `QuoteSet`, `MigrationWitnessSet`, `AdminCapReplaced`, and
+`AdminCapRevoked`, which have no type arguments.
 `reducePresaleEvent` rebuilds each presale's lifecycle, windows, commitments,
 and custody balances, its vault, and its rounds. `Committed` has no wallet
 field, so the reducer keys commitments by the event sender.
 
 ## ABI coverage
 
-`abi/production-presale-v1.json` freezes the package at contracts `d475623`.
+`abi/production-presale-v1.json` freezes the package at contracts `db75393`.
 Every public function is classified:
 
-- **Builders:** all 13 `blast_presale` functions; `fee_policy` `set_fees` and
+- **Builders:** all 15 `blast_presale` functions; `blast_presale_admin`
+  `replace_admin_cap`, `revoke_admin_cap`, and `transfer_super_admin`;
+  `fee_policy` `set_fees` and
   `set_destination`; `creation_policy` `set_quote_allowed` and
   `set_migration_witness_allowed`; `cetus` and `bluefin` `new`, `migrate`, and
   `collect_fees`; `presale_vault::claim_migration_residuals`; and

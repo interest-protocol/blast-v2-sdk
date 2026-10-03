@@ -12,8 +12,16 @@ import {
 import { moveTypeNameBcs, suiObjectIdBcs } from "../lib/bcs.ts";
 import type { SuiEventPosition } from "../lib/events.ts";
 import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
-import type { EligibilityPolicy, UncappedPhase } from "./state.ts";
-import { eligibilityPolicyBcs, uncappedPhaseBcs } from "./state.ts";
+import type {
+  EligibilityPolicy,
+  UncappedPhase,
+  VestingTerms,
+} from "./state.ts";
+import {
+  eligibilityPolicyBcs,
+  uncappedPhaseBcs,
+  vestingTermsBcs,
+} from "./state.ts";
 
 type PresaleEventFieldDescriptor =
   | "id"
@@ -27,7 +35,9 @@ type PresaleEventFieldDescriptor =
   | "addressVector"
   | "u64Vector"
   | "eligibility"
-  | "optionUncapped";
+  | "optionUncapped"
+  | "optionId"
+  | "vestingVector";
 
 /** Every event `blast_presale` emits, by module, in Move field order. */
 export const presaleEventSpecs = {
@@ -41,10 +51,12 @@ export const presaleEventSpecs = {
       liquidity_token_allocation_bps: "u64",
       recipients: "addressVector",
       recipient_bps: "u64Vector",
+      recipient_vesting: "vestingVector",
       burnable: "bool",
       raise_target: "u64",
       raise_recipients: "addressVector",
       raise_recipient_bps: "u64Vector",
+      raise_recipient_vesting: "vestingVector",
       duration_ms: "u64",
       liquidity_window_ms: "u64",
       eligibility: "eligibility",
@@ -105,11 +117,13 @@ export const presaleEventSpecs = {
       presale_id: "id",
       recipient: "address",
       quote: "u64",
+      vesting_id: "optionId",
     },
     RecipientAllocated: {
       presale_id: "id",
       recipient: "address",
       tokens: "u64",
+      vesting_id: "optionId",
     },
     Claimed: {
       presale_id: "id",
@@ -212,6 +226,10 @@ type DescriptorOutputs = {
   u64Vector: bigint[];
   eligibility: EligibilityPolicy;
   optionUncapped: UncappedPhase | null;
+  /** A `blast_fun_linear_vesting::Vesting` ID, or null for a direct payout. */
+  optionId: string | null;
+  /** Aligned with the share list it follows; null for an unvested share. */
+  vestingVector: (VestingTerms | null)[];
 };
 
 export type PresaleEventPayloads = {
@@ -250,6 +268,8 @@ const FIELD_BCS: Record<PresaleEventFieldDescriptor, BcsType<unknown>> = {
   u64Vector: bcs.vector(u64) as BcsType<unknown>,
   eligibility: eligibilityPolicyBcs as BcsType<unknown>,
   optionUncapped: bcs.option(uncappedPhaseBcs) as BcsType<unknown>,
+  optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown>,
+  vestingVector: bcs.vector(bcs.option(vestingTermsBcs)) as BcsType<unknown>,
 };
 
 /** Kind to Move module, e.g. `FeesCollected` to `presale_vault`. */
@@ -337,8 +357,8 @@ export function presaleEventId(event: DecodedPresaleEvent): string {
 }
 
 /**
- * The `fee_policy` and `creation_policy` events, by module. Unlike every other
- * presale event they have no type arguments.
+ * The `fee_policy`, `creation_policy`, and `blast_presale_admin` events, by
+ * module. Unlike every other presale event they have no type arguments.
  */
 export const presalePolicyEventSpecs = {
   fee_policy: {
@@ -354,6 +374,10 @@ export const presalePolicyEventSpecs = {
     QuoteSet: { quote: "typeName", allowed: "bool" },
     MigrationWitnessSet: { migration_witness: "typeName", allowed: "bool" },
   },
+  blast_presale_admin: {
+    AdminCapReplaced: { previous_admin_cap_id: "optionId", admin_cap_id: "id" },
+    AdminCapRevoked: { admin_cap_id: "id" },
+  },
 } as const satisfies Record<
   string,
   Record<string, Record<string, PresaleEventFieldDescriptor>>
@@ -361,7 +385,8 @@ export const presalePolicyEventSpecs = {
 
 type PolicySpecs = typeof presalePolicyEventSpecs;
 type FlatPolicySpecs = PolicySpecs["fee_policy"] &
-  PolicySpecs["creation_policy"];
+  PolicySpecs["creation_policy"] &
+  PolicySpecs["blast_presale_admin"];
 export type PresalePolicyEventKind = keyof FlatPolicySpecs;
 
 export type DecodedPresalePolicyEvent = {
@@ -402,7 +427,10 @@ const presalePolicyEventBcs = Object.fromEntries(
   ),
 ) as Record<PresalePolicyEventKind, BcsType<unknown>>;
 
-/** Decodes one `<originalPackageId>::fee_policy::<Kind>` or `creation_policy::<Kind>` event. */
+/**
+ * Decodes one `<originalPackageId>::fee_policy::<Kind>`,
+ * `creation_policy::<Kind>`, or `blast_presale_admin::<Kind>` event.
+ */
 export function decodePresalePolicyEvent(
   event: SuiClientTypes.EventEntry,
   packages: { originalPackageId: string },

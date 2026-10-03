@@ -14,6 +14,7 @@ import {
   moveTypeNameBcs,
   suiBalanceBcs,
   suiIdBcs,
+  suiObjectIdBcs,
   suiUidBcs,
 } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
@@ -43,11 +44,37 @@ export type UncappedPhase = {
   hardCap: boolean;
 };
 
-/** `blast_presale::RecipientShare`: a BPS share of the supply, the raise, or LP fees for an address. */
-export type BpsShare = { recipient: string; bps: bigint };
+/**
+ * `blast_presale::VestingTerms`: linear vesting from migration. Nothing vests
+ * before `cliffMs`; the vested amount then steps up every `periodMs` until all
+ * `periods` have elapsed.
+ */
+export type VestingTerms = {
+  cliffMs: bigint;
+  periodMs: bigint;
+  periods: bigint;
+};
 
-/** `blast_presale::RecipientPayout`: exact atoms apportioned at creation. */
-export type RecipientPayout = { recipient: string; amount: bigint };
+/**
+ * `blast_presale::RecipientShare`: a BPS share of the supply, the raise, or LP
+ * fees for an address. A token or raise share may vest from migration; a fee
+ * share may not. Decoded shares always carry `vesting`, null when unvested.
+ */
+export type BpsShare = {
+  recipient: string;
+  bps: bigint;
+  vesting?: VestingTerms | null;
+};
+
+/**
+ * `blast_presale::RecipientPayout`: exact atoms apportioned at creation, and
+ * the terms they vest under from migration, if any.
+ */
+export type RecipientPayout = {
+  recipient: string;
+  amount: bigint;
+  vesting: VestingTerms | null;
+};
 
 /**
  * `fee_policy::ProtocolFees`: Blast's BPS of the accepted raise, of the token
@@ -173,14 +200,35 @@ export const uncappedPhaseBcs = bcs
     }),
   });
 
-const bpsShareBcs = bcs
-  .struct("RecipientShare", { recipient: address, bps })
+/** BCS layout of `blast_presale::VestingTerms`. */
+export const vestingTermsBcs = bcs
+  .struct("VestingTerms", { cliff_ms: u64, period_ms: u64, periods: u64 })
   .transform({
-    input: (value: BpsShare) => value,
+    input: (value: VestingTerms) => ({
+      cliff_ms: value.cliffMs,
+      period_ms: value.periodMs,
+      periods: value.periods,
+    }),
+    output: (value): VestingTerms => ({
+      cliffMs: value.cliff_ms,
+      periodMs: value.period_ms,
+      periods: value.periods,
+    }),
+  });
+const optionVesting = bcs.option(vestingTermsBcs);
+
+const bpsShareBcs = bcs
+  .struct("RecipientShare", { recipient: address, bps, vesting: optionVesting })
+  .transform({
+    input: (value: BpsShare) => ({ ...value, vesting: value.vesting ?? null }),
     output: (value): BpsShare => value,
   });
 const payoutBcs = bcs
-  .struct("RecipientPayout", { recipient: address, amount: u64 })
+  .struct("RecipientPayout", {
+    recipient: address,
+    amount: u64,
+    vesting: optionVesting,
+  })
   .transform({
     input: (value: RecipientPayout) => value,
     output: (value): RecipientPayout => value,
@@ -291,6 +339,12 @@ export const creationPolicyBcs = bcs.struct("CreationPolicy", {
   id: suiUidBcs,
   allowed_quotes: typeNameSet,
   allowed_migration_witnesses: typeNameSet,
+});
+
+/** BCS layout of `blast_presale_admin::AdminRegistry`, the package's one shared admin record. */
+export const adminRegistryBcs = bcs.struct("AdminRegistry", {
+  id: suiUidBcs,
+  admin_cap_id: bcs.option(suiObjectIdBcs),
 });
 
 /** BCS layout of `holder_rewards::Round<Meme, Quote>`. */
@@ -411,6 +465,15 @@ export type PresaleFeePolicyState = SharedObjectReference<true> & {
 export type PresaleCreationPolicyState = SharedObjectReference<true> & {
   allowedQuotes: string[];
   allowedMigrationWitnesses: string[];
+};
+
+/**
+ * `blast_presale_admin::AdminRegistry`: the one `AdminCap` every presale
+ * administrator call accepts; null after `revoke_admin_cap` until a
+ * `replace_admin_cap`.
+ */
+export type PresaleAdminRegistryState = SharedObjectReference<true> & {
+  adminCapId: string | null;
 };
 
 export type PresaleCommitment = { quote: bigint; walletCap: bigint };
@@ -548,6 +611,23 @@ export function decodePresaleCreationPolicyObject(
   };
 }
 
+export function decodePresaleAdminRegistryObject(
+  object: PresaleObject,
+  originalPackageId?: string,
+): PresaleAdminRegistryState {
+  assertSingletonType(
+    object,
+    "blast_presale_admin",
+    "AdminRegistry",
+    originalPackageId,
+  );
+  const parsed = adminRegistryBcs.parse(object.content);
+  return {
+    ...sharedIdentity(object, parsed.id.id.bytes),
+    adminCapId: parsed.admin_cap_id,
+  };
+}
+
 /** Mirrors `holder_rewards::claim_bit`: whether leaf `index` was already paid. */
 export function presaleRewardIsClaimed(
   round: Pick<PresaleRewardRoundState, "leafCount" | "claimedBitmap">,
@@ -610,6 +690,17 @@ export async function getPresaleCreationPolicy(
   originalPackageId?: string,
 ): Promise<PresaleCreationPolicyState> {
   return decodePresaleCreationPolicyObject(
+    await getSharedObject(client, objectId),
+    originalPackageId,
+  );
+}
+
+export async function getPresaleAdminRegistry(
+  client: ClientWithCoreApi,
+  objectId: string,
+  originalPackageId?: string,
+): Promise<PresaleAdminRegistryState> {
+  return decodePresaleAdminRegistryObject(
     await getSharedObject(client, objectId),
     originalPackageId,
   );
