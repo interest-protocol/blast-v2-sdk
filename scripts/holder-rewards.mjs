@@ -1,4 +1,4 @@
-import { runHolderRewardsOperator } from "../src/holder-rewards/operator.ts";
+import { runHolderRewardsOperator } from "../operator/holder-rewards.ts";
 
 runHolderRewardsOperator(process.argv.slice(2)).catch((error) => {
   console.error(error.message);

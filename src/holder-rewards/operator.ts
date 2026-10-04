@@ -1,9 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { parseArgs } from "node:util";
-import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import type { Signer } from "@mysten/sui/cryptography";
+import type { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { Transaction } from "@mysten/sui/transactions";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import { getLpVault } from "../migrators/state.ts";
@@ -42,11 +38,35 @@ import {
 import { getRewardRound } from "./state.ts";
 
 const CHECKPOINT_BATCH_SIZE = 100;
+const RELAY_BATCH_SIZE = 10;
 
-type OperatorConfig = {
-  grpcUrl: string;
-  /** Blast deploys to Sui mainnet only. */
-  network: "mainnet";
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+/**
+ * Durable operator state for one vault, supplied by the deployment: files for
+ * a single-host CLI, a database for a service. Keys are `/`-separated paths
+ * such as `state` or `rounds/0/manifest`; values arrive JSON-safe, with every
+ * `bigint` already a decimal string.
+ */
+export type HolderRewardsStore = {
+  /** Resolves `undefined` for a key that was never written or was removed. */
+  read(key: string): Promise<JsonValue | undefined>;
+  /** Must replace the whole value atomically and durably before resolving. */
+  write(key: string, value: JsonValue): Promise<void>;
+  /** Removing an absent key is a no-op. */
+  remove(key: string): Promise<void>;
+  /** Must exclude every other writer of this store, across processes and hosts, while `action` runs. */
+  withLock<T>(action: () => Promise<T>): Promise<T>;
+};
+
+export type HolderRewardsOperatorConfig = {
+  /** Expected genesis checkpoint digest; every command rejects another chain. */
   chainId: string;
   /** The package whose vault funds the rounds; `migrators` when omitted. */
   product?: "migrators" | "presale";
@@ -62,11 +82,41 @@ type OperatorConfig = {
    * role, which signs in. Presale: the presale package's `AdminCap`.
    */
   adminCapId?: string;
-  /** Presale only: claims stay open this many milliseconds after `publish-tx` builds the round. */
+  /** Presale only: claims stay open this many milliseconds after `publishTransaction` builds the round. */
   claimWindowMs?: string;
+  /** Sender set on unsigned publication and relay transactions. */
   sender?: string;
   excludedAddresses?: string[];
 };
+
+export type HolderRewardsRelay = {
+  roundNumber: string;
+  /** Up to ten unpaid claims each; `digest` is set once a signer executed the batch. */
+  batches: { firstIndex: string; transaction: Transaction; digest?: string }[];
+};
+
+/** Holder-rewards keeper over a caller-supplied store. Every command holds the store lock. */
+export type HolderRewardsOperator = {
+  /** The vault's reward balances, round cursor, and product summary. */
+  inspect(): Promise<Record<string, unknown>>;
+  /** Replays finalized checkpoints through `until` into the stored ledger. */
+  index(until: bigint): Promise<void>;
+  /** Freezes the indexed interval into the pending manifest and its accounting. */
+  prepare(): Promise<RewardManifest>;
+  /** Unsigned publication of `manifest`, or of the pending manifest when omitted. */
+  publishTransaction(manifest?: RewardManifest): Promise<Transaction>;
+  /** After `roundId` confirms, closes its interval and clears the pending manifest. */
+  advance(roundId: string, manifest?: RewardManifest): Promise<void>;
+  /** Claims every unpaid leaf: unsigned without `signer`; with it, executes and records receipts. */
+  relay(
+    roundId: string,
+    options?: {
+      manifest?: RewardManifest | undefined;
+      signer?: Signer | undefined;
+    },
+  ): Promise<HolderRewardsRelay>;
+};
+
 /** The vault fields every product's rounds read. */
 type RewardsVault = SharedObjectReference<true> & {
   memeType: string;
@@ -101,185 +151,90 @@ type OperatorState = {
   ledger: HolderLedger;
 };
 
-/** Atomic replacement keeps the durable checkpoint watermark with the balances it describes. */
-export async function writeOperatorJson(
-  path: string,
-  value: unknown,
-): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  const file = await open(temporary, "wx", 0o600);
-  try {
-    await file.writeFile(
-      `${JSON.stringify(value, (_, item) => (typeof item === "bigint" ? item.toString() : item), 2)}\n`,
-    );
-    await file.sync();
-  } finally {
-    await file.close();
-  }
-  try {
-    await rename(temporary, path);
-  } finally {
-    await rm(temporary, { force: true });
-  }
-  const directory = await open(dirname(path), "r");
-  try {
-    await directory.sync();
-  } finally {
-    await directory.close();
-  }
-}
-
-/** Local single-writer lock. After a hard crash, an operator must remove the stale lock. */
-export async function withOperatorLock<T>(
-  directory: string,
-  action: () => Promise<T>,
-): Promise<T> {
-  await mkdir(directory, { recursive: true });
-  const lock = join(directory, ".lock");
-  try {
-    await mkdir(lock);
-  } catch (error) {
-    throw new Error(`operator lock unavailable: ${lock}`, { cause: error });
-  }
-  try {
-    return await action();
-  } finally {
-    await rm(lock, { recursive: true });
-  }
-}
-
-/** Node-only operator. Publication stays unsigned; only explicit relay --execute reads a gas key. */
-export async function runHolderRewardsOperator(args: string[]): Promise<void> {
-  const { values, positionals } = parseArgs({
-    args,
-    allowPositionals: true,
-    options: {
-      config: { type: "string" },
-      dir: { type: "string" },
-      until: { type: "string" },
-      round: { type: "string" },
-      manifest: { type: "string" },
-      out: { type: "string" },
-      execute: { type: "boolean", default: false },
-      help: { type: "boolean", default: false },
-    },
-  });
-  if (values.help) {
-    console.log(
-      "holder-rewards <inspect|index|prepare|publish-tx|advance|relay> --config FILE --dir DIRECTORY [--until CHECKPOINT] [--round ID] [--manifest FILE] [--out FILE] [--execute]",
-    );
-    return;
-  }
-  const command = positionals[0];
-  if (!values.config || !values.dir || !command || positionals.length !== 1)
-    throw new Error("supply one command, --config and --dir; use --help");
-  if (values.execute && command !== "relay")
-    throw new Error("--execute is supported only for permissionless relay");
-  const config = await readJson<OperatorConfig>(values.config);
-  if (
-    !config.chainId ||
-    !config.grpcUrl ||
-    !config.deployment ||
-    !config.vaultId ||
-    config.network !== "mainnet"
-  )
-    throw new Error(
-      "config needs grpcUrl, network, expected genesis chainId, deployment and vaultId",
-    );
-  const client = new SuiGrpcClient({
-    baseUrl: config.grpcUrl,
-    network: config.network,
-  });
-  const info = await client.ledgerService.getServiceInfo({}).response;
-  if (info.chainId !== config.chainId)
-    throw new Error("RPC chain does not match configured genesis chainId");
-  const directory = resolve(values.dir);
-  const product = await loadProduct(client, config);
-  const { vault } = product;
-  const statePath = join(directory, "state.json");
-  const pendingPath = join(directory, "pending.json");
-  const pair = { memeType: vault.memeType, quoteType: vault.quoteType };
-  const output = values.out ?? join(directory, `${command}.json`);
-
-  const context: OperatorContext = {
-    client,
-    config,
-    vault,
-    product,
-    directory,
-    output,
-    statePath,
-    pendingPath,
-    pair,
-    values,
-    command,
-    checkpointHeight: info.checkpointHeight,
-  };
-  await withOperatorLock(directory, () => dispatchCommand(context));
-  console.log(`${command} completed; artifacts: ${directory}`);
-}
-
-type OperatorOptions = {
-  until?: string;
-  round?: string;
-  manifest?: string;
-  execute?: boolean;
-};
 type OperatorContext = {
   client: SuiGrpcClient;
-  config: OperatorConfig;
+  config: HolderRewardsOperatorConfig;
+  store: HolderRewardsStore;
   vault: RewardsVault;
   product: RewardsProduct;
-  directory: string;
-  output: string;
-  statePath: string;
-  pendingPath: string;
-  pair: { memeType: string; quoteType: string };
-  values: OperatorOptions;
-  command: string;
   checkpointHeight: bigint | undefined;
 };
 
-async function dispatchCommand(context: OperatorContext): Promise<void> {
-  switch (context.command) {
-    case "inspect":
-      return inspectVault(context);
-    case "index":
-      return indexHolders(context);
-    case "prepare":
-      return prepareRound(context);
-    case "publish-tx":
-      return publishRound(context);
-    case "advance":
-      return advanceRound(context);
-    case "relay":
-      return relayRewards(context);
-    default:
-      throw new Error(`unknown command: ${context.command}`);
-  }
+export function holderRewardsOperator(
+  client: SuiGrpcClient,
+  config: HolderRewardsOperatorConfig,
+  store: HolderRewardsStore,
+): HolderRewardsOperator {
+  const run = <T>(action: (context: OperatorContext) => Promise<T>) =>
+    store.withLock(async () =>
+      action(await openContext(client, config, store)),
+    );
+  return {
+    inspect: () => run(async ({ vault }) => inspectVault(vault)),
+    index: (until) => run((context) => indexHolders(context, until)),
+    prepare: () => run(prepareRound),
+    publishTransaction: (manifest) =>
+      run((context) => publishRound(context, manifest)),
+    advance: (roundId, manifest) =>
+      run((context) => advanceRound(context, roundId, manifest)),
+    relay: (roundId, options = {}) =>
+      run((context) => relayRewards(context, roundId, options)),
+  };
 }
-async function readManifest(context: OperatorContext): Promise<RewardManifest> {
-  const manifest = await readJson<RewardManifest>(
-    context.values.manifest ?? context.pendingPath,
-  );
+
+/** Reads the vault fresh under the lock, after rejecting a provider on another chain. */
+async function openContext(
+  client: SuiGrpcClient,
+  config: HolderRewardsOperatorConfig,
+  store: HolderRewardsStore,
+): Promise<OperatorContext> {
+  const info = await client.ledgerService.getServiceInfo({}).response;
+  if (info.chainId !== config.chainId)
+    throw new Error("RPC chain does not match configured genesis chainId");
+  const product = await loadProduct(client, config);
+  return {
+    client,
+    config,
+    store,
+    vault: product.vault,
+    product,
+    checkpointHeight: info.checkpointHeight,
+  };
+}
+
+async function readManifest(
+  context: OperatorContext,
+  supplied: RewardManifest | undefined,
+): Promise<RewardManifest> {
+  const manifest =
+    supplied ??
+    ((await context.store.read("pending")) as RewardManifest | undefined);
+  if (!manifest)
+    throw new Error("no pending manifest; prepare a round or supply one");
   if (manifest.vaultId !== context.vault.objectId)
     throw new Error("manifest belongs to another vault");
   return manifest;
 }
 async function readConfirmedRound(
   context: OperatorContext,
+  roundId: string,
   manifest: RewardManifest,
 ) {
-  if (!context.values.round)
-    throw new Error("supply the confirmed --round object ID");
-  const round = await context.product.readRound(context.values.round);
+  if (!roundId) throw new Error("supply the confirmed round object ID");
+  const round = await context.product.readRound(roundId);
   assertRewardRoundMatchesManifest(round, manifest, context.product.leafDomain);
   return round;
 }
-async function inspectVault(context: OperatorContext): Promise<void> {
-  const { vault, output } = context;
-  await writeOperatorJson(output, {
+async function readState(context: OperatorContext): Promise<OperatorState> {
+  const state = (await context.store.read("state")) as
+    | OperatorState
+    | undefined;
+  if (!state) throw new Error("no indexed ledger; index first");
+  assertState(state, context.config, context.vault);
+  return state;
+}
+function inspectVault(vault: RewardsVault): Record<string, unknown> {
+  return {
     vaultId: vault.objectId,
     memeType: vault.memeType,
     quoteType: vault.quoteType,
@@ -288,31 +243,22 @@ async function inspectVault(context: OperatorContext): Promise<void> {
     rewardsQuote: vault.rewardsQuote,
     nextRound: vault.nextRound,
     lastCheckpoint: vault.lastCheckpoint,
-  });
+  };
 }
 
-async function indexHolders(context: OperatorContext): Promise<void> {
-  const {
-    values,
-    pendingPath,
-    statePath,
-    client,
-    config,
-    vault,
-    directory,
-    checkpointHeight,
-  } = context;
-  if (!values.until || !/^\d+$/.test(values.until))
-    throw new Error("index needs --until CHECKPOINT");
-  if (await readOptional<RewardManifest>(pendingPath))
+async function indexHolders(
+  context: OperatorContext,
+  until: bigint,
+): Promise<void> {
+  const { store, client, config, vault, checkpointHeight } = context;
+  if (await store.read("pending"))
     throw new Error(
       "a prepared round is pending; confirm and advance before indexing further",
     );
   let state =
-    (await readOptional<OperatorState>(statePath)) ??
+    ((await store.read("state")) as OperatorState | undefined) ??
     (await bootstrap(client, config, vault));
   assertState(state, config, vault);
-  const until = BigInt(values.until);
   if (checkpointHeight === undefined || until > checkpointHeight)
     throw new Error("requested checkpoint is not finalized at this provider");
   // ponytail: bound replay and memory to 100 checkpoints; use a dedicated indexer if archival replay outgrows this keeper.
@@ -335,22 +281,18 @@ async function indexHolders(context: OperatorContext): Promise<void> {
       const first = batch[0];
       if (!first) throw new Error("empty checkpoint batch");
       // Journal first, then the matching durable watermark. Retry overwrites the same batch start.
-      await writeOperatorJson(
-        join(directory, "checkpoints", `batch-${first.sequence}.json`),
-        batch,
-      );
-      await writeOperatorJson(statePath, state);
+      await write(store, `checkpoints/batch-${first.sequence}`, batch);
+      await write(store, "state", state);
       batch = [];
     }
   }
 }
 
-async function prepareRound(context: OperatorContext): Promise<void> {
-  const { pendingPath, statePath, config, vault, directory, product } = context;
-  if (await readOptional<RewardManifest>(pendingPath))
+async function prepareRound(context: OperatorContext): Promise<RewardManifest> {
+  const { store, config, vault, product } = context;
+  if (await store.read("pending"))
     throw new Error("a prepared round already exists");
-  const state = await readJson<OperatorState>(statePath);
-  assertState(state, config, vault);
+  const state = await readState(context);
   const end = BigInt(state.ledger.nextCheckpoint) - 1n;
   if (
     end <= BigInt(state.activationCheckpoint) ||
@@ -379,8 +321,8 @@ async function prepareRound(context: OperatorContext): Promise<void> {
     allocations: allocation.allocations,
     leafDomain: product.leafDomain,
   });
-  const roundDir = join(directory, "rounds", manifest.number);
-  await writeOperatorJson(join(roundDir, "accounting.json"), {
+  const round = `rounds/${manifest.number}`;
+  await write(store, `${round}/accounting`, {
     chainId: config.chainId,
     policy: "address-balance-time-v1",
     activationCheckpoint: state.activationCheckpoint,
@@ -391,85 +333,96 @@ async function prepareRound(context: OperatorContext): Promise<void> {
     memeDust: allocation.memeDust,
     quoteDust: allocation.quoteDust,
   });
-  await writeOperatorJson(join(roundDir, "manifest.json"), manifest);
-  await writeOperatorJson(pendingPath, manifest);
+  await write(store, `${round}/manifest`, manifest);
+  await write(store, "pending", manifest);
+  return manifest;
 }
 
-async function publishRound(context: OperatorContext): Promise<void> {
-  const { config, product, output } = context;
-  const manifest = await readManifest(context);
+async function publishRound(
+  context: OperatorContext,
+  supplied: RewardManifest | undefined,
+): Promise<Transaction> {
+  const { config, product } = context;
+  const manifest = await readManifest(context, supplied);
   if (!config.adminCapId) throw new Error("adminCapId required");
-  const tx = product.publish(manifest, config.adminCapId);
-  await writeTransaction(output, tx, config.sender);
+  return withSender(product.publish(manifest, config.adminCapId), config);
 }
 
-async function advanceRound(context: OperatorContext): Promise<void> {
-  const { statePath, config, vault, directory, pendingPath } = context;
-  const manifest = await readManifest(context);
-  const round = await readConfirmedRound(context, manifest);
-  const state = await readJson<OperatorState>(statePath);
-  assertState(state, config, vault);
+async function advanceRound(
+  context: OperatorContext,
+  roundId: string,
+  supplied: RewardManifest | undefined,
+): Promise<void> {
+  const { store, vault } = context;
+  const manifest = await readManifest(context, supplied);
+  const round = await readConfirmedRound(context, roundId, manifest);
+  const state = await readState(context);
   const end = BigInt(state.ledger.nextCheckpoint) - 1n;
   // Publication moved the vault's last checkpoint to the round's end.
   if (end !== BigInt(manifest.endCheckpoint) || vault.lastCheckpoint !== end)
     throw new Error("round does not close this ledger checkpoint");
   // Repeating advance after a crash is safe: resetting a zero-weight interval is idempotent.
-  await writeOperatorJson(statePath, {
+  await write(store, "state", {
     ...state,
     ledger: resetHolderWeights(state.ledger),
   });
-  await writeOperatorJson(
-    join(directory, "rounds", manifest.number, "publication.json"),
-    { roundId: round.objectId, manifestDigest: manifest.manifestDigest },
-  );
-  await rm(pendingPath, { force: true });
+  await write(store, `rounds/${manifest.number}/publication`, {
+    roundId: round.objectId,
+    manifestDigest: manifest.manifestDigest,
+  });
+  await store.remove("pending");
 }
 
-async function relayRewards(context: OperatorContext): Promise<void> {
-  const { values, product, directory, config, client } = context;
-  const manifest = await readManifest(context);
-  const round = await readConfirmedRound(context, manifest);
+async function relayRewards(
+  context: OperatorContext,
+  roundId: string,
+  options: {
+    manifest?: RewardManifest | undefined;
+    signer?: Signer | undefined;
+  },
+): Promise<HolderRewardsRelay> {
+  const { product, config, client, store } = context;
+  const { signer } = options;
+  const manifest = await readManifest(context, options.manifest);
+  const round = await readConfirmedRound(context, roundId, manifest);
   const pending = pendingRewardAllocations(round, manifest, product.leafDomain);
-  const key = values.execute
-    ? process.env.HOLDER_REWARDS_RELAYER_KEY
-    : undefined;
-  if (values.execute && !key)
-    throw new Error(
-      "relay --execute requires HOLDER_REWARDS_RELAYER_KEY (gas only)",
-    );
-  const signer = key ? Ed25519Keypair.fromSecretKey(key) : undefined;
-  for (let offset = 0; offset < pending.length; offset += 10) {
-    const batch = pending.slice(offset, offset + 10);
+  const relay: HolderRewardsRelay = {
+    roundNumber: manifest.number,
+    batches: [],
+  };
+  for (let offset = 0; offset < pending.length; offset += RELAY_BATCH_SIZE) {
+    const batch = pending.slice(offset, offset + RELAY_BATCH_SIZE);
     const first = batch[0];
     if (!first) continue;
-    const tx = product.claim(round, batch);
-    const roundDir = join(directory, "rounds", manifest.number);
+    const transaction = product.claim(round, batch);
     if (!signer) {
-      await writeTransaction(
-        join(roundDir, `relay-${first.index}.json`),
-        tx,
-        config.sender,
-      );
+      relay.batches.push({
+        firstIndex: first.index,
+        transaction: withSender(transaction, config),
+      });
       continue;
     }
     const result = await client.core.signAndExecuteTransaction({
-      transaction: tx,
+      transaction,
       signer,
     });
     if (result.$kind === "FailedTransaction")
       throw new Error(
         `relay failed: ${result.FailedTransaction.digest}; rerun to refresh claimed bits`,
       );
-    await client.core.waitForTransaction({ digest: result.Transaction.digest });
-    await writeOperatorJson(join(roundDir, `receipt-${first.index}.json`), {
-      digest: result.Transaction.digest,
+    const { digest } = result.Transaction;
+    await client.core.waitForTransaction({ digest });
+    await write(store, `rounds/${manifest.number}/receipt-${first.index}`, {
+      digest,
     });
+    relay.batches.push({ firstIndex: first.index, transaction, digest });
   }
+  return relay;
 }
 
 async function bootstrap(
   client: SuiGrpcClient,
-  config: OperatorConfig,
+  config: HolderRewardsOperatorConfig,
   vault: RewardsVault,
 ): Promise<OperatorState> {
   const first = await coinPackageCreationCheckpoint(client, vault.memeType);
@@ -495,7 +448,7 @@ async function bootstrap(
 }
 function assertState(
   state: OperatorState,
-  config: OperatorConfig,
+  config: HolderRewardsOperatorConfig,
   vault: RewardsVault,
 ) {
   if (
@@ -505,30 +458,33 @@ function assertState(
   )
     throw new Error("operator state belongs to another chain, vault or coin");
 }
-async function writeTransaction(
-  path: string,
+function withSender(
   tx: Transaction,
-  sender?: string,
-) {
-  if (sender) tx.setSender(rewardAddress(sender));
-  await writeOperatorJson(path, { transaction: await tx.toJSON() });
+  config: HolderRewardsOperatorConfig,
+): Transaction {
+  if (config.sender) tx.setSender(rewardAddress(config.sender));
+  return tx;
 }
-async function readJson<T>(path: string): Promise<T> {
-  return JSON.parse(await readFile(path, "utf8")) as T;
-}
-async function readOptional<T>(path: string): Promise<T | null> {
-  try {
-    return await readJson<T>(path);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
+/** Stores receive JSON-safe values: `bigint` becomes its decimal string. */
+function write(
+  store: HolderRewardsStore,
+  key: string,
+  value: unknown,
+): Promise<void> {
+  return store.write(
+    key,
+    JSON.parse(
+      JSON.stringify(value, (_, item) =>
+        typeof item === "bigint" ? item.toString() : item,
+      ),
+    ),
+  );
 }
 
 /** Reads the configured product's vault and binds its round reader and builders. */
 async function loadProduct(
   client: SuiGrpcClient,
-  config: OperatorConfig,
+  config: HolderRewardsOperatorConfig,
 ): Promise<RewardsProduct> {
   if (config.product === "presale") {
     const transactions = new PresaleTransactions(
