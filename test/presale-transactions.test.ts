@@ -396,6 +396,17 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       ],
     ],
     [
+      tx.setProtocolLpFees({
+        ...types,
+        vault,
+        adminCapId: "0xadc",
+        lpFeeMemeBps: 500n,
+        lpFeeQuoteBps: 2_500n,
+      }),
+      "presale_vault::set_protocol_lp_fees",
+      ["shared-mut:0xba", ...ADMIN, "Result:0", "Result:1"],
+    ],
+    [
       tx.setQuoteAllowed({
         adminCapId: "0xadc",
         quoteType: sui,

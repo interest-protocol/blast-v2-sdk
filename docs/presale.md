@@ -43,6 +43,7 @@ mutability its Move signature needs.
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. |
 | Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, then every fee recipient. The holder-reward share stays in the vault. |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
+| Vault LP-fee rates | `setProtocolLpFees` | Takes the `AdminCap`. Sets Blast's share of each asset in one vault's later LP-fee collections, including fees still in the pool. |
 | Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication takes the `AdminCap` (`adminCapId`). |
 | Cap | `destroyCap` | After cancellation only. |
 | Blast's rates | `setProtocolFees` | Takes the `AdminCap`. Applies to presales created afterward. |
@@ -101,6 +102,10 @@ is created:
   destination (`ProtocolFeesPaid`).
 - `lpFeeMemeBps` and `lpFeeQuoteBps` of each collected LP fee, rounded up, go
   to the current destination before the creator's split (`FeesCollected`).
+  Migration snapshots them into the vault; the `AdminCap` can then change one
+  vault's pair with `setProtocolLpFees` (`ProtocolLpFeesChanged`, which the
+  reducer applies to the vault's `protocolLpFeeMemeBps` and
+  `protocolLpFeeQuoteBps`). The creator's split of the rest is unchanged.
 
 A cancelled sale pays Blast nothing, and its token share stays locked.
 
@@ -153,7 +158,7 @@ const manifest = buildRewardManifest({ ...round, leafDomain: PRESALE_REWARD_LEAF
 `PresaleClient` (`blastPresale()` extension) reads a `Presale`, a wallet's
 `Commitment` dynamic field, a `PresaleVault`, a reward `Round`, the
 `FeePolicy`, the `CreationPolicy`, and the `AdminRegistry`.
-`decodePresaleEvent` decodes the 16
+`decodePresaleEvent` decodes the 17
 events generic over `<SaleToken, Quote>`. `PresaleVaultCreated` adds a `Venue`
 type argument. `decodePresalePolicyEvent` decodes `FeesChanged`,
 `DestinationChanged`, `QuoteSet`, `MigrationWitnessSet`, `AdminCapReplaced`, and
@@ -164,7 +169,7 @@ field, so the reducer keys commitments by the event sender.
 
 ## ABI coverage
 
-`abi/production-presale-v1.json` freezes the package at contracts `db75393`.
+`abi/production-presale-v1.json` freezes the package at contracts `a3aa934`.
 Every public function is classified:
 
 - **Builders:** all 15 `blast_presale` functions; `blast_presale_admin`
@@ -172,10 +177,11 @@ Every public function is classified:
   `fee_policy` `set_fees` and
   `set_destination`; `creation_policy` `set_quote_allowed` and
   `set_migration_witness_allowed`; `cetus` and `bluefin` `new`, `migrate`, and
-  `collect_fees`; `presale_vault::claim_migration_residuals`; and
+  `collect_fees`; `presale_vault` `claim_migration_residuals` and
+  `set_protocol_lp_fees`; and
   `holder_rewards` `publish_round`, `claim`, and `close_round`.
 - **Compositional:** `bps::new`, which every rate argument passes through.
-- **Off-chain mirror:** `merkle_tree::node` and `verify` (`allowlist.ts`);
-  `bps::value` and `apply_up` (`math.ts`).
+- **Off-chain mirror:** `bps::value` and `apply_up` (`math.ts`). The
+  `merkle_tree` functions are package-only; `allowlist.ts` mirrors them.
 - **Excluded:** `package_admin::wrap` (deployment), and `authorize_upgrade` and
   `commit_upgrade` (upgrade custody, which CLI publish tooling drives).

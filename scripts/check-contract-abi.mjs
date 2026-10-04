@@ -55,10 +55,11 @@ const artifactDeclarations = [
   {
     path: "production-presale-v1.json",
     // The presale package is unpublished, so it is frozen at the contracts
-    // commit it follows: ADRs 0099 through 0102, team vesting, and the
-    // package's own two-tier administration (contracts PR 45).
+    // commit it follows: ADRs 0099 through 0102, team vesting, the package's
+    // own two-tier administration (contracts PR 45), and per-vault Blast
+    // LP-fee rates with a package-only merkle_tree (contracts PR 48).
     baseline: {
-      contractsCommit: "db753931f7f530ccc5ba9783ac16c6e6b8ea8b97",
+      contractsCommit: "a3aa93487c518f9b39cd7b3e50d737ed73cc3440",
       workingTreeDifferedAtFreeze: false,
     },
     packages: [["presale", "presale", "blast_presale"]],
@@ -408,6 +409,7 @@ const presaleBuilders = new Set([
   "bluefin::migrate",
   "bluefin::collect_fees",
   "presale_vault::claim_migration_residuals",
+  "presale_vault::set_protocol_lp_fees",
   "holder_rewards::publish_round",
   "holder_rewards::claim",
   "holder_rewards::close_round",
@@ -429,6 +431,7 @@ const presaleEventNames = new Set([
   "PresaleVaultCreated",
   "FeesCollected",
   "MigrationResidualsClaimed",
+  "ProtocolLpFeesChanged",
   "FeesChanged",
   "DestinationChanged",
   "QuoteSet",
@@ -445,8 +448,8 @@ function classifyPresaleFunction(moduleName, functionName) {
   if (presaleBuilders.has(key)) return "builder";
   // Every rate argument is a `bps::Bps` built in the PTB.
   if (key === "bps::new") return "compositional";
-  // `allowlist.ts` mirrors the Merkle tree and `math.ts` the BPS arithmetic off chain.
-  if (moduleName === "merkle_tree" || moduleName === "bps") {
+  // `math.ts` mirrors the BPS arithmetic off chain.
+  if (moduleName === "bps") {
     return "move-composition";
   }
   return classifyPackageAdmin("blast_presale", moduleName, functionName);

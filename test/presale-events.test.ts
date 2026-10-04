@@ -80,7 +80,7 @@ test("event specs match every event frozen in the presale ABI", () => {
     { ...presaleEventSpecs, ...presalePolicyEventSpecs },
     readFrozenPresaleEventSpecs(),
   );
-  assert.equal(Object.keys(presaleEventModules).length, 16);
+  assert.equal(Object.keys(presaleEventModules).length, 17);
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
@@ -318,6 +318,11 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       meme: 1n,
       quote: 0n,
     }),
+    decode("ProtocolLpFeesChanged", {
+      vault_id: VAULT,
+      protocol_lp_fee_meme_bps: 500n,
+      protocol_lp_fee_quote_bps: 2_500n,
+    }),
     decode("RoundPublished", {
       vault_id: VAULT,
       round_id: ROUND,
@@ -367,6 +372,10 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       vault.migrationMemeResidual,
     ],
     [10n, 1n, 1n, 10n, 0n],
+  );
+  assert.deepEqual(
+    [vault.protocolLpFeeMemeBps, vault.protocolLpFeeQuoteBps],
+    [500n, 2_500n],
   );
   assert.deepEqual(vault.feeRecipientMemePaid, [51n, 20n]);
   assert.deepEqual(vault.feeRecipientQuotePaid, [5n, 2n]);
