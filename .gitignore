@@ -1,2 +1,6 @@
 node_modules/
 npm-debug.log*
+
+# Presale mainnet e2e: wallet keys and raw run output
+e2e/presale-mainnet/.wallets.json
+e2e/presale-mainnet/runs/
