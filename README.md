@@ -3,6 +3,16 @@
 The SDK mirrors the completed Sui launchpad and migrators ABIs
 without becoming a second source of truth for protocol execution.
 
+```sh
+npm install @interest-protocol/blast-sdk @mysten/sui @mysten/move-bytecode-template
+```
+
+The package is ESM with TypeScript declarations and has no Node, browser, or
+storage dependencies of its own: it runs on Node 22+, browsers, edge workers,
+and other runtimes with ES2023, `BigInt`, and `TextEncoder`. Node 22.12+ can
+also `require()` it. Workflows that need durable state, such as the
+holder-rewards operator, take a store you implement.
+
 It provides:
 
 - exact `bigint` buy, sell, allocation, LP-fee split, and valuation

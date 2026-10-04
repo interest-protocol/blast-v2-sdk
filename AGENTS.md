@@ -58,8 +58,10 @@ preview.
 - Validate inputs only enough to reject impossible canonical states; do not
   duplicate contract admission policy that may legitimately change.
 - Run `npm run typecheck` and `npm test` before committing. Typecheck also
-  compiles `src` without Node types (`tsconfig.sdk.json`); only ES2023 and the
-  globals in `types/runtime.d.ts` are available there.
+  compiles `src` without Node types (`tsconfig.build.json`, which also emits
+  the published `dist`); only ES2023 and the globals in `types/runtime.d.ts`
+  are available there. Run `npm run check:package` after changing exports or
+  package metadata.
 
 ## Agent skills
 
