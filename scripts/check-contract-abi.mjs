@@ -64,6 +64,11 @@ const artifactDeclarations = [
   },
   {
     path: "production-admin-v1.json",
+    // The admin ABI was reviewed and frozen at `BASELINE_COMMIT`; the amendments below were
+    // approved after that freeze, so the bytes this check reproduces come from the amended tree
+    // (`PRESALE_COMMIT`). `frozenAtCommit` keeps the commit the review was against, which is what
+    // the amendment ledger is measured from.
+    frozenAtCommit: BASELINE_COMMIT,
     contractsCommit: PRESALE_COMMIT,
     approvedAbiAmendments: [
       "contracts ADR 0097 (amended 2026-10-02, admin package review): upgrade_custody::publisher borrows the sealed Publisher, operational_version::new takes the package's one-time witness, and advance takes the versioned object's UID",
@@ -157,6 +162,9 @@ function checkArtifact(declaration) {
     baseline: {
       contractsCommit,
       source: "git archive of the commit's sui/ tree",
+      ...(declaration.frozenAtCommit === undefined
+        ? {}
+        : { frozenAtCommit: declaration.frozenAtCommit }),
       ...(declaration.approvedAbiAmendments === undefined
         ? {}
         : { approvedAbiAmendments: declaration.approvedAbiAmendments }),
