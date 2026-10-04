@@ -28,7 +28,8 @@
     "lint": "biome lint .",
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc",
-    "holder-rewards": "node scripts/holder-rewards.mjs"
+    "holder-rewards": "node scripts/holder-rewards.mjs",
+    "vectors:presale": "node scripts/presale-vectors.mjs"
   },
   "peerDependencies": {
     "@mysten/move-bytecode-template": "^0.4.1",

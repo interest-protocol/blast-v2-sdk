@@ -185,3 +185,116 @@ Every public function is classified:
   `merkle_tree` functions are package-only; `allowlist.ts` mirrors them.
 - **Excluded:** `package_admin::wrap` (deployment), and `authorize_upgrade` and
   `commit_upgrade` (upgrade custody, which CLI publish tooling drives).
+
+## Parity vectors
+
+`tests/vectors/presale-events.json` holds real emitted presale and policy
+events with the expected `decodePresaleEvent` (or `decodePresalePolicyEvent`)
+output and the expected `reducePresaleEvent` projection (`presales`, `vaults`,
+`rounds`) after each event. Bigints are decimal strings. Its SHA-256 is pinned
+in `presale-events.sha256` (`sha256sum -c` format).
+`test/presale-vectors.test.ts` refuses a file that does not match the pin, then
+replays every case through the decoders and the reducer. blast-infra vendors
+the same file and pin as its parity gate.
+
+Each case is one sale's full event history in ledger order, or one batch of
+policy events, with its `source` (`localnet` or `mainnet:<chain id>`) and the
+package's original ID. `kinds` lists the event kinds the cases cover;
+`pending_kinds` lists the rest. There is no testnet stage.
+
+Pinned at SHA-256
+`6da23d838c476c9c66ff07c41de93752468780de8bee3ad98d17446dd4c0bcf7`, from the
+localnet stage on contracts `a3aa934` with `sui` 1.77.2 (which contains the
+contracts' framework revision `06734f6`):
+
+| Case | Events |
+| --- | --- |
+| `policy` | `QuoteSet`, `MigrationWitnessSet`, `FeesChanged`, `DestinationChanged` |
+| `admin` | `AdminCapReplaced` (naming the publication's `AdminCap` as the previous cap), then `AdminCapRevoked` |
+| `open-funded` | Created with a vested 600 BPS and an unvested 400 BPS token share and a vested 2,000 BPS raise share, opened, four `commit_open` commitments from three wallets (one wallet twice), funded by `settle` with a 5 SUI overflow |
+| `open-missed-raise-refunded` | Created with a 1,000 BPS token share vesting over exactly 2^63 ms (the contract's bound), two commitments below the raise, cancelled by `settle`, two refund `Claimed` relayed in one PTB |
+| `allowlisted-funded` | Two `commit_allowlisted` commitments with `buildAllowlist` proofs, funded |
+| `uncapped-hard-cap-filled` | Two capped commitments, then a `commit_uncapped` offering 6 SUI that the hard cap fills with the last 4, funded |
+
+`pending_kinds`: `PresaleMigrated`, `ProtocolFeesPaid`, `RaiseAllocated`,
+`RecipientAllocated`, `PresaleVaultCreated`, `FeesCollected`,
+`MigrationResidualsClaimed`, `ProtocolLpFeesChanged`, `RoundPublished`,
+`RoundClosed`, `RewardClaimed`. A localnet cannot reach them: `blast_presale`
+links the Cetus and Bluefin interface stubs, whose bodies are `abort 0`, so
+migration aborts, and `cancel_unlaunched` needs the seven-day liquidity window
+to pass. The vesting schedules migration creates (and their
+`blast_fun_vesting` events) are out of this file's kinds for the same reason.
+They come from mainnet capture.
+
+### Localnet stage
+
+```bash
+npm run vectors:presale -- localnet --contracts ../contracts
+```
+
+Uses the localnet at `--rpc` (default `http://127.0.0.1:9000`, faucet
+`--faucet` `http://127.0.0.1:9123`), or starts
+`sui start --force-regenesis --with-faucet` and stops it afterward. Point
+`--rpc` and `--faucet` at a localnet you started on other ports (for example
+`sui start --force-regenesis --with-faucet=127.0.0.1:9323 --fullnode-rpc-port 9310`)
+to keep it off the defaults; the stage only starts one when `--rpc` does not
+answer. It copies `sui/presale` and `sui/migrators/interfaces` from the
+contracts worktree and publishes `blast_presale` with
+`sui client test-publish --build-env mainnet --publish-unpublished-deps`
+under its own client config, keystore, and ephemeral pubfile. That also
+publishes IntegerLibrary, IntegerMate, BluefinSpot, the Cetus interface stubs,
+and `blast_fun_vesting` on the localnet: an ephemeral publication ignores a
+dependency's mainnet `Published.toml` or `published-at`. Publication sends the
+deployer the `SuperAdminCap` and the `AdminCap`; the stage sets the policies
+with that `AdminCap`, then replaces and revokes it (`admin`, after every call
+that needs it), runs the sales with `PresaleTransactions`, and captures them
+into `--out` (default `tests/vectors/presale-events.json`). Every sale uses the
+Bluefin venue: `cetus::new` calls aborting interface stubs. Each sale's window
+is 240 s so its commits land on a loaded host. It writes the transaction
+digests to `--digests-out` (default: beside its temporary directory, which it
+removes on success). `--out` must end in `.json`, because the pin is written
+beside it as `.sha256`. It took 440 s.
+
+The `sui` binary must contain the contracts' framework revision. Bluefin's
+interface pins IntegerMate `sui-v1.1.2`, which `blast_presale` overrides; the
+CLI ignores that override when it publishes Bluefin, so the stage records the
+pinned copy at the published override's address.
+
+### Capture
+
+```bash
+npm run vectors:presale -- capture --rpc https://fullnode.mainnet.sui.io:443 --digests mainnet-digests.json
+```
+
+The digests file names the package and the transactions to capture:
+
+```json
+{
+  "original_package_id": "0x…",
+  "cases": [{ "name": "bluefin-migration", "digests": ["<migrate digest>"] }]
+}
+```
+
+Capture reads every event of the package's `blast_presale`, `presale_vault`,
+`holder_rewards`, `fee_policy`, `creation_policy`, and `blast_presale_admin`
+modules over gRPC. For
+each case it keeps the full history of the one sale its transactions touch
+(through the sale's vault and rounds), so one digest per sale is enough, or
+the listed transactions' policy events when they touch no sale. It recomputes
+the expected output with the SDK, replaces cases of the same name in place in
+`--out`, appends new ones, and rewrites `kinds`, `pending_kinds`, and the pin.
+The fullnode must still hold each captured sale's oldest event, so capture
+soon after the transactions (mainnet retained about 14.5 days of events in
+October 2026). Capture refuses a sale whose history does not start at its
+`PresaleCreated`, and a listed event it cannot map to a sale. It ignores
+unlisted vault or round events whose creation event is no longer retained.
+Mainnet capture stages:
+
+1. A migration (`PresaleMigrated`, `ProtocolFeesPaid`, `RaiseAllocated`,
+   `RecipientAllocated`, `PresaleVaultCreated`) and the claims after it.
+2. `MigrationResidualsClaimed`, `FeesCollected`, `ProtocolLpFeesChanged`,
+   `RoundPublished`, `RewardClaimed`, and `RoundClosed`.
+3. A liquidity-deadline cancellation (`cancel_unlaunched` and its refunds).
+
+Run against the localnet digests, capture reproduces the localnet stage's file
+byte for byte, including from only the last transaction of each sale.
