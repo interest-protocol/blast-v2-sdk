@@ -81,6 +81,16 @@ export const presaleEventSpecs = {
       liquidity_deadline_ms: "u64",
       uncapped_from_ms: "u64",
     },
+    ProtocolFeesChanged: {
+      presale_id: "id",
+      protocol_raise_bps: "u64",
+      protocol_token_bps: "u64",
+      protocol_lp_fee_meme_bps: "u64",
+      protocol_lp_fee_quote_bps: "u64",
+      protocol_quote: "u64",
+      protocol_tokens: "u64",
+      token_allocation: "u64",
+    },
     Committed: {
       presale_id: "id",
       quote: "u64",

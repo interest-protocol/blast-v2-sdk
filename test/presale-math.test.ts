@@ -348,6 +348,7 @@ test("fixes the windows share starts", () => {
 
 const openSale: CommitPreviewInput["presale"] = {
   lifecycle: "Open",
+  startMs: 1_000n,
   endMs: 1_100n,
   raiseTarget: RAISE,
   eligibility: openEligibility(5_000n, 2n, RAISE / 2n),
@@ -399,6 +400,8 @@ test("previews every commitment abort in contract order", () => {
     () => commit({ ...openSale, lifecycle: "Funded" }, 500n),
     "EInvalidLifecycle",
   );
+  // `commitments_before_the_start_are_rejected_before_amount_checks`.
+  aborts(() => commit(openSale, 0n, { nowMs: 999n }), "EPresaleNotStarted");
   aborts(() => commit(openSale, 500n, { nowMs: 1_100n }), "EPresaleEnded");
   aborts(() => commit(openSale, 0n, { nowMs: 1_100n }), "EPresaleEnded");
   aborts(() => commit(openSale, 0n), "EZeroCommitment");

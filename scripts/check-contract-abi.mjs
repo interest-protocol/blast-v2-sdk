@@ -57,9 +57,10 @@ const artifactDeclarations = [
     // The presale package is unpublished, so it is frozen at the contracts
     // commit it follows: ADRs 0099 through 0102, team vesting, the
     // package's own two-tier administration (contracts PR 45), the AdminCap's
-    // per-vault LP-fee rates, and the package-internal Merkle check.
+    // per-vault LP-fee rates, the package-internal Merkle check, and the
+    // scheduled start with the AdminCap's per-sale rates before it.
     baseline: {
-      contractsCommit: "2a654b93de6c7f0dec0247e1bacab3c8df40e4ba",
+      contractsCommit: "55e1ac0841535e708554cb45f9c67ab20f6e979a",
       workingTreeDifferedAtFreeze: false,
     },
     packages: [["presale", "presale", "blast_presale"]],
@@ -391,6 +392,7 @@ const presaleBuilders = new Set([
   "blast_presale::vested_recipient_share",
   "blast_presale::vesting_terms",
   "blast_presale::share",
+  "blast_presale::set_protocol_fees",
   "blast_presale::commit_open",
   "blast_presale::commit_allowlisted",
   "blast_presale::commit_uncapped",
@@ -420,6 +422,7 @@ const presaleBuilders = new Set([
 const presaleEventNames = new Set([
   "PresaleCreated",
   "PresaleOpened",
+  "ProtocolFeesChanged",
   "Committed",
   "PresaleFunded",
   "PresaleCancelled",

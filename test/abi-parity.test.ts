@@ -18,7 +18,7 @@ const expectedEvents = {
   launchpad: 27,
   migrators: 13,
   blastSui: 13,
-  presale: 23,
+  presale: 24,
   admin: 15,
   partners: 2,
 };
