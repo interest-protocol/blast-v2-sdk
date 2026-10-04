@@ -13,7 +13,16 @@ artifacts are:
 
 `npm run check:abi` extracts that commit's `sui/` tree with `git archive` from
 the contracts repository (`BLAST_CONTRACTS_DIR`, default `../contracts`), so the
-contracts working tree and branch never affect the comparison. Both artifacts
+contracts working tree and branch never affect the comparison.
+
+An artifact whose package was amended after its review names two commits.
+`baseline.contractsCommit` is the commit whose `sui/` tree the check archives
+and so the one that reproduces the recorded bytes; `baseline.frozenAtCommit` is
+the commit the review was against, which is what `baseline.approvedAbiAmendments`
+is measured from. `abi/production-admin-v1.json` is the one such artifact today:
+it reproduces at `55e1ac0841535e708554cb45f9c67ab20f6e979a` and was reviewed at
+the baseline commit, with contracts ADR 0097 recorded as the approved amendment.
+An artifact with no amendments names only `contractsCommit`. Both artifacts
 record Sui CLI `1.77.2-51d177ad7d65`, and the checker verifies the installed
 `sui --version` before it runs `sui move summary`. `FROZEN_ABI` in
 `src/deployments/identity.ts` carries the commit and the sha256 of both
