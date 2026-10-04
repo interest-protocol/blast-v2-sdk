@@ -387,7 +387,7 @@ preview.
 ## Presale
 
 `@interest-protocol/blast-sdk/presale` builds every product route of the
-unpublished `blast_presale` package. It previews creation, commitments, and
+`blast_presale` package published on mainnet. It previews creation, commitments, and
 claims exactly as the contract enforces them, and it decodes and replays the
 package's objects and events. See [docs/presale.md](docs/presale.md).
 
