@@ -1,7 +1,7 @@
 # Holder rewards
 
 Holder rewards live in the migrators package (`blast_holder_rewards`, contracts
-ADR 0089); the separate distributor package, its enrollment, `PublisherCap`,
+ADR 0089) and, for presales, in the presale package (`holder_rewards`); the separate distributor package, its enrollment, `PublisherCap`,
 and pause switch are gone. Every LP-fee collection credits the creator's
 `FeeSplit` rewards share to the launch's `LpVault`. A Blast administrator
 publishes a Merkle allocation of those funds as a shared `Round`, and anyone can
@@ -86,6 +86,29 @@ Create a JSON config outside the public artifacts:
   },
   "vaultId": "0xVERIFIED_LP_VAULT",
   "adminCapId": "0xBLAST_ADMIN_CAP",
+  "sender": "0xADMIN_MULTISIG",
+  "excludedAddresses": []
+}
+```
+
+For a presale vault, set `"product": "presale"`, pass the call-ready
+`PresaleDeployment` (`getPresaleDeployment("mainnet")`) as `deployment`, the
+`PresaleVault` ID as `vaultId`, and the presale package's `AdminCap` as
+`adminCapId`. Presale rounds also need `claimWindowMs`: `publish-tx` sets the
+round's claim deadline that far after it builds the transaction. Presale
+manifests use `PRESALE_REWARD_LEAF_DOMAIN`, and `relay` reads the presale
+`holder_rewards::Round`; the commands are otherwise the same.
+
+```json
+{
+  "grpcUrl": "https://YOUR-ARCHIVAL-SUI-GRPC-ENDPOINT",
+  "network": "mainnet",
+  "chainId": "EXPECTED-GENESIS-DIGEST",
+  "product": "presale",
+  "deployment": { "packageId": "0x...", "originalPackageId": "0x...", "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1" }, "creationPolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "feePolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "adminRegistry": { "objectId": "0x...", "initialSharedVersion": "1" } },
+  "vaultId": "0xVERIFIED_PRESALE_VAULT",
+  "adminCapId": "0xPRESALE_ADMIN_CAP",
+  "claimWindowMs": "604800000",
   "sender": "0xADMIN_MULTISIG",
   "excludedAddresses": []
 }

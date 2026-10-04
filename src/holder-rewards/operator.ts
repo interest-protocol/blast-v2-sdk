@@ -5,15 +5,23 @@ import { parseArgs } from "node:util";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import type { Transaction } from "@mysten/sui/transactions";
-import type { LpVaultState } from "../migrators/state.ts";
+import type { SharedObjectReference } from "../lib/sui.ts";
 import { getLpVault } from "../migrators/state.ts";
 import type { MigratorsDeployment } from "../migrators/transactions.ts";
 import { MigratorTransactions } from "../migrators/transactions.ts";
-import type { RewardManifest } from "./allocations.ts";
+import { getPresaleRewardRound, getPresaleVault } from "../presale/state.ts";
+import type { PresaleDeployment } from "../presale/transactions.ts";
+import { PresaleTransactions } from "../presale/transactions.ts";
+import type {
+  RewardLeafDomain,
+  RewardManifest,
+  RewardProof,
+} from "./allocations.ts";
 import {
   allocateHolderRewards,
   buildRewardManifest,
   MIGRATOR_REWARD_LEAF_DOMAIN,
+  PRESALE_REWARD_LEAF_DOMAIN,
   rewardAddress,
 } from "./allocations.ts";
 import {
@@ -40,15 +48,52 @@ type OperatorConfig = {
   /** Blast deploys to Sui mainnet only. */
   network: "mainnet";
   chainId: string;
-  /** Call-ready migrators deployment, including its launchpad deployment. */
-  deployment: MigratorsDeployment;
-  /** The migrated launch's `LpVault`, whose rewards share funds every round. */
+  /** The package whose vault funds the rounds; `migrators` when omitted. */
+  product?: "migrators" | "presale";
+  /**
+   * Call-ready deployment of that product: `MigratorsDeployment` (including
+   * its launchpad deployment) or `PresaleDeployment`.
+   */
+  deployment: MigratorsDeployment | PresaleDeployment;
+  /** The migrated launch's `LpVault` or presale's `PresaleVault`, whose holder share funds every round. */
   vaultId: string;
-  /** Blast `blast_acl::AdminCap` holding the launchpad `RewardsAdmin` role; it signs in to publish rounds. */
+  /**
+   * Migrators: Blast `blast_acl::AdminCap` holding the launchpad `RewardsAdmin`
+   * role, which signs in. Presale: the presale package's `AdminCap`.
+   */
   adminCapId?: string;
+  /** Presale only: claims stay open this many milliseconds after `publish-tx` builds the round. */
+  claimWindowMs?: string;
   sender?: string;
   excludedAddresses?: string[];
 };
+/** The vault fields every product's rounds read. */
+type RewardsVault = SharedObjectReference<true> & {
+  memeType: string;
+  quoteType: string;
+  rewardsMeme: bigint;
+  rewardsQuote: bigint;
+  nextRound: bigint;
+  lastCheckpoint: bigint | null;
+  summary: Record<string, unknown>;
+};
+/** A funded round in the keeper's shape. */
+type RewardsRound = SharedObjectReference<true> & {
+  vaultId: string;
+  number: bigint;
+  root: string;
+  leafCount: number;
+  claimed: bigint[];
+};
+/** One product's vault, leaf domain, round reader, and transaction builders. */
+type RewardsProduct = {
+  leafDomain: RewardLeafDomain;
+  vault: RewardsVault;
+  readRound(roundId: string): Promise<RewardsRound>;
+  publish(manifest: RewardManifest, adminCapId: string): Transaction;
+  claim(round: RewardsRound, allocations: readonly RewardProof[]): Transaction;
+};
+
 type OperatorState = {
   chainId: string;
   vaultId: string;
@@ -150,12 +195,8 @@ export async function runHolderRewardsOperator(args: string[]): Promise<void> {
   if (info.chainId !== config.chainId)
     throw new Error("RPC chain does not match configured genesis chainId");
   const directory = resolve(values.dir);
-  const transactions = new MigratorTransactions(config.deployment);
-  const vault = await getLpVault(
-    client,
-    config.vaultId,
-    transactions.call.deployment.originalPackageId,
-  );
+  const product = await loadProduct(client, config);
+  const { vault } = product;
   const statePath = join(directory, "state.json");
   const pendingPath = join(directory, "pending.json");
   const pair = { memeType: vault.memeType, quoteType: vault.quoteType };
@@ -165,7 +206,7 @@ export async function runHolderRewardsOperator(args: string[]): Promise<void> {
     client,
     config,
     vault,
-    transactions,
+    product,
     directory,
     output,
     statePath,
@@ -188,8 +229,8 @@ type OperatorOptions = {
 type OperatorContext = {
   client: SuiGrpcClient;
   config: OperatorConfig;
-  vault: LpVaultState;
-  transactions: MigratorTransactions;
+  vault: RewardsVault;
+  product: RewardsProduct;
   directory: string;
   output: string;
   statePath: string;
@@ -232,16 +273,8 @@ async function readConfirmedRound(
 ) {
   if (!context.values.round)
     throw new Error("supply the confirmed --round object ID");
-  const round = await getRewardRound(
-    context.client,
-    context.values.round,
-    context.transactions.call.deployment.originalPackageId,
-  );
-  assertRewardRoundMatchesManifest(
-    round,
-    manifest,
-    MIGRATOR_REWARD_LEAF_DOMAIN,
-  );
+  const round = await context.product.readRound(context.values.round);
+  assertRewardRoundMatchesManifest(round, manifest, context.product.leafDomain);
   return round;
 }
 async function inspectVault(context: OperatorContext): Promise<void> {
@@ -250,8 +283,7 @@ async function inspectVault(context: OperatorContext): Promise<void> {
     vaultId: vault.objectId,
     memeType: vault.memeType,
     quoteType: vault.quoteType,
-    generation: vault.generation,
-    feeSplit: vault.feeSplit,
+    ...vault.summary,
     rewardsMeme: vault.rewardsMeme,
     rewardsQuote: vault.rewardsQuote,
     nextRound: vault.nextRound,
@@ -314,7 +346,7 @@ async function indexHolders(context: OperatorContext): Promise<void> {
 }
 
 async function prepareRound(context: OperatorContext): Promise<void> {
-  const { pendingPath, statePath, config, vault, directory } = context;
+  const { pendingPath, statePath, config, vault, directory, product } = context;
   if (await readOptional<RewardManifest>(pendingPath))
     throw new Error("a prepared round already exists");
   const state = await readJson<OperatorState>(statePath);
@@ -345,7 +377,7 @@ async function prepareRound(context: OperatorContext): Promise<void> {
     startCheckpoint: BigInt(state.ledger.startCheckpoint),
     endCheckpoint: end,
     allocations: allocation.allocations,
-    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
+    leafDomain: product.leafDomain,
   });
   const roundDir = join(directory, "rounds", manifest.number);
   await writeOperatorJson(join(roundDir, "accounting.json"), {
@@ -364,15 +396,10 @@ async function prepareRound(context: OperatorContext): Promise<void> {
 }
 
 async function publishRound(context: OperatorContext): Promise<void> {
-  const { config, transactions, pair, output, vault } = context;
+  const { config, product, output } = context;
   const manifest = await readManifest(context);
   if (!config.adminCapId) throw new Error("adminCapId required");
-  const tx = transactions.publishHolderRewardRound({
-    ...pair,
-    vault,
-    adminCapId: config.adminCapId,
-    manifest,
-  });
+  const tx = product.publish(manifest, config.adminCapId);
   await writeTransaction(output, tx, config.sender);
 }
 
@@ -399,14 +426,10 @@ async function advanceRound(context: OperatorContext): Promise<void> {
 }
 
 async function relayRewards(context: OperatorContext): Promise<void> {
-  const { values, transactions, pair, directory, config, client } = context;
+  const { values, product, directory, config, client } = context;
   const manifest = await readManifest(context);
   const round = await readConfirmedRound(context, manifest);
-  const pending = pendingRewardAllocations(
-    round,
-    manifest,
-    MIGRATOR_REWARD_LEAF_DOMAIN,
-  );
+  const pending = pendingRewardAllocations(round, manifest, product.leafDomain);
   const key = values.execute
     ? process.env.HOLDER_REWARDS_RELAYER_KEY
     : undefined;
@@ -419,11 +442,7 @@ async function relayRewards(context: OperatorContext): Promise<void> {
     const batch = pending.slice(offset, offset + 10);
     const first = batch[0];
     if (!first) continue;
-    const tx = transactions.claimHolderRewards({
-      ...pair,
-      round,
-      allocations: batch,
-    });
+    const tx = product.claim(round, batch);
     const roundDir = join(directory, "rounds", manifest.number);
     if (!signer) {
       await writeTransaction(
@@ -451,7 +470,7 @@ async function relayRewards(context: OperatorContext): Promise<void> {
 async function bootstrap(
   client: SuiGrpcClient,
   config: OperatorConfig,
-  vault: LpVaultState,
+  vault: RewardsVault,
 ): Promise<OperatorState> {
   const first = await coinPackageCreationCheckpoint(client, vault.memeType);
   const { object } = await client.ledgerService.getObject({
@@ -477,7 +496,7 @@ async function bootstrap(
 function assertState(
   state: OperatorState,
   config: OperatorConfig,
-  vault: LpVaultState,
+  vault: RewardsVault,
 ) {
   if (
     state.chainId !== config.chainId ||
@@ -504,4 +523,85 @@ async function readOptional<T>(path: string): Promise<T | null> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
+}
+
+/** Reads the configured product's vault and binds its round reader and builders. */
+async function loadProduct(
+  client: SuiGrpcClient,
+  config: OperatorConfig,
+): Promise<RewardsProduct> {
+  if (config.product === "presale") {
+    const transactions = new PresaleTransactions(
+      config.deployment as PresaleDeployment,
+    );
+    const { originalPackageId } = transactions.call.deployment;
+    const state = await getPresaleVault(
+      client,
+      config.vaultId,
+      originalPackageId,
+    );
+    const pair = { memeType: state.memeType, quoteType: state.quoteType };
+    const vault: RewardsVault = {
+      ...state,
+      rewardsMeme: state.holderRewardsMeme,
+      rewardsQuote: state.holderRewardsQuote,
+      summary: {
+        presaleId: state.presaleId,
+        feeRecipients: state.feeRecipients,
+        holderRewardsBps: state.holderRewardsBps,
+      },
+    };
+    return {
+      leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
+      vault,
+      readRound: async (roundId) => {
+        const round = await getPresaleRewardRound(
+          client,
+          roundId,
+          originalPackageId,
+        );
+        return {
+          ...round,
+          leafCount: Number(round.leafCount),
+          claimed: round.claimedBitmap,
+        };
+      },
+      publish: (manifest, adminCapId) => {
+        if (!config.claimWindowMs || !/^\d+$/.test(config.claimWindowMs))
+          throw new Error("presale publish-tx needs claimWindowMs");
+        return transactions.publishHolderRewardRound({
+          ...pair,
+          vault,
+          adminCapId,
+          manifest,
+          claimDeadlineMs: BigInt(Date.now()) + BigInt(config.claimWindowMs),
+        });
+      },
+      claim: (round, allocations) =>
+        transactions.claimHolderRewards({ ...pair, round, allocations }),
+    };
+  }
+  const transactions = new MigratorTransactions(
+    config.deployment as MigratorsDeployment,
+  );
+  const { originalPackageId } = transactions.call.deployment;
+  const state = await getLpVault(client, config.vaultId, originalPackageId);
+  const pair = { memeType: state.memeType, quoteType: state.quoteType };
+  return {
+    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
+    vault: {
+      ...state,
+      summary: { generation: state.generation, feeSplit: state.feeSplit },
+    },
+    readRound: (roundId) => getRewardRound(client, roundId, originalPackageId),
+    publish: (manifest, adminCapId) =>
+      transactions.publishHolderRewardRound({
+        ...pair,
+        vault: state,
+        adminCapId,
+        manifest,
+      }),
+    claim: (round, allocations) =>
+      transactions.claimHolderRewards({ ...pair, round, allocations }),
+  };
 }

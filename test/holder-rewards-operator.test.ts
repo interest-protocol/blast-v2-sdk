@@ -10,6 +10,8 @@ import type { RewardManifest } from "../src/holder-rewards/allocations.ts";
 import {
   buildRewardManifest,
   MIGRATOR_REWARD_LEAF_DOMAIN,
+  PRESALE_REWARD_LEAF_DOMAIN,
+  validateRewardManifest,
 } from "../src/holder-rewards/allocations.ts";
 import type { HolderLedger } from "../src/holder-rewards/holders.ts";
 import {
@@ -27,6 +29,10 @@ import {
 } from "../src/holder-rewards/operator.ts";
 import { rewardRoundBcs } from "../src/holder-rewards/state.ts";
 import { lpVaultBcs } from "../src/migrators/state.ts";
+import {
+  presaleRewardRoundBcs,
+  presaleVaultBcs,
+} from "../src/presale/state.ts";
 
 const manifest = buildRewardManifest({
   leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
@@ -374,5 +380,225 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
   await assert.rejects(
     () => readFile(join(dir, "rounds", "0", "relay-0.json")),
     { code: "ENOENT" },
+  );
+});
+
+test("CLI runs a presale vault's round under the presale leaf domain and claim window", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "blast-holder-rewards-presale-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const address = normalizeSuiAddress;
+  const memeType = `${address("0x42")}::meme::MEME`;
+  const quoteType = `${address("0x2")}::sui::SUI`;
+  const alice = address("0xa");
+  const bob = address("0xb");
+  const vaultId = address("0xd");
+  const roundId = address("0xc");
+  const originalPackageId = address("0x99");
+  const packageId = address("0x100");
+  const shared = (objectId: string) => ({
+    objectId: address(objectId),
+    initialSharedVersion: "1",
+  });
+  const uid = (id: string) => ({ id: { bytes: address(id) } });
+  const configPath = join(dir, "config.json");
+  const pendingPath = join(dir, "pending.json");
+  const readJson = async (path: string) =>
+    JSON.parse(await readFile(path, "utf8"));
+  const run = (command: string, ...args: string[]) =>
+    runHolderRewardsOperator([
+      command,
+      "--config",
+      configPath,
+      "--dir",
+      dir,
+      ...args,
+    ]);
+  const config = {
+    grpcUrl: "http://127.0.0.1:0",
+    network: "mainnet",
+    chainId: "test-genesis",
+    product: "presale",
+    deployment: {
+      packageId,
+      originalPackageId,
+      venueConfig: shared("0x90"),
+      creationPolicy: shared("0x91"),
+      feePolicy: shared("0x92"),
+      adminRegistry: shared("0x93"),
+    },
+    vaultId,
+    adminCapId: address("0x94"),
+    sender: alice,
+  };
+  await writeOperatorJson(configPath, config);
+  await writeOperatorJson(join(dir, "state.json"), {
+    chainId: "test-genesis",
+    vaultId,
+    activationCheckpoint: "0",
+    ledger: createHolderLedger(memeType, 0n),
+  });
+  const client = new SuiGrpcClient({
+    baseUrl: "http://127.0.0.1:0",
+    network: "mainnet",
+  });
+  const ledgerPrototype = Object.getPrototypeOf(client.ledgerService);
+  let published: RewardManifest | undefined;
+  t.mock.method(console, "log", () => {});
+  t.mock.method(ledgerPrototype, "getServiceInfo", () => ({
+    response: Promise.resolve({
+      chainId: "test-genesis",
+      checkpointHeight: 2n,
+    }),
+  }));
+  t.mock.method(
+    ledgerPrototype,
+    "getCheckpoint",
+    (request: { checkpointId: { sequenceNumber: bigint } }) => {
+      const sequence = request.checkpointId.sequenceNumber;
+      const changes =
+        sequence === 0n
+          ? [
+              { address: alice, amount: "300" },
+              { address: bob, amount: "100" },
+            ]
+          : [];
+      return {
+        response: Promise.resolve({
+          checkpoint: {
+            sequenceNumber: sequence,
+            digest: `cp-${sequence}`,
+            summary: {
+              previousDigest:
+                sequence === 0n ? undefined : `cp-${sequence - 1n}`,
+              timestamp: { seconds: sequence + 1n, nanos: 0 },
+            },
+            contents: { transactions: [{ transaction: `tx-${sequence}` }] },
+            transactions: [
+              {
+                digest: `tx-${sequence}`,
+                balanceChanges: changes.map((change) => ({
+                  ...change,
+                  coinType: memeType,
+                })),
+              },
+            ],
+          },
+        }),
+      };
+    },
+  );
+  t.mock.method(
+    Object.getPrototypeOf(client.core),
+    "getObject",
+    async (request: { objectId: string }) => {
+      const base = {
+        objectId: request.objectId,
+        owner: { $kind: "Shared", Shared: { initialSharedVersion: "1" } },
+      };
+      if (request.objectId === vaultId)
+        return {
+          object: {
+            ...base,
+            type: `${originalPackageId}::presale_vault::PresaleVault<${memeType},${quoteType}>`,
+            content: presaleVaultBcs
+              .serialize({
+                id: uid(vaultId),
+                presale_id: { bytes: address("0x20") },
+                presale_cap_id: { bytes: address("0x21") },
+                pool_id: { bytes: address("0x22") },
+                fee_recipients: [],
+                holder_rewards_bps: 10_000n,
+                protocol_fees: {
+                  raiseBps: 0n,
+                  tokenBps: 0n,
+                  lpFeeMemeBps: 0n,
+                  lpFeeQuoteBps: 0n,
+                },
+                migration_meme_residual: { value: 0n },
+                migration_quote_residual: { value: 0n },
+                holder_rewards_meme: { value: published ? 0n : 4000n },
+                holder_rewards_quote: { value: published ? 0n : 800n },
+                next_round: published ? 1n : 0n,
+                last_checkpoint: published ? 2n : null,
+              })
+              .toBytes(),
+          },
+        };
+      assert.equal(request.objectId, roundId);
+      assert.ok(published);
+      return {
+        object: {
+          ...base,
+          type: `${originalPackageId}::holder_rewards::Round<${memeType},${quoteType}>`,
+          content: presaleRewardRoundBcs
+            .serialize({
+              id: uid(roundId),
+              vault_id: { bytes: vaultId },
+              number: 0n,
+              claim_deadline_ms: 9_999_999_999_999n,
+              root: published.root,
+              leaf_count: 2n,
+              claimed_bitmap: [1n],
+              meme: { value: 1000n },
+              quote: { value: 200n },
+            })
+            .toBytes(),
+        },
+      };
+    },
+  );
+
+  await run("index", "--until", "2");
+  await run("prepare");
+  const prepared = (await readJson(pendingPath)) as RewardManifest;
+  validateRewardManifest(prepared, PRESALE_REWARD_LEAF_DOMAIN);
+  assert.throws(() =>
+    validateRewardManifest(prepared, MIGRATOR_REWARD_LEAF_DOMAIN),
+  );
+  assert.deepEqual(
+    prepared.allocations.map(({ beneficiary, memeAmount, quoteAmount }) => ({
+      beneficiary,
+      memeAmount,
+      quoteAmount,
+    })),
+    [
+      { beneficiary: alice, memeAmount: "3000", quoteAmount: "600" },
+      { beneficiary: bob, memeAmount: "1000", quoteAmount: "200" },
+    ],
+  );
+  await assert.rejects(() => run("publish-tx"), /claimWindowMs/);
+  await writeOperatorJson(configPath, { ...config, claimWindowMs: "86400000" });
+  await run("publish-tx");
+  const publishTx = Transaction.from(
+    (await readJson(join(dir, "publish-tx.json"))).transaction,
+  );
+  const call = publishTx.getData().commands[0]?.MoveCall;
+  assert.deepEqual(
+    publishTx.getData().commands.map((command) => command.MoveCall?.function),
+    ["publish_round"],
+  );
+  assert.equal(call?.package, packageId);
+  assert.equal(call?.module, "holder_rewards");
+
+  published = prepared;
+  await run("advance", "--round", roundId);
+  await run(
+    "relay",
+    "--round",
+    roundId,
+    "--manifest",
+    join(dir, "rounds", "0", "manifest.json"),
+  );
+  const relayTx = Transaction.from(
+    (await readJson(join(dir, "rounds", "0", "relay-1.json"))).transaction,
+  );
+  assert.deepEqual(
+    relayTx
+      .getData()
+      .commands.map((command) => [
+        command.MoveCall?.module,
+        command.MoveCall?.function,
+      ]),
+    [["holder_rewards", "claim"]],
   );
 });
