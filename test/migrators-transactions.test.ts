@@ -28,12 +28,13 @@ const deployment: MigratorsDeployment = {
   launchpad: {
     packageId: "0x123",
     originalPackageId: "0x122",
-    partnersPackageId: "0xae",
-    timelockPackageId: "0xaf",
+    adminPackageId: "0xad",
+    partnersPackageId: "0xbe",
+    timelockPackageId: "0x7e",
     packageVersion: shared("0x2", "10", false),
     launchConfig: shared("0x3", "11", false),
     runtimeConfig: shared("0x4", "12", false),
-    admin: { packageId: "0xad", acl: shared("0x5", "13", false) },
+    acl: shared("0x5", "13", false),
   },
   migratorsVersion: shared("0x61", "15", false),
   lpFeePolicy: shared("0x40", "18", false),
@@ -53,7 +54,7 @@ const lpFeeSplit = {
 const settings = {
   virtualQuote: 1_000n,
   graduationTarget: 3_000n,
-  creationFee: 1_001n,
+  creationFee: 0n,
   allocationPlan: {
     curveMemeBps: 8_000n,
     lpMemeBps: 1_900n,
@@ -114,14 +115,12 @@ test("starts, configures, finalizes, and shares a Cetus launch in one PTB", () =
   ]);
   const finalize = moveCall(tx, "launch::finalize");
   assert.equal(finalize.package, normalizeSuiObjectId("0x123"));
-  // The creation fee is an exact-balance SUI coin intent resolved at build.
-  assert.deepEqual(argumentKinds(tx, finalize), [
+  assert.deepEqual(argumentKinds(tx, finalize).slice(0, 3), [
     `Result:${commandIndex(tx, "cetus::new")}`,
     "shared-mut:0xd",
     "shared:0x3",
-    "Result:1",
   ]);
-  assert.equal(tx.getData().commands[1]?.$kind, "$Intent");
+  assert.equal(finalize.arguments.length, 4);
   assert.equal(tx.getData().commands.at(-1)?.$kind, "TransferObjects");
 });
 
@@ -133,9 +132,22 @@ test("starts a Bluefin launch at the creator's tier", () => {
     memeCurrency: shared("0xd", "22", true),
     tickSpacing: 200,
     feeRate: 10_000n,
-    openingRoundMs: 120_000n,
-    creationFee: 0n,
+    openingRoundMs: 60_000n,
+    partner: shared("0x9a", "30", false),
+    creatorBid: { quoteAmount: 50n },
   });
+  assert.deepEqual(
+    moveFunctions(tx)
+      .filter((name) => name.startsWith("launch::"))
+      .slice(-5),
+    [
+      "launch::set_opening_round",
+      "launch::set_partner",
+      "launch::finalize",
+      "launch::join_opening_round",
+      "launch::share",
+    ],
+  );
 
   const start = moveCall(tx, "bluefin::new");
   assert.deepEqual(argumentKinds(tx, start), [
@@ -146,7 +158,6 @@ test("starts a Bluefin launch at the creator's tier", () => {
     "pure",
     "pure",
   ]);
-  assert.ok(moveFunctions(tx).includes("launch::set_opening_round"));
   assert.equal(moveFunctions(tx).at(-1), "launch::share");
   assert.throws(
     () =>
@@ -318,7 +329,6 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
     "blast_acl::sign_in",
     "cetus::buyback_and_burn",
   ]);
-  assert.equal(signInRole(cetusTx), "BuybackAdmin");
   const buyback = moveCall(cetusTx, "cetus::buyback_and_burn");
   assert.deepEqual(buyback.typeArguments, cetusTypeArguments.b);
   assert.deepEqual(argumentKinds(cetusTx, buyback), [
@@ -369,6 +379,104 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
   );
 });
 
+test("signs in with the one role each migrators administrator action takes", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const role = (tx: Transaction) =>
+    moveCall(tx, "blast_acl::sign_in").typeArguments[0]?.split("::").at(-1);
+  const vault = shared("0xc", "20", true);
+  assert.equal(
+    role(
+      sdk.claimProtocolFees({
+        ...types,
+        vault,
+        adminCapId: "0x1",
+        recipient: "0xe",
+      }),
+    ),
+    "TreasuryAdmin",
+  );
+  assert.equal(
+    role(
+      sdk.setLpFeeProtocolDestination({
+        adminCapId: "0x1",
+        destination: "0xb",
+      }),
+    ),
+    "TreasuryAdmin",
+  );
+  assert.equal(
+    role(
+      sdk.setLpFeeDefaultShares({
+        adminCapId: "0x1",
+        memeBps: 1n,
+        quoteBps: 1n,
+      }),
+    ),
+    "FeeAdmin",
+  );
+  assert.equal(
+    role(
+      sdk.setLpFeeCoinShares({
+        memeType: types.memeType,
+        adminCapId: "0x1",
+        memeBps: 1n,
+        quoteBps: 1n,
+      }),
+    ),
+    "FeeAdmin",
+  );
+  assert.equal(
+    role(
+      sdk.clearLpFeeCoinShares({ memeType: types.memeType, adminCapId: "0x1" }),
+    ),
+    "FeeAdmin",
+  );
+  assert.equal(
+    role(
+      sdk.buybackAndBurnBluefin({
+        ...types,
+        vault,
+        adminCapId: "0x1",
+        memeCurrency: shared("0xd", "22", true),
+        bluefinConfig: shared("0x80", "40", false),
+        pool: shared("0x81", "41", true),
+        minMemeOut: 1n,
+      }),
+    ),
+    "BuybackAdmin",
+  );
+  const manifest = buildRewardManifest({
+    vaultId: "0xc",
+    number: 0n,
+    startCheckpoint: 1n,
+    endCheckpoint: 2n,
+    allocations: [{ beneficiary: "0xa", memeAmount: 1n, quoteAmount: 0n }],
+    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
+  });
+  assert.equal(
+    role(
+      sdk.publishHolderRewardRound({
+        ...types,
+        vault,
+        adminCapId: "0x1",
+        manifest,
+      }),
+    ),
+    "RewardsAdmin",
+  );
+  assert.equal(
+    moveCall(
+      sdk.setLpFeeDefaultShares({
+        adminCapId: "0x1",
+        memeBps: 1n,
+        quoteBps: 1n,
+      }),
+      "blast_acl::sign_in",
+    ).typeArguments[0],
+    `${normalizeSuiObjectId("0x122")}::blast_fun_domain::FeeAdmin`,
+  );
+});
+
 test("claims creator LP fees with the launch's live curve-fee cap", () => {
   const tx = new MigratorTransactions(deployment).claimCreatorFees({
     ...types,
@@ -396,12 +504,10 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
     "blast_acl::sign_in",
     "vault::claim_protocol_fees",
   ]);
-  assert.equal(signInRole(claim), "TreasuryAdmin");
 
   const cases = [
     [
       "set_default_shares",
-      "FeeAdmin",
       sdk.setLpFeeDefaultShares({
         adminCapId: "0xad1",
         memeBps: 100n,
@@ -411,7 +517,6 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
     ],
     [
       "set_coin_shares",
-      "FeeAdmin",
       sdk.setLpFeeCoinShares({
         memeType: types.memeType,
         adminCapId: "0xad1",
@@ -422,7 +527,6 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
     ],
     [
       "clear_coin_shares",
-      "FeeAdmin",
       sdk.clearLpFeeCoinShares({
         memeType: types.memeType,
         adminCapId: "0xad1",
@@ -431,7 +535,6 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
     ],
     [
       "set_protocol_destination",
-      "TreasuryAdmin",
       sdk.setLpFeeProtocolDestination({
         adminCapId: "0xad1",
         destination: "0xb",
@@ -439,8 +542,7 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
       [],
     ],
   ] as const;
-  for (const [functionName, role, tx, typeArguments] of cases) {
-    assert.equal(signInRole(tx), role);
+  for (const [functionName, tx, typeArguments] of cases) {
     const call = moveCall(tx, `lp_fee_policy::${functionName}`);
     assert.deepEqual(call.typeArguments, typeArguments);
     const kinds = argumentKinds(tx, call);
@@ -464,7 +566,6 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
 test("publishes a holder-reward round and relays its claims", () => {
   const vault = shared("0xd", "20", true);
   const manifest = buildRewardManifest({
-    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
     vaultId: "0xd",
     number: 0n,
     startCheckpoint: 10n,
@@ -474,6 +575,7 @@ test("publishes a holder-reward round and relays its claims", () => {
       { beneficiary: "0xb", memeAmount: 30n, quoteAmount: 40n },
       { beneficiary: "0xc", memeAmount: 50n, quoteAmount: 60n },
     ],
+    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
   });
   const sdk = new MigratorTransactions(deployment);
   const publish = sdk.publishHolderRewardRound({
@@ -482,7 +584,6 @@ test("publishes a holder-reward round and relays its claims", () => {
     adminCapId: "0xad1",
     manifest,
   });
-  assert.equal(signInRole(publish), "RewardsAdmin");
   const call = moveCall(publish, "blast_holder_rewards::publish_round");
   assert.deepEqual(argumentKinds(publish, call).slice(0, 3), [
     "shared-mut:0xd",
@@ -544,11 +645,6 @@ function commandIndex(tx: Transaction, name: string): number {
         command.$kind === "MoveCall" &&
         `${command.MoveCall.module}::${command.MoveCall.function}` === name,
     );
-}
-
-/** The `blast_fun_domain` role the transaction signs in with. */
-function signInRole(tx: Transaction): string | undefined {
-  return moveCall(tx, "blast_acl::sign_in").typeArguments[0]?.split("::")[2];
 }
 
 function moveCall(tx: Transaction, name: string) {

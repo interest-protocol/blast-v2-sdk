@@ -4,12 +4,13 @@ import test from "node:test";
 
 import type { BcsType } from "@mysten/sui/bcs";
 import { rewardRoundBcs } from "../src/holder-rewards/state.ts";
+import { allocationPlanBcs, feeSplitBcs } from "../src/launchpad/allocation.ts";
 import {
-  allocationPlanBcs,
-  feeSplitBcs,
-  protocolAllocationBcs,
-} from "../src/launchpad/allocation.ts";
-import { launchBcs, launchConfigBcs } from "../src/launchpad/state.ts";
+  launchBcs,
+  launchConfigBcs,
+  launchTicketBcs,
+  runtimeConfigBcs,
+} from "../src/launchpad/state.ts";
 import {
   lpFeePolicyBcs,
   lpFeeSharePairBcs,
@@ -64,18 +65,19 @@ test("SDK object layouts follow the frozen Move field order", () => {
     ["launchpad", "launch", "Launch", launchBcs as never, launch()],
     [
       "launchpad",
-      "allocation",
-      "AllocationPlan",
-      allocationPlanBcs as never,
-      plan,
-    ],
-    ["launchpad", "allocation", "FeeSplit", feeSplitBcs as never, feeSplit],
-    [
-      "launchpad",
-      "allocation",
-      "ProtocolAllocation",
-      protocolAllocationBcs as never,
-      { memeBps: 0n, quoteBps: 0n },
+      "launch_ticket",
+      "LaunchTicket",
+      launchTicketBcs as never,
+      {
+        id: uid("0x1"),
+        meme: balance,
+        treasury_cap: { id: uid("0x2"), total_supply: { value: 0n } },
+        metadata_cap: { id: uid("0x3") },
+        creator: { Address: "0x4" },
+        decimals: 9,
+        burnable: false,
+        sell_burn_bps: 0n,
+      },
     ],
     [
       "launchpad",
@@ -84,15 +86,34 @@ test("SDK object layouts follow the frozen Move field order", () => {
       launchConfigBcs as never,
       {
         id: uid("0x1"),
-        meme_decimals: [],
+        meme_decimals: [6, 9],
         quotes: { id: uid("0x2"), size: 0n },
         quote_fee_bps: 0n,
         meme_fee_bps: 0n,
         migration_witnesses: [],
-        protocol_allocation: { memeBps: 0n, quoteBps: 0n },
+        protocol_allocation: { meme_bps: 0n, quote_bps: 0n },
         creation_fee: 0n,
       },
     ],
+    [
+      "launchpad",
+      "runtime_config",
+      "RuntimeConfig",
+      runtimeConfigBcs as never,
+      {
+        id: uid("0x1"),
+        creator_claim_signer_public_key: [],
+        protocol_fee_share_bps: 0n,
+      },
+    ],
+    [
+      "launchpad",
+      "allocation",
+      "AllocationPlan",
+      allocationPlanBcs as never,
+      plan,
+    ],
+    ["launchpad", "allocation", "FeeSplit", feeSplitBcs as never, feeSplit],
     ["migrators", "vault", "LpVault", lpVaultBcs as never, vault()],
     [
       "migrators",

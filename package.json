@@ -20,8 +20,8 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "check:abi": "node scripts/check-contract-abi.mjs ../contracts",
-    "check:abi:write": "node scripts/check-contract-abi.mjs ../contracts --write",
+    "check:abi": "node scripts/check-contract-abi.mjs",
+    "check:abi:write": "node scripts/check-contract-abi.mjs --write",
     "check": "npm run check:abi && npm run format:check && npm run lint && npm run typecheck && npm test",
     "format": "biome format --write . && biome check --write --only=assist/source/organizeImports .",
     "format:check": "biome format .",

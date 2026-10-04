@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
-    "workingTreeDifferedAtFreeze": false,
+    "contractsCommit": "55e1ac0841535e708554cb45f9c67ab20f6e979a",
+    "source": "git archive of the commit's sui/ tree",
     "approvedAbiAmendments": [
       "contracts ADR 0097 (amended 2026-10-02, admin package review): upgrade_custody::publisher borrows the sealed Publisher, operational_version::new takes the package's one-time witness, and advance takes the versioned object's UID"
     ],

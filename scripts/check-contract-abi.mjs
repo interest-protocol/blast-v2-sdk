@@ -12,15 +12,21 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const BASELINE_COMMIT = "a5ed34ad49c6c001af2db5b9cbcb206075704412";
-const LAUNCHPAD_BASELINE = {
-  contractsCommit: BASELINE_COMMIT,
-  workingTreeDifferedAtFreeze: true,
-  abiNeutralDifferences: [
-    "sui/meme_template/Move.lock",
-    "docs/research/sui-deepbook-indexer-architecture-2026.md",
-  ],
-};
+/**
+ * The reviewed contracts commit the SDK is frozen to. The checker materializes
+ * each artifact's commit's `sui/` tree with `git archive`, so the contracts
+ * working tree and branch never affect the result.
+ */
+const BASELINE_COMMIT = "442116a0a1b82c6b4a64dc55fa0de430322f4bb7";
+/**
+ * The presale package is unpublished, so it is frozen at the contracts commit
+ * it follows: ADRs 0099 through 0102, team vesting, the package's own two-tier
+ * administration (contracts PR 45), the AdminCap's per-vault LP-fee rates, the
+ * package-internal Merkle check, and the scheduled start with the AdminCap's
+ * per-sale rates before it. The shared ACL package's review amendments land in
+ * the same commit, so `blast_admin` is frozen there too.
+ */
+const PRESALE_COMMIT = "55e1ac0841535e708554cb45f9c67ab20f6e979a";
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
   {
@@ -43,35 +49,22 @@ const artifactDeclarations = [
       "contracts ADR 0089: start launches in the migration adapter and move every post-migration fee path into the migrators package",
       "contracts ADR 0090: a minimal launchpad surface — trimmed getters, recipient allocation plans, merged config setters and events, renumbered errors, one migration call",
       "contracts ADR 0091: a burn part in the LP-fee split, with admin buyback and burn",
+      "contracts ADR 0092: the creator picks the virtual Quote reserve",
+      "contracts ADR 0093: an optional opening round replaces purchase protection",
+      "contracts ADR 0094 and 0097: one typed role per administrator action in the singleton Blast ACL",
+      "contracts ADR 0098: a SUI creation fee and one partner per launch set at creation",
+      "contracts a2a1db2: Blast's migration allocation accrues as protocol fees in the launch ledger",
       "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs",
-      "contracts ADR 0090 (redundancy audit): framework aborts replace duplicate checks; Migrated drops native_supply_burned, the holder-reward Round drops its checkpoints and manifest digest, CreatorClaimMessage drops copy",
-      "contracts ADR 0092: the creator sets the virtual Quote reserve on the initializer; LaunchConfig admits Quotes in a Table and QuoteSet records allowed",
-      "contracts ADR 0093: an optional opening round replaces purchase protection; buy no longer takes the Clock",
-      "contracts ADRs 0094 and 0097: every administrator action takes blast_admin::blast_acl::AdminWitness of its own typed blast_fun_domain role",
-      "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation",
-      "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
     ],
   },
   {
     path: "production-presale-v1.json",
-    // The presale package is unpublished, so it is frozen at the contracts
-    // commit it follows: ADRs 0099 through 0102, team vesting, the
-    // package's own two-tier administration (contracts PR 45), the AdminCap's
-    // per-vault LP-fee rates, the package-internal Merkle check, and the
-    // scheduled start with the AdminCap's per-sale rates before it.
-    baseline: {
-      contractsCommit: "55e1ac0841535e708554cb45f9c67ab20f6e979a",
-      workingTreeDifferedAtFreeze: false,
-    },
+    contractsCommit: PRESALE_COMMIT,
     packages: [["presale", "presale", "blast_presale"]],
   },
   {
     path: "production-admin-v1.json",
-    // The shared ACL package is new to SDK coverage, frozen at contracts main.
-    baseline: {
-      contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
-      workingTreeDifferedAtFreeze: false,
-    },
+    contractsCommit: PRESALE_COMMIT,
     approvedAbiAmendments: [
       "contracts ADR 0097 (amended 2026-10-02, admin package review): upgrade_custody::publisher borrows the sealed Publisher, operational_version::new takes the package's one-time witness, and advance takes the versioned object's UID",
     ],
@@ -79,11 +72,6 @@ const artifactDeclarations = [
   },
   {
     path: "production-partners-v1.json",
-    // The immutable partner package is new to SDK coverage, frozen at contracts main.
-    baseline: {
-      contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
-      workingTreeDifferedAtFreeze: false,
-    },
     packages: [["partners", "partners", "blast_partners"]],
   },
   {
@@ -95,14 +83,14 @@ const artifactDeclarations = [
       "contracts ADR 0061: restore routine AdminCap authorization and composable PackageAdmin custody",
       "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody",
       "contracts ADR 0085: name every explorer-visible type after Blast",
-      "contracts ADR 0097: package custody and the redeem fee take blast_admin::blast_acl::AdminWitness of the typed UpgradeAdmin and FeeAdmin roles",
-      "contracts ADR 0097 (amended 2026-10-02): PackageVersion lives in the one-time-witness module as blast_sui_package::PackageVersion, seeded from that witness",
+      "contracts ADR 0097: one singleton ACL with typed roles",
     ],
   },
 ];
-const contractsRoot = resolve(
+const contractsRepository = resolve(
   sdkRoot,
   process.argv.slice(2).find((argument) => !argument.startsWith("--")) ??
+    process.env.BLAST_CONTRACTS_DIR ??
     "../contracts",
 );
 const write = process.argv.includes("--write");
@@ -119,19 +107,56 @@ function main() {
   }
 }
 
+/** Extracts one reviewed commit's `sui/` tree once; the working tree is never read. */
+function materializeContracts(commit) {
+  const contractsRoot = join(temporaryRoot, "contracts", commit);
+  if (existsSync(contractsRoot)) return contractsRoot;
+  const found = spawnSync(
+    "git",
+    ["-C", contractsRepository, "cat-file", "-e", `${commit}^{commit}`],
+    { encoding: "utf8" },
+  );
+  if (found.status !== 0) {
+    throw new Error(
+      `${contractsRepository} does not contain contracts commit ${commit}`,
+    );
+  }
+  const archive = spawnSync(
+    "git",
+    ["-C", contractsRepository, "archive", "--format=tar", commit, "sui"],
+    { maxBuffer: 256 * 1024 * 1024 },
+  );
+  if (archive.status !== 0) {
+    throw new Error(
+      `failed to archive contracts commit ${commit}: ${archive.stderr}`,
+    );
+  }
+  mkdirSync(contractsRoot, { recursive: true });
+  const extract = spawnSync("tar", ["-x", "-C", contractsRoot], {
+    input: archive.stdout,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  if (extract.status !== 0) {
+    throw new Error(`failed to extract contracts commit: ${extract.stderr}`);
+  }
+  return contractsRoot;
+}
+
 function checkArtifact(declaration) {
   const artifactPath = join(sdkRoot, "abi", declaration.path);
+  const contractsCommit = declaration.contractsCommit ?? BASELINE_COMMIT;
+  const contractsRoot = materializeContracts(contractsCommit);
   const packages = Object.fromEntries(
     declaration.packages.map(([name, directory, packageName]) => [
       name,
       summarizePackage(join(contractsRoot, "sui", directory), packageName),
     ]),
   );
-  const baseline = declaration.baseline ?? LAUNCHPAD_BASELINE;
   const artifact = {
     schemaVersion: 1,
     baseline: {
-      ...baseline,
+      contractsCommit,
+      source: "git archive of the commit's sui/ tree",
       ...(declaration.approvedAbiAmendments === undefined
         ? {}
         : { approvedAbiAmendments: declaration.approvedAbiAmendments }),
@@ -157,7 +182,7 @@ function checkArtifact(declaration) {
     return;
   }
   console.log(
-    `current production Move ABI matches abi/${declaration.path} frozen at ${baseline.contractsCommit}`,
+    `abi/${declaration.path} matches contracts commit ${contractsCommit}`,
   );
 }
 
@@ -458,6 +483,32 @@ function classifyPresaleFunction(moduleName, functionName) {
   return classifyPackageAdmin("blast_presale", moduleName, functionName);
 }
 
+/**
+ * Every package's `package_admin` holds its Publisher and UpgradeCap.
+ * Wrapping them is part of publishing, and authorizing, committing,
+ * restricting or sealing an upgrade is CLI publish tooling; neither is SDK
+ * surface.
+ */
+const upgradeCustodyFunctions = new Set([
+  "authorize_upgrade",
+  "commit_upgrade",
+  "commit_upgrade_and_advance",
+  "restrict_to_additive",
+  "make_immutable",
+]);
+
+function classifyPackageAdmin(packageName, moduleName, functionName) {
+  if (moduleName === "package_admin") {
+    if (functionName === "wrap") return "intentional-deployment-exclusion";
+    if (upgradeCustodyFunctions.has(functionName)) {
+      return "intentional-upgrade-exclusion";
+    }
+  }
+  throw new Error(
+    `unclassified function ${packageName}::${moduleName}::${functionName}`,
+  );
+}
+
 function classifyMemeTemplateFunction(moduleName, functionName) {
   throw new Error(
     `unexpected public function meme_template::${moduleName}::${functionName}`,
@@ -488,33 +539,8 @@ const migratorBuilders = new Set([
 function classifyMigratorFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
   if (migratorBuilders.has(key)) return "builder";
-  return classifyPackageAdmin("blast_fun_migrators", moduleName, functionName);
-}
-
-/**
- * Every package's `package_admin` holds its Publisher and UpgradeCap.
- * Wrapping them is part of publishing, and authorizing, committing,
- * restricting or sealing an upgrade is CLI publish tooling; neither is SDK
- * surface.
- */
-const upgradeCustodyFunctions = new Set([
-  "authorize_upgrade",
-  "commit_upgrade",
-  "commit_upgrade_and_advance",
-  "restrict_to_additive",
-  "make_immutable",
-]);
-
-function classifyPackageAdmin(packageName, moduleName, functionName) {
-  if (moduleName === "package_admin") {
-    if (functionName === "wrap") return "intentional-deployment-exclusion";
-    if (upgradeCustodyFunctions.has(functionName)) {
-      return "intentional-upgrade-exclusion";
-    }
-  }
-  throw new Error(
-    `unclassified function ${packageName}::${moduleName}::${functionName}`,
-  );
+  if (moduleName === "package_admin") return "intentional-admin-exclusion";
+  throw new Error(`unclassified function blast_fun_migrators::${key}`);
 }
 
 const launchpadBuilders = new Set([
@@ -522,10 +548,10 @@ const launchpadBuilders = new Set([
   "launch::share",
   "launch::buy",
   "launch::sell",
+  "launch::set_virtual_quote",
   "launch::set_graduation_target",
   "launch::set_allocation_plan",
   "launch::set_lp_fee_split",
-  "launch::set_virtual_quote",
   "launch::set_opening_round",
   "launch::set_partner",
   "launch::join_opening_round",
@@ -538,18 +564,6 @@ const launchpadBuilders = new Set([
   "launch::set_name",
   "launch::set_description",
   "launch::set_icon_url",
-  "launch::reassign_curve_fee_cap",
-  "launch::reassign_metadata_cap",
-  "launch_config::set_protocol_allocation",
-  "launch_config::set_meme_decimals_allowed",
-  "launch_config::set_quote_allowed",
-  "launch_config::set_trade_fees",
-  "launch_config::set_creation_fee",
-  "launch_config::add_partner",
-  "launch_config::remove_partner",
-  "launch_config::set_migration_witness_allowed",
-  "runtime_config::set_creator_claim_signer",
-  "runtime_config::set_protocol_fee_share",
 ]);
 const launchpadCompositional = new Set([
   "allocation::recipient",
@@ -573,25 +587,32 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
   if (moduleName === "creator_authority" && functionName.startsWith("new_")) {
     return "template-internal";
   }
+  if (isIntentionalAdminExclusion(moduleName, key)) {
+    return "intentional-admin-exclusion";
+  }
   if (isLaunchpadMoveComposition(moduleName, functionName)) {
     return "move-composition";
   }
-  return classifyPackageAdmin(packageName, moduleName, functionName);
+  throw new Error(`unclassified function ${packageName}::${key}`);
 }
-
-const launchGetters = new Set([
-  "launch::pool_tier",
-  "launch::lp_fee_split",
-  "launch::assert_curve_fee_cap",
-]);
 
 /** Getters and exact math the SDK mirrors off chain. */
 function isLaunchpadMoveComposition(moduleName, functionName) {
   return (
     moduleName === "bps" ||
     moduleName === "allocation" ||
-    launchGetters.has(`${moduleName}::${functionName}`) ||
+    moduleName === "launch" ||
     (moduleName === "creator_authority" && functionName.startsWith("destroy_"))
+  );
+}
+
+function isIntentionalAdminExclusion(moduleName, key) {
+  return (
+    moduleName === "launch_config" ||
+    moduleName === "package_admin" ||
+    moduleName === "runtime_config" ||
+    key === "launch::reassign_curve_fee_cap" ||
+    key === "launch::reassign_metadata_cap"
   );
 }
 
@@ -605,7 +626,15 @@ const blastSuiBuilders = new Set([
   "vault::donate_sui",
   "vault::redeem_blast_sui",
   "vault::sync",
+  // `BlastSuiTransactions.setRedeemFee` signs in as the typed FeeAdmin.
   "vault::set_redeem_fee",
+]);
+const blastSuiAdminExclusions = new Set([
+  "package_admin::add_capability",
+  "package_admin::authorize_upgrade",
+  "package_admin::commit_upgrade_and_advance",
+  "package_admin::make_immutable",
+  "package_admin::restrict_to_additive",
 ]);
 const blastSuiMoveComposition = new Set(["package_admin::has_upgrade_cap"]);
 
@@ -615,14 +644,16 @@ function classifyBlastSuiFunction(moduleName, functionName) {
   if (isBlastSuiDeploymentExclusion(key)) {
     return "intentional-deployment-exclusion";
   }
+  if (blastSuiAdminExclusions.has(key)) {
+    return "intentional-admin-exclusion";
+  }
   if (blastSuiMoveComposition.has(key)) return "move-composition";
-  return classifyPackageAdmin("blast_sui", moduleName, functionName);
+  throw new Error(`unclassified function blast_sui::${key}`);
 }
 
 function isBlastSuiDeploymentExclusion(key) {
   return (
     key === "vault::create" ||
-    key === "package_admin::add_capability" ||
     key === "deposit_receipt::create_display" ||
     key === "package_admin::new" ||
     key === "package_admin::share"

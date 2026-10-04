@@ -90,12 +90,13 @@ test("a product signs in with its own typed role", () => {
   const calls = new LaunchpadCalls({
     packageId: "0x123",
     originalPackageId: "0x122",
-    admin: deployment,
+    adminPackageId: deployment.packageId,
     partnersPackageId: "0xae",
     timelockPackageId: "0xaf",
     packageVersion: shared("0x2"),
     launchConfig: shared("0x3"),
     runtimeConfig: shared("0x4"),
+    acl: shared(deployment.acl.objectId),
   });
   assert.equal(calls.roleType("FeeAdmin"), ROLE);
   const tx = new Transaction();

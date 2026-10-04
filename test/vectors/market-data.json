@@ -1,0 +1,4198 @@
+{
+  "schema_version": 1,
+  "description": "Market-data formulas for the blast-infra engine and the SDK: spot price and its canonical string, live supply, market cap, progress, curve and venue trade mapping, USD stamps, candles and position accounting. Contract-produced values come from the scenarios, which sui/launchpad/tests/market_data_vectors_tests.move proves through the launchpad.",
+  "source_decisions": [
+    "docs/decisions/0004-bonding-curve.md",
+    "docs/decisions/0005-quote-asset-generalisation.md",
+    "docs/decisions/0022-dual-asset-fee-ledger-and-claims.md",
+    "docs/decisions/0077-fixed-creator-selected-sell-burn.md"
+  ],
+  "generator": "docs/vectors/generate_market_data.py",
+  "units": {
+    "meme": "atomic units",
+    "quote": "atomic units",
+    "price": "quote atoms per meme atom; price strings are the exact ratio truncated toward zero at 36 fractional digits, with no exponent, no trailing fractional zeros and at least one digit before the point",
+    "usd": "decimal strings truncated toward zero at 18 fractional digits (integers in units of 10^-18 USD)",
+    "bps": "basis points, 10000 = 100%",
+    "cursor": "<checkpoint>:<tx_slot>:<event_slot>:<part>, compared as a numeric tuple",
+    "time": "milliseconds since the Unix epoch, UTC; Pyth publish_time in seconds"
+  },
+  "parameters": {
+    "meme_decimals": 9,
+    "quote_decimals": 9,
+    "atomic_supply": "1000000000000000000",
+    "virtual_quote": "3000000000000",
+    "graduation_target": "12345678901237",
+    "quote_fee_bps": 100,
+    "meme_fee_bps": 250,
+    "sell_burn_bps": 1000,
+    "protocol_fee_share_bps": 3000,
+    "allocation_plan": {
+      "curve_meme_bps": 7250,
+      "lp_meme_bps": 2000,
+      "lp_quote_bps": 9750,
+      "protocol_meme_bps": 750,
+      "protocol_quote_bps": 250
+    },
+    "opening_round_ms": 60000,
+    "min_sqrt_price_x64": "4295048016",
+    "max_sqrt_price_x64": "79226673515401279992447579055"
+  },
+  "kinds": {
+    "curve_price": "given virtual_quote, real_quote_reserve, meme_reserve; expect price, price_exact_rational (null without a price)",
+    "venue_price": "given sqrt_price_x64, meme_is_coin_a; expect price, price_exact_rational",
+    "live_supply": "given path, supply_mode, before, change; expect after and live_supply = currency_supply - pending_burn_total - balance_0x0",
+    "market_cap": "given live_supply, price_exact_rational; expect market_cap = floor(live_supply x price)",
+    "progress": "given real_quote_reserve, graduation_target, lifecycle; expect progress_bps",
+    "curve_trade": "given the Bought or Sold fields; expect kind, side, trader (sender, or null for the opening-round pot), amounts, fees, price and progress after",
+    "opening_round_fill": "given the OpeningRoundDelivered fields; expect the bidder's fill (or null when it delivers no meme)",
+    "venue_trade": "given a swap; expect side, amounts, fees and prices before and after",
+    "usd_stamp": "given the trade, its cursor and the Pyth updates; expect the stamp and volume_usd",
+    "candles": "given trades and the previous close; expect the candles of one interval",
+    "candle_derivation": "given candles of the source interval; expect the derived interval",
+    "position": "given per-transaction balance deltas and trades; expect the position after each transaction"
+  },
+  "scenarios": [
+    {
+      "name": "fixed",
+      "supply_mode": "fixed",
+      "initial_meme_reserve": "725000000000000000",
+      "steps": [
+        {
+          "name": "creator buy before share",
+          "event": "Bought",
+          "before_share": true,
+          "lifecycle_after": "live",
+          "quote_supplied": "150000000000",
+          "fields": {
+            "quote_in": "150000000000",
+            "meme_out_gross": "34194854692710814",
+            "meme_out_net": "33339983325393043",
+            "quote_refund": "0",
+            "protocol_meme_fee": "256461410195332",
+            "creator_meme_fee": "598409957122439",
+            "protocol_quote_fee": "450000000",
+            "creator_quote_fee": "1050000000",
+            "meme_reserve": "690805145307289186",
+            "real_quote_reserve": "148500000000"
+          }
+        },
+        {
+          "name": "public buy",
+          "event": "Bought",
+          "before_share": false,
+          "lifecycle_after": "live",
+          "quote_supplied": "700000000000",
+          "fields": {
+            "quote_in": "700000000000",
+            "meme_out_gross": "124620061355707771",
+            "meme_out_net": "121504559821815076",
+            "quote_refund": "0",
+            "protocol_meme_fee": "934650460167809",
+            "creator_meme_fee": "2180851073724886",
+            "protocol_quote_fee": "2100000000",
+            "creator_quote_fee": "4900000000",
+            "meme_reserve": "566185083951581415",
+            "real_quote_reserve": "841500000000"
+          }
+        },
+        {
+          "name": "sell with a burn",
+          "event": "Sold",
+          "before_share": false,
+          "lifecycle_after": "live",
+          "fields": {
+            "meme_in_gross": "48601823928726030",
+            "pending_burn": "4738677833050788",
+            "quote_out_gross": "269092884957",
+            "protocol_meme_fee": "364513679465446",
+            "creator_meme_fee": "850531918752705",
+            "protocol_quote_fee": "807278655",
+            "creator_quote_fee": "1883650195",
+            "meme_reserve": "608833184449038506",
+            "real_quote_reserve": "572407115043"
+          }
+        },
+        {
+          "name": "second sell",
+          "event": "Sold",
+          "before_share": false,
+          "lifecycle_after": "live",
+          "fields": {
+            "meme_in_gross": "36451367946544523",
+            "pending_burn": "3554008374788091",
+            "quote_out_gross": "178314371008",
+            "protocol_meme_fee": "273385259599085",
+            "creator_meme_fee": "637898939064529",
+            "protocol_quote_fee": "534943114",
+            "creator_quote_fee": "1248200597",
+            "meme_reserve": "640819259822131324",
+            "real_quote_reserve": "394092744035"
+          }
+        },
+        {
+          "name": "capped graduation buy",
+          "event": "Bought",
+          "before_share": false,
+          "lifecycle_after": "migration_ready",
+          "quote_supplied": "20000000000000",
+          "fields": {
+            "quote_in": "12072309249699",
+            "meme_out_gross": "499085550026805766",
+            "meme_out_net": "486608411276135621",
+            "quote_refund": "7927690750301",
+            "protocol_meme_fee": "3743141625201044",
+            "creator_meme_fee": "8733997125469101",
+            "protocol_quote_fee": "36216927750",
+            "creator_quote_fee": "84506164747",
+            "meme_reserve": "141733709795325558",
+            "real_quote_reserve": "12345678901237"
+          }
+        },
+        {
+          "name": "migration",
+          "event": "Migrated",
+          "lifecycle_after": "migrated",
+          "fields": {
+            "meme": "200000000000000000",
+            "quote": "12037036928706",
+            "disposed_meme": "150026396003164437",
+            "total_supply_after": "1000000000000000000"
+          }
+        }
+      ]
+    },
+    {
+      "name": "burn_only",
+      "supply_mode": "burn_only",
+      "initial_meme_reserve": "725000000000000000",
+      "steps": [
+        {
+          "name": "creator buy before share",
+          "event": "Bought",
+          "before_share": true,
+          "lifecycle_after": "live",
+          "quote_supplied": "150000000000",
+          "fields": {
+            "quote_in": "150000000000",
+            "meme_out_gross": "34194854692710814",
+            "meme_out_net": "33339983325393043",
+            "quote_refund": "0",
+            "protocol_meme_fee": "256461410195332",
+            "creator_meme_fee": "598409957122439",
+            "protocol_quote_fee": "450000000",
+            "creator_quote_fee": "1050000000",
+            "meme_reserve": "690805145307289186",
+            "real_quote_reserve": "148500000000"
+          }
+        },
+        {
+          "name": "public buy",
+          "event": "Bought",
+          "before_share": false,
+          "lifecycle_after": "live",
+          "quote_supplied": "700000000000",
+          "fields": {
+            "quote_in": "700000000000",
+            "meme_out_gross": "124620061355707771",
+            "meme_out_net": "121504559821815076",
+            "quote_refund": "0",
+            "protocol_meme_fee": "934650460167809",
+            "creator_meme_fee": "2180851073724886",
+            "protocol_quote_fee": "2100000000",
+            "creator_quote_fee": "4900000000",
+            "meme_reserve": "566185083951581415",
+            "real_quote_reserve": "841500000000"
+          }
+        },
+        {
+          "name": "sell with a burn",
+          "event": "Sold",
+          "before_share": false,
+          "lifecycle_after": "live",
+          "fields": {
+            "meme_in_gross": "48601823928726030",
+            "pending_burn": "4738677833050788",
+            "quote_out_gross": "269092884957",
+            "protocol_meme_fee": "364513679465446",
+            "creator_meme_fee": "850531918752705",
+            "protocol_quote_fee": "807278655",
+            "creator_quote_fee": "1883650195",
+            "meme_reserve": "608833184449038506",
+            "real_quote_reserve": "572407115043"
+          }
+        },
+        {
+          "name": "second sell",
+          "event": "Sold",
+          "before_share": false,
+          "lifecycle_after": "live",
+          "fields": {
+            "meme_in_gross": "36451367946544523",
+            "pending_burn": "3554008374788091",
+            "quote_out_gross": "178314371008",
+            "protocol_meme_fee": "273385259599085",
+            "creator_meme_fee": "637898939064529",
+            "protocol_quote_fee": "534943114",
+            "creator_quote_fee": "1248200597",
+            "meme_reserve": "640819259822131324",
+            "real_quote_reserve": "394092744035"
+          }
+        },
+        {
+          "name": "capped graduation buy",
+          "event": "Bought",
+          "before_share": false,
+          "lifecycle_after": "migration_ready",
+          "quote_supplied": "20000000000000",
+          "fields": {
+            "quote_in": "12072309249699",
+            "meme_out_gross": "499085550026805766",
+            "meme_out_net": "486608411276135621",
+            "quote_refund": "7927690750301",
+            "protocol_meme_fee": "3743141625201044",
+            "creator_meme_fee": "8733997125469101",
+            "protocol_quote_fee": "36216927750",
+            "creator_quote_fee": "84506164747",
+            "meme_reserve": "141733709795325558",
+            "real_quote_reserve": "12345678901237"
+          }
+        },
+        {
+          "name": "migration",
+          "event": "Migrated",
+          "lifecycle_after": "migrated",
+          "fields": {
+            "meme": "200000000000000000",
+            "quote": "12037036928706",
+            "disposed_meme": "150026396003164437",
+            "total_supply_after": "849973603996835563"
+          }
+        }
+      ]
+    },
+    {
+      "name": "opening_round",
+      "supply_mode": "fixed",
+      "opening_round_ms": 60000,
+      "initial_meme_reserve": "725000000000000000",
+      "steps": [
+        {
+          "name": "LAUNCHER bids",
+          "event": "OpeningRoundJoined",
+          "lifecycle_after": "opening_round",
+          "sender": "0x00000000000000000000000000000000000000000000000000000000000b1a57",
+          "fields": {
+            "quote": "1000000000000",
+            "bids": "1000000000000"
+          }
+        },
+        {
+          "name": "ALICE bids",
+          "event": "OpeningRoundJoined",
+          "lifecycle_after": "opening_round",
+          "sender": "0x00000000000000000000000000000000000000000000000000000000000a11ce",
+          "fields": {
+            "quote": "7000000000000",
+            "bids": "8000000000000"
+          }
+        },
+        {
+          "name": "BOB bids",
+          "event": "OpeningRoundJoined",
+          "lifecycle_after": "opening_round",
+          "sender": "0x0000000000000000000000000000000000000000000000000000000000000b0b",
+          "fields": {
+            "quote": "5000333333333",
+            "bids": "13000333333333"
+          }
+        },
+        {
+          "name": "settlement buy",
+          "event": "Bought",
+          "before_share": false,
+          "opening_round_settlement": true,
+          "lifecycle_after": "migration_ready",
+          "sender": "0x000000000000000000000000000000000000000000000000000000000000fee7",
+          "fields": {
+            "quote_in": "12470382728523",
+            "meme_out_gross": "583266290204685867",
+            "meme_out_net": "568684632949568720",
+            "quote_refund": "529950604810",
+            "protocol_meme_fee": "4374497176535145",
+            "creator_meme_fee": "10207160078582002",
+            "protocol_quote_fee": "37411148186",
+            "creator_quote_fee": "87292679100",
+            "meme_reserve": "141733709795314133",
+            "real_quote_reserve": "12345678901237"
+          }
+        },
+        {
+          "name": "settlement",
+          "event": "OpeningRoundSettled",
+          "lifecycle_after": "migration_ready",
+          "sender": "0x000000000000000000000000000000000000000000000000000000000000fee7",
+          "fields": {
+            "bids": "13000333333333",
+            "meme": "568684632949568720",
+            "quote": "529950604810"
+          }
+        },
+        {
+          "name": "delivery to ALICE",
+          "event": "OpeningRoundDelivered",
+          "lifecycle_after": "migration_ready",
+          "sender": "0x000000000000000000000000000000000000000000000000000000000000fee7",
+          "fields": {
+            "bidder": "0x00000000000000000000000000000000000000000000000000000000000a11ce",
+            "bid": "7000000000000",
+            "meme": "306206950897188516",
+            "quote": "285350701289"
+          }
+        },
+        {
+          "name": "delivery to BOB",
+          "event": "OpeningRoundDelivered",
+          "lifecycle_after": "migration_ready",
+          "sender": "0x000000000000000000000000000000000000000000000000000000000000fee7",
+          "fields": {
+            "bidder": "0x0000000000000000000000000000000000000000000000000000000000000b0b",
+            "bid": "5000333333333",
+            "meme": "218733831924210415",
+            "quote": "203835517622"
+          }
+        },
+        {
+          "name": "delivery to LAUNCHER",
+          "event": "OpeningRoundDelivered",
+          "lifecycle_after": "migration_ready",
+          "sender": "0x000000000000000000000000000000000000000000000000000000000000fee7",
+          "fields": {
+            "bidder": "0x00000000000000000000000000000000000000000000000000000000000b1a57",
+            "bid": "1000000000000",
+            "meme": "43743850128169789",
+            "quote": "40764385899"
+          }
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "name": "curve price at launch, before any trade",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "3000000000000",
+        "real_quote_reserve": "0",
+        "meme_reserve": "725000000000000000"
+      },
+      "expect": {
+        "price": "0.000004137931034482758620689655172413",
+        "price_exact_rational": "3/725000"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "Contract-produced reserve: the curve share of the supply at finalize."
+    },
+    {
+      "name": "curve price after the fixed launch's creator buy before share",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "3000000000000",
+        "real_quote_reserve": "148500000000",
+        "meme_reserve": "690805145307289186"
+      },
+      "expect": {
+        "price": "0.00000455772517241379309900370800428",
+        "price_exact_rational": "1574250000000/345402572653644593"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "Post-trade reserves from the contract scenario; the Move test asserts them."
+    },
+    {
+      "name": "curve price after the fixed launch's public buy",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "3000000000000",
+        "real_quote_reserve": "841500000000",
+        "meme_reserve": "566185083951581415"
+      },
+      "expect": {
+        "price": "0.000006784883793103448258010805744351",
+        "price_exact_rational": "256100000000/37745672263438761"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "Post-trade reserves from the contract scenario; the Move test asserts them."
+    },
+    {
+      "name": "curve price after the fixed launch's sell with a burn",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "3000000000000",
+        "real_quote_reserve": "572407115043",
+        "meme_reserve": "608833184449038506"
+      },
+      "expect": {
+        "price": "0.000005867628779590648493709587138426",
+        "price_exact_rational": "3572407115043/608833184449038506"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "Post-trade reserves from the contract scenario; the Move test asserts them."
+    },
+    {
+      "name": "curve price after the fixed launch's second sell",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "3000000000000",
+        "real_quote_reserve": "394092744035",
+        "meme_reserve": "640819259822131324"
+      },
+      "expect": {
+        "price": "0.000005296489910395451671988444331898",
+        "price_exact_rational": "3394092744035/640819259822131324"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "Post-trade reserves from the contract scenario; the Move test asserts them."
+    },
+    {
+      "name": "curve price after the fixed launch's capped graduation buy",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "3000000000000",
+        "real_quote_reserve": "12345678901237",
+        "meme_reserve": "141733709795325558"
+      },
+      "expect": {
+        "price": "0.000108271200432115602795646990978311",
+        "price_exact_rational": "15345678901237/141733709795325558"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "Post-trade reserves from the contract scenario; the Move test asserts them."
+    },
+    {
+      "name": "empty meme reserve has no price",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "3000000000000",
+        "real_quote_reserve": "0",
+        "meme_reserve": "0"
+      },
+      "expect": {
+        "price": null,
+        "price_exact_rational": null
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "A reserve of 0 gives no price."
+    },
+    {
+      "name": "exact terminating price",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "1",
+        "real_quote_reserve": "0",
+        "meme_reserve": "4"
+      },
+      "expect": {
+        "price": "0.25",
+        "price_exact_rational": "1/4"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "1/4 = 0.25: no trailing zeros."
+    },
+    {
+      "name": "whole-number price",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "10",
+        "real_quote_reserve": "0",
+        "meme_reserve": "5"
+      },
+      "expect": {
+        "price": "2",
+        "price_exact_rational": "2/1"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "10/5 = 2: no fractional point."
+    },
+    {
+      "name": "one third truncates",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "1",
+        "real_quote_reserve": "0",
+        "meme_reserve": "3"
+      },
+      "expect": {
+        "price": "0.333333333333333333333333333333333333",
+        "price_exact_rational": "1/3"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "36 threes; the 37th digit is dropped."
+    },
+    {
+      "name": "five ninths truncates, not rounds",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "5",
+        "real_quote_reserve": "0",
+        "meme_reserve": "9"
+      },
+      "expect": {
+        "price": "0.555555555555555555555555555555555555",
+        "price_exact_rational": "5/9"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "36 fives; rounding half up would end in 6."
+    },
+    {
+      "name": "two thirds truncates, not rounds",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "2",
+        "real_quote_reserve": "0",
+        "meme_reserve": "3"
+      },
+      "expect": {
+        "price": "0.666666666666666666666666666666666666",
+        "price_exact_rational": "2/3"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "Truncation keeps 6 where rounding would give 7."
+    },
+    {
+      "name": "price below 10^-36 truncates to zero",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "9",
+        "real_quote_reserve": "0",
+        "meme_reserve": "10000000000000000000000000000000000000"
+      },
+      "expect": {
+        "price": "0",
+        "price_exact_rational": "9/10000000000000000000000000000000000000"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "0.9 x 10^-36: truncation gives \"0\", rounding would give 10^-36."
+    },
+    {
+      "name": "price exactly 10^-36",
+      "kind": "curve_price",
+      "given": {
+        "virtual_quote": "1",
+        "real_quote_reserve": "0",
+        "meme_reserve": "1000000000000000000000000000000000000"
+      },
+      "expect": {
+        "price": "0.000000000000000000000000000000000001",
+        "price_exact_rational": "1/1000000000000000000000000000000000000"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "The smallest non-zero canonical price."
+    },
+    {
+      "name": "venue price, meme is coin A, at 2^64",
+      "kind": "venue_price",
+      "given": {
+        "sqrt_price_x64": "18446744073709551616",
+        "meme_is_coin_a": true
+      },
+      "expect": {
+        "price": "1",
+        "price_exact_rational": "1/1"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits; meme A: s^2 / 2^128, meme B: 2^128 / s^2",
+      "notes": "sqrt 1.0: one quote atom per meme atom."
+    },
+    {
+      "name": "venue price, meme is coin B, at 2^64",
+      "kind": "venue_price",
+      "given": {
+        "sqrt_price_x64": "18446744073709551616",
+        "meme_is_coin_a": false
+      },
+      "expect": {
+        "price": "1",
+        "price_exact_rational": "1/1"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits; meme A: s^2 / 2^128, meme B: 2^128 / s^2",
+      "notes": "The inverse orientation of the same pool state."
+    },
+    {
+      "name": "venue price, meme is coin A, off-grid sqrt price",
+      "kind": "venue_price",
+      "given": {
+        "sqrt_price_x64": "7922816251426433759",
+        "meme_is_coin_a": true
+      },
+      "expect": {
+        "price": "0.184467440737095516143497195243835449",
+        "price_exact_rational": "62771017353866807632742280768814870081/340282366920938463463374607431768211456"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits; meme A: s^2 / 2^128, meme B: 2^128 / s^2",
+      "notes": "A sqrt price that is not a power of two: the exact ratio has a 2^128 denominator."
+    },
+    {
+      "name": "venue price, meme is coin B, off-grid sqrt price",
+      "kind": "venue_price",
+      "given": {
+        "sqrt_price_x64": "7922816251426433759",
+        "meme_is_coin_a": false
+      },
+      "expect": {
+        "price": "5.421010862427522170522237848439573739",
+        "price_exact_rational": "340282366920938463463374607431768211456/62771017353866807632742280768814870081"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits; meme A: s^2 / 2^128, meme B: 2^128 / s^2",
+      "notes": "The same pool state priced with the meme as coin B."
+    },
+    {
+      "name": "smallest reachable venue price, meme is coin A",
+      "kind": "venue_price",
+      "given": {
+        "sqrt_price_x64": "4295048016",
+        "meme_is_coin_a": true
+      },
+      "expect": {
+        "price": "0.000000000000000000054212146302695819",
+        "price_exact_rational": "72060302577131001/1329227995784915872903807060280344576"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits; meme A: s^2 / 2^128, meme B: 2^128 / s^2",
+      "notes": "MIN_SQRT_PRICE squared over 2^128, about 5.4 x 10^-20."
+    },
+    {
+      "name": "smallest reachable venue price, meme is coin B",
+      "kind": "venue_price",
+      "given": {
+        "sqrt_price_x64": "79226673515401279992447579055",
+        "meme_is_coin_a": false
+      },
+      "expect": {
+        "price": "0.000000000000000000054212146310449513",
+        "price_exact_rational": "340282366920938463463374607431768211456/6276865796315986613124653048717613185753419862130474693025"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits; meme A: s^2 / 2^128, meme B: 2^128 / s^2",
+      "notes": "2^128 over MAX_SQRT_PRICE squared, about 5.4 x 10^-20."
+    },
+    {
+      "name": "largest reachable venue price, meme is coin A",
+      "kind": "venue_price",
+      "given": {
+        "sqrt_price_x64": "79226673515401279992447579055",
+        "meme_is_coin_a": true
+      },
+      "expect": {
+        "price": "18446050711097703529.776342892403440009560951902595944195",
+        "price_exact_rational": "6276865796315986613124653048717613185753419862130474693025/340282366920938463463374607431768211456"
+      },
+      "rounding": "price: exact ratio truncated toward zero at 36 fractional digits; meme A: s^2 / 2^128, meme B: 2^128 / s^2",
+      "notes": "MAX_SQRT_PRICE squared over 2^128, about 1.8 x 10^19: no overflow in the exact form."
+    },
+    {
+      "name": "sell burn grows the pending burn (fixed)",
+      "kind": "live_supply",
+      "given": {
+        "path": "sell_burn",
+        "supply_mode": "fixed",
+        "before": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "0",
+          "balance_0x0": "0"
+        },
+        "change": {
+          "event": "Sold",
+          "pending_burn_delta": "4738677833050788"
+        }
+      },
+      "expect": {
+        "after": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "4738677833050788",
+          "balance_0x0": "0"
+        },
+        "live_supply": "995261322166949212"
+      },
+      "rounding": "none: integer subtraction",
+      "notes": "Contract-produced: Sold.pending_burn is the sell's delta, added to the running total. The pending burn leaves live supply at the sell, though the coins are only burned or sent to 0x0 at migration."
+    },
+    {
+      "name": "a second sell burn adds to the pending burn (fixed)",
+      "kind": "live_supply",
+      "given": {
+        "path": "sell_burn",
+        "supply_mode": "fixed",
+        "before": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "4738677833050788",
+          "balance_0x0": "0"
+        },
+        "change": {
+          "event": "Sold",
+          "pending_burn_delta": "3554008374788091"
+        }
+      },
+      "expect": {
+        "after": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "8292686207838879",
+          "balance_0x0": "0"
+        },
+        "live_supply": "991707313792161121"
+      },
+      "rounding": "none: integer subtraction",
+      "notes": "Contract-produced: Sold.pending_burn is the sell's delta, added to the running total. The pending burn leaves live supply at the sell, though the coins are only burned or sent to 0x0 at migration."
+    },
+    {
+      "name": "migration disposal (fixed)",
+      "kind": "live_supply",
+      "given": {
+        "path": "migration_fixed",
+        "supply_mode": "fixed",
+        "before": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "8292686207838879",
+          "balance_0x0": "0"
+        },
+        "change": {
+          "event": "Migrated",
+          "disposed_meme": "150026396003164437",
+          "total_supply_after": "1000000000000000000"
+        }
+      },
+      "expect": {
+        "after": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "0",
+          "balance_0x0": "150026396003164437"
+        },
+        "live_supply": "849973603996835563"
+      },
+      "rounding": "none: integer subtraction",
+      "notes": "Contract-produced: A fixed supply keeps its currency supply; the disposal (pending burn plus unsold reserve) is a Coin sent to 0x0."
+    },
+    {
+      "name": "sell burn grows the pending burn (burn_only)",
+      "kind": "live_supply",
+      "given": {
+        "path": "sell_burn",
+        "supply_mode": "burn_only",
+        "before": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "0",
+          "balance_0x0": "0"
+        },
+        "change": {
+          "event": "Sold",
+          "pending_burn_delta": "4738677833050788"
+        }
+      },
+      "expect": {
+        "after": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "4738677833050788",
+          "balance_0x0": "0"
+        },
+        "live_supply": "995261322166949212"
+      },
+      "rounding": "none: integer subtraction",
+      "notes": "Contract-produced: Sold.pending_burn is the sell's delta, added to the running total. The pending burn leaves live supply at the sell, though the coins are only burned or sent to 0x0 at migration."
+    },
+    {
+      "name": "a second sell burn adds to the pending burn (burn_only)",
+      "kind": "live_supply",
+      "given": {
+        "path": "sell_burn",
+        "supply_mode": "burn_only",
+        "before": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "4738677833050788",
+          "balance_0x0": "0"
+        },
+        "change": {
+          "event": "Sold",
+          "pending_burn_delta": "3554008374788091"
+        }
+      },
+      "expect": {
+        "after": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "8292686207838879",
+          "balance_0x0": "0"
+        },
+        "live_supply": "991707313792161121"
+      },
+      "rounding": "none: integer subtraction",
+      "notes": "Contract-produced: Sold.pending_burn is the sell's delta, added to the running total. The pending burn leaves live supply at the sell, though the coins are only burned or sent to 0x0 at migration."
+    },
+    {
+      "name": "migration disposal (burn_only)",
+      "kind": "live_supply",
+      "given": {
+        "path": "migration_burn_only",
+        "supply_mode": "burn_only",
+        "before": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "8292686207838879",
+          "balance_0x0": "0"
+        },
+        "change": {
+          "event": "Migrated",
+          "disposed_meme": "150026396003164437",
+          "total_supply_after": "849973603996835563"
+        }
+      },
+      "expect": {
+        "after": {
+          "currency_supply": "849973603996835563",
+          "pending_burn_total": "0",
+          "balance_0x0": "0"
+        },
+        "live_supply": "849973603996835563"
+      },
+      "rounding": "none: integer subtraction",
+      "notes": "Contract-produced: Migrated.total_supply_after is the currency supply after the disposal is burned; the pending burn is 0."
+    },
+    {
+      "name": "user burn of a burn-only coin",
+      "kind": "live_supply",
+      "given": {
+        "path": "user_burn",
+        "supply_mode": "burn_only",
+        "before": {
+          "currency_supply": "849973603996835563",
+          "pending_burn_total": "0",
+          "balance_0x0": "0"
+        },
+        "change": {
+          "event": null,
+          "currency_supply_after": "849961258317934329"
+        }
+      },
+      "expect": {
+        "after": {
+          "currency_supply": "849961258317934329",
+          "pending_burn_total": "0",
+          "balance_0x0": "0"
+        },
+        "live_supply": "849961258317934329"
+      },
+      "rounding": "none: integer subtraction",
+      "notes": "coin_registry::burn emits no event: the currency supply is read from the Currency object."
+    },
+    {
+      "name": "transfer to 0x0 (fixed)",
+      "kind": "live_supply",
+      "given": {
+        "path": "transfer_to_0x0",
+        "supply_mode": "fixed",
+        "before": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "0",
+          "balance_0x0": "5000000000"
+        },
+        "change": {
+          "event": null,
+          "balance_0x0_delta": "777000000001"
+        }
+      },
+      "expect": {
+        "after": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "0",
+          "balance_0x0": "782000000001"
+        },
+        "live_supply": "999999217999999999"
+      },
+      "rounding": "none: integer subtraction",
+      "notes": "0x0 is burned in either mode: its balance leaves live supply and is not a holder."
+    },
+    {
+      "name": "transfer to 0x0 (burn_only)",
+      "kind": "live_supply",
+      "given": {
+        "path": "transfer_to_0x0",
+        "supply_mode": "burn_only",
+        "before": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "0",
+          "balance_0x0": "5000000000"
+        },
+        "change": {
+          "event": null,
+          "balance_0x0_delta": "777000000001"
+        }
+      },
+      "expect": {
+        "after": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "0",
+          "balance_0x0": "782000000001"
+        },
+        "live_supply": "999999217999999999"
+      },
+      "rounding": "none: integer subtraction",
+      "notes": "0x0 is burned in either mode: its balance leaves live supply and is not a holder."
+    },
+    {
+      "name": "intake mints the whole supply once (6 decimals)",
+      "kind": "live_supply",
+      "given": {
+        "path": "intake",
+        "supply_mode": "fixed",
+        "decimals": 6,
+        "before": null,
+        "change": null
+      },
+      "expect": {
+        "after": {
+          "currency_supply": "1000000000000000",
+          "pending_burn_total": "0",
+          "balance_0x0": "0"
+        },
+        "live_supply": "1000000000000000"
+      },
+      "rounding": "none: integer subtraction",
+      "notes": "launch_ticket::atomic_supply: 10^9 whole tokens; nothing mints after intake."
+    },
+    {
+      "name": "intake mints the whole supply once (9 decimals)",
+      "kind": "live_supply",
+      "given": {
+        "path": "intake",
+        "supply_mode": "fixed",
+        "decimals": 9,
+        "before": null,
+        "change": null
+      },
+      "expect": {
+        "after": {
+          "currency_supply": "1000000000000000000",
+          "pending_burn_total": "0",
+          "balance_0x0": "0"
+        },
+        "live_supply": "1000000000000000000"
+      },
+      "rounding": "none: integer subtraction",
+      "notes": "launch_ticket::atomic_supply: 10^9 whole tokens; nothing mints after intake."
+    },
+    {
+      "name": "market cap on the curve",
+      "kind": "market_cap",
+      "given": {
+        "live_supply": "1000000000000000000",
+        "price_exact_rational": "256100000000/37745672263438761"
+      },
+      "expect": {
+        "market_cap": "6784883793103"
+      },
+      "rounding": "market_cap: floor(live_supply x price), in quote atoms",
+      "notes": "Price from the fixed scenario after the public buy."
+    },
+    {
+      "name": "market cap after a sell burn",
+      "kind": "market_cap",
+      "given": {
+        "live_supply": "995261322166949212",
+        "price_exact_rational": "3572407115043/608833184449038506"
+      },
+      "expect": {
+        "market_cap": "5839823977160"
+      },
+      "rounding": "market_cap: floor(live_supply x price), in quote atoms",
+      "notes": "Live supply excludes the pending burn."
+    },
+    {
+      "name": "market cap on a venue pool",
+      "kind": "market_cap",
+      "given": {
+        "live_supply": "987654321000000001",
+        "price_exact_rational": "62771017353866807632742280768814870081/340282366920938463463374607431768211456"
+      },
+      "expect": {
+        "market_cap": "182190064927803811"
+      },
+      "rounding": "market_cap: floor(live_supply x price), in quote atoms",
+      "notes": "The exact venue ratio, not its truncated string."
+    },
+    {
+      "name": "no price, no market cap",
+      "kind": "market_cap",
+      "given": {
+        "live_supply": "1000000000000000000",
+        "price_exact_rational": null
+      },
+      "expect": {
+        "market_cap": null
+      },
+      "rounding": "none",
+      "notes": "A pool without a price has no market cap."
+    },
+    {
+      "name": "progress at launch",
+      "kind": "progress",
+      "given": {
+        "real_quote_reserve": "0",
+        "graduation_target": "12345678901237",
+        "lifecycle": "live"
+      },
+      "expect": {
+        "progress_bps": 0
+      },
+      "rounding": "progress_bps: floor, capped at 10000; 10000 once migration_ready or migrated",
+      "notes": "Floor never overstates progress."
+    },
+    {
+      "name": "progress floors",
+      "kind": "progress",
+      "given": {
+        "real_quote_reserve": "1234567890123",
+        "graduation_target": "12345678901237",
+        "lifecycle": "live"
+      },
+      "expect": {
+        "progress_bps": 999
+      },
+      "rounding": "progress_bps: floor, capped at 10000; 10000 once migration_ready or migrated",
+      "notes": "Floor never overstates progress."
+    },
+    {
+      "name": "progress one atom below the target",
+      "kind": "progress",
+      "given": {
+        "real_quote_reserve": "12345678901236",
+        "graduation_target": "12345678901237",
+        "lifecycle": "live"
+      },
+      "expect": {
+        "progress_bps": 9999
+      },
+      "rounding": "progress_bps: floor, capped at 10000; 10000 once migration_ready or migrated",
+      "notes": "Floor never overstates progress."
+    },
+    {
+      "name": "progress when migration-ready",
+      "kind": "progress",
+      "given": {
+        "real_quote_reserve": "12345678901237",
+        "graduation_target": "12345678901237",
+        "lifecycle": "migration_ready"
+      },
+      "expect": {
+        "progress_bps": 10000
+      },
+      "rounding": "progress_bps: floor, capped at 10000; 10000 once migration_ready or migrated",
+      "notes": "Floor never overstates progress."
+    },
+    {
+      "name": "progress once migrated",
+      "kind": "progress",
+      "given": {
+        "real_quote_reserve": "0",
+        "graduation_target": "12345678901237",
+        "lifecycle": "migrated"
+      },
+      "expect": {
+        "progress_bps": 10000
+      },
+      "rounding": "progress_bps: floor, capped at 10000; 10000 once migration_ready or migrated",
+      "notes": "A migrated pool's reserve is 0, but its progress is complete."
+    },
+    {
+      "name": "progress in the opening round",
+      "kind": "progress",
+      "given": {
+        "real_quote_reserve": "0",
+        "graduation_target": "12345678901237",
+        "lifecycle": "opening_round"
+      },
+      "expect": {
+        "progress_bps": 0
+      },
+      "rounding": "progress_bps: floor, capped at 10000; 10000 once migration_ready or migrated",
+      "notes": "Floor never overstates progress."
+    },
+    {
+      "name": "progress after the fixed launch's creator buy before share",
+      "kind": "progress",
+      "given": {
+        "real_quote_reserve": "148500000000",
+        "graduation_target": "12345678901237",
+        "lifecycle": "live"
+      },
+      "expect": {
+        "progress_bps": 120
+      },
+      "rounding": "progress_bps: floor, capped at 10000; 10000 once migration_ready or migrated",
+      "notes": "Contract-produced reserve."
+    },
+    {
+      "name": "progress after the fixed launch's public buy",
+      "kind": "progress",
+      "given": {
+        "real_quote_reserve": "841500000000",
+        "graduation_target": "12345678901237",
+        "lifecycle": "live"
+      },
+      "expect": {
+        "progress_bps": 681
+      },
+      "rounding": "progress_bps: floor, capped at 10000; 10000 once migration_ready or migrated",
+      "notes": "Contract-produced reserve."
+    },
+    {
+      "name": "progress after the fixed launch's sell with a burn",
+      "kind": "progress",
+      "given": {
+        "real_quote_reserve": "572407115043",
+        "graduation_target": "12345678901237",
+        "lifecycle": "live"
+      },
+      "expect": {
+        "progress_bps": 463
+      },
+      "rounding": "progress_bps: floor, capped at 10000; 10000 once migration_ready or migrated",
+      "notes": "Contract-produced reserve."
+    },
+    {
+      "name": "progress after the fixed launch's second sell",
+      "kind": "progress",
+      "given": {
+        "real_quote_reserve": "394092744035",
+        "graduation_target": "12345678901237",
+        "lifecycle": "live"
+      },
+      "expect": {
+        "progress_bps": 319
+      },
+      "rounding": "progress_bps: floor, capped at 10000; 10000 once migration_ready or migrated",
+      "notes": "Contract-produced reserve."
+    },
+    {
+      "name": "progress after the fixed launch's capped graduation buy",
+      "kind": "progress",
+      "given": {
+        "real_quote_reserve": "12345678901237",
+        "graduation_target": "12345678901237",
+        "lifecycle": "migration_ready"
+      },
+      "expect": {
+        "progress_bps": 10000
+      },
+      "rounding": "progress_bps: floor, capped at 10000; 10000 once migration_ready or migrated",
+      "notes": "Contract-produced reserve."
+    },
+    {
+      "name": "curve trade: pre-share buy",
+      "kind": "curve_trade",
+      "given": {
+        "event": "Bought",
+        "before_share": true,
+        "opening_round_settlement": false,
+        "virtual_quote": "3000000000000",
+        "graduation_target": "12345678901237",
+        "lifecycle_after": "live",
+        "fields": {
+          "quote_in": "150000000000",
+          "meme_out_gross": "34194854692710814",
+          "meme_out_net": "33339983325393043",
+          "quote_refund": "0",
+          "protocol_meme_fee": "256461410195332",
+          "creator_meme_fee": "598409957122439",
+          "protocol_quote_fee": "450000000",
+          "creator_quote_fee": "1050000000",
+          "meme_reserve": "690805145307289186",
+          "real_quote_reserve": "148500000000"
+        }
+      },
+      "expect": {
+        "kind": "pre_share_buy",
+        "side": "buy",
+        "trader": "sender",
+        "quote_amount": "150000000000",
+        "meme_amount": "33339983325393043",
+        "meme_fee": "854871367317771",
+        "quote_fee": "1500000000",
+        "price": "0.00000455772517241379309900370800428",
+        "progress_bps": 120
+      },
+      "rounding": "amounts: exact event fields; fees: protocol + creator deltas; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "A Bought before LaunchShared is the creator's, in the creating transaction."
+    },
+    {
+      "name": "curve trade: buy",
+      "kind": "curve_trade",
+      "given": {
+        "event": "Bought",
+        "before_share": false,
+        "opening_round_settlement": false,
+        "virtual_quote": "3000000000000",
+        "graduation_target": "12345678901237",
+        "lifecycle_after": "live",
+        "fields": {
+          "quote_in": "700000000000",
+          "meme_out_gross": "124620061355707771",
+          "meme_out_net": "121504559821815076",
+          "quote_refund": "0",
+          "protocol_meme_fee": "934650460167809",
+          "creator_meme_fee": "2180851073724886",
+          "protocol_quote_fee": "2100000000",
+          "creator_quote_fee": "4900000000",
+          "meme_reserve": "566185083951581415",
+          "real_quote_reserve": "841500000000"
+        }
+      },
+      "expect": {
+        "kind": "buy",
+        "side": "buy",
+        "trader": "sender",
+        "quote_amount": "700000000000",
+        "meme_amount": "121504559821815076",
+        "meme_fee": "3115501533892695",
+        "quote_fee": "7000000000",
+        "price": "0.000006784883793103448258010805744351",
+        "progress_bps": 681
+      },
+      "rounding": "amounts: exact event fields; fees: protocol + creator deltas; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "quote_amount is the accepted gross quote; the refund is not in it."
+    },
+    {
+      "name": "curve trade: sell with a burn",
+      "kind": "curve_trade",
+      "given": {
+        "event": "Sold",
+        "before_share": false,
+        "opening_round_settlement": false,
+        "virtual_quote": "3000000000000",
+        "graduation_target": "12345678901237",
+        "lifecycle_after": "live",
+        "fields": {
+          "meme_in_gross": "48601823928726030",
+          "pending_burn": "4738677833050788",
+          "quote_out_gross": "269092884957",
+          "protocol_meme_fee": "364513679465446",
+          "creator_meme_fee": "850531918752705",
+          "protocol_quote_fee": "807278655",
+          "creator_quote_fee": "1883650195",
+          "meme_reserve": "608833184449038506",
+          "real_quote_reserve": "572407115043"
+        }
+      },
+      "expect": {
+        "kind": "sell",
+        "side": "sell",
+        "trader": "sender",
+        "quote_amount": "266401956107",
+        "meme_amount": "48601823928726030",
+        "meme_fee": "1215045598218151",
+        "quote_fee": "2690928850",
+        "price": "0.000005867628779590648493709587138426",
+        "progress_bps": 463
+      },
+      "rounding": "amounts: exact event fields; fees: protocol + creator deltas; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "meme_amount includes the meme fee and the pending burn; quote_amount is what the seller receives."
+    },
+    {
+      "name": "curve trade: second sell",
+      "kind": "curve_trade",
+      "given": {
+        "event": "Sold",
+        "before_share": false,
+        "opening_round_settlement": false,
+        "virtual_quote": "3000000000000",
+        "graduation_target": "12345678901237",
+        "lifecycle_after": "live",
+        "fields": {
+          "meme_in_gross": "36451367946544523",
+          "pending_burn": "3554008374788091",
+          "quote_out_gross": "178314371008",
+          "protocol_meme_fee": "273385259599085",
+          "creator_meme_fee": "637898939064529",
+          "protocol_quote_fee": "534943114",
+          "creator_quote_fee": "1248200597",
+          "meme_reserve": "640819259822131324",
+          "real_quote_reserve": "394092744035"
+        }
+      },
+      "expect": {
+        "kind": "sell",
+        "side": "sell",
+        "trader": "sender",
+        "quote_amount": "176531227297",
+        "meme_amount": "36451367946544523",
+        "meme_fee": "911284198663614",
+        "quote_fee": "1783143711",
+        "price": "0.000005296489910395451671988444331898",
+        "progress_bps": 319
+      },
+      "rounding": "amounts: exact event fields; fees: protocol + creator deltas; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "A later sell from the same wallet: Sold.pending_burn is this sell's delta."
+    },
+    {
+      "name": "curve trade: capped graduation buy",
+      "kind": "curve_trade",
+      "given": {
+        "event": "Bought",
+        "before_share": false,
+        "opening_round_settlement": false,
+        "virtual_quote": "3000000000000",
+        "graduation_target": "12345678901237",
+        "lifecycle_after": "migration_ready",
+        "fields": {
+          "quote_in": "12072309249699",
+          "meme_out_gross": "499085550026805766",
+          "meme_out_net": "486608411276135621",
+          "quote_refund": "7927690750301",
+          "protocol_meme_fee": "3743141625201044",
+          "creator_meme_fee": "8733997125469101",
+          "protocol_quote_fee": "36216927750",
+          "creator_quote_fee": "84506164747",
+          "meme_reserve": "141733709795325558",
+          "real_quote_reserve": "12345678901237"
+        }
+      },
+      "expect": {
+        "kind": "buy",
+        "side": "buy",
+        "trader": "sender",
+        "quote_amount": "12072309249699",
+        "meme_amount": "486608411276135621",
+        "meme_fee": "12477138750670145",
+        "quote_fee": "120723092497",
+        "price": "0.000108271200432115602795646990978311",
+        "progress_bps": 10000
+      },
+      "rounding": "amounts: exact event fields; fees: protocol + creator deltas; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "Bought.quote_in is capped at the target; quote_refund returns the rest and is not traded."
+    },
+    {
+      "name": "curve trade: opening-round settlement",
+      "kind": "curve_trade",
+      "given": {
+        "event": "Bought",
+        "before_share": false,
+        "opening_round_settlement": true,
+        "virtual_quote": "3000000000000",
+        "graduation_target": "12345678901237",
+        "lifecycle_after": "migration_ready",
+        "fields": {
+          "quote_in": "12470382728523",
+          "meme_out_gross": "583266290204685867",
+          "meme_out_net": "568684632949568720",
+          "quote_refund": "529950604810",
+          "protocol_meme_fee": "4374497176535145",
+          "creator_meme_fee": "10207160078582002",
+          "protocol_quote_fee": "37411148186",
+          "creator_quote_fee": "87292679100",
+          "meme_reserve": "141733709795314133",
+          "real_quote_reserve": "12345678901237"
+        }
+      },
+      "expect": {
+        "kind": "opening_round",
+        "side": "buy",
+        "trader": null,
+        "quote_amount": "12470382728523",
+        "meme_amount": "568684632949568720",
+        "meme_fee": "14581657255117147",
+        "quote_fee": "124703827286",
+        "price": "0.000108271200432124330419207563420515",
+        "progress_bps": 10000
+      },
+      "rounding": "amounts: exact event fields; fees: protocol + creator deltas; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "The Bought beside OpeningRoundSettled is the pot's (TA-8): kind opening_round, no trader, whoever sent the settlement. This pot passed the target, so it is capped and graduates the launch."
+    },
+    {
+      "name": "opening-round fill: delivery to ALICE",
+      "kind": "opening_round_fill",
+      "given": {
+        "delivered_by": "sender other than the bidder",
+        "fields": {
+          "bidder": "0x00000000000000000000000000000000000000000000000000000000000a11ce",
+          "bid": "7000000000000",
+          "meme": "306206950897188516",
+          "quote": "285350701289"
+        }
+      },
+      "expect": {
+        "kind": "opening_round_fill",
+        "side": "buy",
+        "trader": "0x00000000000000000000000000000000000000000000000000000000000a11ce",
+        "quote_amount": "6714649298711",
+        "meme_amount": "306206950897188516",
+        "meme_fee": "0",
+        "quote_fee": "0"
+      },
+      "rounding": "amounts: exact event fields; the contract rounds each share down and the last delivery takes the remainder",
+      "notes": "Contract-produced delivery. The fill is the bidder's whoever delivers it; its price and USD stamp are the settlement trade's."
+    },
+    {
+      "name": "opening-round fill: delivery to BOB",
+      "kind": "opening_round_fill",
+      "given": {
+        "delivered_by": "sender other than the bidder",
+        "fields": {
+          "bidder": "0x0000000000000000000000000000000000000000000000000000000000000b0b",
+          "bid": "5000333333333",
+          "meme": "218733831924210415",
+          "quote": "203835517622"
+        }
+      },
+      "expect": {
+        "kind": "opening_round_fill",
+        "side": "buy",
+        "trader": "0x0000000000000000000000000000000000000000000000000000000000000b0b",
+        "quote_amount": "4796497815711",
+        "meme_amount": "218733831924210415",
+        "meme_fee": "0",
+        "quote_fee": "0"
+      },
+      "rounding": "amounts: exact event fields; the contract rounds each share down and the last delivery takes the remainder",
+      "notes": "Contract-produced delivery. The fill is the bidder's whoever delivers it; its price and USD stamp are the settlement trade's."
+    },
+    {
+      "name": "opening-round fill: delivery to LAUNCHER",
+      "kind": "opening_round_fill",
+      "given": {
+        "delivered_by": "sender other than the bidder",
+        "fields": {
+          "bidder": "0x00000000000000000000000000000000000000000000000000000000000b1a57",
+          "bid": "1000000000000",
+          "meme": "43743850128169789",
+          "quote": "40764385899"
+        }
+      },
+      "expect": {
+        "kind": "opening_round_fill",
+        "side": "buy",
+        "trader": "0x00000000000000000000000000000000000000000000000000000000000b1a57",
+        "quote_amount": "959235614101",
+        "meme_amount": "43743850128169789",
+        "meme_fee": "0",
+        "quote_fee": "0"
+      },
+      "rounding": "amounts: exact event fields; the contract rounds each share down and the last delivery takes the remainder",
+      "notes": "Contract-produced delivery. The fill is the bidder's whoever delivers it; its price and USD stamp are the settlement trade's."
+    },
+    {
+      "name": "opening-round fill: a delivery with no meme is no trade",
+      "kind": "opening_round_fill",
+      "given": {
+        "delivered_by": "the bidder",
+        "fields": {
+          "bidder": "0x00000000000000000000000000000000000000000000000000000000000a11ce",
+          "bid": "5",
+          "meme": "0",
+          "quote": "5"
+        }
+      },
+      "expect": null,
+      "rounding": "none",
+      "notes": "A pot too small to buy one meme atom is refunded whole: the delivery returns the bid and is no trade."
+    },
+    {
+      "name": "venue trade: meme A, buy",
+      "kind": "venue_trade",
+      "given": {
+        "meme_is_coin_a": true,
+        "a_to_b": false,
+        "amount_in": "1000000000",
+        "amount_out": "49500000000000",
+        "fee_amount": "2500000",
+        "before_sqrt_price": "7922816251426433759",
+        "after_sqrt_price": "7923608532971300000"
+      },
+      "expect": {
+        "side": "buy",
+        "quote_amount": "1000000000",
+        "meme_amount": "49500000000000",
+        "quote_fee": "2500000",
+        "meme_fee": "0",
+        "price_before": "0.184467440737095516143497195243835449",
+        "price_after": "0.184504336066178807514491721032369059"
+      },
+      "rounding": "amounts: exact event fields; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "A sell puts the meme in. amount_in includes the fee, which is in the input coin; a buy never lowers the price."
+    },
+    {
+      "name": "venue trade: meme A, sell",
+      "kind": "venue_trade",
+      "given": {
+        "meme_is_coin_a": true,
+        "a_to_b": true,
+        "amount_in": "50000000000000",
+        "amount_out": "988000000",
+        "fee_amount": "125000000000",
+        "before_sqrt_price": "7923608532971300000",
+        "after_sqrt_price": "7922816251426433759"
+      },
+      "expect": {
+        "side": "sell",
+        "quote_amount": "988000000",
+        "meme_amount": "50000000000000",
+        "quote_fee": "0",
+        "meme_fee": "125000000000",
+        "price_before": "0.184504336066178807514491721032369059",
+        "price_after": "0.184467440737095516143497195243835449"
+      },
+      "rounding": "amounts: exact event fields; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "A sell puts the meme in. amount_in includes the fee, which is in the input coin; a buy never lowers the price."
+    },
+    {
+      "name": "venue trade: meme B, buy",
+      "kind": "venue_trade",
+      "given": {
+        "meme_is_coin_a": false,
+        "a_to_b": true,
+        "amount_in": "1000000000",
+        "amount_out": "49500000000000",
+        "fee_amount": "2500000",
+        "before_sqrt_price": "368934881474191032320",
+        "after_sqrt_price": "368931881474191032320"
+      },
+      "expect": {
+        "side": "buy",
+        "quote_amount": "1000000000",
+        "meme_amount": "49500000000000",
+        "quote_fee": "2500000",
+        "meme_fee": "0",
+        "price_before": "0.0025",
+        "price_after": "0.002500040658077385262409279181345741"
+      },
+      "rounding": "amounts: exact event fields; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "A sell puts the meme in. amount_in includes the fee, which is in the input coin; a buy never lowers the price."
+    },
+    {
+      "name": "venue trade: meme B, sell",
+      "kind": "venue_trade",
+      "given": {
+        "meme_is_coin_a": false,
+        "a_to_b": false,
+        "amount_in": "50000000000000",
+        "amount_out": "988000000",
+        "fee_amount": "125000000000",
+        "before_sqrt_price": "368931881474191032320",
+        "after_sqrt_price": "368934881474191032320"
+      },
+      "expect": {
+        "side": "sell",
+        "quote_amount": "988000000",
+        "meme_amount": "50000000000000",
+        "quote_fee": "0",
+        "meme_fee": "125000000000",
+        "price_before": "0.002500040658077385262409279181345741",
+        "price_after": "0.0025"
+      },
+      "rounding": "amounts: exact event fields; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "A sell puts the meme in. amount_in includes the fee, which is in the input coin; a buy never lowers the price."
+    },
+    {
+      "name": "an update in an earlier transaction of the same checkpoint is used",
+      "kind": "usd_stamp",
+      "given": {
+        "quote_amount": "1234567891234",
+        "quote_decimals": 9,
+        "trade_cursor": "5000:4:0:0",
+        "checkpoint_timestamp_ms": "1790300000123",
+        "updates": [
+          {
+            "cursor": "4998:3:0:0",
+            "price": "345210000",
+            "expo": -8,
+            "publish_time": "1790299990"
+          },
+          {
+            "cursor": "5000:2:1:0",
+            "price": "339875123",
+            "expo": -8,
+            "publish_time": "1790299998"
+          },
+          {
+            "cursor": "5000:7:0:0",
+            "price": "351000000",
+            "expo": -8,
+            "publish_time": "1790300000"
+          }
+        ]
+      },
+      "expect": {
+        "stamp": {
+          "price": "339875123",
+          "expo": -8,
+          "publish_time": "1790299998",
+          "age_ms": "2123"
+        },
+        "volume_usd": "4195.98913885006371782"
+      },
+      "rounding": "volume_usd: quote_amount x price x 10^expo / 10^quote_decimals, truncated toward zero at 18 fractional digits; the stamp is the latest update whose cursor precedes the trade's; age_ms is floored at 0",
+      "notes": "The same-checkpoint update at transaction slot 2 precedes the trade at slot 4."
+    },
+    {
+      "name": "an update in a later transaction is not used",
+      "kind": "usd_stamp",
+      "given": {
+        "quote_amount": "1234567891234",
+        "quote_decimals": 9,
+        "trade_cursor": "5000:4:0:0",
+        "checkpoint_timestamp_ms": "1790300000123",
+        "updates": [
+          {
+            "cursor": "4998:3:0:0",
+            "price": "345210000",
+            "expo": -8,
+            "publish_time": "1790299990"
+          },
+          {
+            "cursor": "5000:7:0:0",
+            "price": "351000000",
+            "expo": -8,
+            "publish_time": "1790300000"
+          }
+        ]
+      },
+      "expect": {
+        "stamp": {
+          "price": "345210000",
+          "expo": -8,
+          "publish_time": "1790299990",
+          "age_ms": "10123"
+        },
+        "volume_usd": "4261.8518173288914"
+      },
+      "rounding": "volume_usd: quote_amount x price x 10^expo / 10^quote_decimals, truncated toward zero at 18 fractional digits; the stamp is the latest update whose cursor precedes the trade's; age_ms is floored at 0",
+      "notes": "The update at slot 7 comes after the trade; the earlier checkpoint's update stamps it."
+    },
+    {
+      "name": "no earlier price gives a null stamp",
+      "kind": "usd_stamp",
+      "given": {
+        "quote_amount": "1234567891234",
+        "quote_decimals": 9,
+        "trade_cursor": "5000:4:0:0",
+        "checkpoint_timestamp_ms": "1790300000123",
+        "updates": [
+          {
+            "cursor": "5000:7:0:0",
+            "price": "351000000",
+            "expo": -8,
+            "publish_time": "1790300000"
+          }
+        ]
+      },
+      "expect": {
+        "stamp": null,
+        "volume_usd": null
+      },
+      "rounding": "volume_usd: quote_amount x price x 10^expo / 10^quote_decimals, truncated toward zero at 18 fractional digits; the stamp is the latest update whose cursor precedes the trade's; age_ms is floored at 0",
+      "notes": "The only update follows the trade."
+    },
+    {
+      "name": "an update earlier in the same transaction is used",
+      "kind": "usd_stamp",
+      "given": {
+        "quote_amount": "5000000000",
+        "quote_decimals": 9,
+        "trade_cursor": "5000:4:3:0",
+        "checkpoint_timestamp_ms": "1790300000123",
+        "updates": [
+          {
+            "cursor": "5000:4:1:0",
+            "price": "339875123",
+            "expo": -8,
+            "publish_time": "1790299999"
+          }
+        ]
+      },
+      "expect": {
+        "stamp": {
+          "price": "339875123",
+          "expo": -8,
+          "publish_time": "1790299999",
+          "age_ms": "1123"
+        },
+        "volume_usd": "16.99375615"
+      },
+      "rounding": "volume_usd: quote_amount x price x 10^expo / 10^quote_decimals, truncated toward zero at 18 fractional digits; the stamp is the latest update whose cursor precedes the trade's; age_ms is floored at 0",
+      "notes": "Event order within a transaction counts."
+    },
+    {
+      "name": "one quote atom",
+      "kind": "usd_stamp",
+      "given": {
+        "quote_amount": "1",
+        "quote_decimals": 9,
+        "trade_cursor": "5000:4:0:0",
+        "checkpoint_timestamp_ms": "1790300000123",
+        "updates": [
+          {
+            "cursor": "4998:3:0:0",
+            "price": "345210000",
+            "expo": -8,
+            "publish_time": "1790299990"
+          }
+        ]
+      },
+      "expect": {
+        "stamp": {
+          "price": "345210000",
+          "expo": -8,
+          "publish_time": "1790299990",
+          "age_ms": "10123"
+        },
+        "volume_usd": "0.0000000034521"
+      },
+      "rounding": "volume_usd: quote_amount x price x 10^expo / 10^quote_decimals, truncated toward zero at 18 fractional digits; the stamp is the latest update whose cursor precedes the trade's; age_ms is floored at 0",
+      "notes": "One quote atom: 3.4521 x 10^-9 USD, exact."
+    },
+    {
+      "name": "volume_usd truncates toward zero at 18 digits",
+      "kind": "usd_stamp",
+      "given": {
+        "quote_amount": "123456789",
+        "quote_decimals": 9,
+        "trade_cursor": "5000:4:0:0",
+        "checkpoint_timestamp_ms": "1790300000123",
+        "updates": [
+          {
+            "cursor": "4000:1:0:0",
+            "price": "987654321",
+            "expo": -10,
+            "publish_time": "1790299000"
+          }
+        ]
+      },
+      "expect": {
+        "stamp": {
+          "price": "987654321",
+          "expo": -10,
+          "publish_time": "1790299000",
+          "age_ms": "1000123"
+        },
+        "volume_usd": "0.012193263111263526"
+      },
+      "rounding": "volume_usd: quote_amount x price x 10^expo / 10^quote_decimals, truncated toward zero at 18 fractional digits; the stamp is the latest update whose cursor precedes the trade's; age_ms is floored at 0",
+      "notes": "Exactly 0.0121932631112635269 USD: 19 fractional digits, the 19th a 9. Truncation keeps ...526; rounding would give ...527."
+    },
+    {
+      "name": "updates are ordered by cursor as a numeric tuple",
+      "kind": "usd_stamp",
+      "given": {
+        "quote_amount": "5000000000",
+        "quote_decimals": 9,
+        "trade_cursor": "5000:11:0:0",
+        "checkpoint_timestamp_ms": "1790300000123",
+        "updates": [
+          {
+            "cursor": "5000:10:0:0",
+            "price": "351000000",
+            "expo": -8,
+            "publish_time": "1790299999"
+          },
+          {
+            "cursor": "5000:9:0:0",
+            "price": "339875123",
+            "expo": -8,
+            "publish_time": "1790299998"
+          },
+          {
+            "cursor": "4999:12:0:0",
+            "price": "345210000",
+            "expo": -8,
+            "publish_time": "1790299997"
+          }
+        ]
+      },
+      "expect": {
+        "stamp": {
+          "price": "351000000",
+          "expo": -8,
+          "publish_time": "1790299999",
+          "age_ms": "1123"
+        },
+        "volume_usd": "17.55"
+      },
+      "rounding": "volume_usd: quote_amount x price x 10^expo / 10^quote_decimals, truncated toward zero at 18 fractional digits; the stamp is the latest update whose cursor precedes the trade's; age_ms is floored at 0",
+      "notes": "Listed out of order. Slot 10 is the latest before slot 11; comparing cursors as text would pick slot 9."
+    },
+    {
+      "name": "a 6-decimal quote",
+      "kind": "usd_stamp",
+      "given": {
+        "quote_amount": "7000001",
+        "quote_decimals": 6,
+        "trade_cursor": "5000:4:0:0",
+        "checkpoint_timestamp_ms": "1790300000123",
+        "updates": [
+          {
+            "cursor": "4000:1:0:0",
+            "price": "99990000",
+            "expo": -8,
+            "publish_time": "1790299000"
+          }
+        ]
+      },
+      "expect": {
+        "stamp": {
+          "price": "99990000",
+          "expo": -8,
+          "publish_time": "1790299000",
+          "age_ms": "1000123"
+        },
+        "volume_usd": "6.9993009999"
+      },
+      "rounding": "volume_usd: quote_amount x price x 10^expo / 10^quote_decimals, truncated toward zero at 18 fractional digits; the stamp is the latest update whose cursor precedes the trade's; age_ms is floored at 0",
+      "notes": "USDC-like quote at 0.9999 USD; age is 1000.123 s."
+    },
+    {
+      "name": "a zero-decimal quote at one cent",
+      "kind": "usd_stamp",
+      "given": {
+        "quote_amount": "1",
+        "quote_decimals": 0,
+        "trade_cursor": "5000:4:0:0",
+        "checkpoint_timestamp_ms": "1790300000123",
+        "updates": [
+          {
+            "cursor": "4000:1:0:0",
+            "price": "1",
+            "expo": -2,
+            "publish_time": "1790299000"
+          }
+        ]
+      },
+      "expect": {
+        "stamp": {
+          "price": "1",
+          "expo": -2,
+          "publish_time": "1790299000",
+          "age_ms": "1000123"
+        },
+        "volume_usd": "0.01"
+      },
+      "rounding": "volume_usd: quote_amount x price x 10^expo / 10^quote_decimals, truncated toward zero at 18 fractional digits; the stamp is the latest update whose cursor precedes the trade's; age_ms is floored at 0",
+      "notes": "A quote with 0 decimals at 0.01 USD a unit, times one: exact 0.01."
+    },
+    {
+      "name": "a positive exponent",
+      "kind": "usd_stamp",
+      "given": {
+        "quote_amount": "2000000001",
+        "quote_decimals": 9,
+        "trade_cursor": "5000:4:0:0",
+        "checkpoint_timestamp_ms": "1790300000123",
+        "updates": [
+          {
+            "cursor": "4000:1:0:0",
+            "price": "3",
+            "expo": 2,
+            "publish_time": "1790299000"
+          }
+        ]
+      },
+      "expect": {
+        "stamp": {
+          "price": "3",
+          "expo": 2,
+          "publish_time": "1790299000",
+          "age_ms": "1000123"
+        },
+        "volume_usd": "600.0000003"
+      },
+      "rounding": "volume_usd: quote_amount x price x 10^expo / 10^quote_decimals, truncated toward zero at 18 fractional digits; the stamp is the latest update whose cursor precedes the trade's; age_ms is floored at 0",
+      "notes": "300 USD a unit (3 x 10^2), times 2.000000001 units: exact 600.0000003."
+    },
+    {
+      "name": "age_ms is floored at 0",
+      "kind": "usd_stamp",
+      "given": {
+        "quote_amount": "5000000000",
+        "quote_decimals": 9,
+        "trade_cursor": "5000:4:0:0",
+        "checkpoint_timestamp_ms": "1790300000123",
+        "updates": [
+          {
+            "cursor": "5000:2:0:0",
+            "price": "339875123",
+            "expo": -8,
+            "publish_time": "1790300002"
+          }
+        ]
+      },
+      "expect": {
+        "stamp": {
+          "price": "339875123",
+          "expo": -8,
+          "publish_time": "1790300002",
+          "age_ms": "0"
+        },
+        "volume_usd": "16.99375615"
+      },
+      "rounding": "volume_usd: quote_amount x price x 10^expo / 10^quote_decimals, truncated toward zero at 18 fractional digits; the stamp is the latest update whose cursor precedes the trade's; age_ms is floored at 0",
+      "notes": "Pyth's publish time (1_790_300_002 s) is after the checkpoint (1_790_300_000.123 s), a clock difference between Pyth and Sui; the age is 0, not -1877."
+    },
+    {
+      "name": "1m candles across minutes, midnight and a new week",
+      "kind": "candles",
+      "given": {
+        "interval": "1m",
+        "previous_close": null,
+        "trades": [
+          {
+            "timestamp_ms": "1791158230000",
+            "side": "buy",
+            "price_exact_rational": "3/725000",
+            "quote_amount": "1000000000",
+            "meme_amount": "241000000000000",
+            "volume_usd": null
+          },
+          {
+            "timestamp_ms": "1791158245000",
+            "side": "buy",
+            "price_exact_rational": "1070/236666667",
+            "quote_amount": "1037000001",
+            "meme_amount": "241000999999999",
+            "volume_usd": "3.452100000000000001"
+          },
+          {
+            "timestamp_ms": "1791158279999",
+            "side": "buy",
+            "price_exact_rational": "3100/718000003",
+            "quote_amount": "1074000002",
+            "meme_amount": "241001999999998",
+            "volume_usd": "3.452100000000000002"
+          },
+          {
+            "timestamp_ms": "1791158280000",
+            "side": "sell",
+            "price_exact_rational": "69/14000000",
+            "quote_amount": "1111000003",
+            "meme_amount": "241002999999997",
+            "volume_usd": "3.452100000000000003"
+          },
+          {
+            "timestamp_ms": "1791158340000",
+            "side": "buy",
+            "price_exact_rational": "2900/731000007",
+            "quote_amount": "1148000004",
+            "meme_amount": "241003999999996",
+            "volume_usd": "3.452100000000000004"
+          },
+          {
+            "timestamp_ms": "1791158400001",
+            "side": "buy",
+            "price_exact_rational": "1111/233333333",
+            "quote_amount": "1185000005",
+            "meme_amount": "241004999999995",
+            "volume_usd": "3.452100000000000005"
+          },
+          {
+            "timestamp_ms": "1791158401000",
+            "side": "buy",
+            "price_exact_rational": "33/7001000",
+            "quote_amount": "1222000006",
+            "meme_amount": "241005999999994",
+            "volume_usd": "3.452100000000000006"
+          },
+          {
+            "timestamp_ms": "1791158530000",
+            "side": "sell",
+            "price_exact_rational": "4100/690000013",
+            "quote_amount": "1259000007",
+            "meme_amount": "241006999999993",
+            "volume_usd": "3.452100000000000007"
+          },
+          {
+            "timestamp_ms": "1791162130000",
+            "side": "buy",
+            "price_exact_rational": "399/69100000",
+            "quote_amount": "1296000008",
+            "meme_amount": "241007999999992",
+            "volume_usd": "3.452100000000000008"
+          },
+          {
+            "timestamp_ms": "1791172630000",
+            "side": "buy",
+            "price_exact_rational": "1/130000",
+            "quote_amount": "1333000009",
+            "meme_amount": "241008999999991",
+            "volume_usd": "3.452100000000000009"
+          },
+          {
+            "timestamp_ms": "1791244630000",
+            "side": "buy",
+            "price_exact_rational": "4999/650000001",
+            "quote_amount": "1370000010",
+            "meme_amount": "241009999999990",
+            "volume_usd": "3.45210000000000001"
+          },
+          {
+            "timestamp_ms": "1791244690000",
+            "side": "sell",
+            "price_exact_rational": "3/320000",
+            "quote_amount": "1407000011",
+            "meme_amount": "241010999999989",
+            "volume_usd": "3.452100000000000011"
+          },
+          {
+            "timestamp_ms": "1791763030000",
+            "side": "buy",
+            "price_exact_rational": "61/6390000",
+            "quote_amount": "1444000012",
+            "meme_amount": "241011999999988",
+            "volume_usd": "3.452100000000000012"
+          }
+        ]
+      },
+      "expect": {
+        "candles": [
+          {
+            "bucket_start": "1791158220000",
+            "interval": "1m",
+            "open": "0.000004137931034482758620689655172413",
+            "high": "0.000004521126754195596120851273069223",
+            "low": "0.000004137931034482758620689655172413",
+            "close": "0.000004317548728478208655383529295054",
+            "volume_quote": "3111000003",
+            "volume_meme": "723002999999997",
+            "volume_usd": "6.904200000000000003",
+            "buys": 3,
+            "sells": 0,
+            "trades": 3
+          },
+          {
+            "bucket_start": "1791158280000",
+            "interval": "1m",
+            "open": "0.000004317548728478208655383529295054",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000004317548728478208655383529295054",
+            "close": "0.000004928571428571428571428571428571",
+            "volume_quote": "1111000003",
+            "volume_meme": "241002999999997",
+            "volume_usd": "3.452100000000000003",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791158340000",
+            "interval": "1m",
+            "open": "0.000004928571428571428571428571428571",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000003967168224664599763813682152262",
+            "volume_quote": "1148000004",
+            "volume_meme": "241003999999996",
+            "volume_usd": "3.452100000000000004",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791158400000",
+            "interval": "1m",
+            "open": "0.000003967168224664599763813682152262",
+            "high": "0.000004761428578230612254615160363735",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000004713612341094129410084273675189",
+            "volume_quote": "2407000011",
+            "volume_meme": "482010999999989",
+            "volume_usd": "6.904200000000000011",
+            "buys": 2,
+            "sells": 0,
+            "trades": 2
+          },
+          {
+            "bucket_start": "1791158520000",
+            "interval": "1m",
+            "open": "0.000004713612341094129410084273675189",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000004713612341094129410084273675189",
+            "close": "0.000005942028873555977744597520753959",
+            "volume_quote": "1259000007",
+            "volume_meme": "241006999999993",
+            "volume_usd": "3.452100000000000007",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791162120000",
+            "interval": "1m",
+            "open": "0.000005942028873555977744597520753959",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000005774240231548480463096960926193",
+            "volume_quote": "1296000008",
+            "volume_meme": "241007999999992",
+            "volume_usd": "3.452100000000000008",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791172620000",
+            "interval": "1m",
+            "open": "0.000005774240231548480463096960926193",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000007692307692307692307692307692307",
+            "volume_quote": "1333000009",
+            "volume_meme": "241008999999991",
+            "volume_usd": "3.452100000000000009",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791244620000",
+            "interval": "1m",
+            "open": "0.000007692307692307692307692307692307",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000007690769218937278124711879808135",
+            "volume_quote": "1370000010",
+            "volume_meme": "241009999999990",
+            "volume_usd": "3.45210000000000001",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791244680000",
+            "interval": "1m",
+            "open": "0.000007690769218937278124711879808135",
+            "high": "0.000009375",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000009375",
+            "volume_quote": "1407000011",
+            "volume_meme": "241010999999989",
+            "volume_usd": "3.452100000000000011",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791763020000",
+            "interval": "1m",
+            "open": "0.000009375",
+            "high": "0.000009546165884194053208137715179968",
+            "low": "0.000009375",
+            "close": "0.000009546165884194053208137715179968",
+            "volume_quote": "1444000012",
+            "volume_meme": "241011999999988",
+            "volume_usd": "3.452100000000000012",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          }
+        ]
+      },
+      "rounding": "bucket: [start, start + interval) by checkpoint time in UTC; prices: exact extremes, truncated strings; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "open is the previous candle's close (O-12), or the first trade's price for the pool's first candle; high and low include the open, so every bar contains it; an empty bucket has no candle; a trade without a USD stamp is left out of volume_usd, which is null only when no trade in the bucket has one."
+    },
+    {
+      "name": "1m candles continuing an earlier close",
+      "kind": "candles",
+      "given": {
+        "interval": "1m",
+        "previous_close": "7/600000",
+        "trades": [
+          {
+            "timestamp_ms": "1792022230000",
+            "side": "buy",
+            "price_exact_rational": "3/725000",
+            "quote_amount": "1000000000",
+            "meme_amount": "241000000000000",
+            "volume_usd": null
+          },
+          {
+            "timestamp_ms": "1792022245000",
+            "side": "buy",
+            "price_exact_rational": "1070/236666667",
+            "quote_amount": "1037000001",
+            "meme_amount": "241000999999999",
+            "volume_usd": "3.452100000000000001"
+          },
+          {
+            "timestamp_ms": "1792022279999",
+            "side": "buy",
+            "price_exact_rational": "3100/718000003",
+            "quote_amount": "1074000002",
+            "meme_amount": "241001999999998",
+            "volume_usd": "3.452100000000000002"
+          },
+          {
+            "timestamp_ms": "1792022280000",
+            "side": "sell",
+            "price_exact_rational": "69/14000000",
+            "quote_amount": "1111000003",
+            "meme_amount": "241002999999997",
+            "volume_usd": "3.452100000000000003"
+          }
+        ]
+      },
+      "expect": {
+        "candles": [
+          {
+            "bucket_start": "1792022220000",
+            "interval": "1m",
+            "open": "0.000011666666666666666666666666666666",
+            "high": "0.000011666666666666666666666666666666",
+            "low": "0.000004137931034482758620689655172413",
+            "close": "0.000004317548728478208655383529295054",
+            "volume_quote": "3111000003",
+            "volume_meme": "723002999999997",
+            "volume_usd": "6.904200000000000003",
+            "buys": 3,
+            "sells": 0,
+            "trades": 3
+          },
+          {
+            "bucket_start": "1792022280000",
+            "interval": "1m",
+            "open": "0.000004317548728478208655383529295054",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000004317548728478208655383529295054",
+            "close": "0.000004928571428571428571428571428571",
+            "volume_quote": "1111000003",
+            "volume_meme": "241002999999997",
+            "volume_usd": "3.452100000000000003",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          }
+        ]
+      },
+      "rounding": "bucket: [start, start + interval) by checkpoint time in UTC; prices: exact extremes, truncated strings; price: exact ratio truncated toward zero at 36 fractional digits",
+      "notes": "The first candle opens at the given previous close, above every trade, so its high is the open."
+    },
+    {
+      "name": "5m candles derived from 1m",
+      "kind": "candle_derivation",
+      "given": {
+        "interval": "5m",
+        "source_interval": "1m",
+        "candles": [
+          {
+            "bucket_start": "1791158220000",
+            "interval": "1m",
+            "open": "0.000004137931034482758620689655172413",
+            "high": "0.000004521126754195596120851273069223",
+            "low": "0.000004137931034482758620689655172413",
+            "close": "0.000004317548728478208655383529295054",
+            "volume_quote": "3111000003",
+            "volume_meme": "723002999999997",
+            "volume_usd": "6.904200000000000003",
+            "buys": 3,
+            "sells": 0,
+            "trades": 3
+          },
+          {
+            "bucket_start": "1791158280000",
+            "interval": "1m",
+            "open": "0.000004317548728478208655383529295054",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000004317548728478208655383529295054",
+            "close": "0.000004928571428571428571428571428571",
+            "volume_quote": "1111000003",
+            "volume_meme": "241002999999997",
+            "volume_usd": "3.452100000000000003",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791158340000",
+            "interval": "1m",
+            "open": "0.000004928571428571428571428571428571",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000003967168224664599763813682152262",
+            "volume_quote": "1148000004",
+            "volume_meme": "241003999999996",
+            "volume_usd": "3.452100000000000004",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791158400000",
+            "interval": "1m",
+            "open": "0.000003967168224664599763813682152262",
+            "high": "0.000004761428578230612254615160363735",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000004713612341094129410084273675189",
+            "volume_quote": "2407000011",
+            "volume_meme": "482010999999989",
+            "volume_usd": "6.904200000000000011",
+            "buys": 2,
+            "sells": 0,
+            "trades": 2
+          },
+          {
+            "bucket_start": "1791158520000",
+            "interval": "1m",
+            "open": "0.000004713612341094129410084273675189",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000004713612341094129410084273675189",
+            "close": "0.000005942028873555977744597520753959",
+            "volume_quote": "1259000007",
+            "volume_meme": "241006999999993",
+            "volume_usd": "3.452100000000000007",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791162120000",
+            "interval": "1m",
+            "open": "0.000005942028873555977744597520753959",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000005774240231548480463096960926193",
+            "volume_quote": "1296000008",
+            "volume_meme": "241007999999992",
+            "volume_usd": "3.452100000000000008",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791172620000",
+            "interval": "1m",
+            "open": "0.000005774240231548480463096960926193",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000007692307692307692307692307692307",
+            "volume_quote": "1333000009",
+            "volume_meme": "241008999999991",
+            "volume_usd": "3.452100000000000009",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791244620000",
+            "interval": "1m",
+            "open": "0.000007692307692307692307692307692307",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000007690769218937278124711879808135",
+            "volume_quote": "1370000010",
+            "volume_meme": "241009999999990",
+            "volume_usd": "3.45210000000000001",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791244680000",
+            "interval": "1m",
+            "open": "0.000007690769218937278124711879808135",
+            "high": "0.000009375",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000009375",
+            "volume_quote": "1407000011",
+            "volume_meme": "241010999999989",
+            "volume_usd": "3.452100000000000011",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791763020000",
+            "interval": "1m",
+            "open": "0.000009375",
+            "high": "0.000009546165884194053208137715179968",
+            "low": "0.000009375",
+            "close": "0.000009546165884194053208137715179968",
+            "volume_quote": "1444000012",
+            "volume_meme": "241011999999988",
+            "volume_usd": "3.452100000000000012",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          }
+        ]
+      },
+      "expect": {
+        "candles": [
+          {
+            "bucket_start": "1791158100000",
+            "interval": "5m",
+            "open": "0.000004137931034482758620689655172413",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000003967168224664599763813682152262",
+            "volume_quote": "5370000010",
+            "volume_meme": "1205009999999990",
+            "volume_usd": "13.80840000000000001",
+            "buys": 4,
+            "sells": 1,
+            "trades": 5
+          },
+          {
+            "bucket_start": "1791158400000",
+            "interval": "5m",
+            "open": "0.000003967168224664599763813682152262",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000005942028873555977744597520753959",
+            "volume_quote": "3666000018",
+            "volume_meme": "723017999999982",
+            "volume_usd": "10.356300000000000018",
+            "buys": 2,
+            "sells": 1,
+            "trades": 3
+          },
+          {
+            "bucket_start": "1791162000000",
+            "interval": "5m",
+            "open": "0.000005942028873555977744597520753959",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000005774240231548480463096960926193",
+            "volume_quote": "1296000008",
+            "volume_meme": "241007999999992",
+            "volume_usd": "3.452100000000000008",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791172500000",
+            "interval": "5m",
+            "open": "0.000005774240231548480463096960926193",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000007692307692307692307692307692307",
+            "volume_quote": "1333000009",
+            "volume_meme": "241008999999991",
+            "volume_usd": "3.452100000000000009",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791244500000",
+            "interval": "5m",
+            "open": "0.000007692307692307692307692307692307",
+            "high": "0.000009375",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000009375",
+            "volume_quote": "2777000021",
+            "volume_meme": "482020999999979",
+            "volume_usd": "6.904200000000000021",
+            "buys": 1,
+            "sells": 1,
+            "trades": 2
+          },
+          {
+            "bucket_start": "1791762900000",
+            "interval": "5m",
+            "open": "0.000009375",
+            "high": "0.000009546165884194053208137715179968",
+            "low": "0.000009375",
+            "close": "0.000009546165884194053208137715179968",
+            "volume_quote": "1444000012",
+            "volume_meme": "241011999999988",
+            "volume_usd": "3.452100000000000012",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          }
+        ]
+      },
+      "rounding": "merge: first open, last close, max high, min low, sums; a null volume_usd adds nothing",
+      "notes": "Equal to building the interval directly from the trades."
+    },
+    {
+      "name": "15m candles derived from 1m",
+      "kind": "candle_derivation",
+      "given": {
+        "interval": "15m",
+        "source_interval": "1m",
+        "candles": [
+          {
+            "bucket_start": "1791158220000",
+            "interval": "1m",
+            "open": "0.000004137931034482758620689655172413",
+            "high": "0.000004521126754195596120851273069223",
+            "low": "0.000004137931034482758620689655172413",
+            "close": "0.000004317548728478208655383529295054",
+            "volume_quote": "3111000003",
+            "volume_meme": "723002999999997",
+            "volume_usd": "6.904200000000000003",
+            "buys": 3,
+            "sells": 0,
+            "trades": 3
+          },
+          {
+            "bucket_start": "1791158280000",
+            "interval": "1m",
+            "open": "0.000004317548728478208655383529295054",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000004317548728478208655383529295054",
+            "close": "0.000004928571428571428571428571428571",
+            "volume_quote": "1111000003",
+            "volume_meme": "241002999999997",
+            "volume_usd": "3.452100000000000003",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791158340000",
+            "interval": "1m",
+            "open": "0.000004928571428571428571428571428571",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000003967168224664599763813682152262",
+            "volume_quote": "1148000004",
+            "volume_meme": "241003999999996",
+            "volume_usd": "3.452100000000000004",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791158400000",
+            "interval": "1m",
+            "open": "0.000003967168224664599763813682152262",
+            "high": "0.000004761428578230612254615160363735",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000004713612341094129410084273675189",
+            "volume_quote": "2407000011",
+            "volume_meme": "482010999999989",
+            "volume_usd": "6.904200000000000011",
+            "buys": 2,
+            "sells": 0,
+            "trades": 2
+          },
+          {
+            "bucket_start": "1791158520000",
+            "interval": "1m",
+            "open": "0.000004713612341094129410084273675189",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000004713612341094129410084273675189",
+            "close": "0.000005942028873555977744597520753959",
+            "volume_quote": "1259000007",
+            "volume_meme": "241006999999993",
+            "volume_usd": "3.452100000000000007",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791162120000",
+            "interval": "1m",
+            "open": "0.000005942028873555977744597520753959",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000005774240231548480463096960926193",
+            "volume_quote": "1296000008",
+            "volume_meme": "241007999999992",
+            "volume_usd": "3.452100000000000008",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791172620000",
+            "interval": "1m",
+            "open": "0.000005774240231548480463096960926193",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000007692307692307692307692307692307",
+            "volume_quote": "1333000009",
+            "volume_meme": "241008999999991",
+            "volume_usd": "3.452100000000000009",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791244620000",
+            "interval": "1m",
+            "open": "0.000007692307692307692307692307692307",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000007690769218937278124711879808135",
+            "volume_quote": "1370000010",
+            "volume_meme": "241009999999990",
+            "volume_usd": "3.45210000000000001",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791244680000",
+            "interval": "1m",
+            "open": "0.000007690769218937278124711879808135",
+            "high": "0.000009375",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000009375",
+            "volume_quote": "1407000011",
+            "volume_meme": "241010999999989",
+            "volume_usd": "3.452100000000000011",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791763020000",
+            "interval": "1m",
+            "open": "0.000009375",
+            "high": "0.000009546165884194053208137715179968",
+            "low": "0.000009375",
+            "close": "0.000009546165884194053208137715179968",
+            "volume_quote": "1444000012",
+            "volume_meme": "241011999999988",
+            "volume_usd": "3.452100000000000012",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          }
+        ]
+      },
+      "expect": {
+        "candles": [
+          {
+            "bucket_start": "1791157500000",
+            "interval": "15m",
+            "open": "0.000004137931034482758620689655172413",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000003967168224664599763813682152262",
+            "volume_quote": "5370000010",
+            "volume_meme": "1205009999999990",
+            "volume_usd": "13.80840000000000001",
+            "buys": 4,
+            "sells": 1,
+            "trades": 5
+          },
+          {
+            "bucket_start": "1791158400000",
+            "interval": "15m",
+            "open": "0.000003967168224664599763813682152262",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000005942028873555977744597520753959",
+            "volume_quote": "3666000018",
+            "volume_meme": "723017999999982",
+            "volume_usd": "10.356300000000000018",
+            "buys": 2,
+            "sells": 1,
+            "trades": 3
+          },
+          {
+            "bucket_start": "1791162000000",
+            "interval": "15m",
+            "open": "0.000005942028873555977744597520753959",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000005774240231548480463096960926193",
+            "volume_quote": "1296000008",
+            "volume_meme": "241007999999992",
+            "volume_usd": "3.452100000000000008",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791171900000",
+            "interval": "15m",
+            "open": "0.000005774240231548480463096960926193",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000007692307692307692307692307692307",
+            "volume_quote": "1333000009",
+            "volume_meme": "241008999999991",
+            "volume_usd": "3.452100000000000009",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791243900000",
+            "interval": "15m",
+            "open": "0.000007692307692307692307692307692307",
+            "high": "0.000009375",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000009375",
+            "volume_quote": "2777000021",
+            "volume_meme": "482020999999979",
+            "volume_usd": "6.904200000000000021",
+            "buys": 1,
+            "sells": 1,
+            "trades": 2
+          },
+          {
+            "bucket_start": "1791762300000",
+            "interval": "15m",
+            "open": "0.000009375",
+            "high": "0.000009546165884194053208137715179968",
+            "low": "0.000009375",
+            "close": "0.000009546165884194053208137715179968",
+            "volume_quote": "1444000012",
+            "volume_meme": "241011999999988",
+            "volume_usd": "3.452100000000000012",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          }
+        ]
+      },
+      "rounding": "merge: first open, last close, max high, min low, sums; a null volume_usd adds nothing",
+      "notes": "Equal to building the interval directly from the trades."
+    },
+    {
+      "name": "1h candles derived from 1m",
+      "kind": "candle_derivation",
+      "given": {
+        "interval": "1h",
+        "source_interval": "1m",
+        "candles": [
+          {
+            "bucket_start": "1791158220000",
+            "interval": "1m",
+            "open": "0.000004137931034482758620689655172413",
+            "high": "0.000004521126754195596120851273069223",
+            "low": "0.000004137931034482758620689655172413",
+            "close": "0.000004317548728478208655383529295054",
+            "volume_quote": "3111000003",
+            "volume_meme": "723002999999997",
+            "volume_usd": "6.904200000000000003",
+            "buys": 3,
+            "sells": 0,
+            "trades": 3
+          },
+          {
+            "bucket_start": "1791158280000",
+            "interval": "1m",
+            "open": "0.000004317548728478208655383529295054",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000004317548728478208655383529295054",
+            "close": "0.000004928571428571428571428571428571",
+            "volume_quote": "1111000003",
+            "volume_meme": "241002999999997",
+            "volume_usd": "3.452100000000000003",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791158340000",
+            "interval": "1m",
+            "open": "0.000004928571428571428571428571428571",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000003967168224664599763813682152262",
+            "volume_quote": "1148000004",
+            "volume_meme": "241003999999996",
+            "volume_usd": "3.452100000000000004",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791158400000",
+            "interval": "1m",
+            "open": "0.000003967168224664599763813682152262",
+            "high": "0.000004761428578230612254615160363735",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000004713612341094129410084273675189",
+            "volume_quote": "2407000011",
+            "volume_meme": "482010999999989",
+            "volume_usd": "6.904200000000000011",
+            "buys": 2,
+            "sells": 0,
+            "trades": 2
+          },
+          {
+            "bucket_start": "1791158520000",
+            "interval": "1m",
+            "open": "0.000004713612341094129410084273675189",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000004713612341094129410084273675189",
+            "close": "0.000005942028873555977744597520753959",
+            "volume_quote": "1259000007",
+            "volume_meme": "241006999999993",
+            "volume_usd": "3.452100000000000007",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791162120000",
+            "interval": "1m",
+            "open": "0.000005942028873555977744597520753959",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000005774240231548480463096960926193",
+            "volume_quote": "1296000008",
+            "volume_meme": "241007999999992",
+            "volume_usd": "3.452100000000000008",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791172620000",
+            "interval": "1m",
+            "open": "0.000005774240231548480463096960926193",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000007692307692307692307692307692307",
+            "volume_quote": "1333000009",
+            "volume_meme": "241008999999991",
+            "volume_usd": "3.452100000000000009",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791244620000",
+            "interval": "1m",
+            "open": "0.000007692307692307692307692307692307",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000007690769218937278124711879808135",
+            "volume_quote": "1370000010",
+            "volume_meme": "241009999999990",
+            "volume_usd": "3.45210000000000001",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791244680000",
+            "interval": "1m",
+            "open": "0.000007690769218937278124711879808135",
+            "high": "0.000009375",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000009375",
+            "volume_quote": "1407000011",
+            "volume_meme": "241010999999989",
+            "volume_usd": "3.452100000000000011",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791763020000",
+            "interval": "1m",
+            "open": "0.000009375",
+            "high": "0.000009546165884194053208137715179968",
+            "low": "0.000009375",
+            "close": "0.000009546165884194053208137715179968",
+            "volume_quote": "1444000012",
+            "volume_meme": "241011999999988",
+            "volume_usd": "3.452100000000000012",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          }
+        ]
+      },
+      "expect": {
+        "candles": [
+          {
+            "bucket_start": "1791154800000",
+            "interval": "1h",
+            "open": "0.000004137931034482758620689655172413",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000003967168224664599763813682152262",
+            "volume_quote": "5370000010",
+            "volume_meme": "1205009999999990",
+            "volume_usd": "13.80840000000000001",
+            "buys": 4,
+            "sells": 1,
+            "trades": 5
+          },
+          {
+            "bucket_start": "1791158400000",
+            "interval": "1h",
+            "open": "0.000003967168224664599763813682152262",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000005942028873555977744597520753959",
+            "volume_quote": "3666000018",
+            "volume_meme": "723017999999982",
+            "volume_usd": "10.356300000000000018",
+            "buys": 2,
+            "sells": 1,
+            "trades": 3
+          },
+          {
+            "bucket_start": "1791162000000",
+            "interval": "1h",
+            "open": "0.000005942028873555977744597520753959",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000005774240231548480463096960926193",
+            "volume_quote": "1296000008",
+            "volume_meme": "241007999999992",
+            "volume_usd": "3.452100000000000008",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791169200000",
+            "interval": "1h",
+            "open": "0.000005774240231548480463096960926193",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000007692307692307692307692307692307",
+            "volume_quote": "1333000009",
+            "volume_meme": "241008999999991",
+            "volume_usd": "3.452100000000000009",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791241200000",
+            "interval": "1h",
+            "open": "0.000007692307692307692307692307692307",
+            "high": "0.000009375",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000009375",
+            "volume_quote": "2777000021",
+            "volume_meme": "482020999999979",
+            "volume_usd": "6.904200000000000021",
+            "buys": 1,
+            "sells": 1,
+            "trades": 2
+          },
+          {
+            "bucket_start": "1791759600000",
+            "interval": "1h",
+            "open": "0.000009375",
+            "high": "0.000009546165884194053208137715179968",
+            "low": "0.000009375",
+            "close": "0.000009546165884194053208137715179968",
+            "volume_quote": "1444000012",
+            "volume_meme": "241011999999988",
+            "volume_usd": "3.452100000000000012",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          }
+        ]
+      },
+      "rounding": "merge: first open, last close, max high, min low, sums; a null volume_usd adds nothing",
+      "notes": "Equal to building the interval directly from the trades."
+    },
+    {
+      "name": "4h candles derived from 1m",
+      "kind": "candle_derivation",
+      "given": {
+        "interval": "4h",
+        "source_interval": "1m",
+        "candles": [
+          {
+            "bucket_start": "1791158220000",
+            "interval": "1m",
+            "open": "0.000004137931034482758620689655172413",
+            "high": "0.000004521126754195596120851273069223",
+            "low": "0.000004137931034482758620689655172413",
+            "close": "0.000004317548728478208655383529295054",
+            "volume_quote": "3111000003",
+            "volume_meme": "723002999999997",
+            "volume_usd": "6.904200000000000003",
+            "buys": 3,
+            "sells": 0,
+            "trades": 3
+          },
+          {
+            "bucket_start": "1791158280000",
+            "interval": "1m",
+            "open": "0.000004317548728478208655383529295054",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000004317548728478208655383529295054",
+            "close": "0.000004928571428571428571428571428571",
+            "volume_quote": "1111000003",
+            "volume_meme": "241002999999997",
+            "volume_usd": "3.452100000000000003",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791158340000",
+            "interval": "1m",
+            "open": "0.000004928571428571428571428571428571",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000003967168224664599763813682152262",
+            "volume_quote": "1148000004",
+            "volume_meme": "241003999999996",
+            "volume_usd": "3.452100000000000004",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791158400000",
+            "interval": "1m",
+            "open": "0.000003967168224664599763813682152262",
+            "high": "0.000004761428578230612254615160363735",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000004713612341094129410084273675189",
+            "volume_quote": "2407000011",
+            "volume_meme": "482010999999989",
+            "volume_usd": "6.904200000000000011",
+            "buys": 2,
+            "sells": 0,
+            "trades": 2
+          },
+          {
+            "bucket_start": "1791158520000",
+            "interval": "1m",
+            "open": "0.000004713612341094129410084273675189",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000004713612341094129410084273675189",
+            "close": "0.000005942028873555977744597520753959",
+            "volume_quote": "1259000007",
+            "volume_meme": "241006999999993",
+            "volume_usd": "3.452100000000000007",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791162120000",
+            "interval": "1m",
+            "open": "0.000005942028873555977744597520753959",
+            "high": "0.000005942028873555977744597520753959",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000005774240231548480463096960926193",
+            "volume_quote": "1296000008",
+            "volume_meme": "241007999999992",
+            "volume_usd": "3.452100000000000008",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791172620000",
+            "interval": "1m",
+            "open": "0.000005774240231548480463096960926193",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000005774240231548480463096960926193",
+            "close": "0.000007692307692307692307692307692307",
+            "volume_quote": "1333000009",
+            "volume_meme": "241008999999991",
+            "volume_usd": "3.452100000000000009",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791244620000",
+            "interval": "1m",
+            "open": "0.000007692307692307692307692307692307",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000007690769218937278124711879808135",
+            "volume_quote": "1370000010",
+            "volume_meme": "241009999999990",
+            "volume_usd": "3.45210000000000001",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791244680000",
+            "interval": "1m",
+            "open": "0.000007690769218937278124711879808135",
+            "high": "0.000009375",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000009375",
+            "volume_quote": "1407000011",
+            "volume_meme": "241010999999989",
+            "volume_usd": "3.452100000000000011",
+            "buys": 0,
+            "sells": 1,
+            "trades": 1
+          },
+          {
+            "bucket_start": "1791763020000",
+            "interval": "1m",
+            "open": "0.000009375",
+            "high": "0.000009546165884194053208137715179968",
+            "low": "0.000009375",
+            "close": "0.000009546165884194053208137715179968",
+            "volume_quote": "1444000012",
+            "volume_meme": "241011999999988",
+            "volume_usd": "3.452100000000000012",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          }
+        ]
+      },
+      "expect": {
+        "candles": [
+          {
+            "bucket_start": "1791144000000",
+            "interval": "4h",
+            "open": "0.000004137931034482758620689655172413",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000003967168224664599763813682152262",
+            "volume_quote": "5370000010",
+            "volume_meme": "1205009999999990",
+            "volume_usd": "13.80840000000000001",
+            "buys": 4,
+            "sells": 1,
+            "trades": 5
+          },
+          {
+            "bucket_start": "1791158400000",
+            "interval": "4h",
+            "open": "0.000003967168224664599763813682152262",
+            "high": "0.000007692307692307692307692307692307",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000007692307692307692307692307692307",
+            "volume_quote": "6295000035",
+            "volume_meme": "1205034999999965",
+            "volume_usd": "17.260500000000000035",
+            "buys": 4,
+            "sells": 1,
+            "trades": 5
+          },
+          {
+            "bucket_start": "1791230400000",
+            "interval": "4h",
+            "open": "0.000007692307692307692307692307692307",
+            "high": "0.000009375",
+            "low": "0.000007690769218937278124711879808135",
+            "close": "0.000009375",
+            "volume_quote": "2777000021",
+            "volume_meme": "482020999999979",
+            "volume_usd": "6.904200000000000021",
+            "buys": 1,
+            "sells": 1,
+            "trades": 2
+          },
+          {
+            "bucket_start": "1791748800000",
+            "interval": "4h",
+            "open": "0.000009375",
+            "high": "0.000009546165884194053208137715179968",
+            "low": "0.000009375",
+            "close": "0.000009546165884194053208137715179968",
+            "volume_quote": "1444000012",
+            "volume_meme": "241011999999988",
+            "volume_usd": "3.452100000000000012",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          }
+        ]
+      },
+      "rounding": "merge: first open, last close, max high, min low, sums; a null volume_usd adds nothing",
+      "notes": "Equal to building the interval directly from the trades."
+    },
+    {
+      "name": "1w candles derived from 1d, weeks starting Monday 00:00 UTC",
+      "kind": "candle_derivation",
+      "given": {
+        "interval": "1w",
+        "source_interval": "1d",
+        "candles": [
+          {
+            "bucket_start": "1791072000000",
+            "interval": "1d",
+            "open": "0.000004137931034482758620689655172413",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000003967168224664599763813682152262",
+            "volume_quote": "5370000010",
+            "volume_meme": "1205009999999990",
+            "volume_usd": "13.80840000000000001",
+            "buys": 4,
+            "sells": 1,
+            "trades": 5
+          },
+          {
+            "bucket_start": "1791158400000",
+            "interval": "1d",
+            "open": "0.000003967168224664599763813682152262",
+            "high": "0.000009375",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000009375",
+            "volume_quote": "9072000056",
+            "volume_meme": "1687055999999944",
+            "volume_usd": "24.164700000000000056",
+            "buys": 5,
+            "sells": 2,
+            "trades": 7
+          },
+          {
+            "bucket_start": "1791676800000",
+            "interval": "1d",
+            "open": "0.000009375",
+            "high": "0.000009546165884194053208137715179968",
+            "low": "0.000009375",
+            "close": "0.000009546165884194053208137715179968",
+            "volume_quote": "1444000012",
+            "volume_meme": "241011999999988",
+            "volume_usd": "3.452100000000000012",
+            "buys": 1,
+            "sells": 0,
+            "trades": 1
+          }
+        ]
+      },
+      "expect": {
+        "candles": [
+          {
+            "bucket_start": "1790553600000",
+            "interval": "1w",
+            "open": "0.000004137931034482758620689655172413",
+            "high": "0.000004928571428571428571428571428571",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000003967168224664599763813682152262",
+            "volume_quote": "5370000010",
+            "volume_meme": "1205009999999990",
+            "volume_usd": "13.80840000000000001",
+            "buys": 4,
+            "sells": 1,
+            "trades": 5
+          },
+          {
+            "bucket_start": "1791158400000",
+            "interval": "1w",
+            "open": "0.000003967168224664599763813682152262",
+            "high": "0.000009546165884194053208137715179968",
+            "low": "0.000003967168224664599763813682152262",
+            "close": "0.000009546165884194053208137715179968",
+            "volume_quote": "10516000068",
+            "volume_meme": "1928067999999932",
+            "volume_usd": "27.616800000000000068",
+            "buys": 6,
+            "sells": 2,
+            "trades": 8
+          }
+        ]
+      },
+      "rounding": "merge: first open, last close, max high, min low, sums; a null volume_usd adds nothing",
+      "notes": "1d candles are stored; 1w derives from them. The Sunday trades and the Monday trades fall in different weeks."
+    },
+    {
+      "name": "position: buys only",
+      "kind": "position",
+      "given": {
+        "transactions": [
+          {
+            "balance_delta": "1000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "1000000",
+                "quote_amount": "3000",
+                "volume_usd": "10"
+              }
+            ]
+          },
+          {
+            "balance_delta": "2000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "2000000",
+                "quote_amount": "7000",
+                "volume_usd": "23"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "after": [
+          {
+            "balance": "1000000",
+            "q": "1000000",
+            "u": "0",
+            "cost_quote": "3000",
+            "cost_usd": "10",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "1000000",
+            "sold_meme": "0",
+            "bought_quote": "3000",
+            "sold_quote": "0",
+            "bought_usd": "10",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "3000000",
+            "q": "3000000",
+            "u": "0",
+            "cost_quote": "10000",
+            "cost_usd": "33",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 2,
+            "sells": 0,
+            "bought_meme": "3000000",
+            "sold_meme": "0",
+            "bought_quote": "10000",
+            "sold_quote": "0",
+            "bought_usd": "33",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          }
+        ]
+      },
+      "rounding": "cost removal: floor(cost x y / q) per currency unless y = q; partial proceeds: floor(p x y / m); USD in units of 10^-18",
+      "notes": "Two buys add up; nothing is realized. A trade without a USD stamp changes the quote values, removes USD cost at average cost, realizes no USD, and sets usd_complete to false."
+    },
+    {
+      "name": "position: a partial sell",
+      "kind": "position",
+      "given": {
+        "transactions": [
+          {
+            "balance_delta": "3000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "3000000",
+                "quote_amount": "10000",
+                "volume_usd": "34"
+              }
+            ]
+          },
+          {
+            "balance_delta": "-1000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "sell",
+                "meme_amount": "1000000",
+                "quote_amount": "5000",
+                "volume_usd": "17"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "after": [
+          {
+            "balance": "3000000",
+            "q": "3000000",
+            "u": "0",
+            "cost_quote": "10000",
+            "cost_usd": "34",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "3000000",
+            "sold_meme": "0",
+            "bought_quote": "10000",
+            "sold_quote": "0",
+            "bought_usd": "34",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "2000000",
+            "q": "2000000",
+            "u": "0",
+            "cost_quote": "6667",
+            "cost_usd": "22.666666666666666667",
+            "realized_quote": "1667",
+            "realized_usd": "5.666666666666666667",
+            "buys": 1,
+            "sells": 1,
+            "bought_meme": "3000000",
+            "sold_meme": "1000000",
+            "bought_quote": "10000",
+            "sold_quote": "5000",
+            "bought_usd": "34",
+            "sold_usd": "17",
+            "usd_complete": true,
+            "mismatches": 0
+          }
+        ]
+      },
+      "rounding": "cost removal: floor(cost x y / q) per currency unless y = q; partial proceeds: floor(p x y / m); USD in units of 10^-18",
+      "notes": "A third of q leaves at average cost, floored. A trade without a USD stamp changes the quote values, removes USD cost at average cost, realizes no USD, and sets usd_complete to false."
+    },
+    {
+      "name": "position: a full exit",
+      "kind": "position",
+      "given": {
+        "transactions": [
+          {
+            "balance_delta": "3000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "3000000",
+                "quote_amount": "10001",
+                "volume_usd": "34.000000000000000001"
+              }
+            ]
+          },
+          {
+            "balance_delta": "-3000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "sell",
+                "meme_amount": "3000000",
+                "quote_amount": "9000",
+                "volume_usd": "30"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "after": [
+          {
+            "balance": "3000000",
+            "q": "3000000",
+            "u": "0",
+            "cost_quote": "10001",
+            "cost_usd": "34.000000000000000001",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "3000000",
+            "sold_meme": "0",
+            "bought_quote": "10001",
+            "sold_quote": "0",
+            "bought_usd": "34.000000000000000001",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "0",
+            "q": "0",
+            "u": "0",
+            "cost_quote": "0",
+            "cost_usd": "0",
+            "realized_quote": "-1001",
+            "realized_usd": "-4.000000000000000001",
+            "buys": 1,
+            "sells": 1,
+            "bought_meme": "3000000",
+            "sold_meme": "3000000",
+            "bought_quote": "10001",
+            "sold_quote": "9000",
+            "bought_usd": "34.000000000000000001",
+            "sold_usd": "30",
+            "usd_complete": true,
+            "mismatches": 0
+          }
+        ]
+      },
+      "rounding": "cost removal: floor(cost x y / q) per currency unless y = q; partial proceeds: floor(p x y / m); USD in units of 10^-18",
+      "notes": "Selling all of q removes the whole cost, with no rounding residue. A trade without a USD stamp changes the quote values, removes USD cost at average cost, realizes no USD, and sets usd_complete to false."
+    },
+    {
+      "name": "position: a transfer in, then a sell larger than q",
+      "kind": "position",
+      "given": {
+        "transactions": [
+          {
+            "balance_delta": "1000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "1000000",
+                "quote_amount": "4000",
+                "volume_usd": "12"
+              }
+            ]
+          },
+          {
+            "balance_delta": "500000",
+            "trades": []
+          },
+          {
+            "balance_delta": "-1500000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "sell",
+                "meme_amount": "1500000",
+                "quote_amount": "7500",
+                "volume_usd": "21"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "after": [
+          {
+            "balance": "1000000",
+            "q": "1000000",
+            "u": "0",
+            "cost_quote": "4000",
+            "cost_usd": "12",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "1000000",
+            "sold_meme": "0",
+            "bought_quote": "4000",
+            "sold_quote": "0",
+            "bought_usd": "12",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "1500000",
+            "q": "1000000",
+            "u": "500000",
+            "cost_quote": "4000",
+            "cost_usd": "12",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "1000000",
+            "sold_meme": "0",
+            "bought_quote": "4000",
+            "sold_quote": "0",
+            "bought_usd": "12",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "0",
+            "q": "0",
+            "u": "0",
+            "cost_quote": "0",
+            "cost_usd": "0",
+            "realized_quote": "1000",
+            "realized_usd": "2",
+            "buys": 1,
+            "sells": 1,
+            "bought_meme": "1000000",
+            "sold_meme": "1500000",
+            "bought_quote": "4000",
+            "sold_quote": "7500",
+            "bought_usd": "12",
+            "sold_usd": "21",
+            "usd_complete": true,
+            "mismatches": 0
+          }
+        ]
+      },
+      "rounding": "cost removal: floor(cost x y / q) per currency unless y = q; partial proceeds: floor(p x y / m); USD in units of 10^-18",
+      "notes": "Received tokens are not traded: only q of the sell has a cost and a gain; the rest records none. A trade without a USD stamp changes the quote values, removes USD cost at average cost, realizes no USD, and sets usd_complete to false."
+    },
+    {
+      "name": "position: a transfer out",
+      "kind": "position",
+      "given": {
+        "transactions": [
+          {
+            "balance_delta": "2000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "2000000",
+                "quote_amount": "6000",
+                "volume_usd": "18"
+              }
+            ]
+          },
+          {
+            "balance_delta": "-500000",
+            "trades": []
+          }
+        ]
+      },
+      "expect": {
+        "after": [
+          {
+            "balance": "2000000",
+            "q": "2000000",
+            "u": "0",
+            "cost_quote": "6000",
+            "cost_usd": "18",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "2000000",
+            "sold_meme": "0",
+            "bought_quote": "6000",
+            "sold_quote": "0",
+            "bought_usd": "18",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "1500000",
+            "q": "1500000",
+            "u": "0",
+            "cost_quote": "4500",
+            "cost_usd": "13.5",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "2000000",
+            "sold_meme": "0",
+            "bought_quote": "6000",
+            "sold_quote": "0",
+            "bought_usd": "18",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          }
+        ]
+      },
+      "rounding": "cost removal: floor(cost x y / q) per currency unless y = q; partial proceeds: floor(p x y / m); USD in units of 10^-18",
+      "notes": "Sending traded tokens away removes their cost with no gain or loss. A trade without a USD stamp changes the quote values, removes USD cost at average cost, realizes no USD, and sets usd_complete to false."
+    },
+    {
+      "name": "position: a buy and a send-away in one transaction",
+      "kind": "position",
+      "given": {
+        "transactions": [
+          {
+            "balance_delta": "1000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "1000000",
+                "quote_amount": "3000",
+                "volume_usd": "9"
+              }
+            ]
+          },
+          {
+            "balance_delta": "600000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "1000000",
+                "quote_amount": "5000",
+                "volume_usd": "15"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "after": [
+          {
+            "balance": "1000000",
+            "q": "1000000",
+            "u": "0",
+            "cost_quote": "3000",
+            "cost_usd": "9",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "1000000",
+            "sold_meme": "0",
+            "bought_quote": "3000",
+            "sold_quote": "0",
+            "bought_usd": "9",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "1600000",
+            "q": "1600000",
+            "u": "0",
+            "cost_quote": "6400",
+            "cost_usd": "19.2",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 2,
+            "sells": 0,
+            "bought_meme": "2000000",
+            "sold_meme": "0",
+            "bought_quote": "8000",
+            "sold_quote": "0",
+            "bought_usd": "24",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          }
+        ]
+      },
+      "rounding": "cost removal: floor(cost x y / q) per currency unless y = q; partial proceeds: floor(p x y / m); USD in units of 10^-18",
+      "notes": "x = delta - t is negative: the send leaves after the buy, at the new average cost. A trade without a USD stamp changes the quote values, removes USD cost at average cost, realizes no USD, and sets usd_complete to false."
+    },
+    {
+      "name": "position: a claim and a sell in one transaction",
+      "kind": "position",
+      "given": {
+        "transactions": [
+          {
+            "balance_delta": "1000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "1000000",
+                "quote_amount": "3000",
+                "volume_usd": "9"
+              }
+            ]
+          },
+          {
+            "balance_delta": "-200000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "sell",
+                "meme_amount": "1200000",
+                "quote_amount": "4800",
+                "volume_usd": "14"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "after": [
+          {
+            "balance": "1000000",
+            "q": "1000000",
+            "u": "0",
+            "cost_quote": "3000",
+            "cost_usd": "9",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "1000000",
+            "sold_meme": "0",
+            "bought_quote": "3000",
+            "sold_quote": "0",
+            "bought_usd": "9",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "800000",
+            "q": "0",
+            "u": "800000",
+            "cost_quote": "0",
+            "cost_usd": "0",
+            "realized_quote": "1000",
+            "realized_usd": "2.666666666666666666",
+            "buys": 1,
+            "sells": 1,
+            "bought_meme": "1000000",
+            "sold_meme": "1200000",
+            "bought_quote": "3000",
+            "sold_quote": "4800",
+            "bought_usd": "9",
+            "sold_usd": "14",
+            "usd_complete": true,
+            "mismatches": 0
+          }
+        ]
+      },
+      "rounding": "cost removal: floor(cost x y / q) per currency unless y = q; partial proceeds: floor(p x y / m); USD in units of 10^-18",
+      "notes": "x is positive: the claimed tokens are received, and the sell takes traded tokens first. A trade without a USD stamp changes the quote values, removes USD cost at average cost, realizes no USD, and sets usd_complete to false."
+    },
+    {
+      "name": "position: a curve buy, then a sell on the migration pool",
+      "kind": "position",
+      "given": {
+        "transactions": [
+          {
+            "balance_delta": "4000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "4000000",
+                "quote_amount": "12000",
+                "volume_usd": "40"
+              }
+            ]
+          },
+          {
+            "balance_delta": "-1000000",
+            "trades": [
+              {
+                "pool": "cetus",
+                "side": "sell",
+                "meme_amount": "1000000",
+                "quote_amount": "6000",
+                "volume_usd": "19"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "after": [
+          {
+            "balance": "4000000",
+            "q": "4000000",
+            "u": "0",
+            "cost_quote": "12000",
+            "cost_usd": "40",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "4000000",
+            "sold_meme": "0",
+            "bought_quote": "12000",
+            "sold_quote": "0",
+            "bought_usd": "40",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "3000000",
+            "q": "3000000",
+            "u": "0",
+            "cost_quote": "9000",
+            "cost_usd": "30",
+            "realized_quote": "3000",
+            "realized_usd": "9",
+            "buys": 1,
+            "sells": 1,
+            "bought_meme": "4000000",
+            "sold_meme": "1000000",
+            "bought_quote": "12000",
+            "sold_quote": "6000",
+            "bought_usd": "40",
+            "sold_usd": "19",
+            "usd_complete": true,
+            "mismatches": 0
+          }
+        ]
+      },
+      "rounding": "cost removal: floor(cost x y / q) per currency unless y = q; partial proceeds: floor(p x y / m); USD in units of 10^-18",
+      "notes": "Positions are per coin across its pools. A trade without a USD stamp changes the quote values, removes USD cost at average cost, realizes no USD, and sets usd_complete to false."
+    },
+    {
+      "name": "position: an unstamped buy",
+      "kind": "position",
+      "given": {
+        "transactions": [
+          {
+            "balance_delta": "1000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "1000000",
+                "quote_amount": "3000",
+                "volume_usd": "9"
+              }
+            ]
+          },
+          {
+            "balance_delta": "1000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "1000000",
+                "quote_amount": "3000",
+                "volume_usd": null
+              }
+            ]
+          },
+          {
+            "balance_delta": "-1000000",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "sell",
+                "meme_amount": "1000000",
+                "quote_amount": "4000",
+                "volume_usd": "12"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "after": [
+          {
+            "balance": "1000000",
+            "q": "1000000",
+            "u": "0",
+            "cost_quote": "3000",
+            "cost_usd": "9",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "1000000",
+            "sold_meme": "0",
+            "bought_quote": "3000",
+            "sold_quote": "0",
+            "bought_usd": "9",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "2000000",
+            "q": "2000000",
+            "u": "0",
+            "cost_quote": "6000",
+            "cost_usd": "9",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 2,
+            "sells": 0,
+            "bought_meme": "2000000",
+            "sold_meme": "0",
+            "bought_quote": "6000",
+            "sold_quote": "0",
+            "bought_usd": "9",
+            "sold_usd": "0",
+            "usd_complete": false,
+            "mismatches": 0
+          },
+          {
+            "balance": "1000000",
+            "q": "1000000",
+            "u": "0",
+            "cost_quote": "3000",
+            "cost_usd": "4.5",
+            "realized_quote": "1000",
+            "realized_usd": "7.5",
+            "buys": 2,
+            "sells": 1,
+            "bought_meme": "2000000",
+            "sold_meme": "1000000",
+            "bought_quote": "6000",
+            "sold_quote": "4000",
+            "bought_usd": "9",
+            "sold_usd": "12",
+            "usd_complete": false,
+            "mismatches": 0
+          }
+        ]
+      },
+      "rounding": "cost removal: floor(cost x y / q) per currency unless y = q; partial proceeds: floor(p x y / m); USD in units of 10^-18",
+      "notes": "The unstamped buy adds quote cost but no USD cost, and the position is USD-incomplete from then on. A trade without a USD stamp changes the quote values, removes USD cost at average cost, realizes no USD, and sets usd_complete to false."
+    },
+    {
+      "name": "position: an opening-round fill delivered by someone else, then a sell",
+      "kind": "position",
+      "given": {
+        "transactions": [
+          {
+            "balance_delta": "306206950897188516",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "306206950897188516",
+                "quote_amount": "6714649298711",
+                "volume_usd": "21000.000000000000000007"
+              }
+            ]
+          },
+          {
+            "balance_delta": "-102068983632396172",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "sell",
+                "meme_amount": "102068983632396172",
+                "quote_amount": "2600000000000",
+                "volume_usd": "8900"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "after": [
+          {
+            "balance": "306206950897188516",
+            "q": "306206950897188516",
+            "u": "0",
+            "cost_quote": "6714649298711",
+            "cost_usd": "21000.000000000000000007",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "306206950897188516",
+            "sold_meme": "0",
+            "bought_quote": "6714649298711",
+            "sold_quote": "0",
+            "bought_usd": "21000.000000000000000007",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "204137967264792344",
+            "q": "204137967264792344",
+            "u": "0",
+            "cost_quote": "4476432865808",
+            "cost_usd": "14000.000000000000000005",
+            "realized_quote": "361783567097",
+            "realized_usd": "1899.999999999999999998",
+            "buys": 1,
+            "sells": 1,
+            "bought_meme": "306206950897188516",
+            "sold_meme": "102068983632396172",
+            "bought_quote": "6714649298711",
+            "sold_quote": "2600000000000",
+            "bought_usd": "21000.000000000000000007",
+            "sold_usd": "8900",
+            "usd_complete": true,
+            "mismatches": 0
+          }
+        ]
+      },
+      "rounding": "cost removal: floor(cost x y / q) per currency unless y = q; partial proceeds: floor(p x y / m); USD in units of 10^-18",
+      "notes": "TA-8: the delivery is the bidder's trade whoever sends it, so x = delta - t is 0 and nothing counts as received. A trade without a USD stamp changes the quote values, removes USD cost at average cost, realizes no USD, and sets usd_complete to false."
+    },
+    {
+      "name": "position: the rounding edge where y < q",
+      "kind": "position",
+      "given": {
+        "transactions": [
+          {
+            "balance_delta": "3",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "buy",
+                "meme_amount": "3",
+                "quote_amount": "10",
+                "volume_usd": "10.000000000000000001"
+              }
+            ]
+          },
+          {
+            "balance_delta": "-1",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "sell",
+                "meme_amount": "1",
+                "quote_amount": "4",
+                "volume_usd": "4"
+              }
+            ]
+          },
+          {
+            "balance_delta": "-1",
+            "trades": [
+              {
+                "pool": "blast_curve",
+                "side": "sell",
+                "meme_amount": "1",
+                "quote_amount": "4",
+                "volume_usd": null
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "after": [
+          {
+            "balance": "3",
+            "q": "3",
+            "u": "0",
+            "cost_quote": "10",
+            "cost_usd": "10.000000000000000001",
+            "realized_quote": "0",
+            "realized_usd": "0",
+            "buys": 1,
+            "sells": 0,
+            "bought_meme": "3",
+            "sold_meme": "0",
+            "bought_quote": "10",
+            "sold_quote": "0",
+            "bought_usd": "10.000000000000000001",
+            "sold_usd": "0",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "2",
+            "q": "2",
+            "u": "0",
+            "cost_quote": "7",
+            "cost_usd": "6.666666666666666668",
+            "realized_quote": "1",
+            "realized_usd": "0.666666666666666667",
+            "buys": 1,
+            "sells": 1,
+            "bought_meme": "3",
+            "sold_meme": "1",
+            "bought_quote": "10",
+            "sold_quote": "4",
+            "bought_usd": "10.000000000000000001",
+            "sold_usd": "4",
+            "usd_complete": true,
+            "mismatches": 0
+          },
+          {
+            "balance": "1",
+            "q": "1",
+            "u": "0",
+            "cost_quote": "4",
+            "cost_usd": "3.333333333333333334",
+            "realized_quote": "2",
+            "realized_usd": "0.666666666666666667",
+            "buys": 1,
+            "sells": 2,
+            "bought_meme": "3",
+            "sold_meme": "2",
+            "bought_quote": "10",
+            "sold_quote": "8",
+            "bought_usd": "10.000000000000000001",
+            "sold_usd": "4",
+            "usd_complete": false,
+            "mismatches": 0
+          }
+        ]
+      },
+      "rounding": "cost removal: floor(cost x y / q) per currency unless y = q; partial proceeds: floor(p x y / m); USD in units of 10^-18",
+      "notes": "floor(cost x y / q) per currency; the remainder stays with q. A trade without a USD stamp changes the quote values, removes USD cost at average cost, realizes no USD, and sets usd_complete to false."
+    }
+  ]
+}

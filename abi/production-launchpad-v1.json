@@ -1,12 +1,8 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "a5ed34ad49c6c001af2db5b9cbcb206075704412",
-    "workingTreeDifferedAtFreeze": true,
-    "abiNeutralDifferences": [
-      "sui/meme_template/Move.lock",
-      "docs/research/sui-deepbook-indexer-architecture-2026.md"
-    ],
+    "contractsCommit": "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
+    "source": "git archive of the commit's sui/ tree",
     "approvedAbiAmendments": [
       "contracts ADR 0011: compact replay-complete event payloads before release",
       "contracts ADR 0027: make protocol ownership explicit in Quote migration fee names",
@@ -20,13 +16,12 @@
       "contracts ADR 0089: start launches in the migration adapter and move every post-migration fee path into the migrators package",
       "contracts ADR 0090: a minimal launchpad surface — trimmed getters, recipient allocation plans, merged config setters and events, renumbered errors, one migration call",
       "contracts ADR 0091: a burn part in the LP-fee split, with admin buyback and burn",
-      "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs",
-      "contracts ADR 0090 (redundancy audit): framework aborts replace duplicate checks; Migrated drops native_supply_burned, the holder-reward Round drops its checkpoints and manifest digest, CreatorClaimMessage drops copy",
-      "contracts ADR 0092: the creator sets the virtual Quote reserve on the initializer; LaunchConfig admits Quotes in a Table and QuoteSet records allowed",
-      "contracts ADR 0093: an optional opening round replaces purchase protection; buy no longer takes the Clock",
-      "contracts ADRs 0094 and 0097: every administrator action takes blast_admin::blast_acl::AdminWitness of its own typed blast_fun_domain role",
-      "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation",
-      "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness"
+      "contracts ADR 0092: the creator picks the virtual Quote reserve",
+      "contracts ADR 0093: an optional opening round replaces purchase protection",
+      "contracts ADR 0094 and 0097: one typed role per administrator action in the singleton Blast ACL",
+      "contracts ADR 0098: a SUI creation fee and one partner per launch set at creation",
+      "contracts a2a1db2: Blast's migration allocation accrues as protocol fees in the launch ledger",
+      "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -676,56 +671,6 @@
                 {
                   "name": "dummy_field",
                   "type": "bool"
-                }
-              ]
-            },
-            {
-              "name": "PackageVersion",
-              "abilities": [
-                "Key"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "generation",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_admin",
-                        "name": "operational_version"
-                      },
-                      "name": "OperationalVersion",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_fun",
-                                "name": "blast_fun"
-                              },
-                              "name": "BLAST_FUN",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": true
-                        }
-                      ]
-                    }
-                  }
                 }
               ]
             }
@@ -2570,7 +2515,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2716,7 +2661,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -2876,7 +2821,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -3011,7 +2956,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -3177,7 +3122,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -3373,7 +3318,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -3595,7 +3540,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -3771,7 +3716,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -3905,7 +3850,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4013,7 +3958,7 @@
             },
             {
               "name": "reassign_curve_fee_cap",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [
                 {
@@ -4063,7 +4008,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4121,7 +4066,7 @@
             },
             {
               "name": "reassign_metadata_cap",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [
                 {
@@ -4171,7 +4116,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4279,7 +4224,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4466,7 +4411,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4632,7 +4577,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -4807,7 +4752,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -5115,7 +5060,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6001,7 +5946,7 @@
           "functions": [
             {
               "name": "add_partner",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -6027,7 +5972,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6084,7 +6029,7 @@
             },
             {
               "name": "remove_partner",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -6110,7 +6055,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6182,7 +6127,7 @@
             },
             {
               "name": "set_creation_fee",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -6208,7 +6153,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6251,7 +6196,7 @@
             },
             {
               "name": "set_meme_decimals_allowed",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -6277,7 +6222,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6321,7 +6266,7 @@
             },
             {
               "name": "set_migration_witness_allowed",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [
                 {
@@ -6355,7 +6300,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6398,7 +6343,7 @@
             },
             {
               "name": "set_protocol_allocation",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -6424,7 +6369,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6486,7 +6431,7 @@
             },
             {
               "name": "set_quote_allowed",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [
                 {
@@ -6518,7 +6463,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -6561,7 +6506,7 @@
             },
             {
               "name": "set_trade_fees",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -6587,7 +6532,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -7062,7 +7007,7 @@
           "functions": [
             {
               "name": "authorize_upgrade",
-              "sdk": "intentional-upgrade-exclusion",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7088,7 +7033,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -7144,7 +7089,7 @@
             },
             {
               "name": "commit_upgrade_and_advance",
-              "sdk": "intentional-upgrade-exclusion",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7170,7 +7115,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -7222,7 +7167,7 @@
             },
             {
               "name": "make_immutable",
-              "sdk": "intentional-upgrade-exclusion",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7248,7 +7193,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -7290,7 +7235,7 @@
             },
             {
               "name": "wrap",
-              "sdk": "intentional-deployment-exclusion",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7388,11 +7333,68 @@
           "enums": [],
           "events": []
         },
+        "package_version": {
+          "functions": [],
+          "structs": [
+            {
+              "name": "PackageVersion",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "generation",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "operational_version"
+                      },
+                      "name": "OperationalVersion",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_fun",
+                                "name": "blast_fun"
+                              },
+                              "name": "BLAST_FUN",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
         "runtime_config": {
           "functions": [
             {
               "name": "set_creator_claim_signer",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7418,7 +7420,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -7463,7 +7465,7 @@
             },
             {
               "name": "set_protocol_fee_share",
-              "sdk": "builder",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -7489,7 +7491,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -8437,56 +8439,6 @@
                   "type": "bool"
                 }
               ]
-            },
-            {
-              "name": "PackageVersion",
-              "abilities": [
-                "Key"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "generation",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_admin",
-                        "name": "operational_version"
-                      },
-                      "name": "OperationalVersion",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_fun_migrators",
-                                "name": "blast_fun_migrators"
-                              },
-                              "name": "BLAST_FUN_MIGRATORS",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": true
-                        }
-                      ]
-                    }
-                  }
-                }
-              ]
             }
           ],
           "enums": [],
@@ -8546,7 +8498,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -8633,7 +8585,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -8867,7 +8819,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9055,7 +9007,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9228,7 +9180,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9243,7 +9195,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9408,7 +9360,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9423,7 +9375,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9527,7 +9479,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -9806,7 +9758,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10004,7 +9956,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10202,7 +10154,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10217,7 +10169,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10381,7 +10333,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10396,7 +10348,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun",
-                          "name": "blast_fun"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10569,7 +10521,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10879,7 +10831,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -10953,7 +10905,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -11041,7 +10993,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -11129,7 +11081,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -11310,7 +11262,7 @@
           "functions": [
             {
               "name": "authorize_upgrade",
-              "sdk": "intentional-upgrade-exclusion",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -11336,7 +11288,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -11392,7 +11344,7 @@
             },
             {
               "name": "commit_upgrade_and_advance",
-              "sdk": "intentional-upgrade-exclusion",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -11418,7 +11370,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -11470,7 +11422,7 @@
             },
             {
               "name": "wrap",
-              "sdk": "intentional-deployment-exclusion",
+              "sdk": "intentional-admin-exclusion",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -11568,6 +11520,63 @@
           "enums": [],
           "events": []
         },
+        "package_version": {
+          "functions": [],
+          "structs": [
+            {
+              "name": "PackageVersion",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "generation",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "operational_version"
+                      },
+                      "name": "OperationalVersion",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_fun_migrators",
+                                "name": "blast_fun_migrators"
+                              },
+                              "name": "BLAST_FUN_MIGRATORS",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
         "vault": {
           "functions": [
             {
@@ -11622,7 +11631,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []
@@ -11785,7 +11794,7 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_fun_migrators",
-                          "name": "blast_fun_migrators"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
                         "type_arguments": []

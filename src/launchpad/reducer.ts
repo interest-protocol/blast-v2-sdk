@@ -1,9 +1,7 @@
-import { U64_MAX } from "../lib/integers.ts";
 import type {
   AllocationMemeAmounts,
   AllocationPlan,
   FeeSplit,
-  ProtocolAllocation,
 } from "./allocation.ts";
 import { apportionMeme } from "./allocation.ts";
 import type { DecodedLaunchpadEvent, LaunchpadEventKind } from "./events.ts";
@@ -40,7 +38,7 @@ export type LaunchEventProjection = {
   poolTickSpacing: number;
   poolFeeRate: bigint;
   lpFeeSplit: FeeSplit;
-  /** The finalized plan, Blast's shares set. */
+  /** The finalized plan, Blast's shares stored. */
   allocationPlan: AllocationPlan;
   /** Meme apportioned at finalization. */
   memeAmounts: AllocationMemeAmounts;
@@ -49,28 +47,37 @@ export type LaunchEventProjection = {
   pendingBurn: bigint;
   /** Pooled non-curve Meme allocations awaiting migration payout. */
   allocatedMeme: bigint;
+  /** Blast's unclaimed Meme: trade fees plus the one-time migration fee. */
   protocolMemeFees: bigint;
   creatorMemeFees: bigint;
+  /** Blast's unclaimed Quote: trade fees plus the one-time migration fee. */
   protocolQuoteFees: bigint;
   creatorQuoteFees: bigint;
-  /** Blast's SUI: the creation fee until Blast claims it. */
+  /** Unclaimed creation fee in MIST. */
   protocolSuiFees: bigint;
-  /** Blast's one-time Meme and Quote migration fee (`ProtocolFeesAccrued`). */
-  protocolMigrationFee: { meme: bigint; quote: bigint } | null;
+  /** SUI the creator paid at finalization, in MIST. */
+  creationFee: bigint;
+  /** The Blast partner named at creation, for good; null when none. */
+  partnerId: string | null;
+  /** Cumulative amounts paid to the partner by protocol-fee claims. */
+  partnerPaid: { meme: bigint; quote: bigint; sui: bigint };
   virtualQuote: bigint;
   graduationTarget: bigint;
   quoteFeeBps: bigint;
   memeFeeBps: bigint;
-  creationFee: bigint;
-  partnerId: string | null;
-  openingRoundMs: bigint;
-  /** Undelivered opening-round bids: the pot until settlement. */
-  openingRoundBids: bigint;
-  openingRoundQuote: bigint;
-  openingRoundMeme: bigint;
-  /** Each bidder's undelivered bid; a keeper delivers every entry after settlement. */
-  openingRoundBidders: Readonly<Record<string, bigint>>;
   publicStartMs: bigint | null;
+  /** Zero means no opening round. */
+  openingRoundMs: bigint;
+  /** When `settle_opening_round` may run; null before share or without a round. */
+  openingRoundEndMs: bigint | null;
+  /** Quote of the opening-round bids not yet delivered. */
+  openingRoundBids: bigint;
+  /** The pot until settlement, then the Quote it left to refund. */
+  openingRoundQuote: bigint;
+  /** Meme the settled pot bought, held for delivery. */
+  openingRoundMeme: bigint;
+  /** Undelivered bids by bidder, the joining transactions' senders. */
+  openingRoundBidders: Readonly<Record<string, bigint>>;
   migration: LaunchMigrationProjection | null;
   allocationPayments: LaunchAllocationPayment[];
   /** Live `CurveFeeCap`, from cap claims and reassignments. */
@@ -106,7 +113,7 @@ export type LaunchpadConfigProjection = {
     quoteFeeBps: bigint;
     memeFeeBps: bigint;
   } | null;
-  /** Admitted Quotes; each creator picks its virtual reserve. */
+  /** Quotes new launches may use. Each creator picks its virtual reserve. */
   quotes: Readonly<Record<string, true>>;
   migrationWitnesses: Readonly<Record<string, true>>;
   /**
@@ -114,12 +121,15 @@ export type LaunchpadConfigProjection = {
    * emitting an event, so the projection starts there too.
    */
   memeDecimals: Readonly<Record<number, true>>;
-  /** Blast's one-time migration fee; `LaunchConfig` starts it at zero. */
-  protocolAllocation: ProtocolAllocation;
-  /** SUI, in MIST, each launch pays at creation; zero initially. */
+  /** Blast's share of future launches; `LaunchConfig` starts at zero. */
+  protocolAllocation: { memeBps: bigint; quoteBps: bigint };
+  /** SUI in MIST future launches pay; `LaunchConfig` starts at zero. */
   creationFee: bigint;
-  /** Partners new launches may name, and when each stops being accepted. */
-  partners: Readonly<Record<string, bigint>>;
+  /**
+   * Partners new launches may name. `acceptedUntilMs` is null until Blast
+   * removes the partner, then the first millisecond it is no longer accepted.
+   */
+  partners: Readonly<Record<string, { acceptedUntilMs: bigint | null }>>;
 };
 
 export type LaunchpadAdministrationProjection = {
@@ -236,7 +246,8 @@ export function reduceLaunchpadEvent(
             migrationWitnessType: payload.migration_witness,
             launcher: ticket.launcher,
             metadataCapId: ticket.metadataCapId,
-            lifecycle: payload.opening_round_ms > 0n ? "OpeningRound" : "Live",
+            lifecycle:
+              payload.opening_round_ms === 0n ? "Live" : "OpeningRound",
             decimals: ticket.decimals,
             atomicSupply: ticket.atomicSupply,
             sellBurnBps: ticket.sellBurnBps,
@@ -254,19 +265,20 @@ export function reduceLaunchpadEvent(
             protocolQuoteFees: 0n,
             creatorQuoteFees: 0n,
             protocolSuiFees: payload.creation_fee,
-            protocolMigrationFee: null,
+            creationFee: payload.creation_fee,
+            partnerId: payload.partner_id,
+            partnerPaid: { meme: 0n, quote: 0n, sui: 0n },
             virtualQuote: payload.virtual_quote,
             graduationTarget: payload.graduation_target,
             quoteFeeBps: payload.quote_fee_bps,
             memeFeeBps: payload.meme_fee_bps,
-            creationFee: payload.creation_fee,
-            partnerId: payload.partner_id,
+            publicStartMs: null,
             openingRoundMs: payload.opening_round_ms,
+            openingRoundEndMs: null,
             openingRoundBids: 0n,
             openingRoundQuote: 0n,
             openingRoundMeme: 0n,
             openingRoundBidders: {},
-            publicStartMs: null,
             migration: null,
             allocationPayments: [],
             curveFeeCapId: null,
@@ -281,6 +293,10 @@ export function reduceLaunchpadEvent(
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
         publicStartMs: payload.public_start_ms,
+        openingRoundEndMs:
+          launch.openingRoundMs === 0n
+            ? null
+            : payload.public_start_ms + launch.openingRoundMs,
       }));
     }
     case "OpeningRoundJoined": {
@@ -297,16 +313,16 @@ export function reduceLaunchpadEvent(
       }));
     }
     case "OpeningRoundSettled": {
-      // The pot's `Bought` precedes this event and already set MigrationReady
-      // when it reached the target.
+      // The pot's `Bought`, when there is one, precedes this event and may
+      // already have made the launch migration-ready.
       const payload = event.payload;
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
         lifecycle:
           launch.lifecycle === "OpeningRound" ? "Live" : launch.lifecycle,
         openingRoundBids: payload.bids,
-        openingRoundMeme: payload.meme,
         openingRoundQuote: payload.quote,
+        openingRoundMeme: payload.meme,
       }));
     }
     case "OpeningRoundDelivered": {
@@ -314,8 +330,8 @@ export function reduceLaunchpadEvent(
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
         openingRoundBids: launch.openingRoundBids - payload.bid,
-        openingRoundMeme: launch.openingRoundMeme - payload.meme,
         openingRoundQuote: launch.openingRoundQuote - payload.quote,
+        openingRoundMeme: launch.openingRoundMeme - payload.meme,
         openingRoundBidders: withEntry(
           launch.openingRoundBidders,
           payload.bidder,
@@ -352,13 +368,20 @@ export function reduceLaunchpadEvent(
         creatorMemeFees: 0n,
         creatorQuoteFees: 0n,
       }));
-    case "ProtocolFeesClaimed":
-      return updateLaunch(next, event.payload.launch_id, (launch) => ({
+    case "ProtocolFeesClaimed": {
+      const payload = event.payload;
+      return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
         protocolMemeFees: 0n,
         protocolQuoteFees: 0n,
         protocolSuiFees: 0n,
+        partnerPaid: {
+          meme: launch.partnerPaid.meme + payload.partner_meme_amount,
+          quote: launch.partnerPaid.quote + payload.partner_quote_amount,
+          sui: launch.partnerPaid.sui + payload.partner_sui_amount,
+        },
       }));
+    }
     case "ProtocolFeesAccrued": {
       const payload = event.payload;
       return updateLaunch(next, payload.launch_id, (launch) => ({
@@ -367,10 +390,6 @@ export function reduceLaunchpadEvent(
         realQuoteReserve: launch.realQuoteReserve - payload.quote_amount,
         protocolMemeFees: launch.protocolMemeFees + payload.meme_amount,
         protocolQuoteFees: launch.protocolQuoteFees + payload.quote_amount,
-        protocolMigrationFee: {
-          meme: payload.meme_amount,
-          quote: payload.quote_amount,
-        },
       }));
     }
     case "MigrationAllocationPaid": {
@@ -435,23 +454,21 @@ export function reduceLaunchpadEvent(
     case "PartnerAdded":
       return updateConfig(next, {
         ...state.config,
-        partners: withEntry(
-          state.config.partners,
-          event.payload.partner_id,
-          U64_MAX,
-        ),
+        partners: {
+          ...state.config.partners,
+          [event.payload.partner_id]: { acceptedUntilMs: null },
+        },
       });
-    case "PartnerRemoved": {
-      const { partner_id, accepted_until_ms } = event.payload;
+    case "PartnerRemoved":
       return updateConfig(next, {
         ...state.config,
-        partners: withEntry(
-          state.config.partners,
-          partner_id,
-          accepted_until_ms,
-        ),
+        partners: {
+          ...state.config.partners,
+          [event.payload.partner_id]: {
+            acceptedUntilMs: event.payload.accepted_until_ms,
+          },
+        },
       });
-    }
     case "MemeDecimalsSet": {
       const { decimals, allowed } = event.payload;
       return updateConfig(next, {

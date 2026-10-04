@@ -20,8 +20,8 @@ import { LaunchpadTransactions } from "../src/launchpad/transactions.ts";
 const blastPackageId = normalizeSuiObjectId("0xb1a57");
 const latestBlastPackageId = normalizeSuiObjectId("0xb1a58");
 const adminPackageId = normalizeSuiObjectId("0xad");
-const partnersPackageId = normalizeSuiObjectId("0xae");
-const timelockPackageId = normalizeSuiObjectId("0xaf");
+const partnersPackageId = normalizeSuiObjectId("0xbe");
+const timelockPackageId = normalizeSuiObjectId("0x7e");
 const options = {
   decimals: 6,
   symbol: "DOG COIN",
@@ -245,27 +245,32 @@ test("keeps constant fields independent when values match placeholders", async (
   }
 });
 
-test("publishes against 0x1, 0x2, the timelock, blast_admin, blast_partners, and Blast, then makes the package immutable", async () => {
+test("publishes against the whole dependency closure, then makes the package immutable", async () => {
   const tx = new LaunchpadTransactions({
     packageId: latestBlastPackageId,
     originalPackageId: blastPackageId,
+    adminPackageId,
     partnersPackageId,
     timelockPackageId,
     packageVersion: {
       objectId: "0x3",
       initialSharedVersion: "10",
+      mutable: false,
     },
     launchConfig: {
       objectId: "0x4",
       initialSharedVersion: "11",
+      mutable: false,
     },
     runtimeConfig: {
       objectId: "0x5",
       initialSharedVersion: "12",
+      mutable: false,
     },
-    admin: {
-      packageId: adminPackageId,
-      acl: { objectId: "0x6", initialSharedVersion: "13" },
+    acl: {
+      objectId: "0x6",
+      initialSharedVersion: "13",
+      mutable: false,
     },
   }).publishMeme(options);
 

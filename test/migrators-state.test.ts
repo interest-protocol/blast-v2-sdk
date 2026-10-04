@@ -5,12 +5,12 @@ import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
 
-import { getOpeningRoundBid } from "../src/launchpad/state.ts";
 import {
   decodeLpVaultObject,
   getLpFeePolicy,
   getLpFeeShares,
   getLpVault,
+  launchMigrationRoute,
   lpFeePolicyBcs,
   lpFeeSharePairBcs,
   lpVaultBcs,
@@ -205,24 +205,41 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
   });
 });
 
-test("reads a bidder's undelivered opening-round bid, zero without one", async () => {
-  let found = true;
-  const client = {
-    core: {
-      getDynamicField: async (request: { name: { type: string } }) => {
-        assert.equal(
-          request.name.type,
-          `${normalizeSuiAddress("0x1")}::launch::OpeningRoundBidKey`,
-        );
-        if (!found) throw notFound();
-        return {
-          dynamicField: { value: { bcs: bcs.u64().serialize(42n).toBytes() } },
-        };
+test("identifies a launch's recorded migration route from its witness and tier", () => {
+  const migrators = normalizeSuiAddress("0x320");
+  assert.deepEqual(
+    launchMigrationRoute(
+      {
+        migrationWitnessType: `${migrators}::bluefin::Witness`,
+        poolTickSpacing: 200,
+        poolFeeRate: 10_000n,
       },
-    },
-  } as unknown as ClientWithCoreApi;
-
-  assert.equal(await getOpeningRoundBid(client, "0xc", "0xa", "0x1"), 42n);
-  found = false;
-  assert.equal(await getOpeningRoundBid(client, "0xc", "0xa", "0x1"), 0n);
+      "0x320",
+    ),
+    { venue: "bluefin", tickSpacing: 200, feeRate: 10_000n },
+  );
+  assert.throws(
+    () =>
+      launchMigrationRoute(
+        {
+          migrationWitnessType: `${normalizeSuiAddress("0x999")}::bluefin::Witness`,
+          poolTickSpacing: 200,
+          poolFeeRate: 10_000n,
+        },
+        "0x320",
+      ),
+    /another migrators package/,
+  );
+  assert.throws(
+    () =>
+      launchMigrationRoute(
+        {
+          migrationWitnessType: `${migrators}::turbos::Witness`,
+          poolTickSpacing: 200,
+          poolFeeRate: 10_000n,
+        },
+        "0x320",
+      ),
+    /unsupported migration route/,
+  );
 });

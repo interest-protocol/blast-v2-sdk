@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
-  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -12,8 +11,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { LAUNCHPAD_ADMIN_ROLES } from "../src/launchpad/transactions.ts";
+
 const contractsDirectory = process.env.BLAST_CONTRACTS_DIR ?? "../contracts";
-const contractsManifest = join(contractsDirectory, "sui/launchpad/Move.toml");
+const REVIEWED_CONTRACTS_COMMIT = "442116a0a1b82c6b4a64dc55fa0de430322f4bb7";
+const PRESALE_CONTRACTS_COMMIT = "55e1ac0841535e708554cb45f9c67ab20f6e979a";
 const expectedEvents = {
   launchpad: 27,
   migrators: 13,
@@ -24,13 +26,14 @@ const expectedEvents = {
 };
 
 type Artifact = {
+  baseline: { contractsCommit: string; suiCli: string };
   packages: Record<
     string,
     {
       modules: Record<
         string,
         {
-          functions: Array<{ sdk: string }>;
+          functions: Array<{ name: string; sdk: string }>;
           structs: Array<{ name: string }>;
           events: Array<{ sdk: string; typeParameters: unknown[] }>;
         }
@@ -55,9 +58,11 @@ function countEvents(artifact: Artifact, packageName: string): number {
 }
 
 test("matches the frozen production Move ABI", {
-  skip: existsSync(contractsManifest)
-    ? false
-    : "requires the sibling blast-v2 contracts checkout",
+  skip:
+    hasCommit(contractsDirectory, REVIEWED_CONTRACTS_COMMIT) &&
+    hasCommit(contractsDirectory, PRESALE_CONTRACTS_COMMIT)
+      ? false
+      : `requires a contracts repository containing ${REVIEWED_CONTRACTS_COMMIT} and ${PRESALE_CONTRACTS_COMMIT}`,
 }, () => {
   const result = spawnSync(
     process.execPath,
@@ -66,6 +71,54 @@ test("matches the frozen production Move ABI", {
   );
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test("freezes every artifact at its reviewed contracts commit", () => {
+  for (const name of [
+    "production-launchpad-v1.json",
+    "production-blast-sui-v1.json",
+    "production-partners-v1.json",
+  ]) {
+    assert.equal(
+      readArtifact(name).baseline.contractsCommit,
+      REVIEWED_CONTRACTS_COMMIT,
+    );
+  }
+  // The presale package and the shared ACL's review amendments land together.
+  for (const name of [
+    "production-presale-v1.json",
+    "production-admin-v1.json",
+  ]) {
+    assert.equal(
+      readArtifact(name).baseline.contractsCommit,
+      PRESALE_CONTRACTS_COMMIT,
+    );
+  }
+});
+
+test("refuses a contracts repository without the reviewed commit", () => {
+  const repository = mkdtempSync(join(tmpdir(), "blast-foreign-contracts-"));
+  try {
+    const init = spawnSync("git", ["init", "--quiet", repository], {
+      encoding: "utf8",
+    });
+    assert.equal(init.status, 0, init.stderr);
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/check-contract-abi.mjs", repository],
+      { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      new RegExp(
+        `does not contain contracts commit ${REVIEWED_CONTRACTS_COMMIT}`,
+      ),
+    );
+  } finally {
+    rmSync(repository, { recursive: true, force: true });
+  }
 });
 
 test("rejects a Sui CLI version that differs from the frozen artifacts", () => {
@@ -125,6 +178,32 @@ test("freezes every production package and event", () => {
   }
 });
 
+test("builds the single generic Cetus route for every operation", () => {
+  const cetus = readArtifact("production-launchpad-v1.json").packages.migrators
+    ?.modules.cetus;
+  assert.ok(cetus);
+  assert.deepEqual(
+    cetus.functions.map(({ name, sdk }) => [name, sdk]),
+    [
+      ["buyback_and_burn", "builder"],
+      ["collect_fees", "builder"],
+      ["migrate", "builder"],
+      ["new", "builder"],
+      ["settle_and_update_fee_split", "builder"],
+    ],
+  );
+});
+
+test("names exactly the frozen blast_fun_domain admin roles", () => {
+  const domain = readArtifact("production-launchpad-v1.json").packages.launchpad
+    ?.modules.blast_fun_domain;
+  assert.ok(domain);
+  assert.deepEqual(
+    [...LAUNCHPAD_ADMIN_ROLES].sort(),
+    domain.structs.map(({ name }) => name).sort(),
+  );
+});
+
 test("rejects unknown blast_sui function classifications", () => {
   for (const moduleName of ["math", "acl", "package_admin"]) {
     const result = spawnSync(
@@ -149,45 +228,44 @@ test("rejects unknown blast_sui function classifications", () => {
   }
 });
 
-test("rejects unknown blast_admin function classifications", () => {
-  const result = spawnSync(
-    process.execPath,
-    [
-      "scripts/check-contract-abi.mjs",
-      "--classify-function",
-      "blast_admin",
-      "blast_acl",
-      "future_operation",
-    ],
-    { cwd: new URL("..", import.meta.url), encoding: "utf8" },
-  );
+for (const [packageName, moduleName] of [
+  ["blast_admin", "blast_acl"],
+  ["blast_presale", "blast_presale"],
+] as const) {
+  test(`rejects unknown ${packageName} function classifications`, () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/check-contract-abi.mjs",
+        "--classify-function",
+        packageName,
+        moduleName,
+        "future_operation",
+      ],
+      { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+    );
 
-  assert.notEqual(result.status, 0);
-  assert.match(
-    result.stderr,
-    /unclassified function blast_admin::blast_acl::future_operation/,
-  );
-});
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      new RegExp(
+        `unclassified function ${packageName}::${moduleName}::future_operation`,
+      ),
+    );
+  });
+}
 
-test("rejects unknown blast_presale function classifications", () => {
-  const result = spawnSync(
-    process.execPath,
-    [
-      "scripts/check-contract-abi.mjs",
-      "--classify-function",
-      "blast_presale",
-      "blast_presale",
-      "future_operation",
-    ],
-    { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+function hasCommit(directory: string, commit: string): boolean {
+  return (
+    spawnSync(
+      "git",
+      ["-C", directory, "cat-file", "-e", `${commit}^{commit}`],
+      {
+        encoding: "utf8",
+      },
+    ).status === 0
   );
-
-  assert.notEqual(result.status, 0);
-  assert.match(
-    result.stderr,
-    /unclassified function blast_presale::blast_presale::future_operation/,
-  );
-});
+}
 
 function assertEveryOperationIsClassified(
   artifact: Artifact,

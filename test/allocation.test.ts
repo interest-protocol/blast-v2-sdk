@@ -15,10 +15,11 @@ import {
   previewFeeCollection,
   requireCompletePlan,
 } from "../src/launchpad/allocation.ts";
+import { LAUNCHPAD_FIXTURE_HEX } from "./fixtures/launchpad-442116a.ts";
 
 const U64_MAX = (1n << 64n) - 1n;
 
-/** A finalized plan: Blast's `protocol` of both assets, then the pool. */
+/** A finalized plan: Blast's `protocol` share of both assets, then the pool. */
 function plan(protocol: bigint, liquidity: bigint): AllocationPlan {
   return addProtocolAllocation(
     {
@@ -115,28 +116,80 @@ test("rounds Blast's allocation up and the rest by largest remainder", () => {
   });
   // Curve 4,000, pool 4,000, Blast 2,000: Blast takes its ceiling first.
   const tied = plan(2_000n, 4_000n);
-  assert.deepEqual(memeAmounts(tied, 1n), [0n, 0n, 1n]);
-  assert.deepEqual(memeAmounts(tied, 2n), [1n, 0n, 1n]);
-  assert.deepEqual(memeAmounts(tied, 3n), [1n, 1n, 1n]);
-  assert.deepEqual(quoteAmounts(tied, 1n), [0n, 1n]);
+  assert.deepEqual(apportionMeme(tied, 1n), {
+    curve: 0n,
+    lp: 0n,
+    protocol: 1n,
+    recipients: [],
+  });
+  assert.deepEqual(apportionMeme(tied, 2n), {
+    curve: 1n,
+    lp: 0n,
+    protocol: 1n,
+    recipients: [],
+  });
+  assert.deepEqual(apportionMeme(tied, 3n), {
+    curve: 1n,
+    lp: 1n,
+    protocol: 1n,
+    recipients: [],
+  });
+  assert.deepEqual(apportionQuote(tied, 1n), {
+    lp: 0n,
+    protocol: 1n,
+    recipients: [],
+  });
   // 7 over 5,714 / 2,857 / 1,429: Blast ceil(1.0003) = 2, floors 3 and 1,
   // and the leftover atom goes to the pool's 9,999 remainder.
-  assert.deepEqual(memeAmounts(plan(1_429n, 2_857n), 7n), [3n, 2n, 2n]);
+  assert.deepEqual(apportionMeme(plan(1_429n, 2_857n), 7n), {
+    curve: 3n,
+    lp: 2n,
+    protocol: 2n,
+    recipients: [],
+  });
   // Recipients are not rounded up.
-  const shared = shaped([5_000n, 4_000n, 500n, 500n], [9_000n, 500n, 500n]);
-  assert.deepEqual(quoteAmounts(shared, 1n), [0n, 1n, 0n]);
-  assert.deepEqual(quoteAmounts(shared, 3n), [2n, 1n, 0n]);
+  const shared = addProtocolAllocation(
+    {
+      curveMemeBps: 5_000n,
+      lpMemeBps: 4_000n,
+      lpQuoteBps: 9_000n,
+      recipients: [{ destination: "0xc", memeBps: 500n, quoteBps: 500n }],
+    },
+    { memeBps: 500n, quoteBps: 500n },
+  );
+  assert.deepEqual(apportionQuote(shared, 1n), {
+    lp: 0n,
+    protocol: 1n,
+    recipients: [0n],
+  });
+  assert.deepEqual(apportionQuote(shared, 3n), {
+    lp: 2n,
+    protocol: 1n,
+    recipients: [0n],
+  });
 });
 
 test("conserves both assets at the u64 maximum", () => {
   const maximum = plan(1_000n, 8_999n);
-  const sum = (amounts: bigint[]) =>
-    amounts.reduce((total, amount) => total + amount, 0n);
-  assert.equal(sum(memeAmounts(maximum, U64_MAX)), U64_MAX);
-  assert.equal(sum(quoteAmounts(maximum, U64_MAX)), U64_MAX);
+  const meme = apportionMeme(maximum, U64_MAX);
+  const quote = apportionQuote(maximum, U64_MAX);
+  assert.equal(
+    meme.recipients.reduce(
+      (sum, amount) => sum + amount,
+      meme.curve + meme.lp + meme.protocol,
+    ),
+    U64_MAX,
+  );
+  assert.equal(
+    quote.recipients.reduce(
+      (sum, amount) => sum + amount,
+      quote.lp + quote.protocol,
+    ),
+    U64_MAX,
+  );
 });
 
-test("sets Blast's shares and checks both sums like allocation::add_protocol", () => {
+test("stores Blast's shares and checks both sums like allocation::add_protocol", () => {
   const creator = normalizeAllocationPlan({
     curveMemeBps: 7_000n,
     lpMemeBps: 2_000n,
@@ -147,11 +200,8 @@ test("sets Blast's shares and checks both sums like allocation::add_protocol", (
     memeBps: 500n,
     quoteBps: 1_000n,
   });
-  assert.deepEqual(complete, {
-    ...creator,
-    protocolMemeBps: 500n,
-    protocolQuoteBps: 1_000n,
-  });
+  assert.equal(complete.protocolMemeBps, 500n);
+  assert.equal(complete.protocolQuoteBps, 1_000n);
   assert.deepEqual(
     complete.recipients.map(({ destination }) => destination),
     [normalizeSuiAddress("0xc")],
@@ -161,15 +211,7 @@ test("sets Blast's shares and checks both sums like allocation::add_protocol", (
     () => addProtocolAllocation(creator, { memeBps: 500n, quoteBps: 500n }),
     /sum to 10,000/,
   );
-  // `allocation::plan` needs positive curve and pool Meme shares only.
-  assert.equal(
-    normalizeAllocationPlan({ ...creator, lpQuoteBps: 0n }).lpQuoteBps,
-    0n,
-  );
-  assert.throws(
-    () => normalizeAllocationPlan({ ...creator, lpMemeBps: 0n }),
-    /positive Meme shares/,
-  );
+  // Blast no longer takes a recipient slot: sixteen recipients are accepted.
   const sixteen = Array.from({ length: 16 }, (_, index) => ({
     destination: `0x${(index + 1).toString(16)}`,
     memeBps: 0n,
@@ -189,7 +231,16 @@ test("sets Blast's shares and checks both sums like allocation::add_protocol", (
           { destination: "0x99", memeBps: 0n, quoteBps: 0n },
         ],
       }),
-    /exceeds sixteen recipients/,
+    /at most sixteen/,
+  );
+  // `allocation::plan` needs positive curve and pool Meme shares only.
+  assert.equal(
+    normalizeAllocationPlan({ ...creator, lpQuoteBps: 0n }).lpQuoteBps,
+    0n,
+  );
+  assert.throws(
+    () => normalizeAllocationPlan({ ...creator, lpMemeBps: 0n }),
+    /positive Meme shares/,
   );
 });
 
@@ -321,4 +372,42 @@ test("rejects plans and splits the Move constructors abort on", () => {
       }),
     /nonzero Sui address/,
   );
+});
+
+test("decodes a finalized plan from literal contract bytes", () => {
+  // `LaunchCreated.allocation_plan` of the 442116a fixture: bytes 219-326.
+  const bytes = Buffer.from(
+    [
+      "581b000000000000",
+      "d007000000000000",
+      "1c25000000000000",
+      "ee02000000000000",
+      "fa00000000000000",
+      "01",
+      "000000000000000000000000000000000000000000000000000000000000feed",
+      "fa00000000000000",
+      "fa00000000000000",
+    ].join(""),
+    "hex",
+  );
+  assert.ok(
+    LAUNCHPAD_FIXTURE_HEX.launchCreated.includes(bytes.toString("hex")),
+  );
+  const decoded = allocationPlanBcs.parse(bytes);
+
+  assert.deepEqual(decoded, {
+    curveMemeBps: 7_000n,
+    lpMemeBps: 2_000n,
+    lpQuoteBps: 9_500n,
+    protocolMemeBps: 750n,
+    protocolQuoteBps: 250n,
+    recipients: [
+      {
+        destination: normalizeSuiAddress("0xfeed"),
+        memeBps: 250n,
+        quoteBps: 250n,
+      },
+    ],
+  });
+  assert.deepEqual(requireCompletePlan(decoded), decoded);
 });
