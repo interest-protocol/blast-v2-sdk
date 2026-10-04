@@ -87,7 +87,10 @@ export type PresaleVaultProjection = {
   liquidity: bigint;
   feeRecipients: BpsShare[];
   holderRewardsBps: bigint;
-  /** Blast's snapshotted shares of each collected LP-fee asset. */
+  /**
+   * Blast's shares of each collected LP-fee asset: snapshotted at migration,
+   * then replaced by each `ProtocolLpFeesChanged`.
+   */
   protocolLpFeeMemeBps: bigint;
   protocolLpFeeQuoteBps: bigint;
   migrationMemeResidual: bigint;
@@ -327,6 +330,13 @@ function applyVaultEvent(
         ),
         protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
         protocolQuotePaid: vault.protocolQuotePaid + payload.protocol_quote,
+      }));
+    }
+    case "ProtocolLpFeesChanged": {
+      const { payload } = event;
+      return updateVault(state, payload.vault_id, () => ({
+        protocolLpFeeMemeBps: payload.protocol_lp_fee_meme_bps,
+        protocolLpFeeQuoteBps: payload.protocol_lp_fee_quote_bps,
       }));
     }
     case "MigrationResidualsClaimed":

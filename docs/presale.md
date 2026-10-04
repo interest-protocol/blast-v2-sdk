@@ -46,6 +46,7 @@ mutability its Move signature needs.
 | Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication takes the `AdminCap` (`adminCapId`). |
 | Cap | `destroyCap` | After cancellation only. |
 | Blast's rates | `setProtocolFees` | Takes the `AdminCap`. Applies to presales created afterward. |
+| Blast's LP-fee rates on one vault | `setProtocolLpFees` | Takes the `AdminCap`. Applies to that vault's later collections, including fees already in the pool. The contract rejects an unchanged pair (`ProtocolLpFeesChanged`). |
 | Blast's payout address | `setProtocolDestination` | Takes the `AdminCap`. Applies to every later payout. |
 | Listing | `setQuoteAllowed`, `setMigrationWitnessAllowed` | Takes the `AdminCap`. Which Quote types and venues presales created afterward may use; existing sales are unaffected. |
 | Administration | `replaceAdminCap`, `revokeAdminCap`, `transferSuperAdmin` | Take the `SuperAdminCap` (`superAdminCapId`). See [Administration](#administration). |
@@ -101,6 +102,8 @@ is created:
   destination (`ProtocolFeesPaid`).
 - `lpFeeMemeBps` and `lpFeeQuoteBps` of each collected LP fee, rounded up, go
   to the current destination before the creator's split (`FeesCollected`).
+  The vault snapshots them at migration; `setProtocolLpFees` later replaces
+  one vault's pair (`ProtocolLpFeesChanged`).
 
 A cancelled sale pays Blast nothing, and its token share stays locked.
 
@@ -172,10 +175,12 @@ Every public function is classified:
   `fee_policy` `set_fees` and
   `set_destination`; `creation_policy` `set_quote_allowed` and
   `set_migration_witness_allowed`; `cetus` and `bluefin` `new`, `migrate`, and
-  `collect_fees`; `presale_vault::claim_migration_residuals`; and
+  `collect_fees`; `presale_vault` `claim_migration_residuals` and
+  `set_protocol_lp_fees`; and
   `holder_rewards` `publish_round`, `claim`, and `close_round`.
 - **Compositional:** `bps::new`, which every rate argument passes through.
-- **Off-chain mirror:** `merkle_tree::node` and `verify` (`allowlist.ts`);
+- **Off-chain mirror:** the package-internal `merkle_tree::node` and `verify`
+  (`allowlist.ts`);
   `bps::value` and `apply_up` (`math.ts`).
 - **Excluded:** `package_admin::wrap` (deployment), and `authorize_upgrade` and
   `commit_upgrade` (upgrade custody, which CLI publish tooling drives).

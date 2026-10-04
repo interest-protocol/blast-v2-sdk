@@ -318,6 +318,11 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       meme: 1n,
       quote: 0n,
     }),
+    decode("ProtocolLpFeesChanged", {
+      vault_id: VAULT,
+      protocol_lp_fee_meme_bps: 100n,
+      protocol_lp_fee_quote_bps: 0n,
+    }),
     decode("RoundPublished", {
       vault_id: VAULT,
       round_id: ROUND,
@@ -472,7 +477,7 @@ test("a raise allocation leaves custody the migration's overflow", () => {
   assert.deepEqual([presale.quote, presale.liquidityTokens], [200n, 0n]);
 });
 
-test("tracks Blast's snapshotted shares from creation through migration and LP fees", () => {
+test("tracks Blast's shares from creation through migration, LP fees, and an LP-rate change", () => {
   let state = createPresaleEventProjection();
   const recipients = [id("0xa110c"), id("0xb110c")];
   for (const event of [
@@ -597,6 +602,26 @@ test("tracks Blast's snapshotted shares from creation through migration and LP f
       vault.protocolQuotePaid,
     ],
     [1_000n, 2_500n, 11n, 3n],
+  );
+
+  // The AdminCap replaces the vault's rates; collections already paid stand.
+  state = reducePresaleEvent(
+    state,
+    decode("ProtocolLpFeesChanged", {
+      vault_id: VAULT,
+      protocol_lp_fee_meme_bps: 500n,
+      protocol_lp_fee_quote_bps: 0n,
+    }),
+  );
+  const changed = required(state.vaults[VAULT]);
+  assert.deepEqual(
+    [
+      changed.protocolLpFeeMemeBps,
+      changed.protocolLpFeeQuoteBps,
+      changed.protocolMemePaid,
+      changed.protocolQuotePaid,
+    ],
+    [500n, 0n, 11n, 3n],
   );
 });
 

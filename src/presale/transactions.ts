@@ -602,6 +602,37 @@ export class PresaleCalls {
     };
   }
 
+  /**
+   * `presale_vault::set_protocol_lp_fees`: Blast's share of each asset in one
+   * vault's later LP-fee collections. Fees still in the pool split at the new
+   * rates when collected. The contract rejects an unchanged pair.
+   */
+  setProtocolLpFees(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      adminCap: TransactionObjectInput;
+      lpFeeMemeBps: bigint;
+      lpFeeQuoteBps: bigint;
+    },
+  ) {
+    const rates = [options.lpFeeMemeBps, options.lpFeeQuoteBps].map((rate) =>
+      this.bps(rate),
+    );
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "set_protocol_lp_fees",
+        [
+          sharedObject(tx, "vault", options.vault, true),
+          ...this.#admin(tx, options.adminCap),
+          ...rates.map((rate) => tx.add(rate)),
+        ],
+        options,
+        "presale_vault",
+      );
+    };
+  }
+
   /** `creation_policy::set_quote_allowed<Quote>`: whether presales created afterward may raise it. */
   setQuoteAllowed(options: {
     adminCap: TransactionObjectInput;
@@ -1087,6 +1118,18 @@ export class PresaleTransactions {
   }): Transaction {
     return single(
       this.call.setProtocolFees({ ...options, adminCap: options.adminCapId }),
+    );
+  }
+
+  /** Sets Blast's LP-fee rates on one migrated vault. */
+  setProtocolLpFees(
+    options: Omit<
+      Parameters<PresaleCalls["setProtocolLpFees"]>[0],
+      "adminCap"
+    > & { adminCapId: string },
+  ): Transaction {
+    return single(
+      this.call.setProtocolLpFees({ ...options, adminCap: options.adminCapId }),
     );
   }
 
