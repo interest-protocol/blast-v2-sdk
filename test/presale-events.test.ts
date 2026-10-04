@@ -80,7 +80,7 @@ test("event specs match every event frozen in the presale ABI", () => {
     { ...presaleEventSpecs, ...presalePolicyEventSpecs },
     readFrozenPresaleEventSpecs(),
   );
-  assert.equal(Object.keys(presaleEventModules).length, 17);
+  assert.equal(Object.keys(presaleEventModules).length, 18);
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
@@ -380,7 +380,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   assert.equal(round.closed, true);
   assert.equal(round.memeRemaining, 0n);
   const twice = ["Committed", "Claimed", "RecipientAllocated"];
-  const never = ["RaiseAllocated", "PresaleCancelled"];
+  const never = ["RaiseAllocated", "PresaleCancelled", "ProtocolFeesChanged"];
   for (const kind of Object.keys(presaleEventModules) as PresaleEventKind[]) {
     const expected = twice.includes(kind) ? 2 : never.includes(kind) ? 0 : 1;
     assert.equal(state.eventCounts[kind], expected, kind);
@@ -477,43 +477,50 @@ test("a raise allocation leaves custody the migration's overflow", () => {
   assert.deepEqual([presale.quote, presale.liquidityTokens], [200n, 0n]);
 });
 
+/**
+ * `blast_presale_tests::migration_pays_blast_its_snapshotted_shares_at_the_current_destination`:
+ * a sale created under Blast's raise, token, and LP-fee rates.
+ */
+function feePayingSaleCreated() {
+  const recipients = [id("0xa110c"), id("0xb110c")];
+  return decode("PresaleCreated", {
+    presale_id: PRESALE,
+    presale_cap_id: id("0xca"),
+    treasury_cap_id: id("0x7c"),
+    token_supply: 20_001n,
+    token_allocation_bps: 5_000n,
+    liquidity_token_allocation_bps: 1_000n,
+    recipients,
+    recipient_bps: [2_500n, 1_000n],
+    recipient_vesting: [null, null],
+    burnable: false,
+    raise_target: 1_000n,
+    raise_recipients: [id("0x5a1e")],
+    raise_recipient_bps: [2_000n],
+    raise_recipient_vesting: [null],
+    duration_ms: 100n,
+    liquidity_window_ms: 50n,
+    eligibility: openEligibility(5_000n, 2n, 500n),
+    uncapped: null,
+    migration_witness: `${pkg}::cetus::Witness`,
+    tick_spacing: 200,
+    pool_fee_rate: 10_000n,
+    fee_recipients: [id("0xc0ffee")],
+    fee_recipient_bps: [7_000n],
+    holder_rewards_bps: 3_000n,
+    protocol_raise_bps: 333n,
+    protocol_token_bps: 500n,
+    protocol_lp_fee_meme_bps: 1_000n,
+    protocol_lp_fee_quote_bps: 2_500n,
+    protocol_quote: 33n,
+    protocol_tokens: 1_000n,
+  });
+}
+
 test("tracks Blast's shares from creation through migration, LP fees, and an LP-rate change", () => {
   let state = createPresaleEventProjection();
-  const recipients = [id("0xa110c"), id("0xb110c")];
   for (const event of [
-    // `blast_presale_tests::migration_pays_blast_its_snapshotted_shares_at_the_current_destination`.
-    decode("PresaleCreated", {
-      presale_id: PRESALE,
-      presale_cap_id: id("0xca"),
-      treasury_cap_id: id("0x7c"),
-      token_supply: 20_001n,
-      token_allocation_bps: 5_000n,
-      liquidity_token_allocation_bps: 1_000n,
-      recipients,
-      recipient_bps: [2_500n, 1_000n],
-      recipient_vesting: [null, null],
-      burnable: false,
-      raise_target: 1_000n,
-      raise_recipients: [id("0x5a1e")],
-      raise_recipient_bps: [2_000n],
-      raise_recipient_vesting: [null],
-      duration_ms: 100n,
-      liquidity_window_ms: 50n,
-      eligibility: openEligibility(5_000n, 2n, 500n),
-      uncapped: null,
-      migration_witness: `${pkg}::cetus::Witness`,
-      tick_spacing: 200,
-      pool_fee_rate: 10_000n,
-      fee_recipients: [id("0xc0ffee")],
-      fee_recipient_bps: [7_000n],
-      holder_rewards_bps: 3_000n,
-      protocol_raise_bps: 333n,
-      protocol_token_bps: 500n,
-      protocol_lp_fee_meme_bps: 1_000n,
-      protocol_lp_fee_quote_bps: 2_500n,
-      protocol_quote: 33n,
-      protocol_tokens: 1_000n,
-    }),
+    feePayingSaleCreated(),
     decode("Committed", {
       presale_id: PRESALE,
       quote: 4_000n,
@@ -622,6 +629,56 @@ test("tracks Blast's shares from creation through migration, LP fees, and an LP-
       changed.protocolQuotePaid,
     ],
     [500n, 0n, 11n, 3n],
+  );
+});
+
+test("replaces a scheduled sale's Blast rates and amounts before the start", () => {
+  // `blast_presale_tests::the_admin_can_replace_a_sales_rates_before_it_starts`.
+  const changed = decode("ProtocolFeesChanged", {
+    presale_id: PRESALE,
+    protocol_raise_bps: 1_000n,
+    protocol_token_bps: 250n,
+    protocol_lp_fee_meme_bps: 100n,
+    protocol_lp_fee_quote_bps: 200n,
+    protocol_quote: 100n,
+    protocol_tokens: 500n,
+    token_allocation: 10_501n,
+  });
+  let state = createPresaleEventProjection();
+  for (const event of [
+    feePayingSaleCreated(),
+    decode("PresaleOpened", {
+      presale_id: PRESALE,
+      start_ms: 1_000n,
+      end_ms: 1_100n,
+      liquidity_deadline_ms: 1_150n,
+      uncapped_from_ms: 1_100n,
+    }),
+    changed,
+  ]) {
+    state = reducePresaleEvent(state, event);
+  }
+  assert.equal(reducePresaleEvent(state, changed), state);
+
+  const presale = required(state.presales[PRESALE]);
+  assert.equal(presale.startMs, 1_000n);
+  assert.deepEqual(presale.protocolFees, {
+    raiseBps: 1_000n,
+    tokenBps: 250n,
+    lpFeeMemeBps: 100n,
+    lpFeeQuoteBps: 200n,
+  });
+  // Blast's 500 freed tokens joined the sale allocation; recipients and the LP are unchanged.
+  assert.deepEqual(
+    [
+      presale.protocolQuote,
+      presale.protocolTokens,
+      presale.tokenAllocation,
+      presale.saleTokens,
+      presale.liquidityTokens,
+      presale.recipientTokens,
+    ],
+    [100n, 500n, 10_501n, 10_501n, 2_000n, 7_000n],
   );
 });
 

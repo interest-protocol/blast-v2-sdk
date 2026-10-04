@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "2a654b93de6c7f0dec0247e1bacab3c8df40e4ba",
+    "contractsCommit": "55e1ac0841535e708554cb45f9c67ab20f6e979a",
     "workingTreeDifferedAtFreeze": false,
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -621,6 +621,139 @@
               ]
             },
             {
+              "name": "set_protocol_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "SaleToken",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale"
+                        },
+                        "name": "Presale",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "SaleToken"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_admin"
+                        },
+                        "name": "AdminRegistry",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_admin"
+                        },
+                        "name": "AdminCap",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
               "name": "settle",
               "sdk": "builder",
               "entry": false,
@@ -723,6 +856,7 @@
                     ]
                   }
                 },
+                "u64",
                 {
                   "Reference": [
                     false,
@@ -953,6 +1087,10 @@
                 },
                 {
                   "name": "liquidity_window_ms",
+                  "type": "u64"
+                },
+                {
+                  "name": "start_ms",
                   "type": "u64"
                 },
                 {
@@ -2113,6 +2251,70 @@
                 },
                 {
                   "name": "uncapped_from_ms",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "ProtocolFeesChanged",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "SaleToken",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "presale_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "protocol_raise_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_token_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_lp_fee_meme_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_lp_fee_quote_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_quote",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_tokens",
+                  "type": "u64"
+                },
+                {
+                  "name": "token_allocation",
                   "type": "u64"
                 }
               ],

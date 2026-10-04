@@ -278,6 +278,7 @@ export const presaleBcs = bcs.struct("Presale", {
   lifecycle: lifecycleBcs,
   duration_ms: u64,
   liquidity_window_ms: u64,
+  start_ms: u64,
   end_ms: u64,
   liquidity_deadline_ms: u64,
   raise_target: u64,
@@ -377,6 +378,8 @@ export type PresaleState = SharedObjectReference<true> & {
   lifecycle: PresaleLifecycle;
   durationMs: bigint;
   liquidityWindowMs: bigint;
+  /** When commitments open, which may be after the share; zero while Pending. */
+  startMs: bigint;
   /** Exclusive commitment end; zero while Pending. */
   endMs: bigint;
   /** From this timestamp anyone may cancel an unmigrated funded sale; zero while Pending. */
@@ -397,7 +400,10 @@ export type PresaleState = SharedObjectReference<true> & {
   participants: bigint;
   /** Quote custody balance. */
   quote: bigint;
-  /** Participant token allocation fixed at creation. */
+  /**
+   * Participant token allocation: fixed at creation, then by any
+   * `ProtocolFeesChanged` before the start.
+   */
   tokenAllocation: bigint;
   /** Participant tokens still in custody. */
   saleTokens: bigint;
@@ -405,7 +411,7 @@ export type PresaleState = SharedObjectReference<true> & {
   recipientPayouts: RecipientPayout[];
   recipientTokens: bigint;
   raisePayouts: RecipientPayout[];
-  /** Blast's rates, snapshotted at creation. */
+  /** Blast's rates: snapshotted at creation; the `AdminCap` may replace them before the start. */
   protocolFees: ProtocolFees;
   /** Blast's share of the raise, paid on migration. */
   protocolQuote: bigint;
@@ -497,6 +503,7 @@ export function decodePresaleObject(
     lifecycle: parsed.lifecycle,
     durationMs: parsed.duration_ms,
     liquidityWindowMs: parsed.liquidity_window_ms,
+    startMs: parsed.start_ms,
     endMs: parsed.end_ms,
     liquidityDeadlineMs: parsed.liquidity_deadline_ms,
     raiseTarget: parsed.raise_target,

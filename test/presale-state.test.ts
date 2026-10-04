@@ -49,6 +49,7 @@ function presaleBytes(): Uint8Array {
     ...u8(2), // lifecycle: Funded
     ...u64(100n), // duration_ms
     ...u64(50n), // liquidity_window_ms
+    ...u64(1_000n), // start_ms
     ...u64(1_100n), // end_ms
     ...u64(1_150n), // liquidity_deadline_ms
     ...u64(1_000n), // raise_target
@@ -126,6 +127,10 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
     access: { kind: "anyone", maxParticipants: 8n, minCommitment: 250n },
     hardCap: true,
   });
+  assert.deepEqual(
+    [state.startMs, state.endMs, state.liquidityDeadlineMs],
+    [1_000n, 1_100n, 1_150n],
+  );
   assert.equal(state.migrationWitness, `0x${witness}`);
   assert.equal(state.tickSpacing, 200);
   assert.equal(state.poolFeeRate, 10_000n);

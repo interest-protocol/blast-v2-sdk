@@ -39,7 +39,7 @@ export type PresaleProjection = {
   poolFeeRate: bigint;
   feeRecipients: BpsShare[];
   holderRewardsBps: bigint;
-  /** Zero until `PresaleOpened`. */
+  /** When commitments open, which may be after the share; zero until `PresaleOpened`. */
   startMs: bigint;
   endMs: bigint;
   liquidityDeadlineMs: bigint;
@@ -64,7 +64,10 @@ export type PresaleProjection = {
   recipientVestingIds: Readonly<Record<string, string>>;
   /** The schedule migration created for each vesting raise recipient. */
   raiseVestingIds: Readonly<Record<string, string>>;
-  /** Blast's rates, snapshotted at creation. */
+  /**
+   * Blast's rates: snapshotted at creation, then replaced by each
+   * `ProtocolFeesChanged` before the start.
+   */
   protocolFees: ProtocolFees;
   /** Blast's share of the raise, paid on migration. */
   protocolQuote: bigint;
@@ -184,6 +187,23 @@ function applyPresaleEvent(
         endMs: payload.end_ms,
         liquidityDeadlineMs: payload.liquidity_deadline_ms,
         uncappedFromMs: payload.uncapped_from_ms,
+      }));
+    }
+    // Before the start: Blast's tokens move to or from the sale allocation, its Quote to or from
+    // the LP's.
+    case "ProtocolFeesChanged": {
+      const { payload } = event;
+      return updatePresale(state, payload.presale_id, () => ({
+        protocolFees: {
+          raiseBps: payload.protocol_raise_bps,
+          tokenBps: payload.protocol_token_bps,
+          lpFeeMemeBps: payload.protocol_lp_fee_meme_bps,
+          lpFeeQuoteBps: payload.protocol_lp_fee_quote_bps,
+        },
+        protocolQuote: payload.protocol_quote,
+        protocolTokens: payload.protocol_tokens,
+        tokenAllocation: payload.token_allocation,
+        saleTokens: payload.token_allocation,
       }));
     }
     case "Committed": {

@@ -298,13 +298,21 @@ export class PresaleCalls {
       ]);
   }
 
-  /** `blast_presale::share`: shares the new presale and starts its window now. */
-  share(options: LaunchTypes & { presale: TransactionArgument }) {
+  /**
+   * `blast_presale::share`: shares the new presale and fixes its windows from
+   * `startMs`, or from execution once that has passed (`0n` opens it at once).
+   * Commitments open at the start; until then the `AdminCap` may change the
+   * sale's Blast rates (`setPresaleProtocolFees`).
+   */
+  share(
+    options: LaunchTypes & { presale: TransactionArgument; startMs: bigint },
+  ) {
+    const startMs = requireU64("startMs", options.startMs);
     return (tx: Transaction): void => {
       this.#presaleCall(
         tx,
         "share",
-        [options.presale, tx.object.clock()],
+        [options.presale, tx.pure.u64(startMs), tx.object.clock()],
         options,
       );
     };
@@ -598,6 +606,40 @@ export class PresaleCalls {
         ],
         undefined,
         "fee_policy",
+      );
+    };
+  }
+
+  /**
+   * `blast_presale::set_protocol_fees`: replaces one sale's Blast rates before
+   * its window starts. Blast's token difference moves to or from the buyers'
+   * sale allocation and its raise difference to or from the LP's Quote, each
+   * rounded down. The contract applies `setProtocolFees`'s bounds and rejects
+   * an unchanged set, a started sale, an LP left without Quote or an
+   * unpoolable price, and buyers left without tokens.
+   */
+  setPresaleProtocolFees(
+    options: LaunchTypes & {
+      presale: SharedObjectReference<true>;
+      adminCap: TransactionObjectInput;
+      fees: ProtocolFees;
+    },
+  ) {
+    const { raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps } = options.fees;
+    const rates = [raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps].map(
+      (rate) => this.bps(rate),
+    );
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "set_protocol_fees",
+        [
+          this.#presale(tx, options),
+          ...this.#admin(tx, options.adminCap),
+          ...rates.map((rate) => tx.add(rate)),
+          tx.object.clock(),
+        ],
+        options,
       );
     };
   }
@@ -950,9 +992,13 @@ export class PresaleTransactions {
     this.call = new PresaleCalls(deployment);
   }
 
-  /** `cetus::new`, then `share`, and transfers the `PresaleCap` to `capRecipient`. */
+  /**
+   * `cetus::new`, then `share` from `startMs`, and transfers the `PresaleCap`
+   * to `capRecipient`.
+   */
   createCetusPresale(
     options: Parameters<PresaleCalls["newCetusPresale"]>[0] & {
+      startMs: bigint;
       capRecipient: string;
     },
   ): Transaction {
@@ -961,9 +1007,13 @@ export class PresaleTransactions {
     return this.#shareAndKeepCap(tx, created, options);
   }
 
-  /** `bluefin::new`, then `share`, and transfers the `PresaleCap` to `capRecipient`. */
+  /**
+   * `bluefin::new`, then `share` from `startMs`, and transfers the
+   * `PresaleCap` to `capRecipient`.
+   */
   createBluefinPresale(
     options: Parameters<PresaleCalls["newBluefinPresale"]>[0] & {
+      startMs: bigint;
       capRecipient: string;
     },
   ): Transaction {
@@ -1121,6 +1171,21 @@ export class PresaleTransactions {
     );
   }
 
+  /** Replaces one sale's Blast rates before its window starts. */
+  setPresaleProtocolFees(
+    options: Omit<
+      Parameters<PresaleCalls["setPresaleProtocolFees"]>[0],
+      "adminCap"
+    > & { adminCapId: string },
+  ): Transaction {
+    return single(
+      this.call.setPresaleProtocolFees({
+        ...options,
+        adminCap: options.adminCapId,
+      }),
+    );
+  }
+
   /** Sets Blast's LP-fee rates on one migrated vault. */
   setProtocolLpFees(
     options: Omit<
@@ -1231,7 +1296,7 @@ export class PresaleTransactions {
   #shareAndKeepCap(
     tx: Transaction,
     created: TransactionResult,
-    options: LaunchTypes & { capRecipient: string },
+    options: LaunchTypes & { startMs: bigint; capRecipient: string },
   ): Transaction {
     const [presale, presaleCap] = moveResults(created, 2);
     tx.add(this.call.share({ ...options, presale }));

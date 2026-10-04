@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { bcs } from "@mysten/sui/bcs";
 import type { Transaction } from "@mysten/sui/transactions";
-import { normalizeStructTag, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
+import {
+  fromBase64,
+  normalizeStructTag,
+  SUI_CLOCK_OBJECT_ID,
+} from "@mysten/sui/utils";
 
 import {
   buildRewardManifest,
@@ -118,6 +123,7 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     ...terms,
     ...cetus,
     tickSpacing: 200,
+    startMs: 1_000n,
     capRecipient: "0xc0",
   });
   assert.deepEqual(moveFunctions(ptb), [
@@ -164,8 +170,10 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
   const share = moveCall(ptb, "blast_presale::share");
   assert.deepEqual(argumentKinds(ptb, share), [
     `NestedResult:${commandIndex(ptb, "cetus::new")}:0`,
+    "pure",
     CLOCK,
   ]);
+  assert.equal(pureU64(ptb, share.arguments[1]), 1_000n);
   assert.equal(ptb.getData().commands.at(-1)?.$kind, "TransferObjects");
   const vectors = ptb
     .getData()
@@ -189,6 +197,7 @@ test("creates a Bluefin presale without an uncapped phase", () => {
     },
     tickSpacing: 60,
     feeRate: 3_000n,
+    startMs: 1_000n,
     capRecipient: "0xc0",
   });
   assert.ok(
@@ -396,6 +405,29 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       ],
     ],
     [
+      tx.setPresaleProtocolFees({
+        ...types,
+        presale,
+        adminCapId: "0xadc",
+        fees: {
+          raiseBps: 1_000n,
+          tokenBps: 250n,
+          lpFeeMemeBps: 100n,
+          lpFeeQuoteBps: 200n,
+        },
+      }),
+      "blast_presale::set_protocol_fees",
+      [
+        "shared-mut:0xab",
+        ...ADMIN,
+        "Result:0",
+        "Result:1",
+        "Result:2",
+        "Result:3",
+        CLOCK,
+      ],
+    ],
+    [
       tx.setProtocolLpFees({
         ...types,
         vault,
@@ -477,6 +509,12 @@ test("administers with the presale AdminCap and never signs in to blast_acl", ()
     listQuote,
     listVenue,
     tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
+    tx.setPresaleProtocolFees({
+      ...types,
+      presale,
+      adminCapId: "0xadc",
+      fees: noFees,
+    }),
     tx.setProtocolLpFees({
       ...types,
       vault,
@@ -541,6 +579,7 @@ test("vested token and raise shares build their terms; fee shares cannot vest", 
     ],
     raiseAllocations: [{ recipient: "0x5a1e", bps: 2_000n, vesting }],
     tickSpacing: 200,
+    startMs: 1_000n,
     capRecipient: "0xc0",
   });
   const vestedShare = [
@@ -588,6 +627,7 @@ test("vested token and raise shares build their terms; fee shares cannot vest", 
           { recipient: "0xb110c", bps: 1_500n },
         ],
         tickSpacing: 200,
+        startMs: 1_000n,
         capRecipient: "0xc0",
       }),
     /EInvalidVestingTerms/,
@@ -599,6 +639,7 @@ test("vested token and raise shares build their terms; fee shares cannot vest", 
         ...cetus,
         feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n, vesting }],
         tickSpacing: 200,
+        startMs: 1_000n,
         capRecipient: "0xc0",
       }),
     /fee recipients cannot vest/,
@@ -726,6 +767,17 @@ function argumentKinds(
     if (argument.$kind !== "Input") return argument.$kind;
     return describeInput(ptb.getData().inputs[argument.Input]);
   });
+}
+
+/** Decodes the pure `u64` input `argument` names. */
+function pureU64(
+  ptb: Transaction,
+  argument: ReturnType<typeof moveCall>["arguments"][number] | undefined,
+): bigint {
+  assert.ok(argument?.$kind === "Input");
+  const input = ptb.getData().inputs[argument.Input];
+  assert.ok(input?.$kind === "Pure");
+  return BigInt(bcs.u64().parse(fromBase64(input.Pure.bytes)));
 }
 
 function describeInput(

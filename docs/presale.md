@@ -36,7 +36,7 @@ mutability its Move signature needs.
 
 | Step | Builder | Notes |
 | --- | --- | --- |
-| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: every rate through `bps::new`, the `RecipientShare` vectors through `recipient_share` (or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), the eligibility policy, `Option<UncappedPhase>`, the venue's `new`, `share`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. |
+| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: every rate through `bps::new`, the `RecipientShare` vectors through `recipient_share` (or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), the eligibility policy, `Option<UncappedPhase>`, the venue's `new`, `share` from `startMs`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
 | Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except in a hard-capped uncapped phase. |
 | Settle | `settle`, `cancelUnlaunched` | Anyone may call. |
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. |
@@ -46,6 +46,7 @@ mutability its Move signature needs.
 | Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication takes the `AdminCap` (`adminCapId`). |
 | Cap | `destroyCap` | After cancellation only. |
 | Blast's rates | `setProtocolFees` | Takes the `AdminCap`. Applies to presales created afterward. |
+| Blast's rates on one sale | `setPresaleProtocolFees` | Takes the `AdminCap`. Only before the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
 | Blast's LP-fee rates on one vault | `setProtocolLpFees` | Takes the `AdminCap`. Applies to that vault's later collections, including fees already in the pool. The contract rejects an unchanged pair (`ProtocolLpFeesChanged`). |
 | Blast's payout address | `setProtocolDestination` | Takes the `AdminCap`. Applies to every later payout. |
 | Listing | `setQuoteAllowed`, `setMigrationWitnessAllowed` | Takes the `AdminCap`. Which Quote types and venues presales created afterward may use; existing sales are unaffected. |
@@ -104,6 +105,15 @@ is created:
   to the current destination before the creator's split (`FeesCollected`).
   The vault snapshots them at migration; `setProtocolLpFees` later replaces
   one vault's pair (`ProtocolLpFeesChanged`).
+
+Until a sale's `startMs`, `setPresaleProtocolFees` may replace all four of
+its rates within the same bounds (`ProtocolFeesChanged`). Blast's new amounts
+are its rates of the supply and of the raise, each rounded down. The token
+difference moves to or from the buyers' `tokenAllocation`, which must keep a
+token; the Quote difference moves to or from the LP's, which must stay positive
+and seed a poolable price. Recipients' amounts and the LP's tokens are
+unchanged. Apply `ProtocolFeesChanged` after `PresaleCreated`: it replaces the
+sale's rates, Blast's Quote and tokens, and the sale allocation.
 
 A cancelled sale pays Blast nothing, and its token share stays locked.
 
@@ -167,10 +177,10 @@ field, so the reducer keys commitments by the event sender.
 
 ## ABI coverage
 
-`abi/production-presale-v1.json` freezes the package at contracts `db75393`.
+`abi/production-presale-v1.json` freezes the package at contracts `55e1ac0`.
 Every public function is classified:
 
-- **Builders:** all 15 `blast_presale` functions; `blast_presale_admin`
+- **Builders:** all 16 `blast_presale` functions; `blast_presale_admin`
   `replace_admin_cap`, `revoke_admin_cap`, and `transfer_super_admin`;
   `fee_policy` `set_fees` and
   `set_destination`; `creation_policy` `set_quote_allowed` and

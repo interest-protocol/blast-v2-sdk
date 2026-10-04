@@ -46,6 +46,7 @@ export type PresaleAbortCode =
   | "EInvalidWindow"
   | "EInvalidEligibilityPolicy"
   | "EInvalidLifecycle"
+  | "EPresaleNotStarted"
   | "EPresaleEnded"
   | "EZeroCommitment"
   | "EWalletCapExceeded"
@@ -654,8 +655,9 @@ export function validateBluefinPresaleTier(
 }
 
 /**
- * Mirrors `blast_presale::share`: the windows fixed when the presale is shared
- * at `startMs`. Without an uncapped phase `uncappedFromMs` is `endMs`.
+ * Mirrors `blast_presale::share`: the windows fixed from `startMs`, the later
+ * of the requested start and the share's clock time. Without an uncapped phase
+ * `uncappedFromMs` is `endMs`.
  */
 export function presaleWindows(
   startMs: bigint,
@@ -685,6 +687,7 @@ export type CommitPreviewInput = {
   presale: Pick<
     PresaleState,
     | "lifecycle"
+    | "startMs"
     | "endMs"
     | "raiseTarget"
     | "eligibility"
@@ -728,6 +731,11 @@ export function previewCommit(input: CommitPreviewInput): CommitPreview {
     presale.lifecycle === "Open",
     "EInvalidLifecycle",
     "the presale is not open",
+  );
+  check(
+    nowMs >= presale.startMs,
+    "EPresaleNotStarted",
+    "the window has not started",
   );
   check(nowMs < presale.endMs, "EPresaleEnded", "the window has ended");
   check(offered > 0n, "EZeroCommitment", "a commitment must be positive");
