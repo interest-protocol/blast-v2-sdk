@@ -17,8 +17,8 @@ The frozen production ABI uses contracts commit
 
 The admin and partners artifacts are frozen at their first SDK coverage,
 contracts `442116a`; the admin artifact's amendment ledger records the ADR 0097
-admin package review (2026-10-02). The presale artifact follows the unpublished
-package's latest contracts commit instead (see [presale](presale.md)). `blast_admin` and
+admin package review (2026-10-02). The presale artifact is frozen at the source of
+the published mainnet package (see [presale](presale.md)). `blast_admin` and
 `blast_partners` are separate artifacts because they are separately published,
 immutable packages that every product links, not part of the launchpad's
 upgrade lineage.

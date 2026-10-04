@@ -52,9 +52,9 @@ import type {
 } from "./state.ts";
 
 /**
- * The presale package is not published yet, so no deployment is registered;
- * callers pass the IDs the publish and `package_admin::wrap` effects return.
- * Publication shares `VenueConfig`, `CreationPolicy`, `FeePolicy`, and
+ * The mainnet release is registered: `getPresaleDeployment("mainnet")`
+ * returns it. For another deployment, pass the IDs the publish and
+ * `package_admin::wrap` effects return. Publication shares `VenueConfig`, `CreationPolicy`, `FeePolicy`, and
  * `AdminRegistry`. The package administers itself and does not link
  * `blast_admin`.
  */
