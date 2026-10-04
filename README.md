@@ -115,6 +115,10 @@ For an unreleased mainnet deployment, validate one manifest with
 built-in registry remains empty until publish output supplies real IDs; the SDK
 does not ship placeholder addresses.
 
+Presale publishes on its own, so `BLAST_PRESALE_DEPLOYMENTS` registers its
+standalone mainnet release, and `getPresaleDeployment(network)` prefers the
+complete release's presale once `BLAST_DEPLOYMENTS` has one.
+
 ## Launch creation
 
 A launch starts in its migration adapter (contracts ADR 0089). Publish the
