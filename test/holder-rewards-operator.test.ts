@@ -6,6 +6,8 @@ import test from "node:test";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { fromHex, normalizeSuiAddress } from "@mysten/sui/utils";
+import { withOperatorLock, writeOperatorJson } from "../operator/file-store.ts";
+import { runHolderRewardsOperator } from "../operator/holder-rewards.ts";
 import type { RewardManifest } from "../src/holder-rewards/allocations.ts";
 import {
   buildRewardManifest,
@@ -22,13 +24,11 @@ import {
   assertRewardRoundMatchesManifest,
   pendingRewardAllocations,
 } from "../src/holder-rewards/keeper.ts";
-import {
-  runHolderRewardsOperator,
-  withOperatorLock,
-  writeOperatorJson,
-} from "../src/holder-rewards/operator.ts";
+import type { HolderRewardsStore } from "../src/holder-rewards/operator.ts";
+import { holderRewardsOperator } from "../src/holder-rewards/operator.ts";
 import { rewardRoundBcs } from "../src/holder-rewards/state.ts";
 import { lpVaultBcs } from "../src/migrators/state.ts";
+import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
 import {
   presaleRewardRoundBcs,
   presaleVaultBcs,
@@ -102,6 +102,46 @@ test("operator writes complete atomic state and refuses a concurrent writer", as
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("SDK operator checks the chain inside the caller's store lock", async (t) => {
+  const events: string[] = [];
+  const store: HolderRewardsStore = {
+    read: async () => undefined,
+    write: async () => {},
+    remove: async () => {},
+    async withLock(action) {
+      events.push("lock");
+      try {
+        return await action();
+      } finally {
+        events.push("unlock");
+      }
+    },
+  };
+  const client = new SuiGrpcClient({
+    baseUrl: "http://127.0.0.1:0",
+    network: "mainnet",
+  });
+  t.mock.method(
+    Object.getPrototypeOf(client.ledgerService),
+    "getServiceInfo",
+    () => {
+      events.push("rpc");
+      return { response: Promise.resolve({ chainId: "another-genesis" }) };
+    },
+  );
+  const operator = holderRewardsOperator(
+    client,
+    {
+      chainId: "test-genesis",
+      deployment: {} as MigratorsDeployment,
+      vaultId: "0xd",
+    },
+    store,
+  );
+  await assert.rejects(() => operator.index(1n), /chain/);
+  assert.deepEqual(events, ["lock", "rpc", "unlock"]);
 });
 
 test("CLI resumes checkpoint batches and publishes, advances and relays the same accounting interval", async (t) => {

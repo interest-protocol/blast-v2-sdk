@@ -8,11 +8,13 @@ publishes a Merkle allocation of those funds as a shared `Round`, and anyone can
 relay a proof; each leaf pays its committed beneficiary once.
 
 `@interest-protocol/blast-sdk/holder-rewards` supplies integer holder
-accounting, Merkle manifests, round reads, and permissionless payout helpers.
-The transaction builders are `MigratorTransactions.publishHolderRewardRound` and
-`claimHolderRewards`. The Node operator is
-`npm run holder-rewards -- <command> ...` from this repository. The packages are
-unpublished; supply verified deployment IDs.
+accounting, Merkle manifests, round reads, permissionless payout helpers, and
+`holderRewardsOperator`: the index, prepare, publish, advance, and relay
+workflow over a `HolderRewardsStore` that you supply. The transaction builders
+are `MigratorTransactions.publishHolderRewardRound` and `claimHolderRewards`.
+The Node operator is `npm run holder-rewards -- <command> ...` from this
+repository; it runs the same workflow over a file store (`operator/`). The
+packages are unpublished; supply verified deployment IDs.
 
 ## Rounds
 
@@ -185,6 +187,12 @@ after which rerunning skips the already paid allocations.
 Use one writer per data directory. Files are fsynced and atomically renamed with
 the checkpoint watermark in the same ledger. After a process crash, first verify
 no operator is running, then remove the stale `operator-data/.lock` directory.
+The file store's lock is a local directory, so it does not protect a vault
+written from more than one host. A service supplies its own
+`HolderRewardsStore`: each `write` must be atomic and durable before it
+resolves, and `withLock` must exclude every other writer across processes and
+hosts (for example, a Postgres transaction-scoped advisory lock keyed by vault,
+which also releases when its connection dies).
 Re-running indexing or advance is safe. If rebuilding from scratch after prior
 publications, replay to each published round's end and call `advance` with that
 round and its original manifest in order; then resume indexing. Never invent a

@@ -35,9 +35,14 @@ The SDK must not:
 - ask contracts to add storage, events, or functions merely to expose a value
   that is reproducible from existing canonical primitives;
 - use floating point on atomic units — all protocol arithmetic is `bigint`
-  integer arithmetic with documented rounding directions; or
+  integer arithmetic with documented rounding directions;
 - convert protocol amounts through a USD price or oracle. Valuations are
-  denominated in the launch's selected Quote asset.
+  denominated in the launch's selected Quote asset; or
+- depend on one runtime or own durable state: no Node built-ins, `process`,
+  filesystem, or browser storage, and no persistence or locking policy. A
+  workflow that needs durable state takes a store interface (for example
+  `HolderRewardsStore`) that the deployment implements. Node tooling, such as
+  the file-backed operator CLI, lives in `operator/`, outside `src`.
 
 A preview may differ from an executed balance by atomic rounding dust or
 intervening transaction history. When they disagree, the executed balance and
@@ -52,7 +57,9 @@ preview.
   the contract also computes to enforce an invariant.
 - Validate inputs only enough to reject impossible canonical states; do not
   duplicate contract admission policy that may legitimately change.
-- Run `npm run typecheck` and `npm test` before committing.
+- Run `npm run typecheck` and `npm test` before committing. Typecheck also
+  compiles `src` without Node types (`tsconfig.sdk.json`); only ES2023 and the
+  globals in `types/runtime.d.ts` are available there.
 
 ## Agent skills
 

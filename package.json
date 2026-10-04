@@ -27,7 +27,7 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "test": "node --test test/*.test.ts",
-    "typecheck": "tsc",
+    "typecheck": "tsc && tsc -p tsconfig.sdk.json",
     "holder-rewards": "node scripts/holder-rewards.mjs"
   },
   "peerDependencies": {
