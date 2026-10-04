@@ -9,9 +9,12 @@ import type { BlastDeployment } from "../src/deployments/index.ts";
 import {
   adminDeployment,
   BLAST_DEPLOYMENTS,
+  BLAST_PRESALE_DEPLOYMENTS,
   blastSuiDeployment,
   defineBlastDeployment,
+  definePresaleDeployment,
   getBlastDeployment,
+  getPresaleDeployment,
   launchpadDeployment,
   migratorsDeployment,
   partnersDeployment,
@@ -190,5 +193,45 @@ test("rejects placeholder package IDs", () => {
         packages: { ...input.packages, launchpad: pkg("0x0", "0x122") },
       }),
     /packages\.launchpad\.packageId must not be the zero address/,
+  );
+});
+
+test("registers the standalone mainnet presale release", () => {
+  const presale = getPresaleDeployment("mainnet");
+  assert.equal(presale, BLAST_PRESALE_DEPLOYMENTS.mainnet);
+  assert.equal(
+    presale.packageId,
+    id("0x76cb0508fc94234fddd910b5616248f8a42998048a28e55f5fe1cc89e7b98400"),
+  );
+  assert.equal(presale.originalPackageId, presale.packageId);
+  assert.deepEqual(presale.adminRegistry, {
+    objectId: id(
+      "0xe7a5cc95aa47e7bc8dfcccce070f6ebc123350c3e478588e23817ee97c8c8cd4",
+    ),
+    initialSharedVersion: "986577439",
+  });
+  assert.equal(Object.isFrozen(presale), true);
+  assert.equal(Object.isFrozen(presale.feePolicy), true);
+  new PresaleCalls(presale);
+});
+
+test("normalizes a standalone presale manifest and requires every singleton", () => {
+  const manifest = presaleDeployment(deployment);
+  assert.deepEqual(definePresaleDeployment(manifest), manifest);
+  for (const name of [
+    "venueConfig",
+    "creationPolicy",
+    "feePolicy",
+    "adminRegistry",
+  ] as const) {
+    const { [name]: _removed, ...rest } = manifest;
+    assert.throws(
+      () => definePresaleDeployment(rest as typeof manifest),
+      new RegExp(`presale\\.${name} is required`),
+    );
+  }
+  assert.throws(
+    () => definePresaleDeployment({ ...manifest, packageId: "0x0" }),
+    /presale\.packageId must not be the zero address/,
   );
 });

@@ -41,6 +41,83 @@ const SHARED_OBJECTS = {
  */
 export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({});
 
+const PRESALE_SHARED_OBJECTS = SHARED_OBJECTS.presale;
+
+/**
+ * Normalizes and freezes one standalone presale deployment. Presale publishes
+ * on its own (contracts ADR 0099), so it registers before a complete
+ * `BlastDeployment` exists.
+ */
+export function definePresaleDeployment(
+  deployment: PresaleDeployment,
+): PresaleDeployment {
+  const reference = normalizeSuiPackageReference("presale", deployment);
+  return Object.freeze({
+    ...reference,
+    ...Object.fromEntries(
+      PRESALE_SHARED_OBJECTS.map((name) => [
+        name,
+        Object.freeze(
+          normalizeSharedObjectIdentity(
+            `presale.${name}`,
+            required<SharedObjectIdentity>(deployment, "presale", name),
+          ),
+        ),
+      ]),
+    ),
+  }) as PresaleDeployment;
+}
+
+/**
+ * Canonical standalone presale releases, from the publish and
+ * `package_admin::wrap` effects recorded in contracts
+ * `deployments/sui/mainnet/2026-10-04-blast-presale-scheduled-start.json`.
+ */
+export const BLAST_PRESALE_DEPLOYMENTS: Readonly<
+  Partial<Record<BlastNetwork, PresaleDeployment>>
+> = Object.freeze({
+  mainnet: definePresaleDeployment({
+    packageId:
+      "0x76cb0508fc94234fddd910b5616248f8a42998048a28e55f5fe1cc89e7b98400",
+    originalPackageId:
+      "0x76cb0508fc94234fddd910b5616248f8a42998048a28e55f5fe1cc89e7b98400",
+    venueConfig: {
+      objectId:
+        "0x129346213a5959533e854092076dc3f2494ba1e2ef08669e86cf1d2561d9f39f",
+      initialSharedVersion: "986577439",
+    },
+    creationPolicy: {
+      objectId:
+        "0xa496515a86087bad827e8190d48f103d900ad5404948dcdf9ca18f5dad738658",
+      initialSharedVersion: "986577439",
+    },
+    feePolicy: {
+      objectId:
+        "0xe2a276bbd2cb922e71e1d6b35b393537df3642e07b2f4d753fdab09c5bd6fb11",
+      initialSharedVersion: "986577439",
+    },
+    adminRegistry: {
+      objectId:
+        "0xe7a5cc95aa47e7bc8dfcccce070f6ebc123350c3e478588e23817ee97c8c8cd4",
+      initialSharedVersion: "986577439",
+    },
+  }),
+});
+
+/**
+ * The released presale deployment on `network`: the complete Blast release's
+ * when one is registered, otherwise the standalone presale release.
+ */
+export function getPresaleDeployment(network: BlastNetwork): PresaleDeployment {
+  const blast = BLAST_DEPLOYMENTS[network];
+  if (blast) return presaleDeployment(blast);
+  const presale = BLAST_PRESALE_DEPLOYMENTS[network];
+  if (!presale) {
+    throw new RangeError(`Blast presale is not deployed on Sui ${network}`);
+  }
+  return presale;
+}
+
 /** Normalizes and freezes one complete deployment of every Blast package. */
 export function defineBlastDeployment(
   deployment: BlastDeployment,

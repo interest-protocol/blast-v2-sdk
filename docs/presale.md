@@ -8,12 +8,22 @@ sale does not migrate, permissionless Cetus or Bluefin migration into a
 creation allowlists, LP-fee splits, holder-reward rounds, and the package's own
 two-tier administration.
 
-The package is not published, so no release is registered. Once one is,
-`presaleDeployment(getBlastDeployment(network))` returns the deployment; until
-then pass the IDs from the publish and `package_admin::wrap` effects:
+The package is published on mainnet on its own (contracts ADR 0099), so it
+registers before the rest of Blast. `getPresaleDeployment(network)` returns the
+complete Blast release's presale once one is registered, and the standalone
+release (`BLAST_PRESALE_DEPLOYMENTS`) until then:
 
 ```ts
-const presale = new PresaleTransactions({
+import { getPresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
+
+const presale = new PresaleTransactions(getPresaleDeployment("mainnet"));
+```
+
+For another deployment, pass the IDs from the publish and `package_admin::wrap`
+effects, validated with `definePresaleDeployment`:
+
+```ts
+const presale = new PresaleTransactions(definePresaleDeployment({
   packageId, // current package
   originalPackageId, // first publication; names every type
   venueConfig: { objectId, initialSharedVersion },
@@ -23,7 +33,7 @@ const presale = new PresaleTransactions({
   feePolicy: { objectId, initialSharedVersion },
   // Shared by publication; every administrator call checks its AdminCap here.
   adminRegistry: { objectId, initialSharedVersion },
-});
+}));
 ```
 
 Deployment shared objects carry no `mutable` flag: each call sets the
