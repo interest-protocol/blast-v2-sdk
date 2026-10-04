@@ -166,6 +166,11 @@ export const presaleEventSpecs = {
       meme: "u64",
       quote: "u64",
     },
+    ProtocolLpFeesChanged: {
+      vault_id: "id",
+      protocol_lp_fee_meme_bps: "u64",
+      protocol_lp_fee_quote_bps: "u64",
+    },
   },
   holder_rewards: {
     RoundPublished: {

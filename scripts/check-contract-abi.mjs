@@ -55,10 +55,11 @@ const artifactDeclarations = [
   {
     path: "production-presale-v1.json",
     // The presale package is unpublished, so it is frozen at the contracts
-    // commit it follows: ADRs 0099 through 0102, team vesting, and the
-    // package's own two-tier administration (contracts PR 45).
+    // commit it follows: ADRs 0099 through 0102, team vesting, the
+    // package's own two-tier administration (contracts PR 45), the AdminCap's
+    // per-vault LP-fee rates, and the package-internal Merkle check.
     baseline: {
-      contractsCommit: "db753931f7f530ccc5ba9783ac16c6e6b8ea8b97",
+      contractsCommit: "2a654b93de6c7f0dec0247e1bacab3c8df40e4ba",
       workingTreeDifferedAtFreeze: false,
     },
     packages: [["presale", "presale", "blast_presale"]],
@@ -408,6 +409,7 @@ const presaleBuilders = new Set([
   "bluefin::migrate",
   "bluefin::collect_fees",
   "presale_vault::claim_migration_residuals",
+  "presale_vault::set_protocol_lp_fees",
   "holder_rewards::publish_round",
   "holder_rewards::claim",
   "holder_rewards::close_round",
@@ -429,6 +431,7 @@ const presaleEventNames = new Set([
   "PresaleVaultCreated",
   "FeesCollected",
   "MigrationResidualsClaimed",
+  "ProtocolLpFeesChanged",
   "FeesChanged",
   "DestinationChanged",
   "QuoteSet",

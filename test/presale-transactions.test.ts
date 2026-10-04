@@ -396,6 +396,17 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       ],
     ],
     [
+      tx.setProtocolLpFees({
+        ...types,
+        vault,
+        adminCapId: "0xadc",
+        lpFeeMemeBps: 500n,
+        lpFeeQuoteBps: 0n,
+      }),
+      "presale_vault::set_protocol_lp_fees",
+      ["shared-mut:0xba", ...ADMIN, "Result:0", "Result:1"],
+    ],
+    [
       tx.setQuoteAllowed({
         adminCapId: "0xadc",
         quoteType: sui,
@@ -444,6 +455,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
 });
 
 test("administers with the presale AdminCap and never signs in to blast_acl", () => {
+  const vault = shared("0xba", true);
   const noFees = {
     raiseBps: 0n,
     tokenBps: 0n,
@@ -465,6 +477,13 @@ test("administers with the presale AdminCap and never signs in to blast_acl", ()
     listQuote,
     listVenue,
     tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
+    tx.setProtocolLpFees({
+      ...types,
+      vault,
+      adminCapId: "0xadc",
+      lpFeeMemeBps: 0n,
+      lpFeeQuoteBps: 0n,
+    }),
   ]) {
     assert.ok(!moveFunctions(ptb).some((name) => name.startsWith("blast_acl")));
   }
@@ -477,6 +496,17 @@ test("administers with the presale AdminCap and never signs in to blast_acl", ()
       .typeArguments,
     [normalizeStructTag("0x5e::cetus::Witness")],
   );
+  for (const lpFeeMemeBps of [-1n, 10_001n]) {
+    assert.throws(() =>
+      tx.setProtocolLpFees({
+        ...types,
+        vault,
+        adminCapId: "0xadc",
+        lpFeeMemeBps,
+        lpFeeQuoteBps: 0n,
+      }),
+    );
+  }
   for (const raiseBps of [-1n, 10_001n]) {
     assert.throws(() =>
       tx.setProtocolFees({

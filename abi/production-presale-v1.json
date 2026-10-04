@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "db753931f7f530ccc5ba9783ac16c6e6b8ea8b97",
+    "contractsCommit": "2a654b93de6c7f0dec0247e1bacab3c8df40e4ba",
     "workingTreeDifferedAtFreeze": false,
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -5162,56 +5162,7 @@
           ]
         },
         "merkle_tree": {
-          "functions": [
-            {
-              "name": "node",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "vector": "u8"
-                },
-                {
-                  "vector": "u8"
-                }
-              ],
-              "returns": [
-                {
-                  "vector": "u8"
-                }
-              ]
-            },
-            {
-              "name": "verify",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "vector": "u8"
-                },
-                {
-                  "vector": "u8"
-                },
-                "u64",
-                "u64",
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "vector": {
-                        "vector": "u8"
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "bool"
-              ]
-            }
-          ],
+          "functions": [],
           "structs": [],
           "enums": [],
           "events": []
@@ -5546,6 +5497,104 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "set_protocol_lp_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "presale_vault"
+                        },
+                        "name": "PresaleVault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_admin"
+                        },
+                        "name": "AdminRegistry",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_admin"
+                        },
+                        "name": "AdminCap",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": []
             }
           ],
           "structs": [
@@ -6021,6 +6070,50 @@
                 },
                 {
                   "name": "migration_quote_residual",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "ProtocolLpFeesChanged",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "protocol_lp_fee_meme_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "protocol_lp_fee_quote_bps",
                   "type": "u64"
                 }
               ],
