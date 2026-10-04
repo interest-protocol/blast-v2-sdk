@@ -236,6 +236,52 @@
         "objectId": "0x672ed784036ca4eead2ea0e8beee64b365e5d89e67dba66dda55f03722b01640",
         "initialSharedVersion": "1035275495"
       }
+    },
+    "e027-open": {
+      "scenario": "E2E-027 open policy",
+      "venue": "bluefin",
+      "memeType": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_M",
+      "quoteType": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+      "presale": {
+        "objectId": "0x72be241f9abce3043c035467312d84541962822d5a99a8d03e048976d3c22f28",
+        "initialSharedVersion": "1035278694"
+      },
+      "capId": "0xcb0fbeea6524a14d3a78fdacb8efbadc8a27854a06ae3c61f40b09582630f9dc",
+      "currency": {
+        "objectId": "0xa196031caabf330210636a1c501c4fb5112f462dc644324647a849f6dfde74cd",
+        "initialSharedVersion": "1035278693"
+      },
+      "vault": {
+        "objectId": "0xd14e2f1f8a2021eaf079ec3b62be9b0379dcf4c52bba1f07dff3ad38a1e9f3d1",
+        "initialSharedVersion": "1035333208"
+      },
+      "pool": {
+        "objectId": "0xbba083f0b1b6043a0d192d8ac6b3607a3bdc0f8ca5c85f47f1f0aa2b0e614ccc",
+        "initialSharedVersion": "1035333208"
+      }
+    },
+    "e027-allowlist": {
+      "scenario": "E2E-027 allowlist",
+      "venue": "bluefin",
+      "memeType": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_N",
+      "quoteType": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+      "presale": {
+        "objectId": "0xe65f5609b8a791addc75921ef64520e043a1b11154b5dc8c01e4a9aa7c4a54f8",
+        "initialSharedVersion": "1035278696"
+      },
+      "capId": "0x2fcd9d726e35ce33a0d8de2c1a107db62cbed7bda1103f6cdfb115d6e7a38adc",
+      "currency": {
+        "objectId": "0xf13a777bccad0d34fbf6503ceb7697c58873f3e829e45cd00fb4c4d3be0b73d0",
+        "initialSharedVersion": "1035278695"
+      },
+      "vault": {
+        "objectId": "0x36c680e463d45047e3ccb65ff086a3547ca342c7fadd42d15fbd7fc7c9199652",
+        "initialSharedVersion": "1035340055"
+      },
+      "pool": {
+        "objectId": "0xefeec86ebbfed9f197f6a18dc9439a8f48a7c58a2580501809b6543cc31b224c",
+        "initialSharedVersion": "1035340055"
+      }
     }
   },
   "tokens": {
@@ -341,6 +387,22 @@
       "currency": {
         "objectId": "0x09cb92fcf4740f3b2bdb8c04e9ac8c8c9e03d278a88b014d51aeef1d6d0bd6e4",
         "initialSharedVersion": "1035257305"
+      }
+    },
+    "M": {
+      "memeType": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_M",
+      "treasuryCap": "0xf1a8a5da5aab7c24fc7210187f2e3f36b1ffb199835bfaa139119a1d69d3f6e8",
+      "currency": {
+        "objectId": "0xa196031caabf330210636a1c501c4fb5112f462dc644324647a849f6dfde74cd",
+        "initialSharedVersion": "1035278693"
+      }
+    },
+    "N": {
+      "memeType": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_N",
+      "treasuryCap": "0x8bcdf6321537d893a458f18ea75656bb678494a248379e222352ac869f9d97a4",
+      "currency": {
+        "objectId": "0xf13a777bccad0d34fbf6503ceb7697c58873f3e829e45cd00fb4c4d3be0b73d0",
+        "initialSharedVersion": "1035278695"
       }
     }
   }

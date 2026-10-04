@@ -11,6 +11,9 @@ import { e019 } from "./e019.ts";
 import { e020 } from "./e020.ts";
 import { e022 } from "./e022.ts";
 import { e024 } from "./e024.ts";
+import { e027 } from "./e027.ts";
+import { e028 } from "./e028.ts";
+import { e029 } from "./e029.ts";
 import { e030 } from "./e030.ts";
 import { setup } from "./setup.ts";
 
@@ -28,6 +31,9 @@ export const scenarios: Record<string, (phase?: string) => Promise<void>> = {
   e020,
   e022,
   e024,
+  e027,
+  e028,
+  e029,
   e030,
   e017,
 };
