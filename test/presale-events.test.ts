@@ -80,7 +80,7 @@ test("event specs match every event frozen in the presale ABI", () => {
     { ...presaleEventSpecs, ...presalePolicyEventSpecs },
     readFrozenPresaleEventSpecs(),
   );
-  assert.equal(Object.keys(presaleEventModules).length, 16);
+  assert.equal(Object.keys(presaleEventModules).length, 17);
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
