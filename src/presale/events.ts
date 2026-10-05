@@ -145,7 +145,7 @@ export const presaleEventSpecs = {
       wallet_commitment: "u64",
       tokens: "u64",
       quote_refund: "u64",
-      remaining_commitments: "u64",
+      remaining_participants: "u64",
       vesting_id: "optionId",
     },
   },

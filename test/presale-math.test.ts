@@ -570,7 +570,7 @@ test("previews settlement and every claim, the last taking the remainder", () =>
   const migrated = {
     lifecycle: "Migrated" as const,
     totalCommitments: 4_000n,
-    remainingCommitments: 4_000n,
+    participants: 2n,
     raiseTarget: RAISE,
     tokenAllocation: 10_001n,
     participantVesting: null,
@@ -586,7 +586,7 @@ test("previews settlement and every claim, the last taking the remainder", () =>
     previewClaim(
       {
         ...migrated,
-        remainingCommitments: 3_000n,
+        participants: 1n,
         saleTokens: 7_501n,
         quote: 2_250n,
       },
@@ -598,7 +598,7 @@ test("previews settlement and every claim, the last taking the remainder", () =>
     ...migrated,
     lifecycle: "Cancelled" as const,
     totalCommitments: 500n,
-    remainingCommitments: 500n,
+    participants: 1n,
     quote: 500n,
   };
   assert.deepEqual(previewClaim(cancelled, 500n), {
@@ -606,10 +606,11 @@ test("previews settlement and every claim, the last taking the remainder", () =>
     quoteRefund: 500n,
     vesting: null,
   });
-  assert.deepEqual(
-    previewClaim({ ...cancelled, remainingCommitments: 501n }, 200n),
-    { tokens: 0n, quoteRefund: 200n, vesting: null },
-  );
+  assert.deepEqual(previewClaim({ ...cancelled, participants: 2n }, 200n), {
+    tokens: 0n,
+    quoteRefund: 200n,
+    vesting: null,
+  });
   aborts(
     () => previewClaim({ ...migrated, lifecycle: "Funded" }, 1n),
     "EInvalidLifecycle",
@@ -682,7 +683,7 @@ test("participant vesting locks every positive claim in a schedule from the clai
   const migrated = {
     lifecycle: "Migrated" as const,
     totalCommitments: 4_000n,
-    remainingCommitments: 4_000n,
+    participants: 2n,
     raiseTarget: RAISE,
     tokenAllocation: 10_001n,
     participantVesting: vesting,
@@ -696,10 +697,7 @@ test("participant vesting locks every positive claim in a schedule from the clai
   });
   // `a_participant_claim_without_tokens_creates_no_schedule`: no tokens, no schedule.
   assert.deepEqual(
-    previewClaim(
-      { ...migrated, totalCommitments: 20_001n, remainingCommitments: 20_001n },
-      1n,
-    ),
+    previewClaim({ ...migrated, totalCommitments: 20_001n }, 1n),
     { tokens: 0n, quoteRefund: 0n, vesting: null },
   );
   // `a_cancelled_vesting_sale_refunds_without_a_schedule`.
@@ -709,7 +707,7 @@ test("participant vesting locks every positive claim in a schedule from the clai
         ...migrated,
         lifecycle: "Cancelled",
         totalCommitments: 500n,
-        remainingCommitments: 500n,
+        participants: 1n,
         quote: 500n,
       },
       500n,

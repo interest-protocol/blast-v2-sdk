@@ -138,10 +138,16 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     "blast_presale::open_eligibility",
     "blast_presale::uncapped_for_anyone",
     "option::some",
-    ...recipientShare, // fee_recipients
-    "bps::new", // holder_rewards_bps
+    ...recipientShare, // fee_split shares
+    "bps::new", // fee_split holder_rewards_bps
+    "blast_presale::fee_split",
     "cetus::new",
     "blast_presale::share",
+  ]);
+  const feeSplit = moveCall(ptb, "blast_presale::fee_split");
+  assert.deepEqual(argumentKinds(ptb, feeSplit), [
+    `Result:${commandIndexOf(ptb, "MakeMoveVec", 2)}`,
+    `Result:${commandIndex(ptb, "blast_presale::fee_split") - 1}`,
   ]);
   const firstShare = moveCall(ptb, "blast_presale::recipient_share");
   assert.deepEqual(argumentKinds(ptb, firstShare), ["pure", "Result:3"]);
@@ -162,8 +168,7 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     "pure",
     `Result:${commandIndex(ptb, "blast_presale::open_eligibility")}`,
     `Result:${commandIndex(ptb, "option::some")}`,
-    `Result:${commandIndexOf(ptb, "MakeMoveVec", 2)}`,
-    `Result:${commandIndex(ptb, "cetus::new") - 1}`,
+    `Result:${commandIndex(ptb, "blast_presale::fee_split")}`,
     "shared:0x62",
     "shared:0x61",
     "shared-mut:0x60",
@@ -227,7 +232,7 @@ test("names a partner between new and share, and pays it in the migration PTB", 
   });
   assert.deepEqual(moveFunctions(migrate), [
     "cetus::migrate",
-    "blast_presale::pay_partner",
+    "blast_presale::pay_protocol_fees_with_partner",
   ]);
   const migrateBluefin = tx.migrateBluefin({
     ...types,
@@ -240,7 +245,7 @@ test("names a partner between new and share, and pays it in the migration PTB", 
   });
   assert.deepEqual(moveFunctions(migrateBluefin), [
     "bluefin::migrate",
-    "blast_presale::pay_partner",
+    "blast_presale::pay_protocol_fees_with_partner",
   ]);
   // Without a partner, neither creation nor migration names one.
   for (const unpartnered of [
@@ -563,8 +568,8 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       ["shared-mut:0x61", ...ADMIN, "pure"],
     ],
     [
-      tx.payPartner({ ...types, presale, partner }),
-      "blast_presale::pay_partner",
+      tx.payProtocolFeesWithPartner({ ...types, presale, partner }),
+      "blast_presale::pay_protocol_fees_with_partner",
       ["shared-mut:0xab", "shared:0x61", "shared:0x9a27", CLOCK],
     ],
     [
@@ -674,7 +679,14 @@ test("allows an external migrator's witness and rejects types anyone can constru
     ...ADMIN,
     "pure",
   ]);
-  for (const witnessType of ["u64", "vector<u8>", "vector<0x2::sui::SUI>"]) {
+  for (const witnessType of [
+    "u64",
+    "vector<u8>",
+    "vector<0x2::sui::SUI>",
+    "0x1::type_name::TypeName",
+    "0x1::option::Option<0xabc::blast_aftermath_dao_presale::Witness>",
+    "0x2::object::ID",
+  ]) {
     assert.throws(
       () =>
         tx.setMigrationWitnessAllowed({

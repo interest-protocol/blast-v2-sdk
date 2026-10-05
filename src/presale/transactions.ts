@@ -128,14 +128,14 @@ export type PresaleCreation = {
   capRecipient: string;
   /**
    * A Blast partner the `CreationPolicy` accepts; it becomes the sale's
-   * partner for good, paid its cut of Blast's raise share after migration.
+   * partner for good, paid its cut of Blast's raise fee after migration.
    */
   partner?: SharedObjectReference<false>;
 };
 
 /**
  * The sale's partner, when `PresaleState.partnerId` is set: the migration
- * transaction then pays it and Blast the shares migration held.
+ * transaction then pays it and Blast the fees migration held.
  */
 export type PresalePayout = {
   partner?: SharedObjectReference<false> | null;
@@ -168,8 +168,19 @@ function externalWitnessType(witnessType: string): string {
       `migration witness must be a struct type: ${witnessType}`,
     );
   }
+  // Anyone can construct the framework's droppable structs, such as
+  // `TypeName`, `Option<T>`, or `ID`, so the contract rejects them too.
+  if (FRAMEWORK_ADDRESSES.has(normalizeSuiAddress(tag.address))) {
+    throw new TypeError(
+      `migration witness must not be a framework type: ${witnessType}`,
+    );
+  }
   return normalizeStructTag(tag);
 }
+
+const FRAMEWORK_ADDRESSES = new Set(
+  ["0x1", "0x2"].map((address) => normalizeSuiAddress(address)),
+);
 
 function cetusTypeName(type: string): string {
   return normalizeStructTag(parseStructTag(type)).replace(
@@ -327,6 +338,23 @@ export class PresaleCalls {
   }
 
   /**
+   * `blast_presale::fee_split`: the LP-fee split, each recipient's share then
+   * the holder-reward share, totalling 10,000 BPS. Fee shares cannot vest.
+   */
+  feeSplit(feeRecipients: readonly BpsShare[], holderRewardsBps: bigint) {
+    if (feeRecipients.some((recipient) => recipient.vesting)) {
+      throw new RangeError("fee recipients cannot vest");
+    }
+    const shares = this.recipientShares(feeRecipients);
+    const holderRewards = this.bps(holderRewardsBps);
+    return (tx: Transaction): TransactionResult =>
+      this.#presaleCall(tx, "fee_split", [
+        tx.add(shares),
+        tx.add(holderRewards),
+      ]);
+  }
+
+  /**
    * `cetus::new`: mints and seals the supply, reserves the pair's Cetus pool
    * creation at `tickSpacing` (Cetus derives the fee rate), and returns
    * `(Presale, PresaleCap)`; the same PTB must `share` the presale.
@@ -361,7 +389,7 @@ export class PresaleCalls {
    * `blast_presale::set_partner`: names the new presale's Blast partner, which
    * the `CreationPolicy` must accept now. Call it after `new` and before
    * `share`, which fixes it for good; the partner earns its cut of Blast's
-   * raise share through `payPartner` once the sale migrates.
+   * raise fee through `payProtocolFeesWithPartner` once the sale migrates.
    */
   setPartner(
     options: LaunchTypes & {
@@ -607,11 +635,11 @@ export class PresaleCalls {
   }
 
   /**
-   * `blast_presale::pay_partner`: once a partnered sale migrates, pays its
-   * partner its share in force of Blast's raise share, rounded down, and
+   * `blast_presale::pay_protocol_fees_with_partner`: once a partnered sale migrates, pays its
+   * partner its cut in force of Blast's raise fee, rounded down, and
    * Blast the rest and its token share. Anyone may call it, once.
    */
-  payPartner(
+  payProtocolFeesWithPartner(
     options: LaunchTypes & {
       presale: SharedObjectReference<true>;
       partner: SharedObjectReference<false>;
@@ -620,7 +648,7 @@ export class PresaleCalls {
     return (tx: Transaction): void => {
       this.#presaleCall(
         tx,
-        "pay_partner",
+        "pay_protocol_fees_with_partner",
         [
           this.#presale(tx, options),
           this.#feePolicy(tx),
@@ -1037,9 +1065,6 @@ export class PresaleCalls {
     options: PresaleTerms,
     venueArguments: TransactionArgument[],
   ): TransactionResult {
-    if (options.feeRecipients.some((recipient) => recipient.vesting)) {
-      throw new RangeError("fee recipients cannot vest");
-    }
     return this.#presaleCall(
       tx,
       "new",
@@ -1058,8 +1083,7 @@ export class PresaleCalls {
         tx.pure.u64(options.liquidityWindowMs),
         tx.add(this.eligibility(options.eligibility)),
         tx.add(this.uncapped(options.uncapped)),
-        tx.add(this.recipientShares(options.feeRecipients)),
-        tx.add(this.bps(options.holderRewardsBps)),
+        tx.add(this.feeSplit(options.feeRecipients, options.holderRewardsBps)),
         this.#creationPolicy(tx),
         this.#feePolicy(tx),
         ...venueArguments,
@@ -1263,18 +1287,18 @@ export class PresaleTransactions {
     );
   }
 
-  /** Then pays the sale's partner when `partner` is given; see `payPartner`. */
+  /** Then pays the sale's partner when `partner` is given; see `payProtocolFeesWithPartner`. */
   migrateCetus(
     options: Parameters<PresaleCalls["migrateCetus"]>[0] & PresalePayout,
   ): Transaction {
     const tx = new Transaction();
     tx.add(this.call.migrateCetus(options));
-    return this.#payPartnerAfter(tx, options);
+    return this.#payProtocolFeesWithPartnerAfter(tx, options);
   }
 
   /**
    * Pays Bluefin's SUI pool-creation fee from gas as an exact-balance coin,
-   * then the sale's partner when `partner` is given; see `payPartner`.
+   * then the sale's partner when `partner` is given; see `payProtocolFeesWithPartner`.
    */
   migrateBluefin(
     options: Omit<
@@ -1289,15 +1313,17 @@ export class PresaleTransactions {
       balance: options.creationFee,
     });
     tx.add(this.call.migrateBluefin({ ...options, creationFee }));
-    return this.#payPartnerAfter(tx, options);
+    return this.#payProtocolFeesWithPartnerAfter(tx, options);
   }
 
   /**
    * Pays a migrated sale's partner and Blast the shares its migration held.
    * Use it for a sale another migrator, such as a vendor package's, migrated.
    */
-  payPartner(options: Parameters<PresaleCalls["payPartner"]>[0]): Transaction {
-    return single(this.call.payPartner(options));
+  payProtocolFeesWithPartner(
+    options: Parameters<PresaleCalls["payProtocolFeesWithPartner"]>[0],
+  ): Transaction {
+    return single(this.call.payProtocolFeesWithPartner(options));
   }
 
   collectCetusFees(
@@ -1514,14 +1540,15 @@ export class PresaleTransactions {
     return tx;
   }
 
-  #payPartnerAfter(
+  #payProtocolFeesWithPartnerAfter(
     tx: Transaction,
     options: LaunchTypes & {
       presale: SharedObjectReference<true>;
     } & PresalePayout,
   ): Transaction {
     const { partner } = options;
-    if (partner) tx.add(this.call.payPartner({ ...options, partner }));
+    if (partner)
+      tx.add(this.call.payProtocolFeesWithPartner({ ...options, partner }));
     return tx;
   }
 }
