@@ -5,7 +5,8 @@
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
-      "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness"
+      "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness",
+      "contracts ADR 0105: one Blast partner per presale, named by set_partner before the share and accepted by creation_policy::add_partner and remove_partner; a partnered migration holds Blast's shares for pay_partner, PresaleOpened gains partner_id, and ProtocolFeesPaid gains partner_quote"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -1026,6 +1027,114 @@
               ]
             },
             {
+              "name": "pay_partner",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "SaleToken",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale"
+                        },
+                        "name": "Presale",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "SaleToken"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_partners",
+                          "name": "blast_partners"
+                        },
+                        "name": "Partner",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
               "name": "recipient_share",
               "sdk": "builder",
               "entry": false,
@@ -1055,6 +1164,99 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "set_partner",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "SaleToken",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale"
+                        },
+                        "name": "Presale",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "SaleToken"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "creation_policy"
+                        },
+                        "name": "CreationPolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_partners",
+                          "name": "blast_partners"
+                        },
+                        "name": "Partner",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
             },
             {
               "name": "set_protocol_fees",
@@ -1819,6 +2021,67 @@
                             "NamedTypeParameter": "SaleToken"
                           },
                           "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "partner_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "unpaid_protocol_quote",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "balance"
+                              },
+                              "name": "Balance",
+                              "type_arguments": [
+                                {
+                                  "argument": {
+                                    "NamedTypeParameter": "Quote"
+                                  },
+                                  "phantom": true
+                                }
+                              ]
+                            }
+                          },
+                          "phantom": false
                         }
                       ]
                     }
@@ -2769,6 +3032,33 @@
                 {
                   "name": "uncapped_from_ms",
                   "type": "u64"
+                },
+                {
+                  "name": "partner_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
                 }
               ],
               "sdk": "decoder-reducer"
@@ -2880,6 +3170,10 @@
                 },
                 {
                   "name": "tokens",
+                  "type": "u64"
+                },
+                {
+                  "name": "partner_quote",
                   "type": "u64"
                 }
               ],
@@ -4740,6 +5034,159 @@
         "creation_policy": {
           "functions": [
             {
+              "name": "add_partner",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "creation_policy"
+                        },
+                        "name": "CreationPolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_admin"
+                        },
+                        "name": "AdminRegistry",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_admin"
+                        },
+                        "name": "AdminCap",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_partners",
+                          "name": "blast_partners"
+                        },
+                        "name": "Partner",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "remove_partner",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "creation_policy"
+                        },
+                        "name": "CreationPolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_admin"
+                        },
+                        "name": "AdminRegistry",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_admin"
+                        },
+                        "name": "AdminCap",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_partners",
+                          "name": "blast_partners"
+                        },
+                        "name": "Partner",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
               "name": "set_migration_witness_allowed",
               "sdk": "builder",
               "entry": false,
@@ -4941,6 +5388,31 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "PartnerKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "pos0",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ]
             }
           ],
           "enums": [],
@@ -4970,6 +5442,60 @@
                 {
                   "name": "allowed",
                   "type": "bool"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "PartnerAdded",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "partner_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "PartnerRemoved",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "partner_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "accepted_until_ms",
+                  "type": "u64"
                 }
               ],
               "sdk": "decoder-reducer"

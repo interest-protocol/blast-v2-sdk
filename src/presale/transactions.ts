@@ -57,15 +57,15 @@ import type {
  * The mainnet release is registered: `getPresaleDeployment("mainnet")`
  * returns it. For another deployment, pass the IDs the publish and
  * `package_admin::wrap` effects return. Publication shares `VenueConfig`, `CreationPolicy`, `FeePolicy`, and
- * `AdminRegistry`. The package administers itself and does not link
- * `blast_admin`.
+ * `AdminRegistry`. The package administers itself, without the Blast ACL; it
+ * links `blast_partners` only to pay a sale's partner.
  */
 export type PresaleDeployment = {
   packageId: string;
   originalPackageId: string;
   /** `venue_config::VenueConfig`, holding each Meme's Cetus `PoolCreationCap`. */
   venueConfig: SharedObjectIdentity;
-  /** `creation_policy::CreationPolicy`: the Quote types and migrators creation admits. */
+  /** `creation_policy::CreationPolicy`: the Quote types, migrators, and partners creation admits. */
   creationPolicy: SharedObjectIdentity;
   /** `fee_policy::FeePolicy`: creation, migration, and fee collection read it. */
   feePolicy: SharedObjectIdentity;
@@ -120,6 +120,25 @@ export type CetusPresaleObjects = {
   cetusConfig: SharedObjectReference<false>;
   /** Cetus CLMM `factory::Pools`. */
   cetusPools: SharedObjectReference<true>;
+};
+
+/** What `createCetusPresale` and `createBluefinPresale` add to `new`. */
+export type PresaleCreation = {
+  startMs: bigint;
+  capRecipient: string;
+  /**
+   * A Blast partner the `CreationPolicy` accepts; it becomes the sale's
+   * partner for good, paid its cut of Blast's raise share after migration.
+   */
+  partner?: SharedObjectReference<false>;
+};
+
+/**
+ * The sale's partner, when `PresaleState.partnerId` is set: the migration
+ * transaction then pays it and Blast the shares migration held.
+ */
+export type PresalePayout = {
+  partner?: SharedObjectReference<false> | null;
 };
 
 /** Maximum Merkle proof depth for 65,536 leaves. */
@@ -336,6 +355,33 @@ export class PresaleCalls {
         tx.pure.u32(tickSpacing),
         tx.pure.u64(feeRate),
       ]);
+  }
+
+  /**
+   * `blast_presale::set_partner`: names the new presale's Blast partner, which
+   * the `CreationPolicy` must accept now. Call it after `new` and before
+   * `share`, which fixes it for good; the partner earns its cut of Blast's
+   * raise share through `payPartner` once the sale migrates.
+   */
+  setPartner(
+    options: LaunchTypes & {
+      presale: TransactionArgument;
+      partner: SharedObjectReference<false>;
+    },
+  ) {
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "set_partner",
+        [
+          options.presale,
+          this.#creationPolicy(tx),
+          sharedObject(tx, "partner", options.partner, false),
+          tx.object.clock(),
+        ],
+        options,
+      );
+    };
   }
 
   /**
@@ -560,6 +606,32 @@ export class PresaleCalls {
     };
   }
 
+  /**
+   * `blast_presale::pay_partner`: once a partnered sale migrates, pays its
+   * partner its share in force of Blast's raise share, rounded down, and
+   * Blast the rest and its token share. Anyone may call it, once.
+   */
+  payPartner(
+    options: LaunchTypes & {
+      presale: SharedObjectReference<true>;
+      partner: SharedObjectReference<false>;
+    },
+  ) {
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "pay_partner",
+        [
+          this.#presale(tx, options),
+          this.#feePolicy(tx),
+          sharedObject(tx, "partner", options.partner, false),
+          tx.object.clock(),
+        ],
+        options,
+      );
+    };
+  }
+
   /** `cetus::collect_fees`: pays Blast and every fee recipient, keeps the holder share. */
   collectCetusFees(
     options: LaunchTypes & {
@@ -751,6 +823,29 @@ export class PresaleCalls {
         : this.migrationWitnessType(options.venue);
     return (tx: Transaction): void => {
       this.#setAllowed(tx, "set_migration_witness_allowed", witness, options);
+    };
+  }
+
+  /** `creation_policy::add_partner`: new presales may name `partner` at once. */
+  addPartner(options: {
+    adminCap: TransactionObjectInput;
+    partner: SharedObjectReference<false>;
+  }) {
+    return (tx: Transaction): void => {
+      this.#partnerCall(tx, "add_partner", options, []);
+    };
+  }
+
+  /**
+   * `creation_policy::remove_partner`: new presales stop naming `partner`
+   * after `PARTNER_DELAY_MS`; sales that name it keep paying it.
+   */
+  removePartner(options: {
+    adminCap: TransactionObjectInput;
+    partner: SharedObjectReference<false>;
+  }) {
+    return (tx: Transaction): void => {
+      this.#partnerCall(tx, "remove_partner", options, [tx.object.clock()]);
     };
   }
 
@@ -991,6 +1086,26 @@ export class PresaleCalls {
     });
   }
 
+  #partnerCall(
+    tx: Transaction,
+    functionName: "add_partner" | "remove_partner",
+    options: {
+      adminCap: TransactionObjectInput;
+      partner: SharedObjectReference<false>;
+    },
+    trailing: TransactionArgument[],
+  ): void {
+    tx.moveCall({
+      target: `${this.deployment.packageId}::creation_policy::${functionName}`,
+      arguments: [
+        this.#creationPolicy(tx, true),
+        ...this.#admin(tx, options.adminCap),
+        sharedObject(tx, "partner", options.partner, false),
+        ...trailing,
+      ],
+    });
+  }
+
   #vestingTerms(tx: Transaction, terms: VestingTerms): TransactionResult {
     return this.#presaleCall(tx, "vesting_terms", [
       tx.pure.u64(terms.cliffMs),
@@ -1057,14 +1172,11 @@ export class PresaleTransactions {
   }
 
   /**
-   * `cetus::new`, then `share` from `startMs`, and transfers the `PresaleCap`
-   * to `capRecipient`.
+   * `cetus::new`, then `set_partner` when `partner` is given, `share` from
+   * `startMs`, and transfers the `PresaleCap` to `capRecipient`.
    */
   createCetusPresale(
-    options: Parameters<PresaleCalls["newCetusPresale"]>[0] & {
-      startMs: bigint;
-      capRecipient: string;
-    },
+    options: Parameters<PresaleCalls["newCetusPresale"]>[0] & PresaleCreation,
   ): Transaction {
     const tx = new Transaction();
     const created = tx.add(this.call.newCetusPresale(options));
@@ -1072,14 +1184,11 @@ export class PresaleTransactions {
   }
 
   /**
-   * `bluefin::new`, then `share` from `startMs`, and transfers the
-   * `PresaleCap` to `capRecipient`.
+   * `bluefin::new`, then `set_partner` when `partner` is given, `share` from
+   * `startMs`, and transfers the `PresaleCap` to `capRecipient`.
    */
   createBluefinPresale(
-    options: Parameters<PresaleCalls["newBluefinPresale"]>[0] & {
-      startMs: bigint;
-      capRecipient: string;
-    },
+    options: Parameters<PresaleCalls["newBluefinPresale"]>[0] & PresaleCreation,
   ): Transaction {
     const tx = new Transaction();
     const created = tx.add(this.call.newBluefinPresale(options));
@@ -1154,18 +1263,24 @@ export class PresaleTransactions {
     );
   }
 
+  /** Then pays the sale's partner when `partner` is given; see `payPartner`. */
   migrateCetus(
-    options: Parameters<PresaleCalls["migrateCetus"]>[0],
+    options: Parameters<PresaleCalls["migrateCetus"]>[0] & PresalePayout,
   ): Transaction {
-    return single(this.call.migrateCetus(options));
+    const tx = new Transaction();
+    tx.add(this.call.migrateCetus(options));
+    return this.#payPartnerAfter(tx, options);
   }
 
-  /** Pays Bluefin's SUI pool-creation fee from gas as an exact-balance coin. */
+  /**
+   * Pays Bluefin's SUI pool-creation fee from gas as an exact-balance coin,
+   * then the sale's partner when `partner` is given; see `payPartner`.
+   */
   migrateBluefin(
     options: Omit<
       Parameters<PresaleCalls["migrateBluefin"]>[0],
       "creationFee"
-    > & { creationFee: bigint },
+    > & { creationFee: bigint } & PresalePayout,
   ): Transaction {
     requireU64("creationFee", options.creationFee);
     const tx = new Transaction();
@@ -1174,7 +1289,15 @@ export class PresaleTransactions {
       balance: options.creationFee,
     });
     tx.add(this.call.migrateBluefin({ ...options, creationFee }));
-    return tx;
+    return this.#payPartnerAfter(tx, options);
+  }
+
+  /**
+   * Pays a migrated sale's partner and Blast the shares its migration held.
+   * Use it for a sale another migrator, such as a vendor package's, migrated.
+   */
+  payPartner(options: Parameters<PresaleCalls["payPartner"]>[0]): Transaction {
+    return single(this.call.payPartner(options));
   }
 
   collectCetusFees(
@@ -1288,6 +1411,26 @@ export class PresaleTransactions {
     );
   }
 
+  /** Lets new presales name `partner` at once. */
+  addPartner(options: {
+    adminCapId: string;
+    partner: SharedObjectReference<false>;
+  }): Transaction {
+    return single(
+      this.call.addPartner({ ...options, adminCap: options.adminCapId }),
+    );
+  }
+
+  /** Stops new presales naming `partner` after `PARTNER_DELAY_MS`. */
+  removePartner(options: {
+    adminCapId: string;
+    partner: SharedObjectReference<false>;
+  }): Transaction {
+    return single(
+      this.call.removePartner({ ...options, adminCap: options.adminCapId }),
+    );
+  }
+
   /** Redirects every later protocol payout. */
   setProtocolDestination(options: {
     adminCapId: string;
@@ -1361,11 +1504,24 @@ export class PresaleTransactions {
   #shareAndKeepCap(
     tx: Transaction,
     created: TransactionResult,
-    options: LaunchTypes & { startMs: bigint; capRecipient: string },
+    options: LaunchTypes & PresaleCreation,
   ): Transaction {
     const [presale, presaleCap] = moveResults(created, 2);
+    const { partner } = options;
+    if (partner) tx.add(this.call.setPartner({ ...options, presale, partner }));
     tx.add(this.call.share({ ...options, presale }));
     tx.transferObjects([presaleCap], normalizeSuiAddress(options.capRecipient));
+    return tx;
+  }
+
+  #payPartnerAfter(
+    tx: Transaction,
+    options: LaunchTypes & {
+      presale: SharedObjectReference<true>;
+    } & PresalePayout,
+  ): Transaction {
+    const { partner } = options;
+    if (partner) tx.add(this.call.payPartner({ ...options, partner }));
     return tx;
   }
 }
