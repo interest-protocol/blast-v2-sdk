@@ -37,7 +37,9 @@ function fakeClient(options: FakeOptions = {}) {
     getCurrentSystemState: async () => ({
       systemState: { referenceGasPrice: String(PRICE), epoch: "900" },
     }),
-    getChainIdentifier: async () => ({ chainIdentifier: "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S" }),
+    getChainIdentifier: async () => ({
+      chainIdentifier: "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S",
+    }),
     getBalance: async () => ({
       balance: {
         coinType: "0x2::sui::SUI",
