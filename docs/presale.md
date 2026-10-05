@@ -143,7 +143,7 @@ A cancelled sale pays Blast nothing, and its token share stays locked.
 
 ## Partners
 
-A sale may name one Blast partner (contracts ADR 0105), set once, at creation:
+A sale may name one Blast partner (contracts ADR 0106), set once, at creation:
 pass `partner` to `createCetusPresale` or `createBluefinPresale`, and the PTB
 calls `set_partner` between the venue's `new` and `share`. The
 `CreationPolicy` must accept the partner (`EPartnerNotAccepted`); after the
