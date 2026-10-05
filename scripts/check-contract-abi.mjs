@@ -65,6 +65,7 @@ const artifactDeclarations = [
     },
     approvedAbiAmendments: [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
+      "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness",
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },
@@ -454,6 +455,11 @@ function classifyPresaleFunction(moduleName, functionName) {
   if (presaleBuilders.has(key)) return "builder";
   // Every rate argument is a `bps::Bps` built in the PTB.
   if (key === "bps::new") return "compositional";
+  // A migrator's module calls these with its own sealed witness, which no
+  // transaction can construct; the SDK builds that migrator's entry points.
+  if (key === "blast_presale::new" || key === "blast_presale::migrate") {
+    return "move-composition";
+  }
   // `allowlist.ts` mirrors the Merkle tree and `math.ts` the BPS arithmetic off chain.
   if (moduleName === "merkle_tree" || moduleName === "bps") {
     return "move-composition";

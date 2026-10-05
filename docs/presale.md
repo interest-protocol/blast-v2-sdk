@@ -1,7 +1,7 @@
 # Presale
 
 `@interest-protocol/blast-sdk/presale` covers the standalone `blast_presale`
-package (contracts ADRs 0099 through 0102): overflow presales with capped
+package (contracts ADRs 0099 through 0102 and 0104): overflow presales with capped
 commitments, one common fill rate, migration-gated claims, full refunds when a
 sale does not migrate, permissionless Cetus or Bluefin migration into a
 `PresaleVault`, vesting token and raise shares, Blast's protocol fees and
@@ -59,7 +59,7 @@ mutability its Move signature needs.
 | Blast's rates on one sale | `setPresaleProtocolFees` | Takes the `AdminCap`. Only before the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
 | Blast's LP-fee rates on one vault | `setProtocolLpFees` | Takes the `AdminCap`. Applies to that vault's later collections, including fees already in the pool. The contract rejects an unchanged pair (`ProtocolLpFeesChanged`). |
 | Blast's payout address | `setProtocolDestination` | Takes the `AdminCap`. Applies to every later payout. |
-| Listing | `setQuoteAllowed`, `setMigrationWitnessAllowed` | Takes the `AdminCap`. Which Quote types and venues presales created afterward may use; existing sales are unaffected. |
+| Listing | `setQuoteAllowed`, `setMigrationWitnessAllowed` | Takes the `AdminCap`. Which Quote types and migrators presales created afterward may use; existing sales are unaffected. A migrator is a `venue` of this package or the `witnessType` of an external migrator's `Witness` struct. |
 | Administration | `replaceAdminCap`, `revokeAdminCap`, `transferSuperAdmin` | Take the `SuperAdminCap` (`superAdminCapId`). See [Administration](#administration). |
 
 `PresaleCalls` exposes each Move call separately for composition.
@@ -141,11 +141,16 @@ A cancelled sale pays Blast nothing, and its token share stays locked.
 ## Creation allowlists
 
 `creation_policy::CreationPolicy` lists the Quote types and the migration
-witnesses (`cetus::Witness`, `bluefin::Witness`) new presales may use; both
-sets are empty at publication, so the `AdminCap` must allow at least one of each
-before any sale can be created. Creation checks it once
-(`EQuoteNotAllowed`, `EMigrationWitnessNotAllowed`); a later delisting never
-touches a live sale. Read it with `PresaleClient.getCreationPolicy` before
+witnesses (`cetus::Witness`, `bluefin::Witness`, or an external migrator's) new
+presales may use; both sets are empty at publication, so the `AdminCap` must
+allow at least one of each before any sale can be created. Creation checks it
+once (`EQuoteNotAllowed`, `EMigrationWitnessNotAllowed`); a later delisting never
+touches a live sale. `blast_presale::new` and `migrate` are public (contracts
+ADR 0104), so a migrator in another package, such as a partner's vendor package,
+creates and migrates sales with its own sealed `Witness` once allowed. Pass that
+struct as `setMigrationWitnessAllowed({ witnessType })`; the contract rejects a
+primitive or vector witness (`EInvalidMigrationWitness`), which anyone can
+construct, and the builder throws before it reaches the chain. Read it with `PresaleClient.getCreationPolicy` before
 building a creation; `previewPresaleCreation` does not check it.
 
 ## Previews
@@ -199,8 +204,8 @@ field, so the reducer keys commitments by the event sender.
 
 ## ABI coverage
 
-`abi/production-presale-v1.json` freezes the package at contracts `55e1ac0`.
-Every public function is classified:
+`abi/production-presale-v1.json` freezes the package at contracts `55e1ac0`,
+with the approved amendments it lists. Every public function is classified:
 
 - **Builders:** all 16 `blast_presale` functions; `blast_presale_admin`
   `replace_admin_cap`, `revoke_admin_cap`, and `transfer_super_admin`;
@@ -211,6 +216,8 @@ Every public function is classified:
   `set_protocol_lp_fees`; and
   `holder_rewards` `publish_round`, `claim`, and `close_round`.
 - **Compositional:** `bps::new`, which every rate argument passes through.
+- **Move composition:** `blast_presale::new` and `migrate`, which a migrator's
+  own module calls with its sealed witness; no transaction can construct one.
 - **Off-chain mirror:** the package-internal `merkle_tree::node` and `verify`
   (`allowlist.ts`);
   `bps::value` and `apply_up` (`math.ts`).
