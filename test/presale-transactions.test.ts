@@ -138,10 +138,16 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     "blast_presale::open_eligibility",
     "blast_presale::uncapped_for_anyone",
     "option::some",
-    ...recipientShare, // fee_recipients
-    "bps::new", // holder_rewards_bps
+    ...recipientShare, // fee_split shares
+    "bps::new", // fee_split holder_rewards_bps
+    "blast_presale::fee_split",
     "cetus::new",
     "blast_presale::share",
+  ]);
+  const feeSplit = moveCall(ptb, "blast_presale::fee_split");
+  assert.deepEqual(argumentKinds(ptb, feeSplit), [
+    `Result:${commandIndexOf(ptb, "MakeMoveVec", 2)}`,
+    `Result:${commandIndex(ptb, "blast_presale::fee_split") - 1}`,
   ]);
   const firstShare = moveCall(ptb, "blast_presale::recipient_share");
   assert.deepEqual(argumentKinds(ptb, firstShare), ["pure", "Result:3"]);
@@ -162,8 +168,7 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     "pure",
     `Result:${commandIndex(ptb, "blast_presale::open_eligibility")}`,
     `Result:${commandIndex(ptb, "option::some")}`,
-    `Result:${commandIndexOf(ptb, "MakeMoveVec", 2)}`,
-    `Result:${commandIndex(ptb, "cetus::new") - 1}`,
+    `Result:${commandIndex(ptb, "blast_presale::fee_split")}`,
     "shared:0x62",
     "shared:0x61",
     "shared-mut:0x60",

@@ -47,7 +47,7 @@ export type PresaleProjection = {
   liquidityDeadlineMs: bigint;
   uncappedFromMs: bigint;
   totalCommitments: bigint;
-  remainingCommitments: bigint;
+  /** Wallets holding an undelivered commitment; each claim releases one. */
   participants: bigint;
   /** Undelivered commitment per wallet (the `Committed` sender). */
   commitments: Readonly<Record<string, bigint>>;
@@ -228,7 +228,6 @@ function applyPresaleEvent(
       const { payload, sender } = event;
       return updatePresale(state, payload.presale_id, (presale) => ({
         totalCommitments: payload.total_commitments,
-        remainingCommitments: payload.total_commitments,
         participants: payload.participants,
         commitments: {
           ...presale.commitments,
@@ -310,7 +309,7 @@ function applyPresaleEvent(
           presale.commitments;
         return {
           commitments,
-          remainingCommitments: payload.remaining_commitments,
+          participants: payload.remaining_participants,
           saleTokens: presale.saleTokens - payload.tokens,
           quote: presale.quote - payload.quote_refund,
           participantVestingIds:
@@ -530,7 +529,6 @@ function createdPresale(
     liquidityDeadlineMs: 0n,
     uncappedFromMs: 0n,
     totalCommitments: 0n,
-    remainingCommitments: 0n,
     participants: 0n,
     commitments: {},
     quote: 0n,

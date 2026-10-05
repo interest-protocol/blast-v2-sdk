@@ -268,8 +268,8 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
         wallet_commitment: commitment,
         tokens: expected.tokens,
         quote_refund: expected.quoteRefund,
-        remaining_commitments:
-          required(state.presales[PRESALE]).remainingCommitments - commitment,
+        remaining_participants:
+          required(state.presales[PRESALE]).participants - 1n,
         vesting_id: null,
       }),
     );
@@ -277,18 +277,18 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   presale = required(state.presales[PRESALE]);
   assert.equal(presale.lifecycle, "Migrated");
   assert.deepEqual(presale.commitments, {});
-  // `blast_presale_tests`: custody is [4_000, 0, 2, 0, 0, 0, 0] after both claims.
+  // `blast_presale_tests`: after both claims custody is [4_000, 0, 0, 0, 0, 0, 0]; each claim
+  // released one participant.
   assert.deepEqual(
     [
       presale.totalCommitments,
-      presale.remainingCommitments,
       presale.participants,
       presale.quote,
       presale.saleTokens,
       presale.liquidityTokens,
       presale.recipientTokens,
     ],
-    [4_000n, 0n, 2n, 0n, 0n, 0n, 0n],
+    [4_000n, 0n, 0n, 0n, 0n, 0n],
   );
 
   const vaultEvents: DecodedPresaleEvent[] = [
@@ -827,7 +827,7 @@ test("carries vesting terms from creation and schedule IDs from migration and cl
       wallet_commitment: 1_000n,
       tokens: 2_500n,
       quote_refund: 0n,
-      remaining_commitments: 0n,
+      remaining_participants: 0n,
       vesting_id: PARTICIPANT_SCHEDULE,
     }),
   ]) {

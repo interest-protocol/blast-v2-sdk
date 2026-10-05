@@ -885,8 +885,9 @@ export function previewSettlement(
  * Mirrors `blast_presale::claim` for one commitment of `commitment` Quote
  * atoms. After migration: `tokens = floor(tokenAllocation * c / C)` and
  * `quoteRefund = floor((C - R) * c / C)`; after cancellation no tokens and
- * `floor(C * c / C) = c`. The last claim (`remaining == c`) takes every atom
- * left in custody instead, so the rounding remainder goes to it. `vesting` is
+ * `floor(C * c / C) = c`. The last claim, from the one wallet still holding a
+ * commitment (`participants == 1`), takes every atom left in custody instead,
+ * so the rounding remainder goes to it. `vesting` is
  * the terms of the schedule the claim locks `tokens` in, starting at the claim;
  * null when they are paid out, including when there are none to lock.
  */
@@ -895,7 +896,7 @@ export function previewClaim(
     PresaleState,
     | "lifecycle"
     | "totalCommitments"
-    | "remainingCommitments"
+    | "participants"
     | "raiseTarget"
     | "tokenAllocation"
     | "participantVesting"
@@ -911,7 +912,7 @@ export function previewClaim(
     "claims open after migration or cancellation",
   );
   const total = presale.totalCommitments;
-  const last = presale.remainingCommitments === commitment;
+  const last = presale.participants === 1n;
   const tokens = !migrated
     ? 0n
     : last

@@ -49,9 +49,7 @@ function presaleBytes(): Uint8Array {
     ...u8(2), // lifecycle: Funded
     ...u64(100n), // duration_ms
     ...u64(50n), // liquidity_window_ms
-    ...u64(1_000n), // start_ms
-    ...u64(1_100n), // end_ms
-    ...u64(1_150n), // liquidity_deadline_ms
+    ...u64(1_000n), // start_ms; the contract derives every other window from it
     ...u64(1_000n), // raise_target
     ...u8(1), // eligibility: Allowlisted
     ...bytes(root),
@@ -62,17 +60,15 @@ function presaleBytes(): Uint8Array {
     ...u64(8n),
     ...u64(250n),
     ...bool(true), // hard_cap
-    ...u64(1_050n), // uncapped_from_ms
     ...ascii(witness), // migration_witness
     ...u32(200), // tick_spacing
     ...u64(10_000n), // pool_fee_rate
     ...vec([
       [...addr("0xc0ffee"), ...u64(5_000n), ...u8(0)],
       [...addr("0xfee"), ...u64(2_000n), ...u8(0)],
-    ]), // fee_recipients: RecipientShare { recipient, bps: Bps(u64), vesting: None }
-    ...u64(3_000n), // holder_rewards_bps: Bps(u64)
+    ]), // fee_split.shares: RecipientShare { recipient, bps: Bps(u64), vesting: None }
+    ...u64(3_000n), // fee_split.holder_rewards_bps: Bps(u64)
     ...u64(4_000n), // total_commitments
-    ...u64(3_000n), // remaining_commitments
     ...u64(2n), // participants
     ...u64(3_000n), // quote
     ...u64(10_001n), // token_allocation
@@ -135,8 +131,13 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
     hardCap: true,
   });
   assert.deepEqual(
-    [state.startMs, state.endMs, state.liquidityDeadlineMs],
-    [1_000n, 1_100n, 1_150n],
+    [
+      state.startMs,
+      state.endMs,
+      state.liquidityDeadlineMs,
+      state.uncappedFromMs,
+    ],
+    [1_000n, 1_100n, 1_150n, 1_050n],
   );
   assert.equal(state.migrationWitness, `0x${witness}`);
   assert.equal(state.tickSpacing, 200);
@@ -156,7 +157,6 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
   assert.deepEqual(
     [
       state.totalCommitments,
-      state.remainingCommitments,
       state.participants,
       state.quote,
       state.tokenAllocation,
@@ -164,7 +164,7 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
       state.liquidityTokens,
       state.recipientTokens,
     ],
-    [4_000n, 3_000n, 2n, 3_000n, 10_001n, 7_501n, 0n, 0n],
+    [4_000n, 2n, 3_000n, 10_001n, 7_501n, 0n, 0n],
   );
   assert.deepEqual(state.participantVesting, {
     cliffMs: 0n,
@@ -248,8 +248,8 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
     ...addr("0xab"), // presale_id
     ...addr("0xca"), // presale_cap_id
     ...addr("0x9001"), // pool_id
-    ...vec([[...addr("0xc0ffee"), ...u64(7_000n), ...u8(0)]]), // fee_recipients
-    ...u64(3_000n), // holder_rewards_bps
+    ...vec([[...addr("0xc0ffee"), ...u64(7_000n), ...u8(0)]]), // fee_split.shares
+    ...u64(3_000n), // fee_split.holder_rewards_bps
     ...u64(0n), // protocol_fees.raise_bps
     ...u64(0n), // protocol_fees.token_bps
     ...u64(1_000n), // protocol_fees.lp_fee_meme_bps

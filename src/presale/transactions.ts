@@ -338,6 +338,23 @@ export class PresaleCalls {
   }
 
   /**
+   * `blast_presale::fee_split`: the LP-fee split, each recipient's share then
+   * the holder-reward share, totalling 10,000 BPS. Fee shares cannot vest.
+   */
+  feeSplit(feeRecipients: readonly BpsShare[], holderRewardsBps: bigint) {
+    if (feeRecipients.some((recipient) => recipient.vesting)) {
+      throw new RangeError("fee recipients cannot vest");
+    }
+    const shares = this.recipientShares(feeRecipients);
+    const holderRewards = this.bps(holderRewardsBps);
+    return (tx: Transaction): TransactionResult =>
+      this.#presaleCall(tx, "fee_split", [
+        tx.add(shares),
+        tx.add(holderRewards),
+      ]);
+  }
+
+  /**
    * `cetus::new`: mints and seals the supply, reserves the pair's Cetus pool
    * creation at `tickSpacing` (Cetus derives the fee rate), and returns
    * `(Presale, PresaleCap)`; the same PTB must `share` the presale.
@@ -1048,9 +1065,6 @@ export class PresaleCalls {
     options: PresaleTerms,
     venueArguments: TransactionArgument[],
   ): TransactionResult {
-    if (options.feeRecipients.some((recipient) => recipient.vesting)) {
-      throw new RangeError("fee recipients cannot vest");
-    }
     return this.#presaleCall(
       tx,
       "new",
@@ -1069,8 +1083,7 @@ export class PresaleCalls {
         tx.pure.u64(options.liquidityWindowMs),
         tx.add(this.eligibility(options.eligibility)),
         tx.add(this.uncapped(options.uncapped)),
-        tx.add(this.recipientShares(options.feeRecipients)),
-        tx.add(this.bps(options.holderRewardsBps)),
+        tx.add(this.feeSplit(options.feeRecipients, options.holderRewardsBps)),
         this.#creationPolicy(tx),
         this.#feePolicy(tx),
         ...venueArguments,

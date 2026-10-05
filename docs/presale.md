@@ -46,7 +46,7 @@ mutability its Move signature needs.
 
 | Step | Builder | Notes |
 | --- | --- | --- |
-| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: every rate through `bps::new`, the `RecipientShare` vectors through `recipient_share` (or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), the eligibility policy, `Option<UncappedPhase>`, the venue's `new`, `set_partner` when `partner` is given, `share` from `startMs`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
+| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: every rate through `bps::new`, the `RecipientShare` vectors through `recipient_share` (or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), the eligibility policy, `Option<UncappedPhase>`, the LP-fee split through `fee_split`, the venue's `new`, `set_partner` when `partner` is given, `share` from `startMs`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
 | Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except in a hard-capped uncapped phase. |
 | Settle | `settle`, `cancelUnlaunched` | Anyone may call. |
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. Pass the sale's `partner` when it names one, and the same PTB pays it. |
@@ -225,14 +225,18 @@ type argument. `decodePresalePolicyEvent` decodes `FeesChanged`,
 arguments.
 `reducePresaleEvent` rebuilds each presale's lifecycle, windows, commitments,
 and custody balances, its vault, and its rounds. `Committed` has no wallet
-field, so the reducer keys commitments by the event sender.
+field, so the reducer keys commitments by the event sender. The `Presale`
+object stores only its start: `PresaleState` derives the end, LP deadline, and
+uncapped start from it, and `participants` counts the wallets still holding a
+commitment, which `Claimed.remaining_participants` reports after each claim;
+the claim that leaves one takes the rounding remainder.
 
 ## ABI coverage
 
 `abi/production-presale-v1.json` freezes the package at contracts `55e1ac0`,
 with the approved amendments it lists. Every public function is classified:
 
-- **Builders:** all 18 `blast_presale` functions; `blast_presale_admin`
+- **Builders:** all 19 `blast_presale` functions; `blast_presale_admin`
   `replace_admin_cap`, `revoke_admin_cap`, and `transfer_super_admin`;
   `fee_policy` `set_fees` and
   `set_destination`; `creation_policy` `set_quote_allowed`,

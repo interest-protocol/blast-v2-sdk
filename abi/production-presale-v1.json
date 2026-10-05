@@ -6,7 +6,9 @@
     "approvedAbiAmendments": [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
       "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness",
-      "contracts ADR 0106: one Blast partner per presale, named by set_partner before the share and accepted by creation_policy::add_partner and remove_partner; a partnered migration holds Blast's shares for pay_partner, PresaleOpened gains partner_id, and ProtocolFeesPaid gains partner_quote"
+      "contracts ADR 0106: one Blast partner per presale, named by set_partner before the share and accepted by creation_policy::add_partner and remove_partner; a partnered migration holds Blast's shares for pay_partner, PresaleOpened gains partner_id, and ProtocolFeesPaid gains partner_quote",
+      "contracts ADR 0099 (owner-requested cleanup, 2026-10-05): Presale derives its windows from start_ms, counts participants down as they claim (Claimed reports remaining_participants), and holds the LP-fee split as one FeeSplit that new, cetus::new, and bluefin::new take, built by blast_presale::fee_split; PresaleVault holds the same FeeSplit",
+      "contracts ADR 0104 (amended 2026-10-05): set_migration_witness_allowed also rejects witness types defined at 0x1 and 0x2"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -587,6 +589,48 @@
               "returns": []
             },
             {
+              "name": "fee_split",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "vector": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_presale",
+                        "name": "blast_presale"
+                      },
+                      "name": "RecipientShare",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "blast_presale"
+                    },
+                    "name": "FeeSplit",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
               "name": "migrate",
               "sdk": "move-composition",
               "entry": false,
@@ -900,24 +944,12 @@
                 "u32",
                 "u64",
                 {
-                  "vector": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_presale",
-                        "name": "blast_presale"
-                      },
-                      "name": "RecipientShare",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
                   "Datatype": {
                     "module": {
                       "address": "blast_presale",
-                      "name": "bps"
+                      "name": "blast_presale"
                     },
-                    "name": "Bps",
+                    "name": "FeeSplit",
                     "type_arguments": []
                   }
                 },
@@ -1662,6 +1694,46 @@
               ]
             },
             {
+              "name": "FeeSplit",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "shares",
+                  "type": {
+                    "vector": {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale"
+                        },
+                        "name": "RecipientShare",
+                        "type_arguments": []
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "holder_rewards_bps",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_presale",
+                        "name": "bps"
+                      },
+                      "name": "Bps",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ]
+            },
+            {
               "name": "Presale",
               "abilities": [
                 "Key"
@@ -1732,14 +1804,6 @@
                   "type": "u64"
                 },
                 {
-                  "name": "end_ms",
-                  "type": "u64"
-                },
-                {
-                  "name": "liquidity_deadline_ms",
-                  "type": "u64"
-                },
-                {
                   "name": "raise_target",
                   "type": "u64"
                 },
@@ -1784,10 +1848,6 @@
                   }
                 },
                 {
-                  "name": "uncapped_from_ms",
-                  "type": "u64"
-                },
-                {
                   "name": "migration_witness",
                   "type": {
                     "Datatype": {
@@ -1809,39 +1869,20 @@
                   "type": "u64"
                 },
                 {
-                  "name": "fee_recipients",
-                  "type": {
-                    "vector": {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale"
-                        },
-                        "name": "RecipientShare",
-                        "type_arguments": []
-                      }
-                    }
-                  }
-                },
-                {
-                  "name": "holder_rewards_bps",
+                  "name": "fee_split",
                   "type": {
                     "Datatype": {
                       "module": {
                         "address": "blast_presale",
-                        "name": "bps"
+                        "name": "blast_presale"
                       },
-                      "name": "Bps",
+                      "name": "FeeSplit",
                       "type_arguments": []
                     }
                   }
                 },
                 {
                   "name": "total_commitments",
-                  "type": "u64"
-                },
-                {
-                  "name": "remaining_commitments",
                   "type": "u64"
                 },
                 {
@@ -2442,7 +2483,7 @@
                   "type": "u64"
                 },
                 {
-                  "name": "remaining_commitments",
+                  "name": "remaining_participants",
                   "type": "u64"
                 },
                 {
@@ -4108,24 +4149,12 @@
                   }
                 },
                 {
-                  "vector": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_presale",
-                        "name": "blast_presale"
-                      },
-                      "name": "RecipientShare",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
                   "Datatype": {
                     "module": {
                       "address": "blast_presale",
-                      "name": "bps"
+                      "name": "blast_presale"
                     },
-                    "name": "Bps",
+                    "name": "FeeSplit",
                     "type_arguments": []
                   }
                 },
@@ -4810,24 +4839,12 @@
                   }
                 },
                 {
-                  "vector": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_presale",
-                        "name": "blast_presale"
-                      },
-                      "name": "RecipientShare",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
                   "Datatype": {
                     "module": {
                       "address": "blast_presale",
-                      "name": "bps"
+                      "name": "blast_presale"
                     },
-                    "name": "Bps",
+                    "name": "FeeSplit",
                     "type_arguments": []
                   }
                 },
@@ -6985,29 +7002,14 @@
                   }
                 },
                 {
-                  "name": "fee_recipients",
-                  "type": {
-                    "vector": {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale"
-                        },
-                        "name": "RecipientShare",
-                        "type_arguments": []
-                      }
-                    }
-                  }
-                },
-                {
-                  "name": "holder_rewards_bps",
+                  "name": "fee_split",
                   "type": {
                     "Datatype": {
                       "module": {
                         "address": "blast_presale",
-                        "name": "bps"
+                        "name": "blast_presale"
                       },
-                      "name": "Bps",
+                      "name": "FeeSplit",
                       "type_arguments": []
                     }
                   }
