@@ -123,6 +123,7 @@ test("rejects events from another package, module, or arity", () => {
     end_ms: 2n,
     liquidity_deadline_ms: 3n,
     uncapped_from_ms: 2n,
+    partner_id: null,
   });
   const packages = { originalPackageId: pkg };
   for (const eventType of [
@@ -174,6 +175,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       end_ms: 1_100n,
       liquidity_deadline_ms: 1_150n,
       uncapped_from_ms: 1_100n,
+      partner_id: null,
     }),
     decode(
       "Committed",
@@ -227,6 +229,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       destination: TREASURY,
       quote: 0n,
       tokens: 0n,
+      partner_quote: 0n,
     }),
     decode("RecipientAllocated", {
       presale_id: PRESALE,
@@ -556,6 +559,7 @@ test("tracks Blast's shares from creation through migration, LP fees, and an LP-
       destination: TREASURY,
       quote: 33n,
       tokens: 1_000n,
+      partner_quote: 0n,
     }),
     decode("RaiseAllocated", {
       presale_id: PRESALE,
@@ -637,6 +641,79 @@ test("tracks Blast's shares from creation through migration, LP fees, and an LP-
   );
 });
 
+test("holds a partnered sale's Blast shares from migration until its partner is paid", () => {
+  // `blast_presale_tests::a_partnered_sale_pays_its_partner_a_cut_of_blasts_raise_share_only`.
+  const PARTNER = id("0x9a27");
+  let state = createPresaleEventProjection();
+  for (const event of [
+    feePayingSaleCreated(),
+    decode("PresaleOpened", {
+      presale_id: PRESALE,
+      start_ms: 1_000n,
+      end_ms: 1_100n,
+      liquidity_deadline_ms: 1_150n,
+      uncapped_from_ms: 1_100n,
+      partner_id: PARTNER,
+    }),
+    decode("Committed", {
+      presale_id: PRESALE,
+      quote: 4_000n,
+      wallet_commitment: 4_000n,
+      total_commitments: 4_000n,
+      participants: 1n,
+    }),
+    decode("RaiseAllocated", {
+      presale_id: PRESALE,
+      recipient: id("0x5a1e"),
+      quote: 200n,
+      vesting_id: null,
+    }),
+    decode("PresaleMigrated", {
+      presale_id: PRESALE,
+      migration_witness: `${pkg}::cetus::Witness`,
+      liquidity_quote: 767n,
+      liquidity_tokens: 2_000n,
+      recipient_tokens: 7_000n,
+    }),
+  ]) {
+    state = reducePresaleEvent(state, event);
+  }
+  let presale = required(state.presales[PRESALE]);
+  // Migration paid Blast nothing: its 33 Quote are held apart from the 3,000 overflow.
+  assert.deepEqual(
+    [
+      presale.partnerId,
+      presale.quote,
+      presale.unpaidProtocolQuote,
+      presale.protocolTokens,
+      presale.protocolDestination,
+    ],
+    [PARTNER, 3_000n, 33n, 1_000n, null],
+  );
+
+  state = reducePresaleEvent(
+    state,
+    decode("ProtocolFeesPaid", {
+      presale_id: PRESALE,
+      destination: TREASURY,
+      quote: 20n,
+      tokens: 1_000n,
+      partner_quote: 13n,
+    }),
+  );
+  presale = required(state.presales[PRESALE]);
+  assert.deepEqual(
+    [
+      presale.quote,
+      presale.unpaidProtocolQuote,
+      presale.partnerQuote,
+      presale.protocolTokens,
+      presale.protocolDestination,
+    ],
+    [3_000n, null, 13n, 0n, TREASURY],
+  );
+});
+
 test("replaces a scheduled sale's Blast rates and amounts before the start", () => {
   // `blast_presale_tests::the_admin_can_replace_a_sales_rates_before_it_starts`.
   const changed = decode("ProtocolFeesChanged", {
@@ -658,6 +735,7 @@ test("replaces a scheduled sale's Blast rates and amounts before the start", () 
       end_ms: 1_100n,
       liquidity_deadline_ms: 1_150n,
       uncapped_from_ms: 1_100n,
+      partner_id: null,
     }),
     changed,
   ]) {
@@ -897,6 +975,26 @@ test("decodes fee-policy and creation-policy events, which have no type argument
     packages,
   );
   assert.deepEqual(delisted.payload, { quote, allowed: false });
+  const partner = id("0x9a27");
+  const added = decodePresalePolicyEvent(
+    entry(`${pkg}::creation_policy::PartnerAdded`, [
+      ...Buffer.from(partner.slice(2), "hex"),
+    ]),
+    packages,
+  );
+  assert.equal(added.kind, "PartnerAdded");
+  assert.deepEqual(added.payload, { partner_id: partner });
+  const removed = decodePresalePolicyEvent(
+    entry(`${pkg}::creation_policy::PartnerRemoved`, [
+      ...Buffer.from(partner.slice(2), "hex"),
+      ...u64(604_801_000n),
+    ]),
+    packages,
+  );
+  assert.deepEqual(removed.payload, {
+    partner_id: partner,
+    accepted_until_ms: 604_801_000n,
+  });
   for (const eventType of [
     `${id("0x99")}::fee_policy::FeesChanged`,
     `${pkg}::blast_presale::FeesChanged`,

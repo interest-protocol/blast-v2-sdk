@@ -84,6 +84,7 @@ const cetus = {
   cetusConfig: shared("0x70", false),
   cetusPools: shared("0x71", true),
 };
+const partner = shared("0x9a27", false);
 
 test("orders Cetus coins by defining type name, both ways", () => {
   assert.equal(cetusMemeSide(memeA, sui), "a");
@@ -187,6 +188,81 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     vectors,
     Array(3).fill(normalizeStructTag("0x5e::blast_presale::RecipientShare")),
   );
+});
+
+test("names a partner between new and share, and pays it in the migration PTB", () => {
+  const ptb = tx.createCetusPresale({
+    ...terms,
+    ...cetus,
+    tickSpacing: 200,
+    startMs: 1_000n,
+    capRecipient: "0xc0",
+    partner,
+  });
+  assert.deepEqual(moveFunctions(ptb).slice(-3), [
+    "cetus::new",
+    "blast_presale::set_partner",
+    "blast_presale::share",
+  ]);
+  const setPartner = moveCall(ptb, "blast_presale::set_partner");
+  assert.deepEqual(setPartner.typeArguments, [memeA, sui]);
+  assert.deepEqual(argumentKinds(ptb, setPartner), [
+    `NestedResult:${commandIndex(ptb, "cetus::new")}:0`,
+    "shared:0x62",
+    "shared:0x9a27",
+    CLOCK,
+  ]);
+  assert.equal(
+    setPartner.arguments.length,
+    abiArity("blast_presale", "set_partner"),
+  );
+
+  const burnManager = shared("0x72", true);
+  const migrate = tx.migrateCetus({
+    ...types,
+    presale,
+    ...cetus,
+    burnManager,
+    partner,
+  });
+  assert.deepEqual(moveFunctions(migrate), [
+    "cetus::migrate",
+    "blast_presale::pay_partner",
+  ]);
+  const migrateBluefin = tx.migrateBluefin({
+    ...types,
+    presale,
+    memeCurrency: shared("0xcc", false),
+    quoteCurrency: shared("0xcd", false),
+    bluefinConfig: shared("0x80", true),
+    creationFee: 1_000n,
+    partner,
+  });
+  assert.deepEqual(moveFunctions(migrateBluefin), [
+    "bluefin::migrate",
+    "blast_presale::pay_partner",
+  ]);
+  // Without a partner, neither creation nor migration names one.
+  for (const unpartnered of [
+    tx.createCetusPresale({
+      ...terms,
+      ...cetus,
+      tickSpacing: 200,
+      startMs: 1_000n,
+      capRecipient: "0xc0",
+    }),
+    tx.migrateCetus({
+      ...types,
+      presale,
+      ...cetus,
+      burnManager,
+      partner: null,
+    }),
+  ]) {
+    assert.ok(
+      !moveFunctions(unpartnered).some((name) => name.includes("partner")),
+    );
+  }
 });
 
 test("creates a Bluefin presale without an uncapped phase", () => {
@@ -485,6 +561,21 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
       "fee_policy::set_destination",
       ["shared-mut:0x61", ...ADMIN, "pure"],
+    ],
+    [
+      tx.payPartner({ ...types, presale, partner }),
+      "blast_presale::pay_partner",
+      ["shared-mut:0xab", "shared:0x61", "shared:0x9a27", CLOCK],
+    ],
+    [
+      tx.addPartner({ adminCapId: "0xadc", partner }),
+      "creation_policy::add_partner",
+      ["shared-mut:0x62", ...ADMIN, "shared:0x9a27"],
+    ],
+    [
+      tx.removePartner({ adminCapId: "0xadc", partner }),
+      "creation_policy::remove_partner",
+      ["shared-mut:0x62", ...ADMIN, "shared:0x9a27", CLOCK],
     ],
   ];
   for (const [ptb, name, kinds] of cases) {

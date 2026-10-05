@@ -46,10 +46,11 @@ mutability its Move signature needs.
 
 | Step | Builder | Notes |
 | --- | --- | --- |
-| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: every rate through `bps::new`, the `RecipientShare` vectors through `recipient_share` (or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), the eligibility policy, `Option<UncappedPhase>`, the venue's `new`, `share` from `startMs`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
+| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: every rate through `bps::new`, the `RecipientShare` vectors through `recipient_share` (or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), the eligibility policy, `Option<UncappedPhase>`, the venue's `new`, `set_partner` when `partner` is given, `share` from `startMs`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
 | Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except in a hard-capped uncapped phase. |
 | Settle | `settle`, `cancelUnlaunched` | Anyone may call. |
-| Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. |
+| Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. Pass the sale's `partner` when it names one, and the same PTB pays it. |
+| Pay a partner | `payPartner` | Anyone may call, once, after a partnered sale migrates; use it on its own for a sale another migrator migrated. See [Partners](#partners). |
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. Under participant vesting, each claim locks the participant's tokens in a new schedule starting at that claim. |
 | Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, then every fee recipient. The holder-reward share stays in the vault. |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
@@ -59,6 +60,7 @@ mutability its Move signature needs.
 | Blast's rates on one sale | `setPresaleProtocolFees` | Takes the `AdminCap`. Only before the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
 | Blast's LP-fee rates on one vault | `setProtocolLpFees` | Takes the `AdminCap`. Applies to that vault's later collections, including fees already in the pool. The contract rejects an unchanged pair (`ProtocolLpFeesChanged`). |
 | Blast's payout address | `setProtocolDestination` | Takes the `AdminCap`. Applies to every later payout. |
+| Partners | `addPartner`, `removePartner` | Take the `AdminCap`. Which Blast partners presales created afterward may name: added at once, removed after `PARTNER_DELAY_MS`. |
 | Listing | `setQuoteAllowed`, `setMigrationWitnessAllowed` | Takes the `AdminCap`. Which Quote types and migrators presales created afterward may use; existing sales are unaffected. A migrator is a `venue` of this package or the `witnessType` of an external migrator's `Witness` struct. |
 | Administration | `replaceAdminCap`, `revokeAdminCap`, `transferSuperAdmin` | Take the `SuperAdminCap` (`superAdminCapId`). See [Administration](#administration). |
 
@@ -121,7 +123,8 @@ is created:
   current policy with `PresaleClient.getFeePolicy` before building a creation.
 - `raiseBps` of the raise joins the raise apportionment between the raise
   recipients and the LP. Migration pays it, and Blast's tokens, to the current
-  destination (`ProtocolFeesPaid`).
+  destination (`ProtocolFeesPaid`); a sale naming a partner pays them through
+  `pay_partner` instead (see [Partners](#partners)).
 - `lpFeeMemeBps` and `lpFeeQuoteBps` of each collected LP fee, rounded up, go
   to the current destination before the creator's split (`FeesCollected`).
   The vault snapshots them at migration; `setProtocolLpFees` later replaces
@@ -138,11 +141,31 @@ sale's rates, Blast's Quote and tokens, and the sale allocation.
 
 A cancelled sale pays Blast nothing, and its token share stays locked.
 
+## Partners
+
+A sale may name one Blast partner (contracts ADR 0105), set once, at creation:
+pass `partner` to `createCetusPresale` or `createBluefinPresale`, and the PTB
+calls `set_partner` between the venue's `new` and `share`. The
+`CreationPolicy` must accept the partner (`EPartnerNotAccepted`); after the
+share it never changes. `PresaleOpened.partner_id` records it, and
+`PresaleState.partnerId` reads it.
+
+The partner earns its `blast_partners` share of Blast's raise share, and of
+nothing else: Blast's tokens and LP fees are never shared. A partnered sale's
+migration releases the same raise and LP as any sale but holds Blast's shares
+(`PresaleState.unpaidProtocolQuote`). `pay_partner` then pays the partner its
+share in force, rounded down, and Blast the rest and all its tokens. It emits
+`ProtocolFeesPaid` with `partner_quote`, and `blast_partners` emits
+`PartnerPaid`. A sale without a partner pays Blast at migration as before, with
+`partner_quote` zero. Pass the sale's `partner` to `migrateCetus` or
+`migrateBluefin` to pay it in the migration PTB; `payPartner` does it alone,
+and aborts on a sale it does not owe (`EWrongPartner`, `ENoPartnerPayout`).
+
 ## Creation allowlists
 
 `creation_policy::CreationPolicy` lists the Quote types and the migration
 witnesses (`cetus::Witness`, `bluefin::Witness`, or an external migrator's) new
-presales may use; both sets are empty at publication, so the `AdminCap` must
+presales may use, and the partners they may name (see [Partners](#partners)); both sets are empty at publication, so the `AdminCap` must
 allow at least one of each before any sale can be created. Creation checks it
 once (`EQuoteNotAllowed`, `EMigrationWitnessNotAllowed`); a later delisting never
 touches a live sale. `blast_presale::new` and `migrate` are public (contracts
@@ -196,8 +219,9 @@ const manifest = buildRewardManifest({ ...round, leafDomain: PRESALE_REWARD_LEAF
 `decodePresaleEvent` decodes the 16
 events generic over `<SaleToken, Quote>`. `PresaleVaultCreated` adds a `Venue`
 type argument. `decodePresalePolicyEvent` decodes `FeesChanged`,
-`DestinationChanged`, `QuoteSet`, `MigrationWitnessSet`, `AdminCapReplaced`, and
-`AdminCapRevoked`, which have no type arguments.
+`DestinationChanged`, `QuoteSet`, `MigrationWitnessSet`, `PartnerAdded`,
+`PartnerRemoved`, `AdminCapReplaced`, and `AdminCapRevoked`, which have no type
+arguments.
 `reducePresaleEvent` rebuilds each presale's lifecycle, windows, commitments,
 and custody balances, its vault, and its rounds. `Committed` has no wallet
 field, so the reducer keys commitments by the event sender.
@@ -207,11 +231,11 @@ field, so the reducer keys commitments by the event sender.
 `abi/production-presale-v1.json` freezes the package at contracts `55e1ac0`,
 with the approved amendments it lists. Every public function is classified:
 
-- **Builders:** all 16 `blast_presale` functions; `blast_presale_admin`
+- **Builders:** all 18 `blast_presale` functions; `blast_presale_admin`
   `replace_admin_cap`, `revoke_admin_cap`, and `transfer_super_admin`;
   `fee_policy` `set_fees` and
-  `set_destination`; `creation_policy` `set_quote_allowed` and
-  `set_migration_witness_allowed`; `cetus` and `bluefin` `new`, `migrate`, and
+  `set_destination`; `creation_policy` `set_quote_allowed`,
+  `set_migration_witness_allowed`, `add_partner`, and `remove_partner`; `cetus` and `bluefin` `new`, `migrate`, and
   `collect_fees`; `presale_vault` `claim_migration_residuals` and
   `set_protocol_lp_fees`; and
   `holder_rewards` `publish_round`, `claim`, and `close_round`.

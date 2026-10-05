@@ -82,6 +82,7 @@ export const presaleEventSpecs = {
       end_ms: "u64",
       liquidity_deadline_ms: "u64",
       uncapped_from_ms: "u64",
+      partner_id: "optionId",
     },
     ProtocolFeesChanged: {
       presale_id: "id",
@@ -124,6 +125,7 @@ export const presaleEventSpecs = {
       destination: "address",
       quote: "u64",
       tokens: "u64",
+      partner_quote: "u64",
     },
     RaiseAllocated: {
       presale_id: "id",
@@ -394,6 +396,8 @@ export const presalePolicyEventSpecs = {
   creation_policy: {
     QuoteSet: { quote: "typeName", allowed: "bool" },
     MigrationWitnessSet: { migration_witness: "typeName", allowed: "bool" },
+    PartnerAdded: { partner_id: "id" },
+    PartnerRemoved: { partner_id: "id", accepted_until_ms: "u64" },
   },
   blast_presale_admin: {
     AdminCapReplaced: { previous_admin_cap_id: "optionId", admin_cap_id: "id" },

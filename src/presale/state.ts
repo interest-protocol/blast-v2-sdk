@@ -305,6 +305,8 @@ export const presaleBcs = bcs.struct("Presale", {
   protocol_fees: protocolFeesBcs,
   protocol_quote: u64,
   protocol_tokens: suiBalanceBcs,
+  partner_id: bcs.option(suiObjectIdBcs),
+  unpaid_protocol_quote: bcs.option(suiBalanceBcs),
 });
 
 /** BCS layout of `blast_presale::Commitment`, stored under `CommitmentKey(address)`. */
@@ -422,8 +424,19 @@ export type PresaleState = SharedObjectReference<true> & {
   protocolFees: ProtocolFees;
   /** Blast's share of the raise, paid on migration. */
   protocolQuote: bigint;
-  /** Blast's token share still in custody: paid on migration, locked forever on cancellation. */
+  /**
+   * Blast's token share still in custody: paid on migration, or by
+   * `pay_partner` for a partnered sale; locked forever on cancellation.
+   */
   protocolTokens: bigint;
+  /** The Blast partner named at creation, paid its cut of Blast's raise share. */
+  partnerId: string | null;
+  /**
+   * Blast's raise share a partnered sale's migration holds until
+   * `pay_partner`; null before migration, after the payout, and without a
+   * partner.
+   */
+  unpaidProtocolQuote: bigint | null;
 };
 
 export type PresaleVaultState = SharedObjectReference<true> & {
@@ -536,6 +549,11 @@ export function decodePresaleObject(
     protocolFees: parsed.protocol_fees,
     protocolQuote: parsed.protocol_quote,
     protocolTokens: BigInt(parsed.protocol_tokens.value),
+    partnerId: parsed.partner_id,
+    unpaidProtocolQuote:
+      parsed.unpaid_protocol_quote === null
+        ? null
+        : BigInt(parsed.unpaid_protocol_quote.value),
   };
 }
 

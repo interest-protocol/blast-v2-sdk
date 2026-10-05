@@ -100,6 +100,9 @@ function presaleBytes(): Uint8Array {
     ...u64(2_500n), // protocol_fees.lp_fee_quote_bps
     ...u64(33n), // protocol_quote
     ...u64(1_000n), // protocol_tokens
+    ...u8(1),
+    ...addr("0x9a27"), // partner_id
+    ...u8(0), // unpaid_protocol_quote
   ]);
 }
 
@@ -178,6 +181,19 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
     lpFeeQuoteBps: 2_500n,
   });
   assert.deepEqual([state.protocolQuote, state.protocolTokens], [33n, 1_000n]);
+  assert.deepEqual(
+    [state.partnerId, state.unpaidProtocolQuote],
+    [normalizeSuiAddress("0x9a27"), null],
+  );
+  // After a partnered migration, Blast's raise share is held until `pay_partner`.
+  const held = decodePresaleObject(
+    object(
+      `${pkg}::blast_presale::Presale<0xa::meme::MEME, 0x2::sui::SUI>`,
+      Uint8Array.from([...presaleBytes().slice(0, -1), 1, ...u64(33n)]),
+    ),
+    pkg,
+  );
+  assert.equal(held.unpaidProtocolQuote, 33n);
   const parsed = presaleBcs.parse(presaleBytes());
   assert.deepEqual(
     presaleBcs.parse(presaleBcs.serialize(parsed).toBytes()),
