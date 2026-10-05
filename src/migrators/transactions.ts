@@ -30,6 +30,7 @@ import {
   LaunchpadCalls,
   normalizeLaunchTypes,
 } from "../launchpad/transactions.ts";
+import { grossGasBudget } from "../lib/gas.ts";
 import { requireU64 } from "../lib/integers.ts";
 import { deploymentObject, moveResults } from "../lib/ptb.ts";
 import type {
@@ -210,6 +211,10 @@ export class MigratorCalls {
     const types = normalizeLaunchTypes(options);
     const memeSide = normalizeMemeSide(options.memeSide);
     return (tx: Transaction): void => {
+      // Cetus seeds a new pool's tick skip list from the clock, so its storage
+      // differs between simulation and execution by up to 18 bytes, more than
+      // the default budget's headroom: budget this transaction at gross cost.
+      tx.addBuildPlugin(grossGasBudget());
       tx.moveCall({
         target: `${this.deployment.packageId}::cetus::migrate`,
         typeArguments: cetusTypeArguments(types, memeSide),

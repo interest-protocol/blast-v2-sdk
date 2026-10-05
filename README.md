@@ -403,6 +403,24 @@ preview.
 claims exactly as the contract enforces them, and it decodes and replays the
 package's objects and events. See [docs/presale.md](docs/presale.md).
 
+## Gas budgets
+
+Cetus seeds a new pool's tick skip list from the clock, so creating a pool can
+write up to 18 more bytes of storage when it executes than when it was
+simulated. `@mysten/sui` and the fullnode budget only the simulated net cost
+plus 1,000 gas units, about 13 bytes, so a Cetus migration runs out of gas in
+about one execution in four. A presale's Cetus migration did on mainnet.
+
+The presale and migrators `migrateCetus` calls, and the transactions built from
+them, therefore carry the `grossGasBudget()` build plugin. When built without a
+budget, it budgets the simulated computation plus all storage, ignoring the
+rebate, plus a fifth and 10,000 gas units. The charge is unchanged; only the
+ceiling rises. A payer that cannot cover the gross budget keeps the default
+one. Every other SDK transaction is deterministic and keeps the default budget.
+
+A plugin does not survive JSON serialization: after `Transaction.from(json)` of
+a Cetus migration, add it again with `tx.addBuildPlugin(grossGasBudget())`.
+
 ## Integer helpers
 
 The root package exports branded `U64` and `U128` bigint types. The
