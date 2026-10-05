@@ -19,6 +19,7 @@ import {
 } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
+import { presaleWindows } from "./math.ts";
 
 // === Configuration values (Move `copy + drop + store` types) ===
 
@@ -272,6 +273,12 @@ export const lifecycleBcs = bcs
     output: (value): PresaleLifecycle => value.$kind,
   });
 
+/** BCS layout of `blast_presale::FeeSplit`: the LP-fee recipients, then the holder-reward share. */
+export const presaleFeeSplitBcs = bcs.struct("FeeSplit", {
+  fee_recipients: bcs.vector(bpsShareBcs),
+  holder_rewards_bps: bps,
+});
+
 /** BCS layout of `blast_presale::Presale<SaleToken, Quote>`. */
 export const presaleBcs = bcs.struct("Presale", {
   id: suiUidBcs,
@@ -280,19 +287,14 @@ export const presaleBcs = bcs.struct("Presale", {
   duration_ms: u64,
   liquidity_window_ms: u64,
   start_ms: u64,
-  end_ms: u64,
-  liquidity_deadline_ms: u64,
   raise_target: u64,
   eligibility: eligibilityPolicyBcs,
   uncapped: bcs.option(uncappedPhaseBcs),
-  uncapped_from_ms: u64,
   migration_witness: moveTypeNameBcs,
   tick_spacing: bcs.u32(),
   pool_fee_rate: u64,
-  fee_recipients: bcs.vector(bpsShareBcs),
-  holder_rewards_bps: bps,
+  fee_split: presaleFeeSplitBcs,
   total_commitments: u64,
-  remaining_commitments: u64,
   participants: u64,
   quote: suiBalanceBcs,
   token_allocation: u64,
@@ -321,8 +323,7 @@ export const presaleVaultBcs = bcs.struct("PresaleVault", {
   presale_id: suiIdBcs,
   presale_cap_id: suiIdBcs,
   pool_id: suiIdBcs,
-  fee_recipients: bcs.vector(bpsShareBcs),
-  holder_rewards_bps: bps,
+  fee_split: presaleFeeSplitBcs,
   protocol_fees: protocolFeesBcs,
   migration_meme_residual: suiBalanceBcs,
   migration_quote_residual: suiBalanceBcs,
@@ -384,14 +385,20 @@ export type PresaleState = SharedObjectReference<true> & {
   liquidityWindowMs: bigint;
   /** When commitments open, which may be after the share; zero while Pending. */
   startMs: bigint;
-  /** Exclusive commitment end; zero while Pending. */
+  /** Exclusive commitment end, derived from the start; zero while Pending. */
   endMs: bigint;
-  /** From this timestamp anyone may cancel an unmigrated funded sale; zero while Pending. */
+  /**
+   * From this timestamp anyone may cancel an unmigrated funded sale, derived
+   * from the start; zero while Pending.
+   */
   liquidityDeadlineMs: bigint;
   raiseTarget: bigint;
   eligibility: EligibilityPolicy;
   uncapped: UncappedPhase | null;
-  /** When wallet caps lift; `endMs` without an uncapped phase, zero while Pending. */
+  /**
+   * When wallet caps lift, derived from the start; `endMs` without an
+   * uncapped phase, zero while Pending.
+   */
   uncappedFromMs: bigint;
   migrationWitness: string;
   tickSpacing: number;
@@ -399,8 +406,11 @@ export type PresaleState = SharedObjectReference<true> & {
   feeRecipients: BpsShare[];
   holderRewardsBps: bigint;
   totalCommitments: bigint;
-  /** Commitments not yet claimed. */
-  remainingCommitments: bigint;
+  /**
+   * Wallets holding an undelivered commitment: each joins with its first
+   * commitment and leaves with its claim, so the claim that leaves one
+   * takes the rounding remainder.
+   */
   participants: bigint;
   /** Quote custody balance. */
   quote: bigint;
@@ -426,14 +436,15 @@ export type PresaleState = SharedObjectReference<true> & {
   protocolQuote: bigint;
   /**
    * Blast's token share still in custody: paid on migration, or by
-   * `pay_partner` for a partnered sale; locked forever on cancellation.
+   * `pay_protocol_fees_with_partner` for a partnered sale; locked forever on
+   * cancellation.
    */
   protocolTokens: bigint;
   /** The Blast partner named at creation, paid its cut of Blast's raise share. */
   partnerId: string | null;
   /**
-   * Blast's raise share a partnered sale's migration holds until
-   * `pay_partner`; null before migration, after the payout, and without a
+   * Blast's raise fee a partnered sale's migration holds until
+   * `pay_protocol_fees_with_partner`; null before migration, after the payout, and without a
    * partner.
    */
   unpaidProtocolQuote: bigint | null;
@@ -515,6 +526,7 @@ export function decodePresaleObject(
     originalPackageId,
   );
   const parsed = presaleBcs.parse(object.content);
+  const windows = presaleWindowsOf(parsed);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
     memeType,
@@ -524,19 +536,16 @@ export function decodePresaleObject(
     durationMs: parsed.duration_ms,
     liquidityWindowMs: parsed.liquidity_window_ms,
     startMs: parsed.start_ms,
-    endMs: parsed.end_ms,
-    liquidityDeadlineMs: parsed.liquidity_deadline_ms,
+    ...windows,
     raiseTarget: parsed.raise_target,
     eligibility: parsed.eligibility,
     uncapped: parsed.uncapped,
-    uncappedFromMs: parsed.uncapped_from_ms,
     migrationWitness: parsed.migration_witness,
     tickSpacing: parsed.tick_spacing,
     poolFeeRate: parsed.pool_fee_rate,
-    feeRecipients: parsed.fee_recipients,
-    holderRewardsBps: parsed.holder_rewards_bps,
+    feeRecipients: parsed.fee_split.fee_recipients,
+    holderRewardsBps: parsed.fee_split.holder_rewards_bps,
     totalCommitments: parsed.total_commitments,
-    remainingCommitments: parsed.remaining_commitments,
     participants: parsed.participants,
     quote: BigInt(parsed.quote.value),
     tokenAllocation: parsed.token_allocation,
@@ -557,6 +566,24 @@ export function decodePresaleObject(
   };
 }
 
+/**
+ * The windows `share` fixed. The contract stores only the start and derives
+ * the rest; every window reads zero while the sale is Pending.
+ */
+function presaleWindowsOf(
+  parsed: ReturnType<typeof presaleBcs.parse>,
+): Pick<PresaleState, "endMs" | "liquidityDeadlineMs" | "uncappedFromMs"> {
+  if (parsed.lifecycle === "Pending") {
+    return { endMs: 0n, liquidityDeadlineMs: 0n, uncappedFromMs: 0n };
+  }
+  return presaleWindows(
+    parsed.start_ms,
+    parsed.duration_ms,
+    parsed.liquidity_window_ms,
+    parsed.uncapped,
+  );
+}
+
 export function decodePresaleVaultObject(
   object: PresaleObject,
   originalPackageId: string,
@@ -575,8 +602,8 @@ export function decodePresaleVaultObject(
     presaleId: normalizeSuiObjectId(parsed.presale_id.bytes),
     presaleCapId: normalizeSuiObjectId(parsed.presale_cap_id.bytes),
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
-    feeRecipients: parsed.fee_recipients,
-    holderRewardsBps: parsed.holder_rewards_bps,
+    feeRecipients: parsed.fee_split.fee_recipients,
+    holderRewardsBps: parsed.fee_split.holder_rewards_bps,
     protocolFees: parsed.protocol_fees,
     migrationMemeResidual: BigInt(parsed.migration_meme_residual.value),
     migrationQuoteResidual: BigInt(parsed.migration_quote_residual.value),

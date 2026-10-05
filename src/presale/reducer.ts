@@ -47,7 +47,7 @@ export type PresaleProjection = {
   liquidityDeadlineMs: bigint;
   uncappedFromMs: bigint;
   totalCommitments: bigint;
-  remainingCommitments: bigint;
+  /** Wallets holding an undelivered commitment; each claim releases one. */
   participants: bigint;
   /** Undelivered commitment per wallet (the `Committed` sender). */
   commitments: Readonly<Record<string, bigint>>;
@@ -80,17 +80,17 @@ export type PresaleProjection = {
   /** The Blast partner named at creation; null until `PresaleOpened` names one. */
   partnerId: string | null;
   /**
-   * Blast's raise share a partnered sale's migration holds until
-   * `pay_partner`; null before migration, after the payout, and without a
+   * Blast's raise fee a partnered sale's migration holds until
+   * `pay_protocol_fees_with_partner`; null before migration, after the payout, and without a
    * partner.
    */
   unpaidProtocolQuote: bigint | null;
   /**
-   * What the partner received of Blast's raise share; null until a partnered
+   * What the partner received of Blast's raise fee; null until a partnered
    * sale's payout.
    */
   partnerQuote: bigint | null;
-  /** Where Blast's shares were paid; null until then. */
+  /** Where Blast's fees were paid; null until then. */
   protocolDestination: string | null;
   /** The vault its migration created; null until then. */
   vaultId: string | null;
@@ -228,7 +228,6 @@ function applyPresaleEvent(
       const { payload, sender } = event;
       return updatePresale(state, payload.presale_id, (presale) => ({
         totalCommitments: payload.total_commitments,
-        remainingCommitments: payload.total_commitments,
         participants: payload.participants,
         commitments: {
           ...presale.commitments,
@@ -246,24 +245,15 @@ function applyPresaleEvent(
         lifecycle: "Cancelled",
       }));
     // Migration emits ProtocolFeesPaid, every RaiseAllocated and RecipientAllocated, then
-    // PresaleMigrated. A partnered sale's migration holds Blast's shares instead, and its
-    // `pay_partner` emits ProtocolFeesPaid later, out of the held raise share.
+    // PresaleMigrated. A partnered sale's migration holds Blast's fees instead, and its
+    // `pay_protocol_fees_with_partner` emits ProtocolFeesPaid later, out of the held raise fee.
     case "ProtocolFeesPaid": {
       const { payload } = event;
-      return updatePresale(state, payload.presale_id, (presale) =>
-        presale.partnerId === null
-          ? {
-              quote: presale.quote - payload.quote,
-              protocolTokens: presale.protocolTokens - payload.tokens,
-              protocolDestination: payload.destination,
-            }
-          : {
-              unpaidProtocolQuote: null,
-              partnerQuote: payload.partner_quote,
-              protocolTokens: presale.protocolTokens - payload.tokens,
-              protocolDestination: payload.destination,
-            },
-      );
+      return updatePresale(state, payload.presale_id, (presale) => ({
+        ...protocolQuotePaid(presale, payload),
+        protocolTokens: presale.protocolTokens - payload.tokens,
+        protocolDestination: payload.destination,
+      }));
     }
     case "RaiseAllocated": {
       const { payload } = event;
@@ -294,12 +284,15 @@ function applyPresaleEvent(
     case "PresaleMigrated": {
       const { payload } = event;
       return updatePresale(state, payload.presale_id, (presale) => {
-        const held = presale.partnerId === null ? 0n : presale.protocolQuote;
+        const unpaidProtocolQuote = heldProtocolQuote(presale);
         return {
           lifecycle: "Migrated",
-          quote: presale.quote - payload.liquidity_quote - held,
+          quote:
+            presale.quote -
+            payload.liquidity_quote -
+            (unpaidProtocolQuote ?? 0n),
           liquidityTokens: presale.liquidityTokens - payload.liquidity_tokens,
-          unpaidProtocolQuote: presale.partnerId === null ? null : held,
+          unpaidProtocolQuote,
         };
       });
     }
@@ -310,7 +303,7 @@ function applyPresaleEvent(
           presale.commitments;
         return {
           commitments,
-          remainingCommitments: payload.remaining_commitments,
+          participants: payload.remaining_participants,
           saleTokens: presale.saleTokens - payload.tokens,
           quote: presale.quote - payload.quote_refund,
           participantVestingIds:
@@ -530,7 +523,6 @@ function createdPresale(
     liquidityDeadlineMs: 0n,
     uncappedFromMs: 0n,
     totalCommitments: 0n,
-    remainingCommitments: 0n,
     participants: 0n,
     commitments: {},
     quote: 0n,
@@ -555,6 +547,26 @@ function createdPresale(
     protocolDestination: null,
     vaultId: null,
   };
+}
+
+/** Blast's raise fee a partnered migration holds back from custody; null without a partner. */
+function heldProtocolQuote(presale: PresaleProjection): bigint | null {
+  if (presale.partnerId === null) return null;
+  return presale.protocolQuote;
+}
+
+/**
+ * How `ProtocolFeesPaid` settles Blast's raise fee: out of Quote custody at a
+ * sale's migration, or out of the held fee at a partnered sale's payout.
+ */
+function protocolQuotePaid(
+  presale: PresaleProjection,
+  payload: { quote: bigint; partner_quote: bigint },
+): Partial<PresaleProjection> {
+  if (presale.partnerId === null) {
+    return { quote: presale.quote - payload.quote };
+  }
+  return { unpaidProtocolQuote: null, partnerQuote: payload.partner_quote };
 }
 
 function updatePresale(

@@ -546,8 +546,7 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
                 presale_id: { bytes: address("0x20") },
                 presale_cap_id: { bytes: address("0x21") },
                 pool_id: { bytes: address("0x22") },
-                fee_recipients: [],
-                holder_rewards_bps: 10_000n,
+                fee_split: { fee_recipients: [], holder_rewards_bps: 10_000n },
                 protocol_fees: {
                   raiseBps: 0n,
                   tokenBps: 0n,
