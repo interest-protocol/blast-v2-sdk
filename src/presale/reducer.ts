@@ -126,6 +126,12 @@ export type PresaleVaultProjection = {
   /** Cumulative LP fees paid to Blast. */
   protocolMemePaid: bigint;
   protocolQuotePaid: bigint;
+  /** Blast's LP fees a partnered vault holds for its next partner payout. */
+  protocolMemeHeld: bigint;
+  protocolQuoteHeld: bigint;
+  /** Cumulative cut of Blast's LP fees paid to the sale's partner. */
+  partnerMemePaid: bigint;
+  partnerQuotePaid: bigint;
 };
 
 export type PresaleRewardRoundProjection = {
@@ -363,6 +369,10 @@ function applyVaultEvent(
             feeRecipientQuotePaid: feeRecipients.map(() => 0n),
             protocolMemePaid: 0n,
             protocolQuotePaid: 0n,
+            protocolMemeHeld: 0n,
+            protocolQuoteHeld: 0n,
+            partnerMemePaid: 0n,
+            partnerQuotePaid: 0n,
           },
         },
       };
@@ -380,8 +390,29 @@ function applyVaultEvent(
         feeRecipientQuotePaid: vault.feeRecipientQuotePaid.map(
           (paid, i) => paid + (payload.fee_recipient_quote[i] ?? 0n),
         ),
+        // A partnered vault holds Blast's LP fees: no destination was paid.
+        ...(payload.protocol_destination === null
+          ? {
+              protocolMemeHeld: vault.protocolMemeHeld + payload.protocol_meme,
+              protocolQuoteHeld:
+                vault.protocolQuoteHeld + payload.protocol_quote,
+            }
+          : {
+              protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
+              protocolQuotePaid:
+                vault.protocolQuotePaid + payload.protocol_quote,
+            }),
+      }));
+    }
+    case "ProtocolLpFeesPaid": {
+      const { payload } = event;
+      return updateVault(state, payload.vault_id, (vault) => ({
+        protocolMemeHeld: 0n,
+        protocolQuoteHeld: 0n,
         protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
         protocolQuotePaid: vault.protocolQuotePaid + payload.protocol_quote,
+        partnerMemePaid: vault.partnerMemePaid + payload.partner_meme,
+        partnerQuotePaid: vault.partnerQuotePaid + payload.partner_quote,
       }));
     }
     case "ProtocolLpFeesChanged": {

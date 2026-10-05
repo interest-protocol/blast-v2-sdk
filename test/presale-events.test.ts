@@ -389,7 +389,13 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   assert.equal(round.closed, true);
   assert.equal(round.memeRemaining, 0n);
   const twice = ["Committed", "Claimed", "RecipientAllocated"];
-  const never = ["RaiseAllocated", "PresaleCancelled", "ProtocolFeesChanged"];
+  // An unpartnered vault pays Blast at each collection, so it has no partner payout.
+  const never = [
+    "RaiseAllocated",
+    "PresaleCancelled",
+    "ProtocolFeesChanged",
+    "ProtocolLpFeesPaid",
+  ];
   for (const kind of Object.keys(presaleEventModules) as PresaleEventKind[]) {
     const expected = twice.includes(kind) ? 2 : never.includes(kind) ? 0 : 1;
     assert.equal(state.eventCounts[kind], expected, kind);
@@ -646,7 +652,7 @@ test("tracks Blast's shares from creation through migration, LP fees, and an LP-
 });
 
 test("holds a partnered sale's Blast shares from migration until its partner is paid", () => {
-  // `blast_presale_tests::a_partnered_sale_pays_its_partner_a_cut_of_blasts_raise_share_only`.
+  // `blast_presale_tests::a_partnered_sale_pays_its_partner_a_cut_of_blasts_raise_fee_only`.
   const PARTNER = id("0x9a27");
   let state = createPresaleEventProjection();
   for (const event of [
@@ -715,6 +721,80 @@ test("holds a partnered sale's Blast shares from migration until its partner is 
       presale.protocolDestination,
     ],
     [3_000n, null, 13n, 0n, TREASURY],
+  );
+});
+
+test("holds a partnered vault's Blast LP fees until its partner is paid", () => {
+  // `migration_rewards_tests::anyone_pays_the_partner_its_cut_of_blasts_lp_fees_and_blast_the_rest`.
+  let state = createPresaleEventProjection();
+  const collected = () =>
+    decode("FeesCollected", {
+      vault_id: VAULT,
+      gross_meme: 101n,
+      gross_quote: 10n,
+      protocol_destination: null,
+      protocol_meme: 11n,
+      protocol_quote: 3n,
+      fee_recipient_meme: [45n, 18n],
+      fee_recipient_quote: [4n, 1n],
+      holder_rewards_meme: 27n,
+      holder_rewards_quote: 2n,
+    });
+  for (const event of [
+    decode("PresaleVaultCreated", {
+      vault_id: VAULT,
+      presale_id: PRESALE,
+      pool_id: id("0x90"),
+      position_id: id("0x91"),
+      liquidity: 1n,
+      fee_recipients: [id("0xc0ffee"), id("0xfee")],
+      fee_recipient_bps: [5_000n, 2_000n],
+      holder_rewards_bps: 3_000n,
+      protocol_lp_fee_meme_bps: 1_000n,
+      protocol_lp_fee_quote_bps: 2_500n,
+      migration_meme_residual: 0n,
+      migration_quote_residual: 0n,
+    }),
+    collected(),
+    collected(),
+  ]) {
+    state = reducePresaleEvent(state, event);
+  }
+  let vault = required(state.vaults[VAULT]);
+  assert.deepEqual(
+    [
+      vault.protocolMemeHeld,
+      vault.protocolQuoteHeld,
+      vault.protocolMemePaid,
+      vault.protocolQuotePaid,
+      vault.holderRewardsMeme,
+    ],
+    [22n, 6n, 0n, 0n, 54n],
+  );
+
+  // 40% of 22 Meme and 6 Quote is 8.8 and 2.4: the partner takes 8 and 2.
+  state = reducePresaleEvent(
+    state,
+    decode("ProtocolLpFeesPaid", {
+      vault_id: VAULT,
+      protocol_destination: TREASURY,
+      protocol_meme: 14n,
+      protocol_quote: 4n,
+      partner_meme: 8n,
+      partner_quote: 2n,
+    }),
+  );
+  vault = required(state.vaults[VAULT]);
+  assert.deepEqual(
+    [
+      vault.protocolMemeHeld,
+      vault.protocolQuoteHeld,
+      vault.protocolMemePaid,
+      vault.protocolQuotePaid,
+      vault.partnerMemePaid,
+      vault.partnerQuotePaid,
+    ],
+    [0n, 0n, 14n, 4n, 8n, 2n],
   );
 });
 

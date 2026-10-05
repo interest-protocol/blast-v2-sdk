@@ -247,6 +247,31 @@ test("names a partner between new and share, and pays it in the migration PTB", 
     "bluefin::migrate",
     "blast_presale::pay_protocol_fees_with_partner",
   ]);
+  // After migration, each collection on the partnered vault pays what it held.
+  const partneredVault = shared("0xba", true);
+  const collectCetus = tx.collectCetusFees({
+    ...types,
+    vault: partneredVault,
+    cetusConfig: cetus.cetusConfig,
+    burnManager: shared("0x72", false),
+    pool: shared("0x90", true),
+    partner,
+  });
+  assert.deepEqual(moveFunctions(collectCetus), [
+    "cetus::collect_fees",
+    "presale_vault::pay_protocol_lp_fees_with_partner",
+  ]);
+  const collectBluefin = tx.collectBluefinFees({
+    ...types,
+    vault: partneredVault,
+    bluefinConfig: shared("0x80", false),
+    pool: shared("0x90", true),
+    partner,
+  });
+  assert.deepEqual(moveFunctions(collectBluefin), [
+    "bluefin::collect_fees",
+    "presale_vault::pay_protocol_lp_fees_with_partner",
+  ]);
   // Without a partner, neither creation nor migration names one.
   for (const unpartnered of [
     tx.createCetusPresale({
@@ -571,6 +596,11 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       tx.payProtocolFeesWithPartner({ ...types, presale, partner }),
       "blast_presale::pay_protocol_fees_with_partner",
       ["shared-mut:0xab", "shared:0x61", "shared:0x9a27", CLOCK],
+    ],
+    [
+      tx.payProtocolLpFeesWithPartner({ ...types, vault, partner }),
+      "presale_vault::pay_protocol_lp_fees_with_partner",
+      ["shared-mut:0xba", "shared:0x61", "shared:0x9a27", CLOCK],
     ],
     [
       tx.addPartner({ adminCapId: "0xadc", partner }),

@@ -254,6 +254,10 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
     ...u64(0n), // protocol_fees.token_bps
     ...u64(1_000n), // protocol_fees.lp_fee_meme_bps
     ...u64(2_500n), // protocol_fees.lp_fee_quote_bps
+    ...u8(1), // partner_id: Some
+    ...addr("0x9a27"),
+    ...u64(11n), // unpaid_protocol_meme
+    ...u64(3n), // unpaid_protocol_quote
     ...u64(1n), // migration_meme_residual
     ...u64(0n), // migration_quote_residual
     ...u64(30n), // holder_rewards_meme
@@ -276,6 +280,9 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
       vault.presaleCapId,
       vault.poolId,
       vault.holderRewardsBps,
+      vault.partnerId,
+      vault.unpaidProtocolMeme,
+      vault.unpaidProtocolQuote,
       vault.migrationMemeResidual,
       vault.migrationQuoteResidual,
       vault.holderRewardsMeme,
@@ -288,6 +295,9 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
       normalizeSuiAddress("0xca"),
       normalizeSuiAddress("0x9001"),
       3_000n,
+      normalizeSuiAddress("0x9a27"),
+      11n,
+      3n,
       1n,
       0n,
       30n,

@@ -325,6 +325,9 @@ export const presaleVaultBcs = bcs.struct("PresaleVault", {
   pool_id: suiIdBcs,
   fee_split: presaleFeeSplitBcs,
   protocol_fees: protocolFeesBcs,
+  partner_id: bcs.option(suiObjectIdBcs),
+  unpaid_protocol_meme: suiBalanceBcs,
+  unpaid_protocol_quote: suiBalanceBcs,
   migration_meme_residual: suiBalanceBcs,
   migration_quote_residual: suiBalanceBcs,
   holder_rewards_meme: suiBalanceBcs,
@@ -460,6 +463,11 @@ export type PresaleVaultState = SharedObjectReference<true> & {
   holderRewardsBps: bigint;
   /** The presale's snapshotted rates; only the LP-fee shares apply to the vault. */
   protocolFees: ProtocolFees;
+  /** The partner the sale named, paid its cut of Blast's LP fees; null for none. */
+  partnerId: string | null;
+  /** Blast's LP fees a partnered vault holds until `payProtocolLpFeesWithPartner`. */
+  unpaidProtocolMeme: bigint;
+  unpaidProtocolQuote: bigint;
   migrationMemeResidual: bigint;
   migrationQuoteResidual: bigint;
   /** Holder-reward share not yet reserved by a round. */
@@ -605,6 +613,9 @@ export function decodePresaleVaultObject(
     feeRecipients: parsed.fee_split.fee_recipients,
     holderRewardsBps: parsed.fee_split.holder_rewards_bps,
     protocolFees: parsed.protocol_fees,
+    partnerId: parsed.partner_id,
+    unpaidProtocolMeme: BigInt(parsed.unpaid_protocol_meme.value),
+    unpaidProtocolQuote: BigInt(parsed.unpaid_protocol_quote.value),
     migrationMemeResidual: BigInt(parsed.migration_meme_residual.value),
     migrationQuoteResidual: BigInt(parsed.migration_quote_residual.value),
     holderRewardsMeme: BigInt(parsed.holder_rewards_meme.value),
