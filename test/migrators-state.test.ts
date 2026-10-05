@@ -36,8 +36,11 @@ function serializeVault(id = objectId): Uint8Array {
     .serialize({
       id: uid(id),
       pool_id: { bytes: poolId },
+      partner_id: "0x9a27",
       protocol_meme_residual: balance(5n),
       protocol_quote_residual: balance(6n),
+      unpaid_protocol_meme: balance(10n),
+      unpaid_protocol_quote: balance(11n),
       generation: 2n,
       fee_split: feeSplit,
       creator_meme: balance(1n),
@@ -71,8 +74,11 @@ test("decodes LP-vault custody, split generation, and every balance", () => {
   assert.equal(vault.quoteType.endsWith("02::sui::SUI"), true);
   assert.deepEqual(
     {
+      partnerId: vault.partnerId,
       protocolMemeResidual: vault.protocolMemeResidual,
       protocolQuoteResidual: vault.protocolQuoteResidual,
+      unpaidProtocolMeme: vault.unpaidProtocolMeme,
+      unpaidProtocolQuote: vault.unpaidProtocolQuote,
       generation: vault.generation,
       feeSplit: vault.feeSplit,
       creatorMeme: vault.creatorMeme,
@@ -86,8 +92,11 @@ test("decodes LP-vault custody, split generation, and every balance", () => {
       lastCheckpoint: vault.lastCheckpoint,
     },
     {
+      partnerId: normalizeSuiObjectId("0x9a27"),
       protocolMemeResidual: 5n,
       protocolQuoteResidual: 6n,
+      unpaidProtocolMeme: 10n,
+      unpaidProtocolQuote: 11n,
       generation: 2n,
       feeSplit,
       creatorMeme: 1n,

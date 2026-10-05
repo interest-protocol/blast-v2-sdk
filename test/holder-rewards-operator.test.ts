@@ -289,8 +289,11 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
               .serialize({
                 id: uid(vaultId),
                 pool_id: { bytes: address("0x10") },
+                partner_id: null,
                 protocol_meme_residual: { value: 0n },
                 protocol_quote_residual: { value: 0n },
+                unpaid_protocol_meme: { value: 0n },
+                unpaid_protocol_quote: { value: 0n },
                 generation: 0n,
                 fee_split: {
                   creatorBps: 0n,

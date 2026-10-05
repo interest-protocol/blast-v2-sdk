@@ -43,6 +43,14 @@ import {
 } from "../lib/sui.ts";
 import type { MigratorVenue } from "./state.ts";
 
+/**
+ * The vault's partner, when `LpVaultState.partnerId` is set: the collection
+ * then pays it and Blast the LP fees the vault held.
+ */
+export type LpFeePartner = {
+  partner?: SharedObjectReference<false> | null;
+};
+
 export type MigratorsDeployment = {
   packageId: string;
   originalPackageId: string;
@@ -484,6 +492,34 @@ export class MigratorCalls {
       });
   }
 
+  /**
+   * `vault::claim_protocol_lp_fees_with_partner`: pays a partnered vault's held
+   * Blast LP fees, the launch's partner its cut in force of each asset, rounded
+   * down, and the `LpFeePolicy` destination the rest. Anyone may call it;
+   * holding nothing pays nothing.
+   */
+  claimProtocolLpFeesWithPartner(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      partner: SharedObjectReference<false>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::vault::claim_protocol_lp_fees_with_partner`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          this.#lpFeePolicy(tx),
+          sharedObject(tx, "partner", options.partner, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
   /** Claims the protocol-owned migration residuals under a `TreasuryAdmin` witness. */
   claimProtocolFees(
     options: LaunchTypes & {
@@ -755,19 +791,30 @@ export class MigratorTransactions {
     return tx;
   }
 
+  /** Then pays the vault's partner when `partner` is given; see `claimProtocolLpFeesWithPartner`. */
   collectCetusFees(
-    options: Parameters<MigratorCalls["collectCetusFees"]>[0],
+    options: Parameters<MigratorCalls["collectCetusFees"]>[0] & LpFeePartner,
   ): Transaction {
     const tx = new Transaction();
     tx.add(this.call.collectCetusFees(options));
-    return tx;
+    return this.#claimProtocolLpFeesWithPartnerAfter(tx, options);
   }
 
+  /** Then pays the vault's partner when `partner` is given; see `claimProtocolLpFeesWithPartner`. */
   collectBluefinFees(
-    options: Parameters<MigratorCalls["collectBluefinFees"]>[0],
+    options: Parameters<MigratorCalls["collectBluefinFees"]>[0] & LpFeePartner,
   ): Transaction {
     const tx = new Transaction();
     tx.add(this.call.collectBluefinFees(options));
+    return this.#claimProtocolLpFeesWithPartnerAfter(tx, options);
+  }
+
+  /** Pays a partnered vault's partner and Blast the LP fees its collections held. */
+  claimProtocolLpFeesWithPartner(
+    options: Parameters<MigratorCalls["claimProtocolLpFeesWithPartner"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.claimProtocolLpFeesWithPartner(options));
     return tx;
   }
 
@@ -944,6 +991,18 @@ export class MigratorTransactions {
       this.call.signIn({ adminCap: adminCapId, role }),
     );
     tx.add(call(adminWitness));
+    return tx;
+  }
+
+  #claimProtocolLpFeesWithPartnerAfter(
+    tx: Transaction,
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+    } & LpFeePartner,
+  ): Transaction {
+    const { partner } = options;
+    if (partner)
+      tx.add(this.call.claimProtocolLpFeesWithPartner({ ...options, partner }));
     return tx;
   }
 }

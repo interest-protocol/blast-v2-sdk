@@ -47,6 +47,12 @@ export type LpVaultEventProjection = {
   /** Cumulative protocol LP-fee payouts. */
   protocolMemePaid: bigint;
   protocolQuotePaid: bigint;
+  /** Blast's LP fees a partnered vault holds for its next partner claim. */
+  protocolMemeHeld: bigint;
+  protocolQuoteHeld: bigint;
+  /** Cumulative cut of Blast's LP fees paid to the launch's partner. */
+  partnerMemePaid: bigint;
+  partnerQuotePaid: bigint;
 };
 
 export type HolderRewardRoundProjection = {
@@ -229,6 +235,10 @@ export function reduceMigratorEvent(
             lastCheckpoint: null,
             protocolMemePaid: 0n,
             protocolQuotePaid: 0n,
+            protocolMemeHeld: 0n,
+            protocolQuoteHeld: 0n,
+            partnerMemePaid: 0n,
+            partnerQuotePaid: 0n,
           },
         },
       };
@@ -244,8 +254,30 @@ export function reduceMigratorEvent(
         rewardsMeme: vault.rewardsMeme + payload.rewards_meme,
         rewardsQuote: vault.rewardsQuote + payload.rewards_quote,
         burnQuote: vault.burnQuote + payload.burn_quote,
+        // A partnered vault holds Blast's share: no destination was paid.
+        ...(payload.protocol_destination === null
+          ? {
+              protocolMemeHeld: vault.protocolMemeHeld + payload.protocol_meme,
+              protocolQuoteHeld:
+                vault.protocolQuoteHeld + payload.protocol_quote,
+            }
+          : {
+              protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
+              protocolQuotePaid:
+                vault.protocolQuotePaid + payload.protocol_quote,
+            }),
+      }));
+    }
+    case "ProtocolLpFeesClaimed": {
+      const payload = event.payload;
+      return updateVault(next, payload.vault_id, (vault) => ({
+        ...vault,
+        protocolMemeHeld: 0n,
+        protocolQuoteHeld: 0n,
         protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
         protocolQuotePaid: vault.protocolQuotePaid + payload.protocol_quote,
+        partnerMemePaid: vault.partnerMemePaid + payload.partner_meme,
+        partnerQuotePaid: vault.partnerQuotePaid + payload.partner_quote,
       }));
     }
     case "AutoLiquidityAdded": {

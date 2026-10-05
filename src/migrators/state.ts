@@ -14,6 +14,7 @@ import {
   moveTypeNameBcs,
   suiBalanceBcs,
   suiIdBcs,
+  suiObjectIdBcs,
   suiUidBcs,
 } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
@@ -27,8 +28,11 @@ export type MigratorVenue = (typeof MIGRATOR_VENUES)[number];
 export const lpVaultBcs = bcs.struct("LpVault", {
   id: suiUidBcs,
   pool_id: suiIdBcs,
+  partner_id: bcs.option(suiObjectIdBcs),
   protocol_meme_residual: suiBalanceBcs,
   protocol_quote_residual: suiBalanceBcs,
+  unpaid_protocol_meme: suiBalanceBcs,
+  unpaid_protocol_quote: suiBalanceBcs,
   generation: bcs.u64(),
   fee_split: feeSplitBcs,
   creator_meme: suiBalanceBcs,
@@ -60,9 +64,14 @@ export type LpVaultState = SharedObjectReference<true> & {
   memeType: string;
   quoteType: string;
   poolId: string;
+  /** The partner the launch named, paid its cut of Blast's LP fees; null for none. */
+  partnerId: string | null;
   /** Protocol-owned migration residuals, claimable by an administrator. */
   protocolMemeResidual: bigint;
   protocolQuoteResidual: bigint;
+  /** Blast's LP fees a partnered vault holds until `claimProtocolLpFeesWithPartner`. */
+  unpaidProtocolMeme: bigint;
+  unpaidProtocolQuote: bigint;
   /** Split generation stamped on every collection; zero at migration. */
   generation: bigint;
   feeSplit: FeeSplit;
@@ -137,8 +146,11 @@ export function decodeLpVaultObject(
     memeType: normalizeTypeParameter(tag.typeParams[0]),
     quoteType: normalizeTypeParameter(tag.typeParams[1]),
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
+    partnerId: parsed.partner_id,
     protocolMemeResidual: BigInt(parsed.protocol_meme_residual.value),
     protocolQuoteResidual: BigInt(parsed.protocol_quote_residual.value),
+    unpaidProtocolMeme: BigInt(parsed.unpaid_protocol_meme.value),
+    unpaidProtocolQuote: BigInt(parsed.unpaid_protocol_quote.value),
     generation: BigInt(parsed.generation),
     feeSplit: parsed.fee_split,
     creatorMeme: BigInt(parsed.creator_meme.value),

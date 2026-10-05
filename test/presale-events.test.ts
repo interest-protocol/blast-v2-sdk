@@ -84,7 +84,7 @@ test("event specs match every event frozen in the presale ABI", () => {
     }),
     orderedModuleEventFields(readFrozenPresaleEventSpecs()),
   );
-  assert.equal(Object.keys(presaleEventModules).length, 18);
+  assert.equal(Object.keys(presaleEventModules).length, 19);
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
@@ -1166,6 +1166,12 @@ function descriptor(type: unknown): string {
   if (name === "ID") return "id";
   if (name === "TypeName") return "typeName";
   if (name === "EligibilityPolicy") return "eligibility";
+  if (
+    name === "Option" &&
+    (datatype.type_arguments[0] as { argument: unknown }).argument === "address"
+  ) {
+    return "optionAddress";
+  }
   const option =
     name === "Option" &&
     OPTION_DESCRIPTORS[

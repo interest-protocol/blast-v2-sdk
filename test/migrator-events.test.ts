@@ -52,7 +52,7 @@ test("decodes and idempotently reduces every frozen migrator event", () => {
     orderedEventFields(readFrozenMigratorEventSpecs()),
   );
   const kinds = Object.keys(migratorEventSpecs) as MigratorEventKind[];
-  assert.equal(kinds.length, 13);
+  assert.equal(kinds.length, 14);
 
   let projection = createLaunchpadProductProjection();
   for (const [eventIndex, kind] of kinds.entries()) {
@@ -113,6 +113,7 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
         generation: 0n,
         gross_meme: 110n,
         gross_quote: 220n,
+        protocol_destination: "0xb",
         protocol_meme: 10n,
         protocol_quote: 20n,
         creator_meme: 50n,
@@ -246,6 +247,85 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
   assert.equal(round?.quoteRemaining, 20n);
   assert.deepEqual(round?.paidIndexes, { "1": true });
   assert.equal(round?.root, "01".repeat(32));
+});
+
+test("holds a partnered vault's Blast LP fees until anyone claims them for its partner", () => {
+  // `vault_tests::anyone_claims_the_partners_cut_of_held_lp_fees_and_pays_blast_the_rest`.
+  const collection = (protocolQuote: bigint, eventIndex: number) =>
+    migratorDecoded(
+      "FeesCollected",
+      {
+        vault_id: "0x40",
+        protocol_destination: null,
+        protocol_meme: 50n,
+        protocol_quote: protocolQuote,
+      },
+      eventIndex,
+    );
+  const inputs = [
+    launchpadDecoded("LaunchTicketCreated", { ticket_id: "0xb" }, 0),
+    launchpadDecoded(
+      "LaunchCreated",
+      { launch_id: "0xc", ticket_id: "0xb", quote: "0x2::sui::SUI" },
+      1,
+    ),
+    launchpadDecoded("Migrated", { launch_id: "0xc" }, 2),
+    migratorDecoded(
+      "VaultCreated",
+      {
+        vault_id: "0x40",
+        meme: "0xa::meme::MEME",
+        quote: "0x2::sui::SUI",
+      },
+      3,
+    ),
+    collection(15n, 4),
+    collection(16n, 5),
+  ];
+  let projection = inputs.reduce(
+    reduceLaunchpadProductInput,
+    createLaunchpadProductProjection(),
+  );
+  const vaultId = normalizeSuiObjectId("0x40");
+  let vault = projection.migrators.vaults[vaultId];
+  assert.deepEqual(
+    [
+      vault?.protocolMemeHeld,
+      vault?.protocolQuoteHeld,
+      vault?.protocolMemePaid,
+      vault?.protocolQuotePaid,
+    ],
+    [100n, 31n, 0n, 0n],
+  );
+
+  // 40% of 100 Meme and 31 Quote is 40 and 12.4: the partner takes 40 and 12.
+  projection = reduceLaunchpadProductInput(
+    projection,
+    migratorDecoded(
+      "ProtocolLpFeesClaimed",
+      {
+        vault_id: "0x40",
+        protocol_destination: "0xb",
+        protocol_meme: 60n,
+        protocol_quote: 19n,
+        partner_meme: 40n,
+        partner_quote: 12n,
+      },
+      6,
+    ),
+  );
+  vault = projection.migrators.vaults[vaultId];
+  assert.deepEqual(
+    [
+      vault?.protocolMemeHeld,
+      vault?.protocolQuoteHeld,
+      vault?.protocolMemePaid,
+      vault?.protocolQuotePaid,
+      vault?.partnerMemePaid,
+      vault?.partnerQuotePaid,
+    ],
+    [0n, 0n, 60n, 19n, 40n, 12n],
+  );
 });
 
 test("replays LP-fee policy defaults, coin pairs, destination, and Cetus reservations", () => {
@@ -630,6 +710,7 @@ function optionDescriptor(typeArguments: unknown): string {
   const argument = Array.isArray(typeArguments) ? typeArguments[0] : undefined;
   const inner = isRecord(argument) ? argument.argument : undefined;
   if (inner === "u64") return "optionU64";
+  if (inner === "address") return "optionAddress";
   const name =
     isRecord(inner) && isRecord(inner.Datatype) ? inner.Datatype.name : null;
   if (name === "ID") return "optionId";

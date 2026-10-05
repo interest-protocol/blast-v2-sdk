@@ -369,6 +369,57 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
   );
 });
 
+test("claims a partnered vault's held LP fees after each collection", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const vault = shared("0xc", "20", true);
+  const partner = shared("0x9a27", "27", false);
+  const claim = sdk.claimProtocolLpFeesWithPartner({
+    ...types,
+    vault,
+    partner,
+  });
+  const claimCall = moveCall(
+    claim,
+    "vault::claim_protocol_lp_fees_with_partner",
+  );
+  assert.deepEqual(claimCall.typeArguments, [meme, quote]);
+  assert.deepEqual(argumentKinds(claim, claimCall), [
+    "shared-mut:0xc",
+    "shared:0x61",
+    "shared:0x40",
+    "shared:0x9a27",
+    CLOCK,
+  ]);
+
+  // A collection on a partnered vault claims what it held in the same PTB.
+  const cetusTx = sdk.collectCetusFees({
+    ...types,
+    cetusConfig: cetus.cetusConfig,
+    memeSide: "b",
+    vault,
+    memeCurrency: shared("0xd", "22", true),
+    burnManager: shared("0x72", "32", false),
+    pool: shared("0x73", "33", true),
+    partner,
+  });
+  assert.deepEqual(moveFunctions(cetusTx), [
+    "cetus::collect_fees",
+    "vault::claim_protocol_lp_fees_with_partner",
+  ]);
+  const bluefinTx = sdk.collectBluefinFees({
+    ...types,
+    vault,
+    memeCurrency: shared("0xd", "22", true),
+    bluefinConfig: shared("0x80", "40", false),
+    pool: shared("0x81", "41", true),
+    partner,
+  });
+  assert.deepEqual(moveFunctions(bluefinTx), [
+    "bluefin::collect_fees",
+    "vault::claim_protocol_lp_fees_with_partner",
+  ]);
+});
+
 test("claims creator LP fees with the launch's live curve-fee cap", () => {
   const tx = new MigratorTransactions(deployment).claimCreatorFees({
     ...types,
