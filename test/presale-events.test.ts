@@ -144,6 +144,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       treasury_cap_id: id("0x7c"),
       token_supply: 20_001n,
       token_allocation_bps: 5_000n,
+      participant_vesting: null,
       liquidity_token_allocation_bps: 1_000n,
       recipients,
       recipient_bps: [2_500n, 1_500n],
@@ -266,6 +267,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
         quote_refund: expected.quoteRefund,
         remaining_commitments:
           required(state.presales[PRESALE]).remainingCommitments - commitment,
+        vesting_id: null,
       }),
     );
   }
@@ -404,6 +406,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   assert.deepEqual(previewClaim(cancelled, 1_000n), {
     tokens: 0n,
     quoteRefund: 1_000n,
+    vesting: null,
   });
 });
 
@@ -415,6 +418,7 @@ test("a raise allocation leaves custody the migration's overflow", () => {
     treasury_cap_id: id("0x7c"),
     token_supply: 20_001n,
     token_allocation_bps: 5_000n,
+    participant_vesting: null,
     liquidity_token_allocation_bps: 5_000n,
     recipients: [],
     recipient_bps: [],
@@ -489,6 +493,7 @@ function feePayingSaleCreated() {
     treasury_cap_id: id("0x7c"),
     token_supply: 20_001n,
     token_allocation_bps: 5_000n,
+    participant_vesting: null,
     liquidity_token_allocation_bps: 1_000n,
     recipients,
     recipient_bps: [2_500n, 1_000n],
@@ -682,11 +687,12 @@ test("replaces a scheduled sale's Blast rates and amounts before the start", () 
   );
 });
 
-test("carries vesting terms from creation and schedule IDs from migration", () => {
+test("carries vesting terms from creation and schedule IDs from migration and claims", () => {
   const vesting = { cliffMs: 100n, periodMs: 50n, periods: 4n };
   const recipients = [id("0xa110c"), id("0xb110c")];
   const SCHEDULE = id("0x5c4ed");
   const RAISE_SCHEDULE = id("0x5c4ee");
+  const PARTICIPANT_SCHEDULE = id("0x5c4ef");
   let state = createPresaleEventProjection();
   for (const event of [
     decode("PresaleCreated", {
@@ -695,6 +701,7 @@ test("carries vesting terms from creation and schedule IDs from migration", () =
       treasury_cap_id: id("0x7c"),
       token_supply: 20_001n,
       token_allocation_bps: 5_000n,
+      participant_vesting: vesting,
       liquidity_token_allocation_bps: 1_000n,
       recipients,
       recipient_bps: [2_500n, 1_500n],
@@ -736,10 +743,23 @@ test("carries vesting terms from creation and schedule IDs from migration", () =
       tokens: 3_000n,
       vesting_id: null,
     }),
+    decode("Claimed", {
+      presale_id: PRESALE,
+      participant: ALICE,
+      wallet_commitment: 1_000n,
+      tokens: 2_500n,
+      quote_refund: 0n,
+      remaining_commitments: 0n,
+      vesting_id: PARTICIPANT_SCHEDULE,
+    }),
   ]) {
     state = reducePresaleEvent(state, event);
   }
   const presale = required(state.presales[PRESALE]);
+  assert.deepEqual(presale.participantVesting, vesting);
+  assert.deepEqual(presale.participantVestingIds, {
+    [ALICE]: PARTICIPANT_SCHEDULE,
+  });
   assert.deepEqual(
     presale.recipientAllocations.map((share) => share.vesting),
     [vesting, null],
@@ -950,15 +970,25 @@ function descriptor(type: unknown): string {
   if (name === "ID") return "id";
   if (name === "TypeName") return "typeName";
   if (name === "EligibilityPolicy") return "eligibility";
-  if (name === "Option") {
-    const inner = (
-      datatype.type_arguments[0] as { argument: { Datatype: { name: string } } }
-    ).argument.Datatype.name;
-    if (inner === "UncappedPhase") return "optionUncapped";
-    if (inner === "ID") return "optionId";
-  }
+  const option =
+    name === "Option" &&
+    OPTION_DESCRIPTORS[
+      (
+        datatype.type_arguments[0] as {
+          argument: { Datatype: { name: string } };
+        }
+      ).argument.Datatype.name
+    ];
+  if (option) return option;
   throw new TypeError(`unsupported ABI event field ${JSON.stringify(type)}`);
 }
+
+/** The event descriptor of each `Option<T>` an event carries, by `T`. */
+const OPTION_DESCRIPTORS: Record<string, string | undefined> = {
+  UncappedPhase: "optionUncapped",
+  ID: "optionId",
+  VestingTerms: "optionVesting",
+};
 
 function required<T>(value: T | undefined): T {
   assert.ok(value !== undefined);

@@ -76,6 +76,10 @@ function presaleBytes(): Uint8Array {
     ...u64(2n), // participants
     ...u64(3_000n), // quote
     ...u64(10_001n), // token_allocation
+    ...u8(1), // participant_vesting: Some
+    ...u64(0n), // cliff_ms
+    ...u64(30n), // period_ms
+    ...u64(6n), // periods
     ...u64(7_501n), // sale_tokens
     ...u64(0n), // liquidity_tokens
     ...vec([
@@ -159,6 +163,11 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
     ],
     [4_000n, 3_000n, 2n, 3_000n, 10_001n, 7_501n, 0n, 0n],
   );
+  assert.deepEqual(state.participantVesting, {
+    cliffMs: 0n,
+    periodMs: 30n,
+    periods: 6n,
+  });
   assert.deepEqual(state.raisePayouts, [
     { recipient: normalizeSuiAddress("0x5a1e"), amount: 200n, vesting: null },
   ]);

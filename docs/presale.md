@@ -50,7 +50,7 @@ mutability its Move signature needs.
 | Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except in a hard-capped uncapped phase. |
 | Settle | `settle`, `cancelUnlaunched` | Anyone may call. |
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. |
-| Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. |
+| Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. Under participant vesting, each claim locks the participant's tokens in a new schedule starting at that claim. |
 | Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, then every fee recipient. The holder-reward share stays in the vault. |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
 | Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication takes the `AdminCap` (`adminCapId`). |
@@ -92,11 +92,22 @@ most 2^63 ms). Fee recipients cannot vest: the builders throw, and
 `validateFeeSplit` throws `EInvalidFeeSplit`. Product limits on vesting
 durations belong to creation tooling.
 
+A sale may also set `participantVesting` in `PresaleTerms` (null pays tokens
+out), built as `Option<VestingTerms>` right after the sale's token rate. Each
+claim after migration then locks the participant's tokens in its own
+irrevocable schedule that starts at that claim, not at migration, and pays the
+Quote refund at once. A claim with no tokens, including every claim of a
+cancelled sale, creates no schedule. Since a schedule starts at its claim,
+relaying `claim` for every participant right after migration starts every
+schedule together.
+
 Decoded shares and payouts always carry `vesting` (null when unvested).
-`PresaleCreated` carries `recipient_vesting` and `raise_recipient_vesting`,
-aligned with their recipients; `RecipientAllocated` and `RaiseAllocated` carry
-the created schedule's `vesting_id`, which the reducer keeps in
-`recipientVestingIds` and `raiseVestingIds`.
+`PresaleCreated` carries `participant_vesting`, and `recipient_vesting` and
+`raise_recipient_vesting` aligned with their recipients; `RecipientAllocated`,
+`RaiseAllocated`, and `Claimed` carry the created schedule's `vesting_id`,
+which the reducer keeps in `recipientVestingIds`, `raiseVestingIds`, and
+`participantVestingIds`. `PresaleState.participantVesting` holds the sale's
+terms.
 
 ## Blast's fees
 
@@ -151,9 +162,10 @@ order. A preview throws `PresaleAbortError` with the Move error name.
 - `previewCommit` mirrors `record_commitment` with its route guards: wallet
   cap, minimum, participant bound, uncapped phase, and hard cap. It returns the
   accepted Quote, the change, and the `Committed` totals.
-- `previewSettlement` and `previewClaim` mirror `settle` and `claim_payout`:
+- `previewSettlement` and `previewClaim` mirror `settle` and `claim`:
   `tokens = floor(allocation * c / C)` and `refund = floor((C - R) * c / C)`. On
-  cancellation, the refund is the full commitment.
+  cancellation, the refund is the full commitment. `previewClaim` also returns
+  the `vesting` terms its tokens lock under, null when they are paid out.
 - `apportionFee` mirrors `presale_vault::fee_shares`, and `splitCollectedFee`
   mirrors `split_fees` for one asset: Blast's share first, then the split.
 

@@ -60,6 +60,7 @@ const terms: PresaleTerms = {
   memeCurrency: shared("0xcc", true),
   tokenSupply: 20_001n,
   tokenAllocationBps: 5_000n,
+  participantVesting: null,
   liquidityTokenAllocationBps: 1_000n,
   recipientAllocations: [
     { recipient: "0xa110c", bps: 2_500n },
@@ -128,6 +129,7 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
   });
   assert.deepEqual(moveFunctions(ptb), [
     "bps::new", // token_allocation_bps
+    "option::none", // participant_vesting
     "bps::new", // liquidity_token_allocation_bps
     ...recipientShare,
     ...recipientShare, // recipient_allocations
@@ -141,7 +143,7 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     "blast_presale::share",
   ]);
   const firstShare = moveCall(ptb, "blast_presale::recipient_share");
-  assert.deepEqual(argumentKinds(ptb, firstShare), ["pure", "Result:2"]);
+  assert.deepEqual(argumentKinds(ptb, firstShare), ["pure", "Result:3"]);
   const created = moveCall(ptb, "cetus::new");
   assert.deepEqual(created.typeArguments, [memeA, sui]);
   assert.deepEqual(argumentKinds(ptb, created), [
@@ -150,6 +152,7 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     "pure",
     "Result:0",
     "Result:1",
+    "Result:2",
     `Result:${commandIndexOf(ptb, "MakeMoveVec", 0)}`,
     "pure",
     "pure",
@@ -203,9 +206,16 @@ test("creates a Bluefin presale without an uncapped phase", () => {
   assert.ok(
     moveFunctions(ptb).includes("blast_presale::allowlisted_eligibility"),
   );
-  const none = moveCall(ptb, "option::none");
-  assert.deepEqual(none.typeArguments, [
-    normalizeStructTag("0x5e::blast_presale::UncappedPhase"),
+  const nones = ptb
+    .getData()
+    .commands.flatMap((command) =>
+      command.$kind === "MoveCall" && command.MoveCall.function === "none"
+        ? [command.MoveCall.typeArguments]
+        : [],
+    );
+  assert.deepEqual(nones, [
+    [normalizeStructTag("0x5e::blast_presale::VestingTerms")],
+    [normalizeStructTag("0x5e::blast_presale::UncappedPhase")],
   ]);
   const created = moveCall(ptb, "bluefin::new");
   assert.equal(created.arguments.length, abiArity("bluefin", "new"));
@@ -271,7 +281,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
     [
       tx.claim({ ...types, presale, participants: ["0xa11ce"] }),
       "blast_presale::claim",
-      ["shared-mut:0xab", "pure"],
+      ["shared-mut:0xab", "pure", CLOCK],
     ],
     [
       tx.destroyCap({ ...types, presale, presaleCapId: "0xca" }),
@@ -587,8 +597,9 @@ test("vested token and raise shares build their terms; fee shares cannot vest", 
     "blast_presale::vesting_terms",
     "blast_presale::vested_recipient_share",
   ];
-  assert.deepEqual(moveFunctions(ptb).slice(0, 11), [
+  assert.deepEqual(moveFunctions(ptb).slice(0, 12), [
     "bps::new",
+    "option::none",
     "bps::new",
     ...vestedShare,
     ...recipientShare,
@@ -643,6 +654,53 @@ test("vested token and raise shares build their terms; fee shares cannot vest", 
         capRecipient: "0xc0",
       }),
     /fee recipients cannot vest/,
+  );
+});
+
+test("participant vesting builds Some(vesting_terms) after the sale's token rate", () => {
+  const vesting = { cliffMs: 100n, periodMs: 50n, periods: 4n };
+  const ptb = tx.createCetusPresale({
+    ...terms,
+    ...cetus,
+    participantVesting: vesting,
+    tickSpacing: 200,
+    startMs: 1_000n,
+    capRecipient: "0xc0",
+  });
+  assert.deepEqual(moveFunctions(ptb).slice(0, 4), [
+    "bps::new", // token_allocation_bps
+    "blast_presale::vesting_terms",
+    "option::some", // participant_vesting
+    "bps::new", // liquidity_token_allocation_bps
+  ]);
+  const terms0 = moveCall(ptb, "blast_presale::vesting_terms");
+  assert.deepEqual(
+    terms0.arguments.map((argument) => pureU64(ptb, argument)),
+    [100n, 50n, 4n],
+  );
+  const some = moveCall(ptb, "option::some");
+  assert.deepEqual(some.typeArguments, [
+    normalizeStructTag("0x5e::blast_presale::VestingTerms"),
+  ]);
+  assert.deepEqual(argumentKinds(ptb, some), ["Result:1"]);
+  const created = moveCall(ptb, "cetus::new");
+  assert.equal(created.arguments.length, abiArity("cetus", "new"));
+  assert.deepEqual(argumentKinds(ptb, created).slice(3, 5), [
+    "Result:0",
+    "Result:2",
+  ]);
+
+  assert.throws(
+    () =>
+      tx.createCetusPresale({
+        ...terms,
+        ...cetus,
+        participantVesting: { ...vesting, periodMs: 0n },
+        tickSpacing: 200,
+        startMs: 1_000n,
+        capRecipient: "0xc0",
+      }),
+    /EInvalidVestingTerms/,
   );
 });
 

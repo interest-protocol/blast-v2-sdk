@@ -25,6 +25,8 @@ export type PresaleProjection = {
   lifecycle: PresaleLifecycle;
   tokenSupply: bigint;
   tokenAllocationBps: bigint;
+  /** Terms each claim locks a participant's tokens under; null when paid out. */
+  participantVesting: VestingTerms | null;
   liquidityTokenAllocationBps: bigint;
   recipientAllocations: BpsShare[];
   burnable: boolean;
@@ -64,6 +66,8 @@ export type PresaleProjection = {
   recipientVestingIds: Readonly<Record<string, string>>;
   /** The schedule migration created for each vesting raise recipient. */
   raiseVestingIds: Readonly<Record<string, string>>;
+  /** The schedule each participant's claim created under participant vesting. */
+  participantVestingIds: Readonly<Record<string, string>>;
   /**
    * Blast's rates: snapshotted at creation, then replaced by each
    * `ProtocolFeesChanged` before the start.
@@ -281,6 +285,13 @@ function applyPresaleEvent(
           remainingCommitments: payload.remaining_commitments,
           saleTokens: presale.saleTokens - payload.tokens,
           quote: presale.quote - payload.quote_refund,
+          participantVestingIds:
+            payload.vesting_id === null
+              ? presale.participantVestingIds
+              : {
+                  ...presale.participantVestingIds,
+                  [payload.participant]: payload.vesting_id,
+                },
         };
       });
     }
@@ -471,6 +482,7 @@ function createdPresale(
     lifecycle: "Pending",
     tokenSupply: payload.token_supply,
     tokenAllocationBps: payload.token_allocation_bps,
+    participantVesting: payload.participant_vesting,
     liquidityTokenAllocationBps: payload.liquidity_token_allocation_bps,
     recipientAllocations,
     burnable: payload.burnable,
@@ -505,6 +517,7 @@ function createdPresale(
     raisePayouts,
     recipientVestingIds: {},
     raiseVestingIds: {},
+    participantVestingIds: {},
     protocolFees,
     protocolQuote: payload.protocol_quote,
     protocolTokens: payload.protocol_tokens,

@@ -495,6 +495,8 @@ export function isSeedable(sqrtPrice: bigint): boolean {
 export type PresaleCreationConfig = {
   tokenSupply: bigint;
   tokenAllocationBps: bigint;
+  /** Terms each claim locks a participant's tokens under; null pays them out. */
+  participantVesting: VestingTerms | null;
   liquidityTokenAllocationBps: bigint;
   recipientAllocations: readonly BpsShare[];
   raiseTarget: bigint;
@@ -522,8 +524,8 @@ export type PresaleCreationPreview = SupplyApportionment & {
 /**
  * Mirrors the checks of `blast_presale::new` in its abort order, after the
  * constructors `PresaleCalls` runs first in Move argument order (`bps::new`
- * for each rate, `recipient_share` or `vesting_terms` and
- * `vested_recipient_share` for token then raise recipients,
+ * for each rate, `vesting_terms` for participant vesting, `recipient_share` or
+ * `vesting_terms` and `vested_recipient_share` for token then raise recipients,
  * `open_eligibility` / `allowlisted_eligibility`, `uncapped_for_anyone`, then
  * the fee recipients and holder share), and returns the exact amounts it
  * apportions. Does not check what only the chain knows: the `CreationPolicy`
@@ -543,6 +545,14 @@ export function previewPresaleCreation(
     }
   };
   validateBps(config.tokenAllocationBps);
+  const { participantVesting } = config;
+  if (participantVesting) {
+    vestingTerms(
+      participantVesting.cliffMs,
+      participantVesting.periodMs,
+      participantVesting.periods,
+    );
+  }
   validateBps(config.liquidityTokenAllocationBps);
   shareBps(config.recipientAllocations);
   shareBps(config.raiseAllocations);
@@ -872,11 +882,13 @@ export function previewSettlement(
 }
 
 /**
- * Mirrors `blast_presale::claim_payout` for one commitment of `commitment`
- * Quote atoms. After migration: `tokens = floor(tokenAllocation * c / C)` and
+ * Mirrors `blast_presale::claim` for one commitment of `commitment` Quote
+ * atoms. After migration: `tokens = floor(tokenAllocation * c / C)` and
  * `quoteRefund = floor((C - R) * c / C)`; after cancellation no tokens and
  * `floor(C * c / C) = c`. The last claim (`remaining == c`) takes every atom
- * left in custody instead, so the rounding remainder goes to it.
+ * left in custody instead, so the rounding remainder goes to it. `vesting` is
+ * the terms of the schedule the claim locks `tokens` in, starting at the claim;
+ * null when they are paid out, including when there are none to lock.
  */
 export function previewClaim(
   presale: Pick<
@@ -886,11 +898,12 @@ export function previewClaim(
     | "remainingCommitments"
     | "raiseTarget"
     | "tokenAllocation"
+    | "participantVesting"
     | "saleTokens"
     | "quote"
   >,
   commitment: bigint,
-): { tokens: bigint; quoteRefund: bigint } {
+): { tokens: bigint; quoteRefund: bigint; vesting: VestingTerms | null } {
   const migrated = presale.lifecycle === "Migrated";
   check(
     migrated || presale.lifecycle === "Cancelled",
@@ -906,5 +919,6 @@ export function previewClaim(
       : (presale.tokenAllocation * commitment) / total;
   const refundTotal = migrated ? total - presale.raiseTarget : total;
   const quoteRefund = last ? presale.quote : (refundTotal * commitment) / total;
-  return { tokens, quoteRefund };
+  const vesting = tokens > 0n ? presale.participantVesting : null;
+  return { tokens, quoteRefund, vesting };
 }

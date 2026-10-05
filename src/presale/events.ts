@@ -37,6 +37,7 @@ type PresaleEventFieldDescriptor =
   | "eligibility"
   | "optionUncapped"
   | "optionId"
+  | "optionVesting"
   | "vestingVector";
 
 /** Every event `blast_presale` emits, by module, in Move field order. */
@@ -48,6 +49,7 @@ export const presaleEventSpecs = {
       treasury_cap_id: "id",
       token_supply: "u64",
       token_allocation_bps: "u64",
+      participant_vesting: "optionVesting",
       liquidity_token_allocation_bps: "u64",
       recipients: "addressVector",
       recipient_bps: "u64Vector",
@@ -142,6 +144,7 @@ export const presaleEventSpecs = {
       tokens: "u64",
       quote_refund: "u64",
       remaining_commitments: "u64",
+      vesting_id: "optionId",
     },
   },
   presale_vault: {
@@ -243,6 +246,8 @@ type DescriptorOutputs = {
   optionUncapped: UncappedPhase | null;
   /** A `blast_fun_linear_vesting::Vesting` ID, or null for a direct payout. */
   optionId: string | null;
+  /** Null when the tokens are paid out. */
+  optionVesting: VestingTerms | null;
   /** Aligned with the share list it follows; null for an unvested share. */
   vestingVector: (VestingTerms | null)[];
 };
@@ -284,6 +289,7 @@ const FIELD_BCS: Record<PresaleEventFieldDescriptor, BcsType<unknown>> = {
   eligibility: eligibilityPolicyBcs as BcsType<unknown>,
   optionUncapped: bcs.option(uncappedPhaseBcs) as BcsType<unknown>,
   optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown>,
+  optionVesting: bcs.option(vestingTermsBcs) as BcsType<unknown>,
   vestingVector: bcs.vector(bcs.option(vestingTermsBcs)) as BcsType<unknown>,
 };
 
