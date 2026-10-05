@@ -1,10 +1,10 @@
 import type {
-  Transaction,
   TransactionArgument,
   TransactionObjectArgument,
   TransactionObjectInput,
   TransactionResult,
 } from "@mysten/sui/transactions";
+import { Transaction } from "@mysten/sui/transactions";
 import {
   MOVE_STDLIB_ADDRESS,
   normalizeStructTag,
@@ -20,7 +20,7 @@ import {
   requirePositiveU64,
   requireU64,
 } from "../lib/integers.ts";
-import { deploymentObject, moveResults, newTransaction } from "../lib/ptb.ts";
+import { deploymentObject, moveResults } from "../lib/ptb.ts";
 import type {
   SharedObjectIdentity,
   SharedObjectReference,
@@ -867,7 +867,7 @@ export class LaunchpadTransactions {
    * or `createBluefinLaunch`).
    */
   publishMeme(options: MemeTemplateOptions): Transaction {
-    const tx = newTransaction();
+    const tx = new Transaction();
     const upgradeCap = tx.add(async (innerTx) => {
       const module = await buildMemePackageBytecode(
         options,
@@ -901,7 +901,7 @@ export class LaunchpadTransactions {
     },
   ): Transaction {
     requirePositiveU64("quoteAmount", options.quoteAmount);
-    const tx = newTransaction();
+    const tx = new Transaction();
     const quoteCoin = tx.coin({
       type: normalizeStructTag(options.quoteType),
       balance: options.quoteAmount,
@@ -923,7 +923,7 @@ export class LaunchpadTransactions {
     },
   ): Transaction {
     requirePositiveU64("memeAmount", options.memeAmount);
-    const tx = newTransaction();
+    const tx = new Transaction();
     const memeCoin = tx.coin({
       type: normalizeStructTag(options.memeType),
       balance: options.memeAmount,
@@ -940,7 +940,7 @@ export class LaunchpadTransactions {
       accountAttestation?: Uint8Array | null;
     },
   ): Transaction {
-    const tx = newTransaction();
+    const tx = new Transaction();
     const claimResult = tx.add(this.call.claimCreatorCaps(options));
     tx.transferObjects(
       moveResults(claimResult, 2),
@@ -956,7 +956,7 @@ export class LaunchpadTransactions {
       recipient: string;
     },
   ): Transaction {
-    const tx = newTransaction();
+    const tx = new Transaction();
     const claimResult = tx.add(
       this.call.claimCreatorFees({
         ...options,
@@ -976,7 +976,7 @@ export class LaunchpadTransactions {
       name: string;
     },
   ): Transaction {
-    const tx = newTransaction();
+    const tx = new Transaction();
     tx.add(
       this.call.setName({
         ...options,
@@ -992,7 +992,7 @@ export class LaunchpadTransactions {
       description: string;
     },
   ): Transaction {
-    const tx = newTransaction();
+    const tx = new Transaction();
     tx.add(
       this.call.setDescription({
         ...options,
@@ -1008,7 +1008,7 @@ export class LaunchpadTransactions {
       iconUrl: string;
     },
   ): Transaction {
-    const tx = newTransaction();
+    const tx = new Transaction();
     tx.add(
       this.call.setIconUrl({
         ...options,
@@ -1028,7 +1028,7 @@ export class LaunchpadTransactions {
       partner?: SharedObjectReference<false> | null;
     },
   ): Transaction {
-    const tx = newTransaction();
+    const tx = new Transaction();
     tx.add(this.call.claimProtocolFees(options));
     return tx;
   }
@@ -1041,7 +1041,7 @@ export class LaunchpadTransactions {
     },
   ): Transaction {
     requirePositiveU64("quoteAmount", options.quoteAmount);
-    const tx = newTransaction();
+    const tx = new Transaction();
     const quoteCoin = tx.coin({
       type: normalizeStructTag(options.quoteType),
       balance: options.quoteAmount,
@@ -1053,7 +1053,7 @@ export class LaunchpadTransactions {
   settleOpeningRound(
     options: LaunchTypes & { launch: SharedObjectReference<true> },
   ): Transaction {
-    const tx = newTransaction();
+    const tx = new Transaction();
     tx.add(this.call.settleOpeningRound(options));
     return tx;
   }
@@ -1065,7 +1065,7 @@ export class LaunchpadTransactions {
       bidders: readonly string[];
     },
   ): Transaction {
-    const tx = newTransaction();
+    const tx = new Transaction();
     for (const bidder of options.bidders) {
       tx.add(this.call.deliverOpeningRound({ ...options, bidder }));
     }
@@ -1208,7 +1208,7 @@ export class LaunchpadTransactions {
       adminWitness: TransactionObjectArgument,
     ) => (tx: Transaction) => void,
   ): Transaction {
-    const tx = newTransaction();
+    const tx = new Transaction();
     const adminWitness = tx.add(
       this.call.signIn({ adminCap: adminCapId, role }),
     );

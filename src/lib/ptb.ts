@@ -1,10 +1,8 @@
 import type {
+  Transaction,
   TransactionObjectArgument,
   TransactionResult,
 } from "@mysten/sui/transactions";
-import { Transaction } from "@mysten/sui/transactions";
-
-import { grossGasBudget } from "./gas.ts";
 
 import type { SharedObjectIdentity } from "./sui.ts";
 
@@ -34,14 +32,4 @@ export function deploymentObject(
   mutable: boolean,
 ): TransactionObjectArgument {
   return tx.sharedObjectRef({ ...identity, mutable });
-}
-
-/**
- * A new transaction that budgets its gas at gross cost plus headroom when
- * built without a budget (`grossGasBudget`). Every SDK builder starts here.
- */
-export function newTransaction(): Transaction {
-  const tx = new Transaction();
-  tx.addBuildPlugin(grossGasBudget());
-  return tx;
 }

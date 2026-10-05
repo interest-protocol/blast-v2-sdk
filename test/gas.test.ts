@@ -5,7 +5,11 @@ import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
 
 import { grossGasBudget } from "../src/lib/gas.ts";
-import { newTransaction } from "../src/lib/ptb.ts";
+import type { SharedObjectReference } from "../src/lib/sui.ts";
+import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
+import { MigratorTransactions } from "../src/migrators/transactions.ts";
+import type { PresaleDeployment } from "../src/presale/transactions.ts";
+import { PresaleTransactions } from "../src/presale/transactions.ts";
 
 const SENDER = `0x${"a1".repeat(32)}`;
 const PRICE = 1_000n;
@@ -80,7 +84,14 @@ function fakeClient(options: FakeOptions = {}) {
   return { client: { core } as unknown as ClientWithCoreApi, calls };
 }
 
-function transfer(tx: Transaction = newTransaction()): Transaction {
+/** A transaction carrying the plugin. */
+function budgeted(): Transaction {
+  const tx = new Transaction();
+  tx.addBuildPlugin(grossGasBudget());
+  return tx;
+}
+
+function transfer(tx: Transaction = budgeted()): Transaction {
   tx.setSender(SENDER);
   const [coin] = tx.moveCall({
     target: "0x2::coin::zero",
@@ -95,7 +106,7 @@ async function builtBudget(tx: Transaction, client: ClientWithCoreApi) {
   return BigInt(Transaction.from(bytes).getData().gasData.budget ?? 0);
 }
 
-test("SDK transactions budget gross cost plus headroom", async () => {
+test("the plugin budgets gross cost plus headroom", async () => {
   const { client } = fakeClient();
   assert.equal(await builtBudget(transfer(), client), GROSS_BUDGET);
 });
@@ -161,9 +172,79 @@ test("a transaction-kind build is untouched", async () => {
   assert.equal(calls.simulate, 0);
 });
 
-test("the plugin is exported for transactions built outside the SDK", async () => {
-  const { client } = fakeClient();
-  const tx = transfer(new Transaction());
-  tx.addBuildPlugin(grossGasBudget());
-  assert.equal(await builtBudget(tx, client), GROSS_BUDGET);
+function shared<const Mutable extends boolean>(
+  objectId: string,
+  mutable: Mutable,
+): SharedObjectReference<Mutable> {
+  return { objectId, initialSharedVersion: "3", mutable };
+}
+
+const presaleDeployment: PresaleDeployment = {
+  packageId: "0x5f",
+  originalPackageId: "0x5e",
+  venueConfig: shared("0x60", false),
+  feePolicy: shared("0x61", false),
+  creationPolicy: shared("0x62", false),
+  adminRegistry: shared("0x63", false),
+};
+const presale = new PresaleTransactions(presaleDeployment);
+const types = { memeType: "0xa::meme::MEME", quoteType: "0x2::sui::SUI" };
+const cetus = {
+  cetusConfig: shared("0x70", false),
+  cetusPools: shared("0x71", true),
+  burnManager: shared("0x72", true),
+};
+const presaleMigration = { ...types, ...cetus, presale: shared("0xab", true) };
+
+/** Builds `tx` from `SENDER` and returns its budget. */
+async function senderBudget(tx: Transaction) {
+  tx.setSender(SENDER);
+  return builtBudget(tx, fakeClient().client);
+}
+
+test("a presale Cetus migration budgets gross cost", async () => {
+  assert.equal(
+    await senderBudget(presale.migrateCetus(presaleMigration)),
+    GROSS_BUDGET,
+  );
+});
+
+test("a keeper PTB composing the Cetus migration call budgets gross cost", async () => {
+  const tx = new Transaction();
+  tx.add(presale.call.settle({ ...types, presale: shared("0xab", true) }));
+  tx.add(presale.call.migrateCetus(presaleMigration));
+  assert.equal(await senderBudget(tx), GROSS_BUDGET);
+});
+
+test("a launch's Cetus migration budgets gross cost", async () => {
+  const deployment: MigratorsDeployment = {
+    packageId: "0x321",
+    originalPackageId: "0x320",
+    launchpad: {
+      packageId: "0x123",
+      originalPackageId: "0x122",
+      partnersPackageId: "0xae",
+      timelockPackageId: "0xaf",
+      packageVersion: shared("0x2", false),
+      launchConfig: shared("0x3", false),
+      runtimeConfig: shared("0x4", false),
+      admin: { packageId: "0xad", acl: shared("0x5", false) },
+    },
+    migratorsVersion: shared("0x61", false),
+    lpFeePolicy: shared("0x40", false),
+    venueConfig: shared("0x60", false),
+  };
+  const tx = new MigratorTransactions(deployment).migrateCetus({
+    ...types,
+    ...cetus,
+    memeSide: "a",
+    launch: shared("0xc", true),
+    memeCurrency: shared("0xd", true),
+  });
+  assert.equal(await senderBudget(tx), GROSS_BUDGET);
+});
+
+test("other SDK transactions keep the default budget", async () => {
+  const settle = presale.settle({ ...types, presale: shared("0xab", true) });
+  assert.equal(await senderBudget(settle), DEFAULT_BUDGET);
 });

@@ -1,14 +1,14 @@
 import type {
-  Transaction,
   TransactionObjectArgument,
   TransactionObjectInput,
 } from "@mysten/sui/transactions";
+import { Transaction } from "@mysten/sui/transactions";
 import {
   normalizeStructTag,
   normalizeSuiAddress,
   normalizeSuiObjectId,
 } from "@mysten/sui/utils";
-import { newTransaction } from "../lib/ptb.ts";
+
 import type { SharedObjectIdentity } from "../lib/sui.ts";
 import { normalizeSharedObjectIdentity } from "../lib/sui.ts";
 
@@ -289,7 +289,7 @@ export class AdminTransactions {
 }
 
 function single(call: (tx: Transaction) => void): Transaction {
-  const tx = newTransaction();
+  const tx = new Transaction();
   tx.add(call);
   return tx;
 }

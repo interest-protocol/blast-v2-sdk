@@ -14,7 +14,7 @@ import {
  */
 const PROBE_BUDGET = 50_000_000_000n;
 
-/** Headroom over the gross cost: a fifth of it, plus 10,000 gas units for a computation bucket step. */
+/** Headroom over the gross cost, in MIST: a fifth of it, plus a floor of 10,000 gas units at the gas price. */
 const MARGIN_DIVISOR = 5n;
 const MARGIN_GAS_UNITS = 10_000n;
 
@@ -24,20 +24,24 @@ const SUI = normalizeStructTag("0x2::sui::SUI");
  * A build plugin that budgets a transaction at its gross cost plus headroom
  * when the caller has not set a budget.
  *
- * `@mysten/sui` budgets at the simulated net cost (computation plus storage
- * less rebate) plus 1,000 gas units, about 13 bytes of storage. Execution
- * fails with `InsufficientGas` once `budget - computation < storage - rebate`,
- * so a transaction whose execution writes a little more storage, or is
- * rebated a little less, than its simulation runs out of gas. A presale's
- * Cetus migration, with 56M MIST of storage, did on 2026-10-05.
+ * `@mysten/sui` and the fullnode budget the simulated net cost (computation
+ * plus storage less rebate) plus 1,000 gas units, about 13 bytes of storage.
+ * Execution fails with `InsufficientGas` once `budget - computation < storage
+ * - rebate`, so a transaction whose execution writes more storage than its
+ * simulation runs out of gas. Cetus seeds a new pool's tick skip list from the
+ * clock, so creating a pool writes up to 18 more bytes in about one execution
+ * in four: a presale's Cetus migration ran out of gas that way on 2026-10-05.
+ * The SDK attaches this plugin to its Cetus migration calls only; every other
+ * transaction it builds is deterministic and keeps the default budget.
  *
- * This plugin budgets the simulated computation plus all storage, ignoring
- * the rebate, plus a fifth and 10,000 gas units. The charge is unchanged,
- * since the rebate is still credited; only the ceiling rises. A payer that
- * cannot cover that ceiling, given how `@mysten/sui` then picks its gas
- * payment, keeps the default net budget. A transaction-kind build, a budget
- * already set, no client, or a failing probe also leave the default resolver
- * in charge, with its own errors.
+ * The plugin probes once more and budgets the simulated computation plus all
+ * storage, ignoring the rebate, plus a fifth and 10,000 gas units. The charge
+ * is unchanged, since the rebate is still credited; only the ceiling rises. A
+ * payer that cannot cover that ceiling, given how `@mysten/sui` then picks its
+ * gas payment, keeps the default net budget. A transaction-kind build, a
+ * budget already set, no client, or a failing probe also leave the default
+ * resolver in charge, with its own errors. A plugin does not survive JSON
+ * serialization: add it again after `Transaction.from(json)`.
  */
 export function grossGasBudget(): TransactionPlugin {
   return async (transactionData, options, next) => {

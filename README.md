@@ -405,16 +405,21 @@ package's objects and events. See [docs/presale.md](docs/presale.md).
 
 ## Gas budgets
 
-Every transaction the SDK builds carries the `grossGasBudget()` build plugin.
-When it is built without a budget, the plugin budgets the simulated computation
-plus all storage, ignoring the rebate, plus a fifth and 10,000 gas units.
-`@mysten/sui` and the fullnode budget only the net cost plus 1,000 gas units,
-which runs out of gas when execution writes a little more storage than the
-simulation did: a presale's Cetus migration did on mainnet. The charge is
-unchanged; only the ceiling rises. A payer that cannot cover the gross budget
-keeps the default one. Add the plugin to transactions built outside the SDK with
-`tx.addBuildPlugin(grossGasBudget())`. A plugin does not survive JSON
-serialization, so add it again after `Transaction.from(json)`.
+Cetus seeds a new pool's tick skip list from the clock, so creating a pool can
+write up to 18 more bytes of storage when it executes than when it was
+simulated. `@mysten/sui` and the fullnode budget only the simulated net cost
+plus 1,000 gas units, about 13 bytes, so a Cetus migration runs out of gas in
+about one execution in four. A presale's Cetus migration did on mainnet.
+
+The presale and migrators `migrateCetus` calls, and the transactions built from
+them, therefore carry the `grossGasBudget()` build plugin. When built without a
+budget, it budgets the simulated computation plus all storage, ignoring the
+rebate, plus a fifth and 10,000 gas units. The charge is unchanged; only the
+ceiling rises. A payer that cannot cover the gross budget keeps the default
+one. Every other SDK transaction is deterministic and keeps the default budget.
+
+A plugin does not survive JSON serialization: after `Transaction.from(json)` of
+a Cetus migration, add it again with `tx.addBuildPlugin(grossGasBudget())`.
 
 ## Integer helpers
 
