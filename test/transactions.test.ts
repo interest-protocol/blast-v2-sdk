@@ -438,50 +438,41 @@ test("updates coin metadata through the live Blast metadata cap", () => {
   }
 });
 
-test("composes admin sign-in with a protocol fee claim", () => {
+test("builds a permissionless protocol fee claim that pays the treasury", () => {
   const sdk = new LaunchpadTransactions(deployment);
+  const abi = readAbi("production-launchpad-v1.json", "launchpad");
   const tx = sdk.claimProtocolFees({
     ...types,
     launch: shared("0xc", "20", true),
-    adminCapId: "0xe",
-    recipient: "0xf",
   });
 
-  assert.deepEqual(moveFunctions(tx), [
-    "blast_acl::sign_in",
+  assert.deepEqual(assertBuildersMatchAbi(tx, abi, deployment.packageId), [
     "launch::claim_protocol_fees",
   ]);
-  const signIn = moveCall(tx, "blast_acl::sign_in");
-  assert.equal(signIn.package, normalizeSuiObjectId("0xad"));
-  assert.deepEqual(signIn.typeArguments, [
-    `${normalizeSuiObjectId("0x123")}::blast_fun_domain::TreasuryAdmin`,
-  ]);
-  assert.deepEqual(signIn.arguments.map(argumentKind(tx)), [
-    "shared:0x5",
-    "object:0xe",
-  ]);
-  assert.ok(
-    sharedInputs(tx).some(
-      (input) => input.objectId.endsWith("05") && input.mutable === false,
-    ),
-  );
   assert.deepEqual(
     moveCall(tx, "launch::claim_protocol_fees").arguments.map(argumentKind(tx)),
-    [
-      "shared:0xc",
-      "shared:0x2",
-      `Result:${commandIndex(tx, "blast_acl::sign_in")}`,
-    ],
+    ["shared:0xc", "shared:0x2", "shared:0x4"],
   );
-  assert.equal(transferObjectCount(tx), 3);
+  assert.deepEqual(
+    sharedInputs(tx),
+    [
+      shared("0xc", "20", true),
+      shared("0x2", "10", false),
+      shared("0x4", "12", false),
+    ].map(normalizedShared),
+  );
+  // No sign-in, and nothing returned to route: the contract pays the treasury.
+  assert.equal(transferObjectCount(tx), 0);
 
   const partnered = sdk.claimProtocolFees({
     ...types,
     launch: shared("0xc", "20", true),
-    adminCapId: "0xe",
-    recipient: "0xf",
     partner: shared("0x9a", "30", false),
   });
+  assert.deepEqual(
+    assertBuildersMatchAbi(partnered, abi, deployment.packageId),
+    ["launch::claim_protocol_fees_with_partner"],
+  );
   assert.deepEqual(
     moveCall(
       partnered,
@@ -490,12 +481,12 @@ test("composes admin sign-in with a protocol fee claim", () => {
     [
       "shared:0xc",
       "shared:0x2",
-      `Result:${commandIndex(partnered, "blast_acl::sign_in")}`,
+      "shared:0x4",
       "shared:0x9a",
       `shared:${SUI_CLOCK_OBJECT_ID}`,
     ],
   );
-  assert.equal(transferObjectCount(partnered), 3);
+  assert.equal(transferObjectCount(partnered), 0);
 });
 
 test("uses a fully qualified immutable Clock reference", () => {
@@ -598,6 +589,12 @@ test("signs in with each operator role and calls every launchpad setter", () => 
       ["shared-mut:0x4", "shared:0x2", "result:0", "result:1"],
     ],
     [
+      sdk.setTreasury({ adminCapId, treasury: "0x7ea5" }),
+      "TreasuryAdmin",
+      "runtime_config::set_treasury",
+      ["shared-mut:0x4", "shared:0x2", "result:0", "pure"],
+    ],
+    [
       sdk.reassignCurveFeeCap({
         ...types,
         launch,
@@ -643,6 +640,22 @@ test("signs in with each operator role and calls every launchpad setter", () => 
       .filter((name) => /^(launch_config|runtime_config|launch)::/.test(name)),
   );
   assert.deepEqual([...covered].sort(), operatorTargets.sort());
+});
+
+test("pays every later protocol fee claim to the normalized treasury", () => {
+  const sdk = new LaunchpadTransactions(deployment);
+  const tx = sdk.setTreasury({ adminCapId: "0xadc", treasury: "0x7ea5" });
+  const treasury = moveCall(tx, "runtime_config::set_treasury").arguments.at(
+    -1,
+  );
+  assert.ok(treasury?.$kind === "Input");
+  const input = tx.getData().inputs[treasury.Input];
+  assert.ok(input?.$kind === "Pure");
+
+  assert.equal(
+    `0x${Buffer.from(input.Pure.bytes, "base64").toString("hex")}`,
+    normalizeSuiObjectId("0x7ea5"),
+  );
 });
 
 test("rejects incomplete or incorrectly mutable shared references", () => {

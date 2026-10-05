@@ -50,6 +50,7 @@ const artifactDeclarations = [
       "contracts ADRs 0094 and 0097: every administrator action takes blast_admin::blast_acl::AdminWitness of its own typed blast_fun_domain role",
       "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation",
       "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
+      "contracts ADR 0105: anyone claims Blast's launch fees, paid to the partner and to a RuntimeConfig treasury that runtime_config::set_treasury (TreasuryAdmin) rotates; ProtocolFeesClaimed records the treasury and TreasuryChanged records each rotation",
     ],
   },
   {
@@ -566,6 +567,7 @@ const launchpadBuilders = new Set([
   "launch_config::set_migration_witness_allowed",
   "runtime_config::set_creator_claim_signer",
   "runtime_config::set_protocol_fee_share",
+  "runtime_config::set_treasury",
 ]);
 const launchpadCompositional = new Set([
   "allocation::recipient",

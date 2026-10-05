@@ -148,6 +148,7 @@ export const launchpadEventSpecs = {
   },
   ProtocolFeesClaimed: {
     launch_id: "id",
+    treasury: "address",
     meme_amount: "u64",
     quote_amount: "u64",
     sui_amount: "u64",
@@ -170,6 +171,7 @@ export const launchpadEventSpecs = {
     real_quote_reserve: "u64",
   },
   CreatorClaimSignerSet: { pos0: "bytes" },
+  TreasuryChanged: { pos0: "address" },
 } as const satisfies Record<string, Record<string, EventFieldDescriptor>>;
 
 export type LaunchpadEventKind = keyof typeof launchpadEventSpecs;
