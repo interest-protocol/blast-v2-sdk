@@ -1,10 +1,10 @@
 import type {
+  Transaction,
   TransactionArgument,
   TransactionObjectArgument,
   TransactionObjectInput,
   TransactionResult,
 } from "@mysten/sui/transactions";
-import { Transaction } from "@mysten/sui/transactions";
 import {
   fromHex,
   isValidSuiAddress,
@@ -26,7 +26,7 @@ import {
 import type { LaunchTypes } from "../launchpad/transactions.ts";
 import { normalizeLaunchTypes } from "../launchpad/transactions.ts";
 import { requireU64 } from "../lib/integers.ts";
-import { deploymentObject, moveResults } from "../lib/ptb.ts";
+import { deploymentObject, moveResults, newTransaction } from "../lib/ptb.ts";
 import type {
   SharedObjectIdentity,
   SharedObjectReference,
@@ -1237,7 +1237,7 @@ export class PresaleTransactions {
   createCetusPresale(
     options: Parameters<PresaleCalls["newCetusPresale"]>[0] & PresaleCreation,
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const created = tx.add(this.call.newCetusPresale(options));
     return this.#shareAndKeepCap(tx, created, options);
   }
@@ -1249,7 +1249,7 @@ export class PresaleTransactions {
   createBluefinPresale(
     options: Parameters<PresaleCalls["newBluefinPresale"]>[0] & PresaleCreation,
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const created = tx.add(this.call.newBluefinPresale(options));
     return this.#shareAndKeepCap(tx, created, options);
   }
@@ -1271,7 +1271,7 @@ export class PresaleTransactions {
   ): Transaction {
     const amount = requireU64("amount", options.amount);
     const recipient = normalizeSuiAddress(options.recipient);
-    const tx = new Transaction();
+    const tx = newTransaction();
     const quote = tx.coin({
       type: normalizeStructTag(options.quoteType),
       balance: amount,
@@ -1304,7 +1304,7 @@ export class PresaleTransactions {
       participants: readonly string[];
     },
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     for (const participant of options.participants) {
       tx.add(this.call.claim({ ...options, participant }));
     }
@@ -1326,7 +1326,7 @@ export class PresaleTransactions {
   migrateCetus(
     options: Parameters<PresaleCalls["migrateCetus"]>[0] & PresalePayout,
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     tx.add(this.call.migrateCetus(options));
     return this.#payProtocolFeesWithPartnerAfter(tx, options);
   }
@@ -1342,7 +1342,7 @@ export class PresaleTransactions {
     > & { creationFee: bigint } & PresalePayout,
   ): Transaction {
     requireU64("creationFee", options.creationFee);
-    const tx = new Transaction();
+    const tx = newTransaction();
     const creationFee = tx.coin({
       type: "0x2::sui::SUI",
       balance: options.creationFee,
@@ -1391,7 +1391,7 @@ export class PresaleTransactions {
       recipient: string;
     },
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const result = tx.add(
       this.call.claimMigrationResiduals({
         ...options,
@@ -1525,7 +1525,7 @@ export class PresaleTransactions {
     recipient: string;
   }): Transaction {
     const recipient = normalizeSuiAddress(options.recipient);
-    const tx = new Transaction();
+    const tx = newTransaction();
     const adminCap = tx.add(
       this.call.replaceAdminCap({ superAdminCap: options.superAdminCapId }),
     );
@@ -1560,7 +1560,7 @@ export class PresaleTransactions {
       allocations: readonly RewardProof[];
     },
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     for (const allocation of options.allocations) {
       tx.add(this.call.claimHolderReward({ ...options, allocation }));
     }
@@ -1612,7 +1612,7 @@ export class PresaleTransactions {
 }
 
 function single(call: (tx: Transaction) => void): Transaction {
-  const tx = new Transaction();
+  const tx = newTransaction();
   tx.add(call);
   return tx;
 }

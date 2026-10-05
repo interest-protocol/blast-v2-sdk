@@ -1,10 +1,10 @@
 import type {
+  Transaction,
   TransactionArgument,
   TransactionObjectArgument,
   TransactionObjectInput,
   TransactionResult,
 } from "@mysten/sui/transactions";
-import { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import type {
@@ -31,7 +31,7 @@ import {
   normalizeLaunchTypes,
 } from "../launchpad/transactions.ts";
 import { requireU64 } from "../lib/integers.ts";
-import { deploymentObject, moveResults } from "../lib/ptb.ts";
+import { deploymentObject, moveResults, newTransaction } from "../lib/ptb.ts";
 import type {
   SharedObjectIdentity,
   SharedObjectReference,
@@ -740,7 +740,7 @@ export class MigratorTransactions {
         tickSpacing: number;
       },
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const initializer = tx.add(this.call.newCetusLaunch(options));
     addLaunchCompletion(tx, this.call.launchpad, {
       ...options,
@@ -754,7 +754,7 @@ export class MigratorTransactions {
   createBluefinLaunch(
     options: CreateLaunchOptions & { tickSpacing: number; feeRate: bigint },
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const initializer = tx.add(this.call.newBluefinLaunch(options));
     addLaunchCompletion(tx, this.call.launchpad, {
       ...options,
@@ -767,7 +767,7 @@ export class MigratorTransactions {
   migrateCetus(
     options: Parameters<MigratorCalls["migrateCetus"]>[0],
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     tx.add(this.call.migrateCetus(options));
     return tx;
   }
@@ -782,7 +782,7 @@ export class MigratorTransactions {
     },
   ): Transaction {
     requireU64("creationFee", options.creationFee);
-    const tx = new Transaction();
+    const tx = newTransaction();
     const creationFee = tx.coin({
       type: "0x2::sui::SUI",
       balance: options.creationFee,
@@ -795,7 +795,7 @@ export class MigratorTransactions {
   collectCetusFees(
     options: Parameters<MigratorCalls["collectCetusFees"]>[0] & LpFeePartner,
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     tx.add(this.call.collectCetusFees(options));
     return this.#claimProtocolLpFeesWithPartnerAfter(tx, options);
   }
@@ -804,7 +804,7 @@ export class MigratorTransactions {
   collectBluefinFees(
     options: Parameters<MigratorCalls["collectBluefinFees"]>[0] & LpFeePartner,
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     tx.add(this.call.collectBluefinFees(options));
     return this.#claimProtocolLpFeesWithPartnerAfter(tx, options);
   }
@@ -813,7 +813,7 @@ export class MigratorTransactions {
   claimProtocolLpFeesWithPartner(
     options: Parameters<MigratorCalls["claimProtocolLpFeesWithPartner"]>[0],
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     tx.add(this.call.claimProtocolLpFeesWithPartner(options));
     return tx;
   }
@@ -824,7 +824,7 @@ export class MigratorTransactions {
       "curveFeeCap"
     > & { curveFeeCapId: string },
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     tx.add(
       this.call.settleAndUpdateCetusFeeSplit({
         ...options,
@@ -840,7 +840,7 @@ export class MigratorTransactions {
       "curveFeeCap"
     > & { curveFeeCapId: string },
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     tx.add(
       this.call.settleAndUpdateBluefinFeeSplit({
         ...options,
@@ -858,7 +858,7 @@ export class MigratorTransactions {
       recipient: string;
     },
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const result = tx.add(
       this.call.claimCreatorFees({
         ...options,
@@ -879,7 +879,7 @@ export class MigratorTransactions {
       recipient: string;
     },
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const adminWitness = tx.add(
       this.call.signIn({ adminCap: options.adminCapId, role: "TreasuryAdmin" }),
     );
@@ -972,7 +972,7 @@ export class MigratorTransactions {
       allocations: readonly RewardProof[];
     },
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     for (const allocation of options.allocations) {
       tx.add(this.call.claimHolderReward({ ...options, allocation }));
     }
@@ -986,7 +986,7 @@ export class MigratorTransactions {
       adminWitness: TransactionObjectArgument,
     ) => (tx: Transaction) => void,
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const adminWitness = tx.add(
       this.call.signIn({ adminCap: adminCapId, role }),
     );

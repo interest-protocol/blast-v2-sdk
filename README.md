@@ -403,6 +403,19 @@ preview.
 claims exactly as the contract enforces them, and it decodes and replays the
 package's objects and events. See [docs/presale.md](docs/presale.md).
 
+## Gas budgets
+
+Every transaction the SDK builds carries the `grossGasBudget()` build plugin.
+When it is built without a budget, the plugin budgets the simulated computation
+plus all storage, ignoring the rebate, plus a fifth and 10,000 gas units.
+`@mysten/sui` and the fullnode budget only the net cost plus 1,000 gas units,
+which runs out of gas when execution writes a little more storage than the
+simulation did: a presale's Cetus migration did on mainnet. The charge is
+unchanged; only the ceiling rises. A payer that cannot cover the gross budget
+keeps the default one. Add the plugin to transactions built outside the SDK with
+`tx.addBuildPlugin(grossGasBudget())`. A plugin does not survive JSON
+serialization, so add it again after `Transaction.from(json)`.
+
 ## Integer helpers
 
 The root package exports branded `U64` and `U128` bigint types. The

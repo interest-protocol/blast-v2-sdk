@@ -1,13 +1,13 @@
 import type {
+  Transaction,
   TransactionObjectArgument,
   TransactionObjectInput,
 } from "@mysten/sui/transactions";
-import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiAddress, SUI_TYPE_ARG } from "@mysten/sui/utils";
 
 import { AdminCalls } from "../admin/transactions.ts";
 import { requireU64 } from "../lib/integers.ts";
-import { deploymentObject } from "../lib/ptb.ts";
+import { deploymentObject, newTransaction } from "../lib/ptb.ts";
 import type { BlastSuiAdminRole, BlastSuiDeployment } from "./types.ts";
 import {
   blastSuiType,
@@ -199,7 +199,7 @@ export class BlastSuiTransactions {
 
   mintFunSui(options: { amount: bigint; recipient: string }): Transaction {
     requireU64("amount", options.amount);
-    const tx = new Transaction();
+    const tx = newTransaction();
     const suiCoin = tx.coin({ type: SUI_TYPE_ARG, balance: options.amount });
     const funSuiCoin = tx.add(this.call.mintFunSui({ suiCoin }));
     transfer(tx, funSuiCoin, options.recipient);
@@ -208,7 +208,7 @@ export class BlastSuiTransactions {
 
   redeemFunSui(options: { amount: bigint; recipient: string }): Transaction {
     requireU64("amount", options.amount);
-    const tx = new Transaction();
+    const tx = newTransaction();
     const funSuiCoin = tx.coin({
       type: funSuiType(this.call.deployment.originalPackageId),
       balance: options.amount,
@@ -220,7 +220,7 @@ export class BlastSuiTransactions {
 
   requestBlastSui(options: { amount: bigint }): Transaction {
     requireU64("amount", options.amount);
-    const tx = new Transaction();
+    const tx = newTransaction();
     const suiCoin = tx.coin({ type: SUI_TYPE_ARG, balance: options.amount });
     const receipt = tx.add(this.call.requestBlastSui({ suiCoin }));
     tx.add(this.call.keepDepositReceipt({ receipt }));
@@ -232,7 +232,7 @@ export class BlastSuiTransactions {
     minBlastOut: bigint;
     recipient: string;
   }): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const blastSuiCoin = tx.add(
       this.call.claimBlastSui({
         receipt: options.receiptId,
@@ -247,7 +247,7 @@ export class BlastSuiTransactions {
     receiptId: string;
     recipient: string;
   }): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const suiCoin = tx.add(
       this.call.cancelDepositReceipt({ receipt: options.receiptId }),
     );
@@ -257,7 +257,7 @@ export class BlastSuiTransactions {
 
   donateSui(options: { amount: bigint }): Transaction {
     requireU64("amount", options.amount);
-    const tx = new Transaction();
+    const tx = newTransaction();
     const suiCoin = tx.coin({ type: SUI_TYPE_ARG, balance: options.amount });
     tx.add(this.call.donateSui({ suiCoin }));
     return tx;
@@ -269,7 +269,7 @@ export class BlastSuiTransactions {
     recipient: string;
   }): Transaction {
     requireU64("amount", options.amount);
-    const tx = new Transaction();
+    const tx = newTransaction();
     const blastSuiCoin = tx.coin({
       type: blastSuiType(this.call.deployment.originalPackageId),
       balance: options.amount,
@@ -285,7 +285,7 @@ export class BlastSuiTransactions {
   }
 
   syncVault(): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     tx.add(this.call.syncVault());
     return tx;
   }
@@ -295,7 +295,7 @@ export class BlastSuiTransactions {
     adminCapId: string;
     redeemFeeBps: bigint;
   }): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const adminWitness = tx.add(
       this.call.signIn({ adminCap: options.adminCapId, role: "FeeAdmin" }),
     );

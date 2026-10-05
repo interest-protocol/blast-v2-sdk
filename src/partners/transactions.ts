@@ -1,14 +1,15 @@
 import type {
+  Transaction,
   TransactionObjectArgument,
   TransactionObjectInput,
   TransactionResult,
 } from "@mysten/sui/transactions";
-import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
 
 import type { AdminDeployment } from "../admin/transactions.ts";
 import { AdminCalls, normalizeAdminDeployment } from "../admin/transactions.ts";
 import { requireBasisPoints } from "../lib/integers.ts";
+import { newTransaction } from "../lib/ptb.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import { normalizeSharedObjectReference } from "../lib/sui.ts";
 
@@ -159,7 +160,7 @@ export class PartnersTransactions {
 
   /** Mints a `PartnerCap` and sends it to `recipient`. */
   newCap(options: { recipient: string }): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const cap = tx.add(this.call.newCap());
     tx.transferObjects([cap], normalizeSuiAddress(options.recipient));
     return tx;
@@ -201,7 +202,7 @@ export class PartnersTransactions {
     partnerCapId: string;
     recipient: string;
   }): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     tx.add(
       this.call.setRecipient({ ...options, partnerCap: options.partnerCapId }),
     );
@@ -209,7 +210,7 @@ export class PartnersTransactions {
   }
 
   destroyCap(options: { partnerCapId: string }): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     tx.add(this.call.destroyCap({ partnerCap: options.partnerCapId }));
     return tx;
   }
@@ -220,7 +221,7 @@ export class PartnersTransactions {
       adminWitness: TransactionObjectArgument,
     ) => (tx: Transaction) => void,
   ): Transaction {
-    const tx = new Transaction();
+    const tx = newTransaction();
     const adminWitness = tx.add(this.call.signIn({ adminCap: adminCapId }));
     tx.add(call(adminWitness));
     return tx;
