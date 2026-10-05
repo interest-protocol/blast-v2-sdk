@@ -23,6 +23,7 @@ import {
   createPresaleEventProjection,
   reducePresaleEvent,
 } from "../src/presale/reducer.ts";
+import { orderedEventFields } from "./abi.ts";
 
 const pkg = normalizeSuiAddress("0x5e");
 const meme = normalizeStructTag("0xa::meme::MEME");
@@ -77,8 +78,11 @@ function decode<Kind extends PresaleEventKind>(
 
 test("event specs match every event frozen in the presale ABI", () => {
   assert.deepEqual(
-    { ...presaleEventSpecs, ...presalePolicyEventSpecs },
-    readFrozenPresaleEventSpecs(),
+    orderedModuleEventFields({
+      ...presaleEventSpecs,
+      ...presalePolicyEventSpecs,
+    }),
+    orderedModuleEventFields(readFrozenPresaleEventSpecs()),
   );
   assert.equal(Object.keys(presaleEventModules).length, 18);
 });
@@ -1006,6 +1010,20 @@ test("decodes fee-policy and creation-policy events, which have no type argument
     );
   }
 });
+
+/** Each module's events, with every event's fields in declaration order. */
+function orderedModuleEventFields(
+  modules: Readonly<
+    Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>
+  >,
+): Record<string, Record<string, [string, string][]>> {
+  return Object.fromEntries(
+    Object.entries(modules).map(([module, events]) => [
+      module,
+      orderedEventFields(events),
+    ]),
+  );
+}
 
 function readFrozenPresaleEventSpecs(): Record<
   string,

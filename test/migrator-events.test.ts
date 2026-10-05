@@ -24,6 +24,7 @@ import {
   createLaunchpadProductProjection,
   reduceLaunchpadProductInput,
 } from "../src/migrators/reducer.ts";
+import { orderedEventFields } from "./abi.ts";
 
 const launchpadPackages = { originalPackageId: "0x122" };
 const migratorPackages: MigratorEventPackageIdentity = {
@@ -46,7 +47,10 @@ const samplePlan = {
 };
 
 test("decodes and idempotently reduces every frozen migrator event", () => {
-  assert.deepEqual(migratorEventSpecs, readFrozenMigratorEventSpecs());
+  assert.deepEqual(
+    orderedEventFields(migratorEventSpecs),
+    orderedEventFields(readFrozenMigratorEventSpecs()),
+  );
   const kinds = Object.keys(migratorEventSpecs) as MigratorEventKind[];
   assert.equal(kinds.length, 13);
 

@@ -104,3 +104,19 @@ export function moveCallTypeArguments(tx: Transaction): string[][] {
 function short(objectId: string): string {
   return `0x${BigInt(objectId).toString(16)}`;
 }
+
+/**
+ * Each event's `[field, descriptor]` pairs in declaration order. BCS decodes
+ * fields positionally, but `deepEqual` ignores object key order, so compare
+ * these to catch a field the SDK declares out of the Move order.
+ */
+export function orderedEventFields(
+  specs: Readonly<Record<string, Readonly<Record<string, string>>>>,
+): Record<string, [string, string][]> {
+  return Object.fromEntries(
+    Object.entries(specs).map(([kind, fields]) => [
+      kind,
+      Object.entries(fields),
+    ]),
+  );
+}

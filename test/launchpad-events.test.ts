@@ -18,6 +18,7 @@ import {
   createLaunchpadEventProjection,
   reduceLaunchpadEvent,
 } from "../src/launchpad/reducer.ts";
+import { orderedEventFields } from "./abi.ts";
 
 const packages: LaunchpadEventPackageIdentity = {
   originalPackageId: "0x122",
@@ -40,7 +41,10 @@ const sampleSplit = {
 
 test("decodes and idempotently reduces every frozen launchpad event", () => {
   const frozenSpecs = readFrozenLaunchpadEventSpecs();
-  assert.deepEqual(launchpadEventSpecs, frozenSpecs);
+  assert.deepEqual(
+    orderedEventFields(launchpadEventSpecs),
+    orderedEventFields(frozenSpecs),
+  );
   const kinds = Object.keys(frozenSpecs) as LaunchpadEventKind[];
   assert.equal(kinds.length, 28);
 
