@@ -20,6 +20,7 @@
     "node": ">=22.18"
   },
   "scripts": {
+    "vectors:presale": "node scripts/presale-vectors.mjs",
     "check:abi": "node scripts/check-contract-abi.mjs",
     "check:abi:write": "node scripts/check-contract-abi.mjs --write",
     "check": "npm run check:abi && npm run format:check && npm run lint && npm run typecheck && npm test",
