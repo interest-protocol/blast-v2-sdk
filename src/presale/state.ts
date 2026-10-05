@@ -19,6 +19,7 @@ import {
 } from "../lib/bcs.ts";
 import { normalizePositiveU64 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
+import { presaleWindows } from "./math.ts";
 
 // === Configuration values (Move `copy + drop + store` types) ===
 
@@ -274,7 +275,7 @@ export const lifecycleBcs = bcs
 
 /** BCS layout of `blast_presale::FeeSplit`: the LP-fee recipients, then the holder-reward share. */
 export const presaleFeeSplitBcs = bcs.struct("FeeSplit", {
-  shares: bcs.vector(bpsShareBcs),
+  fee_recipients: bcs.vector(bpsShareBcs),
   holder_rewards_bps: bps,
 });
 
@@ -435,14 +436,15 @@ export type PresaleState = SharedObjectReference<true> & {
   protocolQuote: bigint;
   /**
    * Blast's token share still in custody: paid on migration, or by
-   * `pay_partner` for a partnered sale; locked forever on cancellation.
+   * `pay_protocol_fees_with_partner` for a partnered sale; locked forever on
+   * cancellation.
    */
   protocolTokens: bigint;
   /** The Blast partner named at creation, paid its cut of Blast's raise share. */
   partnerId: string | null;
   /**
-   * Blast's raise share a partnered sale's migration holds until
-   * `pay_partner`; null before migration, after the payout, and without a
+   * Blast's raise fee a partnered sale's migration holds until
+   * `pay_protocol_fees_with_partner`; null before migration, after the payout, and without a
    * partner.
    */
   unpaidProtocolQuote: bigint | null;
@@ -524,9 +526,7 @@ export function decodePresaleObject(
     originalPackageId,
   );
   const parsed = presaleBcs.parse(object.content);
-  // The contract stores only the start; every other window is derived from it once shared.
-  const shared = parsed.lifecycle !== "Pending";
-  const endMs = shared ? parsed.start_ms + parsed.duration_ms : 0n;
+  const windows = presaleWindowsOf(parsed);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
     memeType,
@@ -536,20 +536,14 @@ export function decodePresaleObject(
     durationMs: parsed.duration_ms,
     liquidityWindowMs: parsed.liquidity_window_ms,
     startMs: parsed.start_ms,
-    endMs,
-    liquidityDeadlineMs: shared ? endMs + parsed.liquidity_window_ms : 0n,
+    ...windows,
     raiseTarget: parsed.raise_target,
     eligibility: parsed.eligibility,
     uncapped: parsed.uncapped,
-    uncappedFromMs: !shared
-      ? 0n
-      : parsed.uncapped
-        ? parsed.start_ms + parsed.uncapped.startsAfterMs
-        : endMs,
     migrationWitness: parsed.migration_witness,
     tickSpacing: parsed.tick_spacing,
     poolFeeRate: parsed.pool_fee_rate,
-    feeRecipients: parsed.fee_split.shares,
+    feeRecipients: parsed.fee_split.fee_recipients,
     holderRewardsBps: parsed.fee_split.holder_rewards_bps,
     totalCommitments: parsed.total_commitments,
     participants: parsed.participants,
@@ -572,6 +566,24 @@ export function decodePresaleObject(
   };
 }
 
+/**
+ * The windows `share` fixed. The contract stores only the start and derives
+ * the rest; every window reads zero while the sale is Pending.
+ */
+function presaleWindowsOf(
+  parsed: ReturnType<typeof presaleBcs.parse>,
+): Pick<PresaleState, "endMs" | "liquidityDeadlineMs" | "uncappedFromMs"> {
+  if (parsed.lifecycle === "Pending") {
+    return { endMs: 0n, liquidityDeadlineMs: 0n, uncappedFromMs: 0n };
+  }
+  return presaleWindows(
+    parsed.start_ms,
+    parsed.duration_ms,
+    parsed.liquidity_window_ms,
+    parsed.uncapped,
+  );
+}
+
 export function decodePresaleVaultObject(
   object: PresaleObject,
   originalPackageId: string,
@@ -590,7 +602,7 @@ export function decodePresaleVaultObject(
     presaleId: normalizeSuiObjectId(parsed.presale_id.bytes),
     presaleCapId: normalizeSuiObjectId(parsed.presale_cap_id.bytes),
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
-    feeRecipients: parsed.fee_split.shares,
+    feeRecipients: parsed.fee_split.fee_recipients,
     holderRewardsBps: parsed.fee_split.holder_rewards_bps,
     protocolFees: parsed.protocol_fees,
     migrationMemeResidual: BigInt(parsed.migration_meme_residual.value),

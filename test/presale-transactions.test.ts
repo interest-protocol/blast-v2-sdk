@@ -232,7 +232,7 @@ test("names a partner between new and share, and pays it in the migration PTB", 
   });
   assert.deepEqual(moveFunctions(migrate), [
     "cetus::migrate",
-    "blast_presale::pay_partner",
+    "blast_presale::pay_protocol_fees_with_partner",
   ]);
   const migrateBluefin = tx.migrateBluefin({
     ...types,
@@ -245,7 +245,7 @@ test("names a partner between new and share, and pays it in the migration PTB", 
   });
   assert.deepEqual(moveFunctions(migrateBluefin), [
     "bluefin::migrate",
-    "blast_presale::pay_partner",
+    "blast_presale::pay_protocol_fees_with_partner",
   ]);
   // Without a partner, neither creation nor migration names one.
   for (const unpartnered of [
@@ -568,8 +568,8 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       ["shared-mut:0x61", ...ADMIN, "pure"],
     ],
     [
-      tx.payPartner({ ...types, presale, partner }),
-      "blast_presale::pay_partner",
+      tx.payProtocolFeesWithPartner({ ...types, presale, partner }),
+      "blast_presale::pay_protocol_fees_with_partner",
       ["shared-mut:0xab", "shared:0x61", "shared:0x9a27", CLOCK],
     ],
     [

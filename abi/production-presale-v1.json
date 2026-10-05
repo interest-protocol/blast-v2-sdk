@@ -8,7 +8,8 @@
       "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness",
       "contracts ADR 0106: one Blast partner per presale, named by set_partner before the share and accepted by creation_policy::add_partner and remove_partner; a partnered migration holds Blast's shares for pay_partner, PresaleOpened gains partner_id, and ProtocolFeesPaid gains partner_quote",
       "contracts ADR 0099 (owner-requested cleanup, 2026-10-05): Presale derives its windows from start_ms, counts participants down as they claim (Claimed reports remaining_participants), and holds the LP-fee split as one FeeSplit that new, cetus::new, and bluefin::new take, built by blast_presale::fee_split; PresaleVault holds the same FeeSplit",
-      "contracts ADR 0104 (amended 2026-10-05): set_migration_witness_allowed also rejects witness types defined at 0x1 and 0x2"
+      "contracts ADR 0104 (amended 2026-10-05): set_migration_witness_allowed also rejects witness types defined at 0x1 and 0x2",
+      "contracts ADR 0106 (source-style review, 2026-10-05): pay_partner is pay_protocol_fees_with_partner, since it pays Blast too, and FeeSplit names its recipients fee_recipients"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -1059,7 +1060,7 @@
               ]
             },
             {
-              "name": "pay_partner",
+              "name": "pay_protocol_fees_with_partner",
               "sdk": "builder",
               "entry": false,
               "typeParameters": [
@@ -1704,7 +1705,7 @@
               "positional": false,
               "fields": [
                 {
-                  "name": "shares",
+                  "name": "fee_recipients",
                   "type": {
                     "vector": {
                       "Datatype": {

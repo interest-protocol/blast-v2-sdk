@@ -50,7 +50,7 @@ mutability its Move signature needs.
 | Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except in a hard-capped uncapped phase. |
 | Settle | `settle`, `cancelUnlaunched` | Anyone may call. |
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. Pass the sale's `partner` when it names one, and the same PTB pays it. |
-| Pay a partner | `payPartner` | Anyone may call, once, after a partnered sale migrates; use it on its own for a sale another migrator migrated. See [Partners](#partners). |
+| Pay Blast and its partner | `payProtocolFeesWithPartner` | Anyone may call, once, after a partnered sale migrates; use it on its own for a sale another migrator migrated. See [Partners](#partners). |
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. Under participant vesting, each claim locks the participant's tokens in a new schedule starting at that claim. |
 | Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, then every fee recipient. The holder-reward share stays in the vault. |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
@@ -124,7 +124,7 @@ is created:
 - `raiseBps` of the raise joins the raise apportionment between the raise
   recipients and the LP. Migration pays it, and Blast's tokens, to the current
   destination (`ProtocolFeesPaid`); a sale naming a partner pays them through
-  `pay_partner` instead (see [Partners](#partners)).
+  `pay_protocol_fees_with_partner` instead (see [Partners](#partners)).
 - `lpFeeMemeBps` and `lpFeeQuoteBps` of each collected LP fee, rounded up, go
   to the current destination before the creator's split (`FeesCollected`).
   The vault snapshots them at migration; `setProtocolLpFees` later replaces
@@ -150,16 +150,17 @@ calls `set_partner` between the venue's `new` and `share`. The
 share it never changes. `PresaleOpened.partner_id` records it, and
 `PresaleState.partnerId` reads it.
 
-The partner earns its `blast_partners` share of Blast's raise share, and of
-nothing else: Blast's tokens and LP fees are never shared. A partnered sale's
-migration releases the same raise and LP as any sale but holds Blast's shares
-(`PresaleState.unpaidProtocolQuote`). `pay_partner` then pays the partner its
-share in force, rounded down, and Blast the rest and all its tokens. It emits
-`ProtocolFeesPaid` with `partner_quote`, and `blast_partners` emits
-`PartnerPaid`. A sale without a partner pays Blast at migration as before, with
-`partner_quote` zero. Pass the sale's `partner` to `migrateCetus` or
-`migrateBluefin` to pay it in the migration PTB; `payPartner` does it alone,
-and aborts on a sale it does not owe (`EWrongPartner`, `ENoPartnerPayout`).
+The partner earns its `blast_partners` cut of Blast's raise fee, and of nothing
+else: Blast's token fee and LP fees are never divided with a partner. A
+partnered sale's migration releases the same raise and LP as any sale but holds
+Blast's fees (`PresaleState.unpaidProtocolQuote`).
+`pay_protocol_fees_with_partner` then pays the partner its cut in force, rounded
+down, and Blast the rest and all its tokens. It emits `ProtocolFeesPaid` with
+`partner_quote`, and `blast_partners` emits `PartnerPaid`. A sale without a
+partner pays Blast at migration as before, with `partner_quote` zero. Pass the
+sale's `partner` to `migrateCetus` or `migrateBluefin` to pay it in the
+migration PTB; `payProtocolFeesWithPartner` does it alone, and aborts on a sale
+it does not owe (`EWrongPartner`, `ENoPartnerPayout`).
 
 ## Creation allowlists
 

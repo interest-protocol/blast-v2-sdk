@@ -185,7 +185,7 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
     [state.partnerId, state.unpaidProtocolQuote],
     [normalizeSuiAddress("0x9a27"), null],
   );
-  // After a partnered migration, Blast's raise share is held until `pay_partner`.
+  // After a partnered migration, Blast's raise share is held until `pay_protocol_fees_with_partner`.
   const held = decodePresaleObject(
     object(
       `${pkg}::blast_presale::Presale<0xa::meme::MEME, 0x2::sui::SUI>`,
