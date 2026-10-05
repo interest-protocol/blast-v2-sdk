@@ -205,11 +205,13 @@ as its one-time fee in the launch's fee ledger (`ProtocolFeesAccrued`).
 `apportionFeeSplit` mirror the contract's exact apportionment: Blast's
 migration fee rounds up, every other part goes by largest remainder.
 
-A `TreasuryAdmin` claims Blast's Meme, Quote, and SUI (creation-fee) balances
-with `claimProtocolFees`. When the launch names a partner
+Anyone may claim Blast's Meme, Quote, and SUI (creation-fee) balances with
+`claimProtocolFees`; no admin cap is needed, and the contract pays them to the
+`RuntimeConfig` treasury, never to the sender. When the launch names a partner
 (`LaunchState.partnerId`), pass that `partner`: the SDK then calls
 `claim_protocol_fees_with_partner`, which pays the partner its share of each
-balance in the same call.
+balance in the same call. A `TreasuryAdmin` rotates the treasury with
+`setTreasury`.
 
 ## Migrators
 
@@ -296,8 +298,8 @@ must hold that role:
 | launchpad `LaunchConfig` | `setMigrationWitnessAllowed` | `AdapterAdmin` |
 | launchpad `RuntimeConfig` | `setProtocolFeeShare` | `FeeAdmin` |
 | launchpad `RuntimeConfig` | `setCreatorClaimSigner` | `ClaimSignerAdmin` |
+| launchpad `RuntimeConfig` | `setTreasury` | `TreasuryAdmin` |
 | launchpad `Launch` | `reassignCurveFeeCap`, `reassignMetadataCap` | `CreatorAdmin` |
-| launchpad `Launch` | `claimProtocolFees` | `TreasuryAdmin` |
 | migrators | `setLpFeeDefaultShares`, `setLpFeeCoinShares`, `clearLpFeeCoinShares` | `FeeAdmin` |
 | migrators | `setLpFeeProtocolDestination`, `claimProtocolFees` | `TreasuryAdmin` |
 | migrators | `buybackAndBurnCetus`, `buybackAndBurnBluefin` | `BuybackAdmin` |

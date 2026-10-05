@@ -508,32 +508,32 @@ export class LaunchpadCalls {
   }
 
   /**
-   * Claims Blast's Meme, Quote, and SUI fees under a `TreasuryAdmin` witness.
-   * A launch that names a partner needs that `partner`
+   * Pays Blast's Meme, Quote, and SUI fees to the `RuntimeConfig` treasury.
+   * Anyone may call it. A launch that names a partner needs that `partner`
    * (`claim_protocol_fees_with_partner`), which is paid its share in the call.
    */
   claimProtocolFees(
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
       partner?: SharedObjectReference<false> | null;
     },
   ) {
     const types = normalizeLaunchTypes(options);
     const { partner } = options;
-    return (tx: Transaction): TransactionResult =>
+    return (tx: Transaction): void => {
       tx.moveCall({
         target: `${this.deployment.packageId}::launch::${partner ? "claim_protocol_fees_with_partner" : "claim_protocol_fees"}`,
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "launch", options.launch, true),
           this.#packageVersion(tx),
-          tx.object(options.adminWitness),
+          this.#runtimeConfig(tx),
           ...(partner
             ? [sharedObject(tx, "partner", partner, false), tx.object.clock()]
             : []),
         ],
       });
+    };
   }
 
   /** `launch_config::set_protocol_allocation` (`TreasuryAdmin`): Blast's share of future launches. */
@@ -672,6 +672,20 @@ export class LaunchpadCalls {
       options,
       (tx) => [tx.add(share)],
     );
+  }
+
+  /**
+   * `runtime_config::set_treasury` (`TreasuryAdmin`): where every later
+   * protocol fee claim pays Blast.
+   */
+  setTreasury(options: {
+    adminWitness: TransactionObjectInput;
+    treasury: string;
+  }) {
+    const treasury = normalizeSuiAddress(options.treasury);
+    return this.#configCall("runtime_config::set_treasury", options, (tx) => [
+      tx.pure.address(treasury),
+    ]);
   }
 
   /**
@@ -1004,26 +1018,18 @@ export class LaunchpadTransactions {
     return tx;
   }
 
-  /** Pass the launch's `partner` when `LaunchState.partnerId` is set. */
+  /**
+   * Pays Blast's fees to the `RuntimeConfig` treasury; any sender may claim.
+   * Pass the launch's `partner` when `LaunchState.partnerId` is set.
+   */
   claimProtocolFees(
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
-      adminCapId: string;
-      recipient: string;
       partner?: SharedObjectReference<false> | null;
     },
   ): Transaction {
     const tx = new Transaction();
-    const adminWitness = tx.add(
-      this.call.signIn({ adminCap: options.adminCapId, role: "TreasuryAdmin" }),
-    );
-    const claimResult = tx.add(
-      this.call.claimProtocolFees({ ...options, adminWitness }),
-    );
-    tx.transferObjects(
-      moveResults(claimResult, 3),
-      normalizeSuiAddress(options.recipient),
-    );
+    tx.add(this.call.claimProtocolFees(options));
     return tx;
   }
 
@@ -1161,6 +1167,12 @@ export class LaunchpadTransactions {
   }): Transaction {
     return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.setProtocolFeeShare({ ...options, adminWitness }),
+    );
+  }
+
+  setTreasury(options: { adminCapId: string; treasury: string }): Transaction {
+    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
+      this.call.setTreasury({ ...options, adminWitness }),
     );
   }
 

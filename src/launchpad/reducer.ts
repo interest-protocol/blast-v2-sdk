@@ -120,6 +120,11 @@ export type LaunchpadConfigProjection = {
   creationFee: bigint;
   /** Partners new launches may name, and when each stops being accepted. */
   partners: Readonly<Record<string, bigint>>;
+  /**
+   * Where every protocol fee claim pays Blast. `RuntimeConfig` starts it at
+   * the publisher without an event, so `null` until `TreasuryChanged`.
+   */
+  treasury: string | null;
 };
 
 export type LaunchpadAdministrationProjection = {
@@ -163,6 +168,7 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
       protocolAllocation: { memeBps: 0n, quoteBps: 0n },
       creationFee: 0n,
       partners: {},
+      treasury: null,
     },
     administration: {
       creatorCapClaims: {},
@@ -529,6 +535,11 @@ export function reduceLaunchpadEvent(
         },
       }));
     }
+    case "TreasuryChanged":
+      return updateConfig(next, {
+        ...state.config,
+        treasury: event.payload.pos0,
+      });
     case "CreatorClaimSignerSet":
       return updateAdministration(next, {
         ...state.administration,

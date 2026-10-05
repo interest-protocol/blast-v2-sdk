@@ -42,7 +42,7 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
   const frozenSpecs = readFrozenLaunchpadEventSpecs();
   assert.deepEqual(launchpadEventSpecs, frozenSpecs);
   const kinds = Object.keys(frozenSpecs) as LaunchpadEventKind[];
-  assert.equal(kinds.length, 27);
+  assert.equal(kinds.length, 28);
 
   let projection = createLaunchpadEventProjection();
   for (const [eventIndex, kind] of orderedForReplay(kinds).entries()) {
@@ -177,6 +177,7 @@ test("replays lifecycle, reserves, and fees from ordered events", () => {
       "ProtocolFeesClaimed",
       {
         launch_id: "0xc",
+        treasury: "0x7ea5",
         meme_amount: 30_000_007n,
         quote_amount: 13n,
         sui_amount: 601n,
@@ -235,6 +236,12 @@ test("replays lifecycle, reserves, and fees from ordered events", () => {
       quote: 10n,
     },
   ]);
+
+  const claimed = events.at(-1);
+  assert.equal(claimed?.kind, "ProtocolFeesClaimed");
+  if (claimed?.kind === "ProtocolFeesClaimed") {
+    assert.equal(claimed.payload.treasury, normalizeSuiObjectId("0x7ea5"));
+  }
 
   const launch = states.at(-1)?.launches[launchId];
   assert.ok(launch);
@@ -379,6 +386,7 @@ test("replays launch configuration policy", () => {
       { partner_id: "0x9b", accepted_until_ms: 604_800_000n },
       8,
     ),
+    decoded("TreasuryChanged", { pos0: "0x7ea5" }, 9),
   ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
 
   assert.deepEqual(configured.config.quotes, { [sui]: true });
@@ -393,13 +401,16 @@ test("replays launch configuration policy", () => {
     [normalizeSuiObjectId("0x9a")]: (1n << 64n) - 1n,
     [normalizeSuiObjectId("0x9b")]: 604_800_000n,
   });
+  assert.equal(configured.config.treasury, normalizeSuiObjectId("0x7ea5"));
+  // The publisher is paid until the first `TreasuryChanged`.
+  assert.equal(createLaunchpadEventProjection().config.treasury, null);
 
   const removed = [
-    decoded("QuoteSet", { quote: "0x2::sui::SUI", allowed: false }, 9),
+    decoded("QuoteSet", { quote: "0x2::sui::SUI", allowed: false }, 10),
     decoded(
       "MigrationWitnessSet",
       { migration_witness: "0xf::cetus::CETUS", allowed: false },
-      10,
+      11,
     ),
   ].reduce(reduceLaunchpadEvent, configured);
   assert.deepEqual(removed.config.quotes, {});

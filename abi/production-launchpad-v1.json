@@ -26,7 +26,8 @@
       "contracts ADR 0093: an optional opening round replaces purchase protection; buy no longer takes the Clock",
       "contracts ADRs 0094 and 0097: every administrator action takes blast_admin::blast_acl::AdminWitness of its own typed blast_fun_domain role",
       "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation",
-      "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness"
+      "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
+      "contracts ADR 0105: anyone claims Blast's launch fees, paid to the partner and to a RuntimeConfig treasury that runtime_config::set_treasury (TreasuryAdmin) rotates; ProtocolFeesClaimed records the treasury and TreasuryChanged records each rotation"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -2177,6 +2178,10 @@
                   }
                 },
                 {
+                  "name": "treasury",
+                  "type": "address"
+                },
+                {
                   "name": "meme_amount",
                   "type": "u64"
                 },
@@ -2305,6 +2310,22 @@
                 {
                   "name": "real_quote_reserve",
                   "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "TreasuryChanged",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "pos0",
+                  "type": "address"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -3025,25 +3046,11 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
+                          "address": "blast_fun",
+                          "name": "runtime_config"
                         },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_fun",
-                                  "name": "blast_fun_domain"
-                                },
-                                "name": "TreasuryAdmin",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
+                        "name": "RuntimeConfig",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -3064,66 +3071,7 @@
                   ]
                 }
               ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "Datatype": {
-                            "module": {
-                              "address": "sui",
-                              "name": "sui"
-                            },
-                            "name": "SUI",
-                            "type_arguments": []
-                          }
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
+              "returns": []
             },
             {
               "name": "claim_protocol_fees_with_partner",
@@ -3191,25 +3139,11 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
+                          "address": "blast_fun",
+                          "name": "runtime_config"
                         },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_fun",
-                                  "name": "blast_fun_domain"
-                                },
-                                "name": "TreasuryAdmin",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
+                        "name": "RuntimeConfig",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -3260,66 +3194,7 @@
                   ]
                 }
               ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "Datatype": {
-                            "module": {
-                              "address": "sui",
-                              "name": "sui"
-                            },
-                            "name": "SUI",
-                            "type_arguments": []
-                          }
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
+              "returns": []
             },
             {
               "name": "deliver_opening_round",
@@ -7538,6 +7413,75 @@
                 }
               ],
               "returns": []
+            },
+            {
+              "name": "set_treasury",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "runtime_config"
+                        },
+                        "name": "RuntimeConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "blast_fun"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_fun",
+                                  "name": "blast_fun_domain"
+                                },
+                                "name": "TreasuryAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "address"
+              ],
+              "returns": []
             }
           ],
           "structs": [
@@ -7580,6 +7524,10 @@
                       "type_arguments": []
                     }
                   }
+                },
+                {
+                  "name": "treasury",
+                  "type": "address"
                 }
               ]
             }
