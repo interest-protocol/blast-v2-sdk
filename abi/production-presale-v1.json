@@ -4,7 +4,8 @@
     "contractsCommit": "55e1ac0841535e708554cb45f9c67ab20f6e979a",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
-      "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id"
+      "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
+      "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -583,6 +584,423 @@
                 }
               ],
               "returns": []
+            },
+            {
+              "name": "migrate",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "SaleToken",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "MigrationWitness",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale"
+                        },
+                        "name": "Presale",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "SaleToken"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "NamedTypeParameter": "MigrationWitness"
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "balance"
+                    },
+                    "name": "Balance",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "SaleToken"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "balance"
+                    },
+                    "name": "Balance",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "new",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "SaleToken",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "MigrationWitness",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
+                }
+              ],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "TreasuryCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "SaleToken"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "SaleToken"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "std",
+                      "name": "option"
+                    },
+                    "name": "Option",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "blast_presale",
+                              "name": "blast_presale"
+                            },
+                            "name": "VestingTerms",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": false
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "vector": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_presale",
+                        "name": "blast_presale"
+                      },
+                      "name": "RecipientShare",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                "bool",
+                "u64",
+                {
+                  "vector": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_presale",
+                        "name": "blast_presale"
+                      },
+                      "name": "RecipientShare",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                "u64",
+                "u64",
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "blast_presale"
+                    },
+                    "name": "EligibilityPolicy",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "std",
+                      "name": "option"
+                    },
+                    "name": "Option",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "blast_presale",
+                              "name": "blast_presale"
+                            },
+                            "name": "UncappedPhase",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": false
+                      }
+                    ]
+                  }
+                },
+                {
+                  "NamedTypeParameter": "MigrationWitness"
+                },
+                "u32",
+                "u64",
+                {
+                  "vector": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_presale",
+                        "name": "blast_presale"
+                      },
+                      "name": "RecipientShare",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "bps"
+                    },
+                    "name": "Bps",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "creation_policy"
+                        },
+                        "name": "CreationPolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "blast_presale"
+                    },
+                    "name": "Presale",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "SaleToken"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "blast_presale"
+                    },
+                    "name": "PresaleCap",
+                    "type_arguments": []
+                  }
+                }
+              ]
             },
             {
               "name": "open_eligibility",

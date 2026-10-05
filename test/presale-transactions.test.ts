@@ -565,6 +565,37 @@ test("administers with the presale AdminCap and never signs in to blast_acl", ()
   }
 });
 
+test("allows an external migrator's witness and rejects types anyone can construct", () => {
+  const witness = "0xabc::blast_aftermath_dao_presale::Witness";
+  const allowExternal = tx.setMigrationWitnessAllowed({
+    adminCapId: "0xadc",
+    witnessType: witness,
+    allowed: true,
+  });
+
+  const call = moveCall(
+    allowExternal,
+    "creation_policy::set_migration_witness_allowed",
+  );
+  assert.deepEqual(call.typeArguments, [normalizeStructTag(witness)]);
+  assert.deepEqual(argumentKinds(allowExternal, call), [
+    "shared-mut:0x62",
+    ...ADMIN,
+    "pure",
+  ]);
+  for (const witnessType of ["u64", "vector<u8>", "vector<0x2::sui::SUI>"]) {
+    assert.throws(
+      () =>
+        tx.setMigrationWitnessAllowed({
+          adminCapId: "0xadc",
+          witnessType,
+          allowed: true,
+        }),
+      witnessType,
+    );
+  }
+});
+
 test("replacing the AdminCap sends the new cap to its recipient", () => {
   const ptb = tx.replaceAdminCap({
     superAdminCapId: "0x5ad",

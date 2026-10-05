@@ -7,6 +7,7 @@ import type {
 import { Transaction } from "@mysten/sui/transactions";
 import {
   fromHex,
+  isValidSuiAddress,
   normalizeStructTag,
   normalizeSuiAddress,
   parseStructTag,
@@ -78,6 +79,15 @@ export type PresaleDeployment = {
 /** Venues the presale adapters ship. */
 export type PresaleVenue = "cetus" | "bluefin";
 
+/**
+ * A migrator the `CreationPolicy` can allow: one of this package's venues, or
+ * the `Witness` struct type of a migrator in another package, such as
+ * `<vendor>::blast_aftermath_dao_presale::Witness` (contracts ADR 0104).
+ */
+export type PresaleMigrator =
+  | { venue: PresaleVenue; witnessType?: never }
+  | { witnessType: string; venue?: never };
+
 /** Per-sale terms shared by `cetus::new` and `bluefin::new`, in Move argument order. */
 export type PresaleTerms = LaunchTypes & {
   /** The zero-supply `TreasuryCap<Meme>`, consumed. */
@@ -125,6 +135,21 @@ export function cetusMemeSide(
   quoteType: string,
 ): CetusMemeSide {
   return cetusTypeName(memeType) > cetusTypeName(quoteType) ? "a" : "b";
+}
+
+/**
+ * The normalized struct type of an external migrator's witness. The contract
+ * rejects a primitive or vector witness, which any caller can construct, and
+ * neither parses as a struct here.
+ */
+function externalWitnessType(witnessType: string): string {
+  const tag = parseStructTag(witnessType);
+  if (!isValidSuiAddress(tag.address)) {
+    throw new TypeError(
+      `migration witness must be a struct type: ${witnessType}`,
+    );
+  }
+  return normalizeStructTag(tag);
 }
 
 function cetusTypeName(type: string): string {
@@ -710,13 +735,20 @@ export class PresaleCalls {
     };
   }
 
-  /** `creation_policy::set_migration_witness_allowed`: whether `venue` may create presales afterward. */
-  setMigrationWitnessAllowed(options: {
-    adminCap: TransactionObjectInput;
-    venue: PresaleVenue;
-    allowed: boolean;
-  }) {
-    const witness = this.migrationWitnessType(options.venue);
+  /**
+   * `creation_policy::set_migration_witness_allowed`: whether the venue or
+   * external migrator may create presales afterward.
+   */
+  setMigrationWitnessAllowed(
+    options: PresaleMigrator & {
+      adminCap: TransactionObjectInput;
+      allowed: boolean;
+    },
+  ) {
+    const witness =
+      options.venue === undefined
+        ? externalWitnessType(options.witnessType)
+        : this.migrationWitnessType(options.venue);
     return (tx: Transaction): void => {
       this.#setAllowed(tx, "set_migration_witness_allowed", witness, options);
     };
@@ -1241,12 +1273,13 @@ export class PresaleTransactions {
     );
   }
 
-  /** Lists or delists a venue for new presales. */
-  setMigrationWitnessAllowed(options: {
-    adminCapId: string;
-    venue: PresaleVenue;
-    allowed: boolean;
-  }): Transaction {
+  /** Lists or delists a venue or external migrator for new presales. */
+  setMigrationWitnessAllowed(
+    options: PresaleMigrator & {
+      adminCapId: string;
+      allowed: boolean;
+    },
+  ): Transaction {
     return single(
       this.call.setMigrationWitnessAllowed({
         ...options,
