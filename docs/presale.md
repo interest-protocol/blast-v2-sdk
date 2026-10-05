@@ -172,8 +172,9 @@ touches a live sale. `blast_presale::new` and `migrate` are public (contracts
 ADR 0104), so a migrator in another package, such as a partner's vendor package,
 creates and migrates sales with its own sealed `Witness` once allowed. Pass that
 struct as `setMigrationWitnessAllowed({ witnessType })`; the contract rejects a
-primitive or vector witness (`EInvalidMigrationWitness`), which anyone can
-construct, and the builder throws before it reaches the chain. Read it with `PresaleClient.getCreationPolicy` before
+primitive, a vector, or a framework (`0x1` or `0x2`) type
+(`EInvalidMigrationWitness`), any of which anyone can construct, and the
+builder throws before it reaches the chain. Read it with `PresaleClient.getCreationPolicy` before
 building a creation; `previewPresaleCreation` does not check it.
 
 ## Previews

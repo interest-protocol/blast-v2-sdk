@@ -674,7 +674,14 @@ test("allows an external migrator's witness and rejects types anyone can constru
     ...ADMIN,
     "pure",
   ]);
-  for (const witnessType of ["u64", "vector<u8>", "vector<0x2::sui::SUI>"]) {
+  for (const witnessType of [
+    "u64",
+    "vector<u8>",
+    "vector<0x2::sui::SUI>",
+    "0x1::type_name::TypeName",
+    "0x1::option::Option<0xabc::blast_aftermath_dao_presale::Witness>",
+    "0x2::object::ID",
+  ]) {
     assert.throws(
       () =>
         tx.setMigrationWitnessAllowed({

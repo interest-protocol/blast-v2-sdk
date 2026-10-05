@@ -168,8 +168,19 @@ function externalWitnessType(witnessType: string): string {
       `migration witness must be a struct type: ${witnessType}`,
     );
   }
+  // Anyone can construct the framework's droppable structs, such as
+  // `TypeName`, `Option<T>`, or `ID`, so the contract rejects them too.
+  if (FRAMEWORK_ADDRESSES.has(normalizeSuiAddress(tag.address))) {
+    throw new TypeError(
+      `migration witness must not be a framework type: ${witnessType}`,
+    );
+  }
   return normalizeStructTag(tag);
 }
+
+const FRAMEWORK_ADDRESSES = new Set(
+  ["0x1", "0x2"].map((address) => normalizeSuiAddress(address)),
+);
 
 function cetusTypeName(type: string): string {
   return normalizeStructTag(parseStructTag(type)).replace(
