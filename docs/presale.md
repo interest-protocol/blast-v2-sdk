@@ -52,7 +52,8 @@ mutability its Move signature needs.
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. Pass the sale's `partner` when it names one, and the same PTB pays it. |
 | Pay Blast and its partner | `payProtocolFeesWithPartner` | Anyone may call, once, after a partnered sale migrates; use it on its own for a sale another migrator migrated. See [Partners](#partners). |
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. Under participant vesting, each claim locks the participant's tokens in a new schedule starting at that claim. |
-| Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, then every fee recipient. The holder-reward share stays in the vault. |
+| Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, or holds it on a partnered vault, then every fee recipient. The holder-reward share stays in the vault. Pass the vault's `partner` when it names one, and the same PTB pays what the vault held. |
+| Pay Blast's LP fees and the partner | `payProtocolLpFeesWithPartner` | Anyone may call, on a partnered vault; holding nothing pays nothing. See [Partners](#partners). |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
 | Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication takes the `AdminCap` (`adminCapId`). |
 | Cap | `destroyCap` | After cancellation only. |
@@ -126,7 +127,8 @@ is created:
   destination (`ProtocolFeesPaid`); a sale naming a partner pays them through
   `pay_protocol_fees_with_partner` instead (see [Partners](#partners)).
 - `lpFeeMemeBps` and `lpFeeQuoteBps` of each collected LP fee, rounded up, go
-  to the current destination before the creator's split (`FeesCollected`).
+  to the current destination before the creator's split (`FeesCollected`), or
+  wait in a partnered sale's vault (see [Partners](#partners)).
   The vault snapshots them at migration; `setProtocolLpFees` later replaces
   one vault's pair (`ProtocolLpFeesChanged`).
 
@@ -150,9 +152,9 @@ calls `set_partner` between the venue's `new` and `share`. The
 share it never changes. `PresaleOpened.partner_id` records it, and
 `PresaleState.partnerId` reads it.
 
-The partner earns its `blast_partners` cut of Blast's raise fee, and of nothing
-else: Blast's token fee and LP fees are never divided with a partner. A
-partnered sale's migration releases the same raise and LP as any sale but holds
+The partner earns its `blast_partners` cut of Blast's raise fee and, after
+migration, of Blast's LP fees (contracts ADR 0107); Blast's token fee is never
+divided with a partner. A partnered sale's migration releases the same raise and LP as any sale but holds
 Blast's fees (`PresaleState.unpaidProtocolQuote`).
 `pay_protocol_fees_with_partner` then pays the partner its cut in force, rounded
 down, and Blast the rest and all its tokens. It emits `ProtocolFeesPaid` with
@@ -161,6 +163,18 @@ partner pays Blast at migration as before, with `partner_quote` zero. Pass the
 sale's `partner` to `migrateCetus` or `migrateBluefin` to pay it in the
 migration PTB; `payProtocolFeesWithPartner` does it alone, and aborts on a sale
 it does not owe (`EWrongPartner`, `ENoPartnerPayout`).
+
+The sale's vault inherits its partner (`PresaleVaultState.partnerId`). Each
+collection on it splits the fees exactly as on any vault but holds Blast's LP
+fees (`PresaleVaultState.unpaidProtocolMeme` and `unpaidProtocolQuote`), and
+its `FeesCollected.protocol_destination` is null.
+`pay_protocol_lp_fees_with_partner` pays the partner its cut in force of each
+held asset, rounded down, and the fee policy's current destination the rest,
+emitting `ProtocolLpFeesPaid`. Anyone may call it; a vault holding nothing pays
+and emits nothing, so pass the vault's `partner` to `collectCetusFees` or
+`collectBluefinFees` to pay it in every collection's PTB.
+`payProtocolLpFeesWithPartner` does it alone, and aborts for any other partner
+(`EWrongPartner`).
 
 ## Creation allowlists
 

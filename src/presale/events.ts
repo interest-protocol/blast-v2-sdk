@@ -36,6 +36,7 @@ type PresaleEventFieldDescriptor =
   | "u64Vector"
   | "eligibility"
   | "optionUncapped"
+  | "optionAddress"
   | "optionId"
   | "optionVesting"
   | "vestingVector";
@@ -168,7 +169,7 @@ export const presaleEventSpecs = {
       vault_id: "id",
       gross_meme: "u64",
       gross_quote: "u64",
-      protocol_destination: "address",
+      protocol_destination: "optionAddress",
       protocol_meme: "u64",
       protocol_quote: "u64",
       fee_recipient_meme: "u64Vector",
@@ -180,6 +181,14 @@ export const presaleEventSpecs = {
       vault_id: "id",
       meme: "u64",
       quote: "u64",
+    },
+    ProtocolLpFeesPaid: {
+      vault_id: "id",
+      protocol_destination: "address",
+      protocol_meme: "u64",
+      protocol_quote: "u64",
+      partner_meme: "u64",
+      partner_quote: "u64",
     },
     ProtocolLpFeesChanged: {
       vault_id: "id",
@@ -246,6 +255,8 @@ type DescriptorOutputs = {
   u64Vector: bigint[];
   eligibility: EligibilityPolicy;
   optionUncapped: UncappedPhase | null;
+  /** Null when a partnered vault holds Blast's LP fees for its partner payout. */
+  optionAddress: string | null;
   /** A `blast_fun_linear_vesting::Vesting` ID, or null for a direct payout. */
   optionId: string | null;
   /** Null when the tokens are paid out. */
@@ -290,6 +301,7 @@ const FIELD_BCS: Record<PresaleEventFieldDescriptor, BcsType<unknown>> = {
   u64Vector: bcs.vector(u64) as BcsType<unknown>,
   eligibility: eligibilityPolicyBcs as BcsType<unknown>,
   optionUncapped: bcs.option(uncappedPhaseBcs) as BcsType<unknown>,
+  optionAddress: bcs.option(address) as BcsType<unknown>,
   optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown>,
   optionVesting: bcs.option(vestingTermsBcs) as BcsType<unknown>,
   vestingVector: bcs.vector(bcs.option(vestingTermsBcs)) as BcsType<unknown>,

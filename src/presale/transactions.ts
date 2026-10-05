@@ -134,8 +134,9 @@ export type PresaleCreation = {
 };
 
 /**
- * The sale's partner, when `PresaleState.partnerId` is set: the migration
- * transaction then pays it and Blast the fees migration held.
+ * The sale's partner, when `PresaleState.partnerId` (or, after migration,
+ * `PresaleVaultState.partnerId`) is set: the migration or collection
+ * transaction then pays it and Blast the fees the sale or its vault held.
  */
 export type PresalePayout = {
   partner?: SharedObjectReference<false> | null;
@@ -660,7 +661,38 @@ export class PresaleCalls {
     };
   }
 
-  /** `cetus::collect_fees`: pays Blast and every fee recipient, keeps the holder share. */
+  /**
+   * `presale_vault::pay_protocol_lp_fees_with_partner`: pays a partnered
+   * vault's held Blast LP fees, the partner its cut in force of each asset,
+   * rounded down, and Blast the rest. Anyone may call it; holding nothing
+   * pays nothing.
+   */
+  payProtocolLpFeesWithPartner(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      partner: SharedObjectReference<false>;
+    },
+  ) {
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "pay_protocol_lp_fees_with_partner",
+        [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#feePolicy(tx),
+          sharedObject(tx, "partner", options.partner, false),
+          tx.object.clock(),
+        ],
+        options,
+        "presale_vault",
+      );
+    };
+  }
+
+  /**
+   * `cetus::collect_fees`: pays Blast, or holds its LP fees on a partnered
+   * vault, then pays every fee recipient and keeps the holder share.
+   */
   collectCetusFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
@@ -685,7 +717,10 @@ export class PresaleCalls {
     };
   }
 
-  /** `bluefin::collect_fees`: pays Blast and every fee recipient, keeps the holder share. */
+  /**
+   * `bluefin::collect_fees`: pays Blast, or holds its LP fees on a partnered
+   * vault, then pays every fee recipient and keeps the holder share.
+   */
   collectBluefinFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
@@ -1326,16 +1361,27 @@ export class PresaleTransactions {
     return single(this.call.payProtocolFeesWithPartner(options));
   }
 
+  /** Then pays the vault's partner when `partner` is given; see `payProtocolLpFeesWithPartner`. */
   collectCetusFees(
-    options: Parameters<PresaleCalls["collectCetusFees"]>[0],
+    options: Parameters<PresaleCalls["collectCetusFees"]>[0] & PresalePayout,
   ): Transaction {
-    return single(this.call.collectCetusFees(options));
+    const tx = single(this.call.collectCetusFees(options));
+    return this.#payProtocolLpFeesWithPartnerAfter(tx, options);
   }
 
+  /** Then pays the vault's partner when `partner` is given; see `payProtocolLpFeesWithPartner`. */
   collectBluefinFees(
-    options: Parameters<PresaleCalls["collectBluefinFees"]>[0],
+    options: Parameters<PresaleCalls["collectBluefinFees"]>[0] & PresalePayout,
   ): Transaction {
-    return single(this.call.collectBluefinFees(options));
+    const tx = single(this.call.collectBluefinFees(options));
+    return this.#payProtocolLpFeesWithPartnerAfter(tx, options);
+  }
+
+  /** Pays a partnered vault's partner and Blast the LP fees its collections held. */
+  payProtocolLpFeesWithPartner(
+    options: Parameters<PresaleCalls["payProtocolLpFeesWithPartner"]>[0],
+  ): Transaction {
+    return single(this.call.payProtocolLpFeesWithPartner(options));
   }
 
   claimMigrationResiduals(
@@ -1549,6 +1595,18 @@ export class PresaleTransactions {
     const { partner } = options;
     if (partner)
       tx.add(this.call.payProtocolFeesWithPartner({ ...options, partner }));
+    return tx;
+  }
+
+  #payProtocolLpFeesWithPartnerAfter(
+    tx: Transaction,
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+    } & PresalePayout,
+  ): Transaction {
+    const { partner } = options;
+    if (partner)
+      tx.add(this.call.payProtocolLpFeesWithPartner({ ...options, partner }));
     return tx;
   }
 }

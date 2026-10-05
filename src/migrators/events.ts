@@ -18,6 +18,7 @@ type MigratorEventFieldDescriptor =
   | "u32"
   | "bytes"
   | "u64Vector"
+  | "optionAddress"
   | "optionTypeName"
   | "optionU64"
   | "feeSplit";
@@ -63,7 +64,7 @@ export const migratorEventSpecs = {
     generation: "u64",
     gross_meme: "u64",
     gross_quote: "u64",
-    protocol_destination: "address",
+    protocol_destination: "optionAddress",
     protocol_meme: "u64",
     protocol_quote: "u64",
     creator_meme: "u64",
@@ -95,6 +96,14 @@ export const migratorEventSpecs = {
     claimant: "address",
     meme_amount: "u64",
     quote_amount: "u64",
+  },
+  ProtocolLpFeesClaimed: {
+    vault_id: "id",
+    protocol_destination: "address",
+    protocol_meme: "u64",
+    protocol_quote: "u64",
+    partner_meme: "u64",
+    partner_quote: "u64",
   },
   RewardPaid: {
     round_id: "id",
@@ -147,6 +156,8 @@ type DescriptorOutputs = {
   u32: number;
   bytes: Uint8Array;
   u64Vector: bigint[];
+  /** Null when a partnered vault holds Blast's share for the partner claim. */
+  optionAddress: string | null;
   optionTypeName: string | null;
   optionU64: bigint | null;
   feeSplit: FeeSplit;
@@ -189,6 +200,7 @@ const MIGRATOR_EVENT_FIELD_BCS: Record<
   u32: bcs.u32() as BcsType<unknown, unknown>,
   bytes: BytesBcs as BcsType<unknown, unknown>,
   u64Vector: bcs.vector(U64Bcs) as BcsType<unknown, unknown>,
+  optionAddress: bcs.option(AddressBcs) as BcsType<unknown, unknown>,
   optionTypeName: bcs.option(moveTypeNameBcs) as BcsType<unknown, unknown>,
   optionU64: bcs.option(U64Bcs) as BcsType<unknown, unknown>,
   feeSplit: feeSplitBcs as BcsType<unknown, unknown>,

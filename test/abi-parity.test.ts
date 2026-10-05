@@ -16,9 +16,9 @@ const contractsDirectory = process.env.BLAST_CONTRACTS_DIR ?? "../contracts";
 const contractsManifest = join(contractsDirectory, "sui/launchpad/Move.toml");
 const expectedEvents = {
   launchpad: 28,
-  migrators: 13,
+  migrators: 14,
   blastSui: 13,
-  presale: 26,
+  presale: 27,
   admin: 15,
   partners: 2,
 };

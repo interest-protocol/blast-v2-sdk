@@ -289,8 +289,11 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
               .serialize({
                 id: uid(vaultId),
                 pool_id: { bytes: address("0x10") },
+                partner_id: null,
                 protocol_meme_residual: { value: 0n },
                 protocol_quote_residual: { value: 0n },
+                unpaid_protocol_meme: { value: 0n },
+                unpaid_protocol_quote: { value: 0n },
                 generation: 0n,
                 fee_split: {
                   creatorBps: 0n,
@@ -553,6 +556,9 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
                   lpFeeMemeBps: 0n,
                   lpFeeQuoteBps: 0n,
                 },
+                partner_id: null,
+                unpaid_protocol_meme: { value: 0n },
+                unpaid_protocol_quote: { value: 0n },
                 migration_meme_residual: { value: 0n },
                 migration_quote_residual: { value: 0n },
                 holder_rewards_meme: { value: published ? 0n : 4000n },

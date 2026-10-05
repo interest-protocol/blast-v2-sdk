@@ -182,8 +182,11 @@ function vault() {
   return {
     id: uid("0x1"),
     pool_id: { bytes: "0x2" },
+    partner_id: null,
     protocol_meme_residual: balance,
     protocol_quote_residual: balance,
+    unpaid_protocol_meme: balance,
+    unpaid_protocol_quote: balance,
     generation: 0n,
     fee_split: feeSplit,
     creator_meme: balance,

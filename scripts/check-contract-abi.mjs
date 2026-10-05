@@ -51,6 +51,7 @@ const artifactDeclarations = [
       "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation",
       "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
       "contracts ADR 0105: anyone claims Blast's launch fees, paid to the partner and to a RuntimeConfig treasury that runtime_config::set_treasury (TreasuryAdmin) rotates; ProtocolFeesClaimed records the treasury and TreasuryChanged records each rotation",
+      "contracts ADR 0107: the LpVault inherits launch::partner_id and, when partnered, holds Blast's LP fees until anyone calls vault::claim_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesClaimed records each claim",
     ],
   },
   {
@@ -71,6 +72,7 @@ const artifactDeclarations = [
       "contracts ADR 0099 (owner-requested cleanup, 2026-10-05): Presale derives its windows from start_ms, counts participants down as they claim (Claimed reports remaining_participants), and holds the LP-fee split as one FeeSplit that new, cetus::new, and bluefin::new take, built by blast_presale::fee_split; PresaleVault holds the same FeeSplit",
       "contracts ADR 0104 (amended 2026-10-05): set_migration_witness_allowed also rejects witness types defined at 0x1 and 0x2",
       "contracts ADR 0106 (source-style review, 2026-10-05): pay_partner is pay_protocol_fees_with_partner, since it pays Blast too, and FeeSplit names its recipients fee_recipients",
+      "contracts ADR 0107: the PresaleVault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },
@@ -426,6 +428,7 @@ const presaleBuilders = new Set([
   "bluefin::collect_fees",
   "presale_vault::claim_migration_residuals",
   "presale_vault::set_protocol_lp_fees",
+  "presale_vault::pay_protocol_lp_fees_with_partner",
   "holder_rewards::publish_round",
   "holder_rewards::claim",
   "holder_rewards::close_round",
@@ -449,6 +452,7 @@ const presaleEventNames = new Set([
   "FeesCollected",
   "MigrationResidualsClaimed",
   "ProtocolLpFeesChanged",
+  "ProtocolLpFeesPaid",
   "FeesChanged",
   "DestinationChanged",
   "QuoteSet",
@@ -498,6 +502,7 @@ const migratorBuilders = new Set([
   "cetus::buyback_and_burn",
   "vault::claim_creator_fees",
   "vault::claim_protocol_fees",
+  "vault::claim_protocol_lp_fees_with_partner",
   "blast_holder_rewards::publish_round",
   "blast_holder_rewards::claim",
   "lp_fee_policy::set_default_shares",
@@ -604,6 +609,7 @@ function classifyLaunchpadFunction(packageName, moduleName, functionName) {
 const launchGetters = new Set([
   "launch::pool_tier",
   "launch::lp_fee_split",
+  "launch::partner_id",
   "launch::assert_curve_fee_cap",
 ]);
 
