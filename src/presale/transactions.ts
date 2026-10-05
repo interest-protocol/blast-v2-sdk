@@ -49,6 +49,7 @@ import type {
   EligibilityPolicy,
   ProtocolFees,
   UncappedPhase,
+  VestingTerms,
 } from "./state.ts";
 
 /**
@@ -85,6 +86,11 @@ export type PresaleTerms = LaunchTypes & {
   memeCurrency: SharedObjectReference<true>;
   tokenSupply: bigint;
   tokenAllocationBps: bigint;
+  /**
+   * Terms each claim locks a participant's tokens under, in an irrevocable
+   * schedule that starts at the claim; null pays them out.
+   */
+  participantVesting: VestingTerms | null;
   liquidityTokenAllocationBps: bigint;
   recipientAllocations: readonly BpsShare[];
   /** Coin Registry supply state after minting: burn-only when true, else fixed. */
@@ -221,6 +227,19 @@ export class PresaleCalls {
     };
   }
 
+  /** `Option<VestingTerms>`: `none`, or `some` of `vesting_terms`. */
+  vesting(terms: VestingTerms | null) {
+    const type = this.#type("blast_presale::VestingTerms");
+    const vesting =
+      terms && vestingTerms(terms.cliffMs, terms.periodMs, terms.periods);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: vesting ? "0x1::option::some" : "0x1::option::none",
+        typeArguments: [type],
+        arguments: vesting ? [this.#vestingTerms(tx, vesting)] : [],
+      });
+  }
+
   /** One `bps::Bps` through `bps::new`. */
   bps(value: bigint) {
     validateBps(value);
@@ -257,11 +276,7 @@ export class PresaleCalls {
           return this.#presaleCall(tx, "vested_recipient_share", [
             address,
             rate,
-            this.#presaleCall(tx, "vesting_terms", [
-              tx.pure.u64(vesting.cliffMs),
-              tx.pure.u64(vesting.periodMs),
-              tx.pure.u64(vesting.periods),
-            ]),
+            this.#vestingTerms(tx, vesting),
           ]);
         }),
       });
@@ -404,7 +419,11 @@ export class PresaleCalls {
     };
   }
 
-  /** `claim`: pays `participant` its tokens and Quote refund. Anyone may relay. */
+  /**
+   * `claim`: pays `participant` its Quote refund and its tokens, or under
+   * participant vesting locks the tokens in a new shared schedule that starts
+   * at this claim. Anyone may relay.
+   */
   claim(
     options: LaunchTypes & {
       presale: SharedObjectReference<true>;
@@ -416,7 +435,11 @@ export class PresaleCalls {
       this.#presaleCall(
         tx,
         "claim",
-        [this.#presale(tx, options), tx.pure.address(participant)],
+        [
+          this.#presale(tx, options),
+          tx.pure.address(participant),
+          tx.object.clock(),
+        ],
         options,
       );
     };
@@ -898,6 +921,7 @@ export class PresaleCalls {
         sharedObject(tx, "memeCurrency", options.memeCurrency, true),
         tx.pure.u64(options.tokenSupply),
         tx.add(this.bps(options.tokenAllocationBps)),
+        tx.add(this.vesting(options.participantVesting)),
         tx.add(this.bps(options.liquidityTokenAllocationBps)),
         tx.add(this.recipientShares(options.recipientAllocations)),
         tx.pure.bool(options.burnable),
@@ -933,6 +957,14 @@ export class PresaleCalls {
         tx.pure.bool(options.allowed),
       ],
     });
+  }
+
+  #vestingTerms(tx: Transaction, terms: VestingTerms): TransactionResult {
+    return this.#presaleCall(tx, "vesting_terms", [
+      tx.pure.u64(terms.cliffMs),
+      tx.pure.u64(terms.periodMs),
+      tx.pure.u64(terms.periods),
+    ]);
   }
 
   /** Calls `module::functionName` of this package, typed `<Meme, Quote>` when given. */

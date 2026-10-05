@@ -63,6 +63,9 @@ const artifactDeclarations = [
       contractsCommit: "55e1ac0841535e708554cb45f9c67ab20f6e979a",
       workingTreeDifferedAtFreeze: false,
     },
+    approvedAbiAmendments: [
+      "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
+    ],
     packages: [["presale", "presale", "blast_presale"]],
   },
   {

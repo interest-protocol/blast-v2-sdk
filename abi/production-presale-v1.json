@@ -3,6 +3,9 @@
   "baseline": {
     "contractsCommit": "55e1ac0841535e708554cb45f9c67ab20f6e979a",
     "workingTreeDifferedAtFreeze": false,
+    "approvedAbiAmendments": [
+      "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id"
+    ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
   "packages": {
@@ -144,6 +147,21 @@
                   ]
                 },
                 "address",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
                 {
                   "Reference": [
                     true,
@@ -1235,6 +1253,33 @@
                   "type": "u64"
                 },
                 {
+                  "name": "participant_vesting",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_presale",
+                                "name": "blast_presale"
+                              },
+                              "name": "VestingTerms",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
                   "name": "sale_tokens",
                   "type": {
                     "Datatype": {
@@ -1718,6 +1763,33 @@
                 {
                   "name": "remaining_commitments",
                   "type": "u64"
+                },
+                {
+                  "name": "vesting_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
                 }
               ],
               "sdk": "decoder-reducer"
@@ -1884,6 +1956,33 @@
                 {
                   "name": "token_allocation_bps",
                   "type": "u64"
+                },
+                {
+                  "name": "participant_vesting",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "option"
+                      },
+                      "name": "Option",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_presale",
+                                "name": "blast_presale"
+                              },
+                              "name": "VestingTerms",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
                 },
                 {
                   "name": "liquidity_token_allocation_bps",
@@ -3203,6 +3302,30 @@
                 {
                   "Datatype": {
                     "module": {
+                      "address": "std",
+                      "name": "option"
+                    },
+                    "name": "Option",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "blast_presale",
+                              "name": "blast_presale"
+                            },
+                            "name": "VestingTerms",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": false
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
                       "address": "blast_presale",
                       "name": "bps"
                     },
@@ -3876,6 +3999,30 @@
                     },
                     "name": "Bps",
                     "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "std",
+                      "name": "option"
+                    },
+                    "name": "Option",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "blast_presale",
+                              "name": "blast_presale"
+                            },
+                            "name": "VestingTerms",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": false
+                      }
+                    ]
                   }
                 },
                 {

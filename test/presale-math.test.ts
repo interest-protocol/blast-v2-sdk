@@ -44,6 +44,7 @@ const feeRecipients = [
 const config: PresaleCreationConfig = {
   tokenSupply: 20_001n,
   tokenAllocationBps: 5_000n,
+  participantVesting: null,
   liquidityTokenAllocationBps: 1_000n,
   recipientAllocations: recipients,
   raiseTarget: RAISE,
@@ -572,12 +573,14 @@ test("previews settlement and every claim, the last taking the remainder", () =>
     remainingCommitments: 4_000n,
     raiseTarget: RAISE,
     tokenAllocation: 10_001n,
+    participantVesting: null,
     saleTokens: 10_001n,
     quote: 3_000n,
   };
   assert.deepEqual(previewClaim(migrated, 1_000n), {
     tokens: 2_500n,
     quoteRefund: 750n,
+    vesting: null,
   });
   assert.deepEqual(
     previewClaim(
@@ -589,7 +592,7 @@ test("previews settlement and every claim, the last taking the remainder", () =>
       },
       3_000n,
     ),
-    { tokens: 7_501n, quoteRefund: 2_250n },
+    { tokens: 7_501n, quoteRefund: 2_250n, vesting: null },
   );
   const cancelled = {
     ...migrated,
@@ -601,10 +604,11 @@ test("previews settlement and every claim, the last taking the remainder", () =>
   assert.deepEqual(previewClaim(cancelled, 500n), {
     tokens: 0n,
     quoteRefund: 500n,
+    vesting: null,
   });
   assert.deepEqual(
     previewClaim({ ...cancelled, remainingCommitments: 501n }, 200n),
-    { tokens: 0n, quoteRefund: 200n },
+    { tokens: 0n, quoteRefund: 200n, vesting: null },
   );
   aborts(
     () => previewClaim({ ...migrated, lifecycle: "Funded" }, 1n),
@@ -659,5 +663,57 @@ test("fee recipients cannot vest; token and raise recipients can", () => {
   assert.deepEqual(
     raisePayouts.map((payout) => payout.vesting),
     [vesting],
+  );
+});
+
+test("participant vesting locks every positive claim in a schedule from the claim", () => {
+  const vesting = { cliffMs: 100n, periodMs: 50n, periods: 4n };
+  previewPresaleCreation({ ...config, participantVesting: vesting });
+  aborts(
+    () =>
+      previewPresaleCreation({
+        ...config,
+        participantVesting: { cliffMs: 0n, periodMs: 0n, periods: 1n },
+      }),
+    "EInvalidVestingTerms",
+  );
+
+  // `blast_presale_tests::claims_lock_participant_tokens_in_a_schedule_from_each_claim`.
+  const migrated = {
+    lifecycle: "Migrated" as const,
+    totalCommitments: 4_000n,
+    remainingCommitments: 4_000n,
+    raiseTarget: RAISE,
+    tokenAllocation: 10_001n,
+    participantVesting: vesting,
+    saleTokens: 10_001n,
+    quote: 3_000n,
+  };
+  assert.deepEqual(previewClaim(migrated, 1_000n), {
+    tokens: 2_500n,
+    quoteRefund: 750n,
+    vesting,
+  });
+  // `a_participant_claim_without_tokens_creates_no_schedule`: no tokens, no schedule.
+  assert.deepEqual(
+    previewClaim(
+      { ...migrated, totalCommitments: 20_001n, remainingCommitments: 20_001n },
+      1n,
+    ),
+    { tokens: 0n, quoteRefund: 0n, vesting: null },
+  );
+  // `a_cancelled_vesting_sale_refunds_without_a_schedule`.
+  assert.deepEqual(
+    previewClaim(
+      {
+        ...migrated,
+        lifecycle: "Cancelled",
+        totalCommitments: 500n,
+        remainingCommitments: 500n,
+        quote: 500n,
+      },
+      500n,
+    ),
+    { tokens: 0n, quoteRefund: 500n, vesting: null },
   );
 });

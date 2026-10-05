@@ -45,7 +45,8 @@ export type UncappedPhase = {
 };
 
 /**
- * `blast_presale::VestingTerms`: linear vesting from migration. Nothing vests
+ * `blast_presale::VestingTerms`: linear vesting from the schedule's start,
+ * migration for a recipient share and the claim for a participant. Nothing vests
  * before `cliffMs`; the vested amount then steps up every `periodMs` until all
  * `periods` have elapsed.
  */
@@ -295,6 +296,7 @@ export const presaleBcs = bcs.struct("Presale", {
   participants: u64,
   quote: suiBalanceBcs,
   token_allocation: u64,
+  participant_vesting: optionVesting,
   sale_tokens: suiBalanceBcs,
   liquidity_tokens: suiBalanceBcs,
   recipient_payouts: bcs.vector(payoutBcs),
@@ -405,6 +407,11 @@ export type PresaleState = SharedObjectReference<true> & {
    * `ProtocolFeesChanged` before the start.
    */
   tokenAllocation: bigint;
+  /**
+   * Terms each claim locks a participant's tokens under, in a schedule that
+   * starts at the claim; null when claims pay tokens out.
+   */
+  participantVesting: VestingTerms | null;
   /** Participant tokens still in custody. */
   saleTokens: bigint;
   liquidityTokens: bigint;
@@ -520,6 +527,7 @@ export function decodePresaleObject(
     participants: parsed.participants,
     quote: BigInt(parsed.quote.value),
     tokenAllocation: parsed.token_allocation,
+    participantVesting: parsed.participant_vesting,
     saleTokens: BigInt(parsed.sale_tokens.value),
     liquidityTokens: BigInt(parsed.liquidity_tokens.value),
     recipientPayouts: parsed.recipient_payouts,
