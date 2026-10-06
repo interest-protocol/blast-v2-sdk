@@ -8,16 +8,16 @@ test("matches the contract Q64.64 migration-price vectors", () => {
   assert.equal(sqrtPriceX64(1n, 1n, true), oneX64);
   assert.equal(sqrtPriceX64(1n, 1n, false), oneX64);
   assert.equal(
-    sqrtPriceX64(196_608_503_317_768_494n, 3_038_310_000_000n, true),
-    72_516_129_429_223_843n,
+    sqrtPriceX64(200_000_000_000_000_001n, 2_970_000_000_000n, true),
+    71_085_815_383_773_548n,
   );
   assert.equal(
-    sqrtPriceX64(196_608_503_317_768_494n, 3_038_310_000_000n, false),
-    4_692_505_923_844_928_806_099n,
+    sqrtPriceX64(200_000_000_000_000_001n, 2_970_000_000_000n, false),
+    4_786_923_594_866_905_679_395n,
   );
   assert.equal(
-    sqrtPriceX64(196_608_503_317_768_494n, 3_038_310_000n, true),
-    2_293_161_360_959_133n,
+    sqrtPriceX64(200_000_000_000_000_001n, 2_970_000_000n, true),
+    2_247_930_859_429_608n,
   );
 });
 
