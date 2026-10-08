@@ -79,6 +79,23 @@ const artifactDeclarations = [
     packages: [["presale", "presale", "blast_presale"]],
   },
   {
+    path: "production-aftermath-dao-presale-v1.json",
+    // The Aftermath DAO-pool vendor package (contracts ADR 0104) links only
+    // the next blast_presale generation, so it is frozen with it; both are
+    // unpublished.
+    baseline: {
+      contractsCommit: "8392fd14bdad4c48246338c9cf181046dd14aea4",
+      workingTreeDifferedAtFreeze: false,
+    },
+    packages: [
+      [
+        "aftermathDaoPresale",
+        "vendors/aftermath_dao_presale",
+        "blast_aftermath_dao_presale",
+      ],
+    ],
+  },
+  {
     path: "production-admin-v1.json",
     // The shared ACL package is new to SDK coverage, frozen at contracts main.
     baseline: {
@@ -331,7 +348,24 @@ const functionClassifiers = {
   blast_presale: classifyPresaleFunction,
   blast_admin: classifyAdminFunction,
   blast_partners: classifyPartnersFunction,
+  blast_aftermath_dao_presale: classifyAftermathPresaleFunction,
 };
+
+/**
+ * `new` takes the vendor's AdminCap and a fresh LP coin's `CreatePoolCapV2`;
+ * `migrate` is permissionless. Both are SDK builders.
+ */
+function classifyAftermathPresaleFunction(moduleName, functionName) {
+  if (
+    moduleName === "blast_aftermath_dao_presale" &&
+    (functionName === "new" || functionName === "migrate")
+  ) {
+    return "builder";
+  }
+  throw new Error(
+    `unclassified function blast_aftermath_dao_presale::${moduleName}::${functionName}`,
+  );
+}
 
 const partnersBuilders = new Set([
   "new_cap",
@@ -679,6 +713,9 @@ const blastSuiEventNames = new Set([
 
 function isEventStruct(packageName, moduleName, structName) {
   if (packageName === "blast_presale") return presaleEventNames.has(structName);
+  if (packageName === "blast_aftermath_dao_presale") {
+    return structName === "PoolCreationReserved" || structName === "Migrated";
+  }
   if (packageName === "blast_admin") return moduleName === "blast_admin_events";
   if (packageName === "blast_partners") {
     return structName === "PartnerUpdated" || structName === "PartnerPaid";
