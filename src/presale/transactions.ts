@@ -143,6 +143,29 @@ export type PresalePayout = {
   partner?: SharedObjectReference<false> | null;
 };
 
+/**
+ * An owner's own position for `newCetusVault` or `newBluefinVault`, which lock
+ * it in a `Vault` without a presale (contracts ADR 0109).
+ */
+export type PresaleOwnVault = LaunchTypes & {
+  /** The caller's venue `Position`, consumed. */
+  position: TransactionObjectInput;
+  feeRecipients: readonly BpsShare[];
+  holderRewardsBps: bigint;
+  /**
+   * A Blast partner the `CreationPolicy` accepts now, kept for good and paid
+   * its cut of Blast's LP fees; omit or null for none.
+   */
+  partnerId?: string | null;
+};
+
+export type CetusOwnVaultObjects = {
+  /** The Cetus `Pool<CoinA, CoinB>` holding the position. */
+  pool: SharedObjectReference<false>;
+  /** Cetus LP Burn `lp_burn::BurnManager`. */
+  burnManager: SharedObjectReference<true>;
+};
+
 /** Maximum Merkle proof depth for 65,536 leaves. */
 export const MAX_PRESALE_PROOF_DEPTH = 16;
 
@@ -574,7 +597,7 @@ export class PresaleCalls {
   /**
    * `cetus::migrate<Meme, Quote, CoinA, CoinB>`: creates the reserved Cetus
    * pool, seeds full range, burns the position through LP Burn into a new
-   * `PresaleVault`. The coin order comes from `cetusMemeSide`. Anyone may call.
+   * `Vault`. The coin order comes from `cetusMemeSide`. Anyone may call.
    */
   migrateCetus(
     options: LaunchTypes & {
@@ -609,7 +632,7 @@ export class PresaleCalls {
 
   /**
    * `bluefin::migrate`: creates `Pool<Meme, Quote>`, seeds full range, and seals
-   * the position in a new `PresaleVault`. `creationFee` must be exactly
+   * the position in a new `Vault`. `creationFee` must be exactly
    * Bluefin's configured SUI pool-creation fee. Anyone may call.
    */
   migrateBluefin(
@@ -632,6 +655,57 @@ export class PresaleCalls {
           sharedObject(tx, "quoteCurrency", options.quoteCurrency, false),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, true),
           options.creationFee,
+          tx.object.clock(),
+        ],
+        options,
+        "bluefin",
+      );
+    };
+  }
+
+  /**
+   * `cetus::new_vault<Meme, Quote, CoinA, CoinB>`: burns the caller's own
+   * Cetus position in `pool` through LP Burn and seals the proof in a new
+   * shared `Vault` without a presale, splitting its LP fees by `feeRecipients`
+   * and `holderRewardsBps` after Blast's current rates (contracts ADR 0109).
+   * The coin order comes from `cetusMemeSide`; either order is accepted. The
+   * `CreationPolicy` must allow Quote and the Cetus migrator, and accept
+   * `partnerId` when one is named. The liquidity is locked for good.
+   */
+  newCetusVault(options: PresaleOwnVault & CetusOwnVaultObjects) {
+    const types = normalizeLaunchTypes(options);
+    const vault = this.#ownVault(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::cetus::new_vault`,
+        typeArguments: cetusTypeArguments(types),
+        arguments: [
+          ...vault(tx),
+          sharedObject(tx, "pool", options.pool, false),
+          sharedObject(tx, "burnManager", options.burnManager, true),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /**
+   * `bluefin::new_vault<Meme, Quote>`: seals the caller's own Bluefin position
+   * in `pool`, whose first coin must be Meme, in a new shared `Vault` without a
+   * presale (contracts ADR 0109). The `CreationPolicy` checks are those of
+   * `newCetusVault`. The liquidity is locked for good.
+   */
+  newBluefinVault(
+    options: PresaleOwnVault & { pool: SharedObjectReference<false> },
+  ) {
+    const vault = this.#ownVault(options);
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "new_vault",
+        [
+          ...vault(tx),
+          sharedObject(tx, "pool", options.pool, false),
           tx.object.clock(),
         ],
         options,
@@ -800,7 +874,8 @@ export class PresaleCalls {
 
   /**
    * `blast_presale::set_protocol_fees`: replaces one sale's Blast rates before
-   * its window starts. Blast's token difference moves to or from the buyers'
+   * its window starts, either once shared or, in its creation PTB, before
+   * `share` (with the `Presale` result as `presale`). Blast's token difference moves to or from the buyers'
    * sale allocation and its raise difference to or from the LP's Quote, each
    * rounded down. The contract applies `setProtocolFees`'s bounds and rejects
    * an unchanged set, a started sale, an LP left without Quote or an
@@ -808,11 +883,12 @@ export class PresaleCalls {
    */
   setPresaleProtocolFees(
     options: LaunchTypes & {
-      presale: SharedObjectReference<true>;
+      presale: SharedObjectReference<true> | TransactionArgument;
       adminCap: TransactionObjectInput;
       fees: ProtocolFees;
     },
   ) {
+    const { presale } = options;
     const { raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps } = options.fees;
     const rates = [raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps].map(
       (rate) => this.bps(rate),
@@ -822,7 +898,7 @@ export class PresaleCalls {
         tx,
         "set_protocol_fees",
         [
-          this.#presale(tx, options),
+          "objectId" in presale ? this.#presale(tx, { presale }) : presale,
           ...this.#admin(tx, options.adminCap),
           ...rates.map((rate) => tx.add(rate)),
           tx.object.clock(),
@@ -1133,6 +1209,23 @@ export class PresaleCalls {
     );
   }
 
+  /** `position, fee_split, partner_id, &CreationPolicy, &FeePolicy`, shared by both `new_vault`s. */
+  #ownVault(options: PresaleOwnVault) {
+    const feeSplit = this.feeSplit(
+      options.feeRecipients,
+      options.holderRewardsBps,
+    );
+    const partnerId =
+      options.partnerId == null ? null : normalizeSuiAddress(options.partnerId);
+    return (tx: Transaction): TransactionArgument[] => [
+      tx.object(options.position),
+      tx.add(feeSplit),
+      tx.pure.option("address", partnerId),
+      this.#creationPolicy(tx),
+      this.#feePolicy(tx),
+    ];
+  }
+
   #setAllowed(
     tx: Transaction,
     functionName: string,
@@ -1366,6 +1459,20 @@ export class PresaleTransactions {
     return single(this.call.payProtocolFeesWithPartner(options));
   }
 
+  /** Locks the sender's own Cetus position in a new vault without a presale. */
+  newCetusVault(
+    options: Parameters<PresaleCalls["newCetusVault"]>[0],
+  ): Transaction {
+    return single(this.call.newCetusVault(options));
+  }
+
+  /** Locks the sender's own Bluefin position in a new vault without a presale. */
+  newBluefinVault(
+    options: Parameters<PresaleCalls["newBluefinVault"]>[0],
+  ): Transaction {
+    return single(this.call.newBluefinVault(options));
+  }
+
   /** Then pays the vault's partner when `partner` is given; see `payProtocolLpFeesWithPartner`. */
   collectCetusFees(
     options: Parameters<PresaleCalls["collectCetusFees"]>[0] & PresalePayout,
@@ -1439,8 +1546,8 @@ export class PresaleTransactions {
   setPresaleProtocolFees(
     options: Omit<
       Parameters<PresaleCalls["setPresaleProtocolFees"]>[0],
-      "adminCap"
-    > & { adminCapId: string },
+      "adminCap" | "presale"
+    > & { presale: SharedObjectReference<true>; adminCapId: string },
   ): Transaction {
     return single(
       this.call.setPresaleProtocolFees({

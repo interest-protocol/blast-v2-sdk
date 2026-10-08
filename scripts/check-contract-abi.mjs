@@ -27,7 +27,7 @@ const artifactDeclarations = [
     path: "production-launchpad-v1.json",
     packages: [
       ["launchpad", "launchpad", "blast_fun"],
-      ["memeTemplate", "meme_template", "meme_template"],
+      ["memeTemplate", "launch_ticket_template", "launch_ticket_template"],
       ["migrators", "migrators", "blast_fun_migrators"],
     ],
     approvedAbiAmendments: [
@@ -52,17 +52,17 @@ const artifactDeclarations = [
       "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
       "contracts ADR 0105: anyone claims Blast's launch fees, paid to the partner and to a RuntimeConfig treasury that runtime_config::set_treasury (TreasuryAdmin) rotates; ProtocolFeesClaimed records the treasury and TreasuryChanged records each rotation",
       "contracts ADR 0107: the LpVault inherits launch::partner_id and, when partnered, holds Blast's LP fees until anyone calls vault::claim_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesClaimed records each claim",
+      "contracts ADR 0108: sui/meme_template is renamed sui/launch_ticket_template, package and named address launch_ticket_template; its module meme and its ABI are unchanged",
     ],
   },
   {
     path: "production-presale-v1.json",
-    // The presale package is unpublished, so it is frozen at the contracts
-    // commit it follows: ADRs 0099 through 0102, team vesting, the
-    // package's own two-tier administration (contracts PR 45), the AdminCap's
-    // per-vault LP-fee rates, the package-internal Merkle check, and the
-    // scheduled start with the AdminCap's per-sale rates before it.
+    // The next blast_presale generation is unpublished, so it is frozen at the
+    // contracts commit it follows; re-sync to contracts main before it is
+    // published. The live dependency-only generation (contracts 22e689c) is
+    // not what this artifact describes.
     baseline: {
-      contractsCommit: "55e1ac0841535e708554cb45f9c67ab20f6e979a",
+      contractsCommit: "8392fd14bdad4c48246338c9cf181046dd14aea4",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
@@ -73,6 +73,8 @@ const artifactDeclarations = [
       "contracts ADR 0104 (amended 2026-10-05): set_migration_witness_allowed also rejects witness types defined at 0x1 and 0x2",
       "contracts ADR 0106 (source-style review, 2026-10-05): pay_partner is pay_protocol_fees_with_partner, since it pays Blast too, and FeeSplit names its recipients fee_recipients",
       "contracts ADR 0107: the PresaleVault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
+      "contracts ADR 0101 (amended 2026-10-05): set_protocol_fees also accepts a Pending sale, in its creation transaction before share",
+      "contracts ADR 0109: cetus::new_vault and bluefin::new_vault lock an owner's own position in a Vault without a presale (zero presale and creator-capability IDs) with an optional partner; PresaleVault is renamed Vault and PresaleVaultCreated VaultCreated, with unchanged fields",
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },
@@ -323,7 +325,7 @@ function classifyFunction(packageName, moduleName, functionName) {
 const functionClassifiers = {
   blast_fun: (moduleName, functionName) =>
     classifyLaunchpadFunction("blast_fun", moduleName, functionName),
-  meme_template: classifyMemeTemplateFunction,
+  launch_ticket_template: classifyMemeTemplateFunction,
   blast_fun_migrators: classifyMigratorFunction,
   blast_sui: classifyBlastSuiFunction,
   blast_presale: classifyPresaleFunction,
@@ -423,9 +425,11 @@ const presaleBuilders = new Set([
   "cetus::new",
   "cetus::migrate",
   "cetus::collect_fees",
+  "cetus::new_vault",
   "bluefin::new",
   "bluefin::migrate",
   "bluefin::collect_fees",
+  "bluefin::new_vault",
   "presale_vault::claim_migration_residuals",
   "presale_vault::set_protocol_lp_fees",
   "presale_vault::pay_protocol_lp_fees_with_partner",
@@ -448,7 +452,7 @@ const presaleEventNames = new Set([
   "RaiseAllocated",
   "RecipientAllocated",
   "Claimed",
-  "PresaleVaultCreated",
+  "VaultCreated",
   "FeesCollected",
   "MigrationResidualsClaimed",
   "ProtocolLpFeesChanged",
