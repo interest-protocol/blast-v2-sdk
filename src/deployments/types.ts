@@ -6,8 +6,9 @@ export const BLAST_NETWORKS = ["mainnet"] as const;
 export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
 
 /**
- * Every published Blast package. `meme_template` has no entry: it is
- * bytecode each launch publishes as its own Meme package.
+ * Every published Blast package. `launch_ticket_template` and
+ * `coin_template` have no entry: each is bytecode a launch or a standalone
+ * coin publishes as its own package.
  */
 export type BlastPackages = Readonly<{
   /** Immutable `blast_fun_timelock`, which `admin` and `partners` link. */

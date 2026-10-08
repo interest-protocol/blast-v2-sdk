@@ -28,7 +28,8 @@
       "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation",
       "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
       "contracts ADR 0105: anyone claims Blast's launch fees, paid to the partner and to a RuntimeConfig treasury that runtime_config::set_treasury (TreasuryAdmin) rotates; ProtocolFeesClaimed records the treasury and TreasuryChanged records each rotation",
-      "contracts ADR 0107: the LpVault inherits launch::partner_id and, when partnered, holds Blast's LP fees until anyone calls vault::claim_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesClaimed records each claim"
+      "contracts ADR 0107: the LpVault inherits launch::partner_id and, when partnered, holds Blast's LP fees until anyone calls vault::claim_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesClaimed records each claim",
+      "contracts ADR 0108: meme_template is launch_ticket_template with byte-identical bytecode, and the standalone coin_template, with no public functions, joins the generated-package templates"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -7611,14 +7612,40 @@
         }
       }
     },
-    "memeTemplate": {
-      "address": "meme_template",
+    "launchTicketTemplate": {
+      "address": "launch_ticket_template",
       "modules": {
         "meme": {
           "functions": [],
           "structs": [
             {
               "name": "MEME",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        }
+      }
+    },
+    "coinTemplate": {
+      "address": "coin_template",
+      "modules": {
+        "my_coin": {
+          "functions": [],
+          "structs": [
+            {
+              "name": "MY_COIN",
               "abilities": [
                 "Drop"
               ],

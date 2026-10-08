@@ -27,7 +27,12 @@ const artifactDeclarations = [
     path: "production-launchpad-v1.json",
     packages: [
       ["launchpad", "launchpad", "blast_fun"],
-      ["memeTemplate", "meme_template", "meme_template"],
+      [
+        "launchTicketTemplate",
+        "launch_ticket_template",
+        "launch_ticket_template",
+      ],
+      ["coinTemplate", "coin_template", "coin_template"],
       ["migrators", "migrators", "blast_fun_migrators"],
     ],
     approvedAbiAmendments: [
@@ -52,6 +57,7 @@ const artifactDeclarations = [
       "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
       "contracts ADR 0105: anyone claims Blast's launch fees, paid to the partner and to a RuntimeConfig treasury that runtime_config::set_treasury (TreasuryAdmin) rotates; ProtocolFeesClaimed records the treasury and TreasuryChanged records each rotation",
       "contracts ADR 0107: the LpVault inherits launch::partner_id and, when partnered, holds Blast's LP fees until anyone calls vault::claim_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesClaimed records each claim",
+      "contracts ADR 0108: meme_template is launch_ticket_template with byte-identical bytecode, and the standalone coin_template, with no public functions, joins the generated-package templates",
     ],
   },
   {
@@ -327,7 +333,10 @@ function classifyFunction(packageName, moduleName, functionName) {
 const functionClassifiers = {
   blast_fun: (moduleName, functionName) =>
     classifyLaunchpadFunction("blast_fun", moduleName, functionName),
-  meme_template: classifyMemeTemplateFunction,
+  launch_ticket_template: (moduleName, functionName) =>
+    rejectTemplateFunction("launch_ticket_template", moduleName, functionName),
+  coin_template: (moduleName, functionName) =>
+    rejectTemplateFunction("coin_template", moduleName, functionName),
   blast_fun_migrators: classifyMigratorFunction,
   blast_sui: classifyBlastSuiFunction,
   blast_presale: classifyPresaleFunction,
@@ -504,9 +513,10 @@ function classifyPresaleFunction(moduleName, functionName) {
   return classifyPackageAdmin("blast_presale", moduleName, functionName);
 }
 
-function classifyMemeTemplateFunction(moduleName, functionName) {
+/** A generated-package template runs only its initializer: any public function is new surface. */
+function rejectTemplateFunction(packageName, moduleName, functionName) {
   throw new Error(
-    `unexpected public function meme_template::${moduleName}::${functionName}`,
+    `unexpected public function ${packageName}::${moduleName}::${functionName}`,
   );
 }
 

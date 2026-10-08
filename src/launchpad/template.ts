@@ -1,8 +1,4 @@
-import initBytecodeTemplate, {
-  deserialize,
-  serialize,
-  update_identifiers,
-} from "@mysten/move-bytecode-template";
+import { serialize, update_identifiers } from "@mysten/move-bytecode-template";
 import { bcs } from "@mysten/sui/bcs";
 import {
   fromBase64,
@@ -13,6 +9,19 @@ import {
   SUI_FRAMEWORK_ADDRESS,
 } from "@mysten/sui/utils";
 
+import type {
+  BytecodeTemplateInitOptions,
+  CompiledModule,
+} from "../lib/bytecode-template.ts";
+import {
+  assertIdentifierSlots,
+  deriveTemplateIdentifiers,
+  deserializeTemplate,
+  initializeBytecodeTemplate,
+  patchConstantSlots,
+  requireNonEmptyString,
+  requireString,
+} from "../lib/bytecode-template.ts";
 import { requireBasisPoints, requireU64 } from "../lib/integers.ts";
 import { MAX_SELL_BURN_BPS } from "./curve.ts";
 
@@ -29,7 +38,9 @@ const SYSTEM_ADDRESSES = new Set([
 ]);
 
 // Built from contracts/sui/meme_template/sources/meme.move at contracts commit
-// 97be709 with Sui CLI 1.77.2-51d177ad7d65, `blast_fun` bound to 0xda74. SHA-256:
+// 97be709 with Sui CLI 1.77.2-51d177ad7d65, `blast_fun` bound to 0xda74. The
+// package is now `launch_ticket_template` (contracts ADR 0108); its module and
+// bytecode are unchanged. SHA-256:
 // 7a0303c62ce622ed2f0eb17de1ac4a8d0d8852ee859d4cdca3fdc2711b265da8
 const TEMPLATE_BYTECODE_BASE64 =
   "oRzrCwcAAAUKAQAOAg4WAyQqBE4EBVJBB5MB0AEI4wKAAQbjA4cBCuoEBQzvBEUACwMGAwoBEQIFAhICEwACAgABAAYAAgEMAQABAwMHAAYEAgAACQABAAENAwQAAQ4FBAACDAgJAQIDFAMGAAQIAwUABQ8MAQEMBhAKBQADBwYLAggABwgEAAIIAQgBAQoCAQgBAQUBCAMBCAAKCQACCAMIAwgDCAMIAQEDBwgEAQsCAQkAAQYIBAELAgEIAAIJAAUQQ3JlYXRvclJlY2lwaWVudAxMYXVuY2hUaWNrZXQETUVNRQZTdHJpbmcJVHhDb250ZXh0B2FkZHJlc3MRY3JlYXRvcl9hdXRob3JpdHkLZHVtbXlfZmllbGQKZnJvbV9ieXRlcwRpbml0DWxhdW5jaF90aWNrZXQEbWVtZQNuZXcLbmV3X2FjY291bnQLbmV3X2FkZHJlc3MPcHVibGljX3RyYW5zZmVyBnNlbmRlcgZzdHJpbmcIdHJhbnNmZXIKdHhfY29udGV4dAR1dGY4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2nQKAgUETUVNRQoCCwpCbGFzdCBNZW1lCgIZGEEgTWVtZSBsYXVuY2hlZCBvbiBCbGFzdAoCGxpodHRwczovL2JsYXN0LmZ1bi9tZW1lLnBuZwoCISAAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHwEBAQIBCQEBAAMIAAAAAAAAAAAAAgEHAQAAAAACIAcFBAYHBBEBDAIFCgcEEQURAgwCCwIMAwsABwYHABEEBwERBAcCEQQHAxEECwMHBwcICgE4AAsBLhEHOAECAAA=";
@@ -53,18 +64,7 @@ const defaults = {
   sellBurnBps: bcs.u64().serialize(0n).toBytes(),
 } as const;
 
-type CompiledConstant = {
-  type_: unknown;
-  data: number[];
-};
-
-type CompiledModule = Record<string, unknown> & {
-  address_identifiers: string[];
-  constant_pool: CompiledConstant[];
-  function_handles: { module: number; name: number }[];
-  identifiers: string[];
-  module_handles: { address: number; name: number }[];
-};
+const LABEL = "Meme template";
 
 export type MemeTemplateOptions = {
   /** Decimal precision; launch intake admits only `LaunchConfig`-allowed values. */
@@ -88,29 +88,17 @@ export type MemeTemplateIdentifiers = {
   witnessName: string;
 };
 
-export type MemeTemplateInitOptions = {
-  module_or_path?: unknown;
-};
-
-let initialization: Promise<void> | undefined;
+export type MemeTemplateInitOptions = BytecodeTemplateInitOptions;
 
 /**
- * Initializes the bytecode-template WASM helper. A browser can supply its WASM
- * URL when the bundler cannot discover the package asset automatically.
+ * Initializes the bytecode-template WASM helper, shared with the coin
+ * template. A browser can supply its WASM URL when the bundler cannot
+ * discover the package asset automatically.
  */
 export function initializeMemeTemplate(
   options?: MemeTemplateInitOptions,
 ): Promise<void> {
-  if (initialization) return initialization;
-
-  const pending = Promise.resolve(initBytecodeTemplate(options)).then(
-    () => undefined,
-  );
-  initialization = pending.catch((error: unknown) => {
-    initialization = undefined;
-    throw error;
-  });
-  return initialization;
+  return initializeBytecodeTemplate(options);
 }
 
 /**
@@ -133,10 +121,13 @@ export async function buildMemePackageBytecode(
   );
   await initializeMemeTemplate();
 
-  const compiled = deserializeTemplate(fromBase64(TEMPLATE_BYTECODE_BASE64));
-  assertIdentifierSlots(compiled, identifiers);
+  const compiled = deserializeTemplate(
+    LABEL,
+    fromBase64(TEMPLATE_BYTECODE_BASE64),
+  );
+  assertIdentifierSlots(LABEL, compiled, ["MEME", "meme"], identifiers);
   patchBlastDependency(compiled, dependency);
-  patchConstantSlots(compiled, [
+  patchConstantSlots(LABEL, compiled, [
     {
       name: "symbol",
       type: "Vector(U8)",
@@ -224,22 +215,7 @@ export function deriveMemeTemplateIdentifiers(
   symbol: string,
   requestedModuleName?: string,
 ): MemeTemplateIdentifiers {
-  const normalizedSymbol = requireNonEmptyString("symbol", symbol);
-  const witnessName = normalizedSymbol.toUpperCase().replaceAll(" ", "_");
-  const moduleName =
-    requestedModuleName ?? normalizedSymbol.toLowerCase().replaceAll(" ", "_");
-
-  if (!/^[A-Z][A-Z0-9_]*$/.test(witnessName)) {
-    throw new RangeError(
-      "symbol must produce an uppercase Move witness identifier",
-    );
-  }
-  if (!/^[a-z][a-z0-9_]*$/.test(moduleName)) {
-    throw new RangeError(
-      "moduleName must start with a lowercase letter and contain only lowercase letters, digits, or underscores",
-    );
-  }
-  return { moduleName, witnessName };
+  return deriveTemplateIdentifiers(symbol, requestedModuleName);
 }
 
 function validateOptions(options: MemeTemplateOptions) {
@@ -313,19 +289,6 @@ function validateCreatorRecipient(recipient: MemeCreatorRecipientInput): {
   throw new TypeError("creatorRecipient.kind must be address or account");
 }
 
-function requireString(name: string, value: string): string {
-  if (typeof value !== "string") {
-    throw new TypeError(`${name} must be a string`);
-  }
-  return value;
-}
-
-function requireNonEmptyString(name: string, value: string): string {
-  const normalized = requireString(name, value).trim();
-  if (!normalized) throw new RangeError(`${name} must not be empty`);
-  return normalized;
-}
-
 function normalizeBlastPackageId(packageId: string): string {
   if (typeof packageId !== "string") {
     throw new TypeError("blastPackageId must be a string");
@@ -340,21 +303,6 @@ function normalizeBlastPackageId(packageId: string): string {
     );
   }
   return normalized;
-}
-
-function deserializeTemplate(bytecode: Uint8Array): CompiledModule {
-  const value: unknown = deserialize(bytecode);
-  if (!isRecord(value)) throw new TypeError("Meme template is not a module");
-  if (
-    !isStringArray(value.address_identifiers) ||
-    !Array.isArray(value.constant_pool) ||
-    !Array.isArray(value.function_handles) ||
-    !isStringArray(value.identifiers) ||
-    !Array.isArray(value.module_handles)
-  ) {
-    throw new TypeError("Meme template has invalid module tables");
-  }
-  return value as CompiledModule;
 }
 
 function patchBlastDependency(
@@ -377,71 +325,12 @@ function patchBlastDependency(
   compiled.address_identifiers[index] = blastPackageId.slice(2);
 }
 
-function assertIdentifierSlots(
-  compiled: CompiledModule,
-  identifiers: MemeTemplateIdentifiers,
-): void {
-  const occupied = new Set(
-    compiled.identifiers.filter(
-      (identifier) => identifier !== "MEME" && identifier !== "meme",
-    ),
-  );
-  if (occupied.has(identifiers.moduleName)) {
-    throw new RangeError(
-      `moduleName ${identifiers.moduleName} collides with the Meme template`,
-    );
-  }
-  if (occupied.has(identifiers.witnessName)) {
-    throw new RangeError(
-      `witnessName ${identifiers.witnessName} collides with the Meme template`,
-    );
-  }
-}
-
-function patchConstantSlots(
-  compiled: CompiledModule,
-  patches: readonly {
-    name: string;
-    type: string;
-    expected: Uint8Array;
-    replacement: Uint8Array;
-  }[],
-): void {
-  // Resolve every source slot before mutating. This is required when the
-  // creator-kind and burnable boolean replacements swap true and false.
-  const targets = patches.map((patch) => {
-    const matches = compiled.constant_pool.flatMap((constant, index) =>
-      constantTypeName(constant.type_) === patch.type &&
-      bytesEqual(constant.data, patch.expected)
-        ? [index]
-        : [],
-    );
-    if (matches.length !== 1) {
-      throw new TypeError(
-        `Meme template must have one ${patch.name} constant slot`,
-      );
-    }
-    return matches[0];
-  });
-
-  if (new Set(targets).size !== targets.length) {
-    throw new TypeError("Meme template constant slots must be distinct");
-  }
-  patches.forEach((patch, patchIndex) => {
-    const target = targets[patchIndex];
-    if (target === undefined) throw new TypeError("Missing constant slot");
-    const constant = compiled.constant_pool[target];
-    if (!constant) throw new TypeError("Missing constant");
-    constant.data = Array.from(patch.replacement);
-  });
-}
-
 function assertTemplateWiring(
   bytecode: Uint8Array,
   blastPackageId: string,
   identifiers: MemeTemplateIdentifiers,
 ): void {
-  const compiled = deserializeTemplate(bytecode);
+  const compiled = deserializeTemplate(LABEL, bytecode);
   if (
     !compiled.identifiers.includes(identifiers.moduleName) ||
     !compiled.identifiers.includes(identifiers.witnessName)
@@ -484,29 +373,4 @@ function assertTemplateWiring(
       "Meme template must support address and account recipients",
     );
   }
-}
-
-function constantTypeName(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (!isRecord(value)) return "";
-  const entries = Object.entries(value);
-  if (entries.length !== 1 || !entries[0]) return "";
-  return `${entries[0][0]}(${constantTypeName(entries[0][1])})`;
-}
-
-function bytesEqual(left: number[], right: Uint8Array): boolean {
-  return (
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) && value.every((item) => typeof item === "string")
-  );
 }

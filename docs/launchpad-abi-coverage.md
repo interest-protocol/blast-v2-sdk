@@ -5,7 +5,9 @@
 The frozen production ABI uses contracts commit
 `a5ed34ad49c6c001af2db5b9cbcb206075704412`. The parity artifacts are:
 
-- `abi/production-launchpad-v1.json` for `launchpad`, `meme_template`, and the
+- `abi/production-launchpad-v1.json` for `launchpad`, the two
+  generated-package templates (`launch_ticket_template`, formerly
+  `meme_template`, and `coin_template`, contracts ADR 0108), and the
   migrators package (Cetus and Bluefin adapters, LP vault, LP-fee policy, and
   holder rewards);
 - `abi/production-blast-sui-v1.json` for `blast_sui`;
