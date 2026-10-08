@@ -1,12 +1,8 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "a5ed34ad49c6c001af2db5b9cbcb206075704412",
-    "workingTreeDifferedAtFreeze": true,
-    "abiNeutralDifferences": [
-      "sui/meme_template/Move.lock",
-      "docs/research/sui-deepbook-indexer-architecture-2026.md"
-    ],
+    "contractsCommit": "af86ea4bf34080553a45d961d6db8cec719bb2a0",
+    "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0011: compact replay-complete event payloads before release",
       "contracts ADR 0027: make protocol ownership explicit in Quote migration fee names",

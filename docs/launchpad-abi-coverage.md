@@ -20,7 +20,7 @@ artifacts:
 - `abi/production-partners-v1.json` for `blast_partners`.
 
 Every artifact is frozen at contracts
-`8392fd14bdad4c48246338c9cf181046dd14aea4`, the commit CI checks out. Each
+`af86ea4bf34080553a45d961d6db8cec719bb2a0`, the commit CI checks out. Each
 artifact records `baseline.contractsCommit`, the commit it was frozen at,
 and `baseline.approvedAbiAmendments`, every reviewed contracts change to its
 ABI since that baseline, and Sui CLI `1.77.2-51d177ad7d65`, which the checker

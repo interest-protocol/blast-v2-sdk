@@ -40,6 +40,8 @@ export const PRESALE_ABORTS = {
     "EProtocolFeesUnchanged",
     "EWrongPartner",
     "ENoPartnerPayout",
+    "EInvalidHardCap",
+    "EMissingSetting",
   ],
   blast_presale_admin: ["EInvalidAdminCap", "ENoAdminCap", "EInvalidRecipient"],
   holder_rewards: [
@@ -108,6 +110,7 @@ export const AFTERMATH_PRESALE_ABORTS = {
     "EPoolMismatch",
     "EDaoFeePoolMismatch",
     "EWrongPresale",
+    "EWrongMigrator",
   ],
 } as const;
 
