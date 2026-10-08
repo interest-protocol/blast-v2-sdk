@@ -18,7 +18,9 @@ artifacts:
   signs in to; and
 - `abi/production-partners-v1.json` for `blast_partners`.
 
-Each artifact records `baseline.contractsCommit`, the commit it was frozen at,
+Every artifact is frozen at contracts
+`8392fd14bdad4c48246338c9cf181046dd14aea4`, the commit CI checks out. Each
+artifact records `baseline.contractsCommit`, the commit it was frozen at,
 and `baseline.approvedAbiAmendments`, every reviewed contracts change to its
 ABI since that baseline, and Sui CLI `1.77.2-51d177ad7d65`, which the checker
 verifies before it runs `sui move summary`. `blast_admin` and `blast_partners`

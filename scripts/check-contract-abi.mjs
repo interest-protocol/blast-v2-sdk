@@ -12,14 +12,15 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const BASELINE_COMMIT = "a5ed34ad49c6c001af2db5b9cbcb206075704412";
-const LAUNCHPAD_BASELINE = {
+/**
+ * Every artifact is frozen at the contracts commit the next releases follow;
+ * refreeze at contracts main with `check:abi:write` for an approved change,
+ * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
+ */
+const BASELINE_COMMIT = "8392fd14bdad4c48246338c9cf181046dd14aea4";
+const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
-  workingTreeDifferedAtFreeze: true,
-  abiNeutralDifferences: [
-    "sui/meme_template/Move.lock",
-    "docs/research/sui-deepbook-indexer-architecture-2026.md",
-  ],
+  workingTreeDifferedAtFreeze: false,
 };
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
@@ -61,10 +62,7 @@ const artifactDeclarations = [
     // contracts commit it follows; re-sync to contracts main before it is
     // published. The live dependency-only generation (contracts 22e689c) is
     // not what this artifact describes.
-    baseline: {
-      contractsCommit: "8392fd14bdad4c48246338c9cf181046dd14aea4",
-      workingTreeDifferedAtFreeze: false,
-    },
+    baseline: BASELINE,
     approvedAbiAmendments: [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
       "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness",
@@ -83,10 +81,7 @@ const artifactDeclarations = [
     // The Aftermath DAO-pool vendor package (contracts ADR 0104) links only
     // the next blast_presale generation, so it is frozen with it; both are
     // unpublished.
-    baseline: {
-      contractsCommit: "8392fd14bdad4c48246338c9cf181046dd14aea4",
-      workingTreeDifferedAtFreeze: false,
-    },
+    baseline: BASELINE,
     packages: [
       [
         "aftermathDaoPresale",
@@ -97,11 +92,8 @@ const artifactDeclarations = [
   },
   {
     path: "production-admin-v1.json",
-    // The shared ACL package is new to SDK coverage, frozen at contracts main.
-    baseline: {
-      contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
-      workingTreeDifferedAtFreeze: false,
-    },
+    // First covered at contracts 442116a; its ABI is unchanged since.
+    baseline: BASELINE,
     approvedAbiAmendments: [
       "contracts ADR 0097 (amended 2026-10-02, admin package review): upgrade_custody::publisher borrows the sealed Publisher, operational_version::new takes the package's one-time witness, and advance takes the versioned object's UID",
     ],
@@ -109,11 +101,8 @@ const artifactDeclarations = [
   },
   {
     path: "production-partners-v1.json",
-    // The immutable partner package is new to SDK coverage, frozen at contracts main.
-    baseline: {
-      contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
-      workingTreeDifferedAtFreeze: false,
-    },
+    // First covered at contracts 442116a; its ABI is unchanged since.
+    baseline: BASELINE,
     packages: [["partners", "partners", "blast_partners"]],
   },
   {
@@ -157,7 +146,7 @@ function checkArtifact(declaration) {
       summarizePackage(join(contractsRoot, "sui", directory), packageName),
     ]),
   );
-  const baseline = declaration.baseline ?? LAUNCHPAD_BASELINE;
+  const baseline = declaration.baseline ?? BASELINE;
   const artifact = {
     schemaVersion: 1,
     baseline: {
