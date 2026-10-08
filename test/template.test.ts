@@ -370,3 +370,51 @@ test("rejects invalid policy, dependency, and identifier inputs", async () => {
     /collides with the Meme template/,
   );
 });
+
+test("merges constants that patching made equal, which the verifier would reject as duplicates", async () => {
+  // An address recipient that is not burnable makes both Bool slots false, and a
+  // name equal to the symbol makes two vector<u8> slots equal.
+  const bytecode = await buildMemePackageBytecode(
+    {
+      ...options,
+      symbol: "DOG",
+      name: "DOG",
+      burnable: false,
+      creatorRecipient: { kind: "address", address: "0xc" },
+    },
+    blastPackageId,
+  );
+  const compiled = deserialize(bytecode) as {
+    constant_pool: { type_: unknown; data: number[] }[];
+    function_defs: { code: { code: unknown[] } | null }[];
+  };
+  const keys = compiled.constant_pool.map(
+    (constant) =>
+      `${JSON.stringify(constant.type_)}:${constant.data.join(",")}`,
+  );
+  assert.equal(new Set(keys).size, keys.length);
+
+  const loaded = compiled.function_defs.flatMap((definition) =>
+    (definition.code?.code ?? []).flatMap((instruction) =>
+      typeof instruction === "object" &&
+      instruction !== null &&
+      "LdConst" in instruction
+        ? [(instruction as { LdConst: number }).LdConst]
+        : [],
+    ),
+  );
+  const falseIndex = compiled.constant_pool.findIndex(
+    (constant) => constant.type_ === "Bool" && constant.data[0] === 0,
+  );
+  const symbolIndex = keys.indexOf(
+    `${JSON.stringify({ Vector: "U8" })}:${Array.from(
+      bcs.string().serialize("DOG").toBytes(),
+    ).join(",")}`,
+  );
+  // Both flags and both strings load one merged constant each.
+  assert.equal(loaded.filter((index) => index === falseIndex).length, 2);
+  assert.equal(loaded.filter((index) => index === symbolIndex).length, 2);
+  // The freed slots stay in place, unloaded, so no other index moves.
+  assert.equal(compiled.constant_pool.length, 9);
+  assert.equal(new Set(loaded).size, 7);
+});

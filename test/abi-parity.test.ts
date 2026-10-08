@@ -102,8 +102,9 @@ test("freezes every production package and event", () => {
   const partners = readArtifact("production-partners-v1.json");
 
   assert.deepEqual(Object.keys(launchpad.packages).sort(), [
+    "coinTemplate",
+    "launchTicketTemplate",
     "launchpad",
-    "memeTemplate",
     "migrators",
   ]);
   assert.deepEqual(Object.keys(blastSui.packages), ["blastSui"]);
