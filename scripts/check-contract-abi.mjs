@@ -109,6 +109,23 @@ const artifactDeclarations = [
     packages: [["partners", "partners", "blast_partners"]],
   },
   {
+    path: "production-aftermath-dao-presale-v1.json",
+    // The Aftermath DAO-pool vendor (contracts ADR 0104) is new to SDK
+    // coverage, frozen at its initializer split (ADR 0110) and venue-owned
+    // tiers (ADR 0111).
+    baseline: {
+      contractsCommit: "af86ea4bf34080553a45d961d6db8cec719bb2a0",
+      workingTreeDifferedAtFreeze: false,
+    },
+    packages: [
+      [
+        "aftermathDaoPresale",
+        "vendors/aftermath_dao_presale",
+        "blast_aftermath_dao_presale",
+      ],
+    ],
+  },
+  {
     path: "production-blast-sui-v1.json",
     packages: [["blastSui", "blast_sui", "blast_sui"]],
     approvedAbiAmendments: [
@@ -343,6 +360,7 @@ const functionClassifiers = {
   blast_presale: classifyPresaleFunction,
   blast_admin: classifyAdminFunction,
   blast_partners: classifyPartnersFunction,
+  blast_aftermath_dao_presale: classifyAftermathDaoPresaleFunction,
 };
 
 const partnersBuilders = new Set([
@@ -353,6 +371,19 @@ const partnersBuilders = new Set([
   "set_recipient",
   "destroy_cap",
 ]);
+
+/** `AftermathDaoPresaleCalls` builds every entry point of the vendor package. */
+function classifyAftermathDaoPresaleFunction(moduleName, functionName) {
+  if (
+    moduleName === "blast_aftermath_dao_presale" &&
+    ["new", "finalize", "migrate"].includes(functionName)
+  ) {
+    return "builder";
+  }
+  throw new Error(
+    `unclassified function blast_aftermath_dao_presale::${moduleName}::${functionName}`,
+  );
+}
 
 function classifyPartnersFunction(moduleName, functionName) {
   if (partnersBuilders.has(functionName)) return "builder";
@@ -707,6 +738,9 @@ const blastSuiEventNames = new Set([
 ]);
 
 function isEventStruct(packageName, moduleName, structName) {
+  if (packageName === "blast_aftermath_dao_presale") {
+    return structName === "PoolCreationReserved" || structName === "Migrated";
+  }
   if (packageName === "blast_presale") return presaleEventNames.has(structName);
   if (packageName === "blast_admin") return moduleName === "blast_admin_events";
   if (packageName === "blast_partners") {

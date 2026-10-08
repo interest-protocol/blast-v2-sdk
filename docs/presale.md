@@ -186,6 +186,31 @@ and emits nothing, so pass the vault's `partner` to `collectCetusFees` or
 `payProtocolLpFeesWithPartner` does it alone, and aborts for any other partner
 (`EWrongPartner`).
 
+## Aftermath DAO-pool vendor
+
+`AftermathDaoPresaleTransactions` builds the one-off `blast_aftermath_dao_presale`
+package (contracts ADRs 0104, 0110, and 0111), constructed with the vendor's
+package IDs and the presale deployment. Its sales migrate into a 50/50 Aftermath
+pool behind a DAO-fee pool paying the partner treasury, so they carry no pool
+tier.
+
+- `createSale`, with the vendor `AdminCap`, is one PTB:
+  1. the vendor's `new` returns the `PresaleInitializer`;
+  2. `configurePresaleTerms` sets every term except the LP-fee split, with
+     `set_partner` when `partner` is given;
+  3. the vendor's `finalize` names the treasury as the only LP-fee recipient,
+     sends it the `PresaleCap`, and binds the fresh LP coin's `CreatePoolCapV2`
+     in a shared `PoolCreation<Lp>`;
+  4. `share` opens the sale from `startMs`.
+- `migrate` (anyone, while `Funded`) consumes the sale's `PoolCreation<Lp>`,
+  whose ID `PoolCreationReserved` carries, with Aftermath's `PoolRegistry` and
+  the DAO-fee `Version`. On a partnered sale, the same PTB pays the partner.
+- `decodeAftermathDaoPresaleEvent` decodes `PoolCreationReserved` and
+  `Migrated`, both typed `<Lp, SaleToken, Quote>`.
+
+`abi/production-aftermath-dao-presale-v1.json` freezes the vendor's three entry
+points and two events.
+
 ## Creation allowlists
 
 `creation_policy::CreationPolicy` lists the Quote types and the migration
