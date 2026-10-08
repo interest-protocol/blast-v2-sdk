@@ -70,8 +70,6 @@ export const presaleEventSpecs = {
       uncapped: "optionUncapped",
       hard_cap: "optionHardCap",
       migration_witness: "typeName",
-      tick_spacing: "u32",
-      pool_fee_rate: "u64",
       fee_recipients: "addressVector",
       fee_recipient_bps: "u64Vector",
       holder_rewards_bps: "u64",
@@ -204,6 +202,12 @@ export const presaleEventSpecs = {
       protocol_lp_fee_quote_bps: "u64",
     },
   },
+  venue_config: {
+    PoolTierReserved: {
+      tick_spacing: "u32",
+      pool_fee_rate: "u64",
+    },
+  },
   holder_rewards: {
     RoundPublished: {
       vault_id: "id",
@@ -246,6 +250,7 @@ type Specs = typeof presaleEventSpecs;
 export type PresaleEventModule = keyof Specs;
 type FlatSpecs = Specs["blast_presale"] &
   Specs["presale_vault"] &
+  Specs["venue_config"] &
   Specs["holder_rewards"];
 export type PresaleEventKind = keyof FlatSpecs;
 
@@ -358,18 +363,28 @@ export type DecodedPresaleEvent = {
     /** The event's `SaleToken` / `Meme` type argument. */
     memeType: string;
     quoteType: string;
-    /** `VaultCreated` only: the venue marker, e.g. `<pkg>::cetus::Venue`. */
-    venueType: Kind extends "VaultCreated" ? string : null;
+    /**
+     * `VaultCreated` and `PoolTierReserved` only: the venue marker, e.g.
+     * `<pkg>::cetus::Venue`.
+     */
+    venueType: Kind extends VenueTypedKind ? string : null;
     /** Transaction sender; for `Committed`, the committing wallet. */
     sender: string;
     position: SuiEventPosition;
   };
 }[PresaleEventKind];
 
+/** The events generic over a venue marker after `<SaleToken, Quote>`. */
+type VenueTypedKind = "VaultCreated" | "PoolTierReserved";
+const VENUE_TYPED_KINDS: ReadonlySet<string> = new Set<VenueTypedKind>([
+  "VaultCreated",
+  "PoolTierReserved",
+]);
+
 /**
  * Decodes one event whose type is `<originalPackageId>::<module>::<Kind><...>`.
  * Every presale event is generic over `<SaleToken, Quote>`, and
- * `VaultCreated` also over its `Venue`.
+ * `VaultCreated` and `PoolTierReserved` also over their `Venue`.
  */
 export function decodePresaleEvent(
   event: SuiClientTypes.EventEntry,
@@ -384,7 +399,7 @@ export function decodePresaleEvent(
     presaleEventModules[kind] !== tag.module ||
     memeType === undefined ||
     quoteType === undefined ||
-    (venueType === null) === (kind === "VaultCreated") ||
+    (venueType === null) === VENUE_TYPED_KINDS.has(kind) ||
     extra.length > 0
   ) {
     throw new TypeError(`unexpected presale event type ${event.eventType}`);

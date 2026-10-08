@@ -39,8 +39,6 @@ export type PresaleProjection = {
   uncapped: UncappedPhase | null;
   hardCap: HardCap | null;
   migrationWitness: string;
-  tickSpacing: number;
-  poolFeeRate: bigint;
   feeRecipients: BpsShare[];
   holderRewardsBps: bigint;
   /** When commitments open, which may be after the share; zero until `PresaleOpened`. */
@@ -157,10 +155,24 @@ export type PresaleRewardRoundProjection = {
   closed: boolean;
 };
 
+/**
+ * The pool tier a Cetus or Bluefin sale's venue recorded (contracts ADR 0111),
+ * emitted just before its `PresaleCreated`. A sale token has one sale.
+ */
+export type PresalePoolTierProjection = {
+  /** The venue marker, e.g. `<pkg>::cetus::Venue`. */
+  venueType: string;
+  quoteType: string;
+  tickSpacing: number;
+  poolFeeRate: bigint;
+};
+
 export type PresaleEventProjection = {
   appliedEventIds: Readonly<Record<string, true>>;
   eventCounts: Readonly<Record<PresaleEventKind, number>>;
   presales: Readonly<Record<string, PresaleProjection>>;
+  /** Pool tiers by sale-token (`memeType`); a sale's is `poolTiers[presale.memeType]`. */
+  poolTiers: Readonly<Record<string, PresalePoolTierProjection>>;
   vaults: Readonly<Record<string, PresaleVaultProjection>>;
   rounds: Readonly<Record<string, PresaleRewardRoundProjection>>;
 };
@@ -172,6 +184,7 @@ export function createPresaleEventProjection(): PresaleEventProjection {
       Object.keys(presaleEventModules).map((kind) => [kind, 0]),
     ) as Record<PresaleEventKind, number>,
     presales: {},
+    poolTiers: {},
     vaults: {},
     rounds: {},
   };
@@ -341,6 +354,19 @@ function applyVaultEvent(
   event: DecodedPresaleEvent,
 ): PresaleEventProjection {
   switch (event.kind) {
+    case "PoolTierReserved":
+      return {
+        ...state,
+        poolTiers: {
+          ...state.poolTiers,
+          [event.memeType]: {
+            venueType: event.venueType,
+            quoteType: event.quoteType,
+            tickSpacing: event.payload.tick_spacing,
+            poolFeeRate: event.payload.pool_fee_rate,
+          },
+        },
+      };
     case "VaultCreated": {
       const { payload } = event;
       const feeRecipients = payload.fee_recipients.map((recipient, i) => ({
@@ -555,8 +581,6 @@ function createdPresale(
     uncapped: payload.uncapped,
     hardCap: payload.hard_cap,
     migrationWitness: payload.migration_witness,
-    tickSpacing: payload.tick_spacing,
-    poolFeeRate: payload.pool_fee_rate,
     feeRecipients: shares(payload.fee_recipients, payload.fee_recipient_bps),
     holderRewardsBps: payload.holder_rewards_bps,
     startMs: 0n,

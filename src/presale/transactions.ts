@@ -403,6 +403,8 @@ export class PresaleCalls {
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           this.#creationPolicy(tx),
           this.#feePolicy(tx),
+          // Records the tier for the migration (contracts ADR 0111).
+          deploymentObject(tx, this.deployment.venueConfig, true),
           tx.pure.u32(tickSpacing),
           tx.pure.u64(feeRate),
         ],
@@ -732,6 +734,7 @@ export class PresaleCalls {
         [
           this.#presale(tx, options),
           this.#feePolicy(tx),
+          deploymentObject(tx, this.deployment.venueConfig, false),
           sharedObject(tx, "memeCurrency", options.memeCurrency, false),
           sharedObject(tx, "quoteCurrency", options.quoteCurrency, false),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, true),

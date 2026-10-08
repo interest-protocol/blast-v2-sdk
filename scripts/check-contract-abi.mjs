@@ -67,10 +67,10 @@ const artifactDeclarations = [
     // package's own two-tier administration (contracts PR 45), the AdminCap's
     // per-vault LP-fee rates, the package-internal Merkle check, and the
     // scheduled start with the AdminCap's per-sale rates before it, vaults
-    // without a presale, and initializer creation with the sale-level hard cap
-    // and early close.
+    // without a presale, initializer creation with the sale-level hard cap and
+    // early close, and venue-owned pool tiers.
     baseline: {
-      contractsCommit: "80050682420d5674048dc1366ccf8f5c0986db14",
+      contractsCommit: "6433aa1f1bce03e8a878e3a753cb8b2cb8c0ffd3",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
@@ -83,6 +83,7 @@ const artifactDeclarations = [
       "contracts ADR 0107: the Vault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
       "contracts ADR 0109: cetus::new_vault and bluefin::new_vault lock an owner's own position in a Vault with zero presale IDs; PresaleVault and PresaleVaultCreated become Vault and VaultCreated",
       "contracts ADR 0110: blast_presale::new returns a PresaleInitializer that the set_* setters configure and finalize turns into (Presale, PresaleCap); cetus::new and bluefin::new take only their venue arguments; the hard cap moves from UncappedPhase to a sale-level HardCap with closes_when_filled, settle closes a full sale early, PresaleCreated gains hard_cap, PresaleOpened hard_cap_from_ms, and PresaleFunded end_ms and liquidity_deadline_ms",
+      "contracts ADR 0111: the pool tier belongs to the venue; blast_presale::new, Presale, and PresaleCreated drop tick_spacing and pool_fee_rate, bluefin::new and bluefin::migrate take the VenueConfig, and venue_config::PoolTierReserved<Meme, Quote, Venue> records each Cetus or Bluefin tier",
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },
@@ -474,6 +475,7 @@ const presaleEventNames = new Set([
   "RecipientAllocated",
   "Claimed",
   "VaultCreated",
+  "PoolTierReserved",
   "FeesCollected",
   "MigrationResidualsClaimed",
   "ProtocolLpFeesChanged",

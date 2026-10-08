@@ -24,7 +24,6 @@ import {
 // fork), independently of the SDK's BCS schemas.
 const pkg = "0x5e";
 const u8 = (value: number) => [value];
-const u32 = (value: number) => le(BigInt(value), 4);
 const u64 = (value: bigint) => le(value, 8);
 const bool = (value: boolean) => [value ? 1 : 0];
 const addr = (value: string) =>
@@ -63,8 +62,6 @@ function presaleBytes(): Uint8Array {
     ...u64(50n), // starts_after_ms
     ...bool(true), // closes_when_filled
     ...ascii(witness), // migration_witness
-    ...u32(200), // tick_spacing
-    ...u64(10_000n), // pool_fee_rate
     ...vec([
       [...addr("0xc0ffee"), ...u64(5_000n), ...u8(0)],
       [...addr("0xfee"), ...u64(2_000n), ...u8(0)],
@@ -146,8 +143,6 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
     [1_000n, 1_100n, 1_150n, 1_050n, 1_050n],
   );
   assert.equal(state.migrationWitness, `0x${witness}`);
-  assert.equal(state.tickSpacing, 200);
-  assert.equal(state.poolFeeRate, 10_000n);
   assert.equal(state.holderRewardsBps, 3_000n);
   assert.deepEqual(state.feeRecipients, [
     { recipient: normalizeSuiAddress("0xc0ffee"), bps: 5_000n, vesting: null },

@@ -317,8 +317,6 @@ export const presaleBcs = bcs.struct("Presale", {
   uncapped: bcs.option(uncappedPhaseBcs),
   hard_cap: bcs.option(hardCapBcs),
   migration_witness: moveTypeNameBcs,
-  tick_spacing: bcs.u32(),
-  pool_fee_rate: u64,
   fee_split: presaleFeeSplitBcs,
   total_commitments: u64,
   participants: u64,
@@ -440,8 +438,6 @@ export type PresaleState = SharedObjectReference<true> & {
    */
   hardCapFromMs: bigint | null;
   migrationWitness: string;
-  tickSpacing: number;
-  poolFeeRate: bigint;
   feeRecipients: BpsShare[];
   holderRewardsBps: bigint;
   totalCommitments: bigint;
@@ -586,8 +582,6 @@ export function decodePresaleObject(
     uncapped: parsed.uncapped,
     hardCap: parsed.hard_cap,
     migrationWitness: parsed.migration_witness,
-    tickSpacing: parsed.tick_spacing,
-    poolFeeRate: parsed.pool_fee_rate,
     feeRecipients: parsed.fee_split.fee_recipients,
     holderRewardsBps: parsed.fee_split.holder_rewards_bps,
     totalCommitments: parsed.total_commitments,
