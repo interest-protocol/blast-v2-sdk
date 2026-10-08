@@ -51,6 +51,18 @@ export function normalizeSharedObjectReference<const Mutable extends boolean>(
   };
 }
 
+/**
+ * Adds the mutability one Move call needs to a recorded identity. A manifest
+ * records an object's identity only; every launchpad, migrators and venue
+ * builder picks the mutability its own call requires.
+ */
+export function sharedObjectReference<const Mutable extends boolean>(
+  identity: SharedObjectIdentity,
+  mutable: Mutable,
+): SharedObjectReference<Mutable> {
+  return { ...identity, mutable };
+}
+
 export function normalizeSuiPackageReference(
   name: string,
   reference: SuiPackageReference,
