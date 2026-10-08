@@ -12,7 +12,12 @@ import { join } from "node:path";
 import test from "node:test";
 
 import type { PresaleAbortName } from "../src/presale/aborts.ts";
-import { PRESALE_ABORTS, presaleAbortName } from "../src/presale/aborts.ts";
+import {
+  AFTERMATH_PRESALE_ABORTS,
+  aftermathPresaleAbortName,
+  PRESALE_ABORTS,
+  presaleAbortName,
+} from "../src/presale/aborts.ts";
 import type { PresaleAbortCode } from "../src/presale/math.ts";
 
 // `check:abi` freezes each ABI at its artifact's commit; this test reads the
@@ -24,6 +29,9 @@ const frozenCommit = (artifact: string): string =>
     ) as { baseline: { contractsCommit: string } }
   ).baseline.contractsCommit;
 const PRESALE_COMMIT = frozenCommit("production-presale-v1.json");
+const AFTERMATH_COMMIT = frozenCommit(
+  "production-aftermath-dao-presale-v1.json",
+);
 const configured = process.env.BLAST_CONTRACTS_DIR;
 const contracts = configured ?? "../contracts";
 // A configured repository must hold the pinned sources; only an absent
@@ -58,6 +66,24 @@ test("names a presale abort by its module and code", () => {
   );
 });
 
+test("names an Aftermath vendor abort by its module and code", () => {
+  assert.equal(
+    aftermathPresaleAbortName("blast_aftermath_dao_presale", 0),
+    "EPoolMismatch",
+  );
+  assert.equal(
+    aftermathPresaleAbortName("blast_aftermath_dao_presale", 2),
+    "EWrongPresale",
+  );
+  assert.equal(
+    aftermathPresaleAbortName("blast_aftermath_dao_presale", 3),
+    null,
+  );
+  // The vendor's module is not a presale-package module, and vice versa.
+  assert.equal(presaleAbortName("blast_aftermath_dao_presale", 0), null);
+  assert.equal(aftermathPresaleAbortName("blast_presale", 0), null);
+});
+
 test("returns null for an unknown module or code", () => {
   assert.equal(presaleAbortName("blast_presale", 33), null);
   assert.equal(presaleAbortName("blast_presale", -1), null);
@@ -76,6 +102,18 @@ test(`matches every #[error(code = N)] constant at contracts ${PRESALE_COMMIT}`,
   assert.deepEqual(
     PRESALE_ABORTS,
     declaredAbortsAt(PRESALE_COMMIT, "sui/presale/sources"),
+  );
+});
+
+test(`matches the Aftermath vendor's error constants at contracts ${AFTERMATH_COMMIT}`, {
+  skip,
+}, () => {
+  assert.deepEqual(
+    AFTERMATH_PRESALE_ABORTS,
+    declaredAbortsAt(
+      AFTERMATH_COMMIT,
+      "sui/vendors/aftermath_dao_presale/sources",
+    ),
   );
 });
 

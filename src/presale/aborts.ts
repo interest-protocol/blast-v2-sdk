@@ -98,6 +98,39 @@ export function presaleAbortName(
   return abortName(PRESALE_ABORTS, module, code) as PresaleAbortName | null;
 }
 
+/**
+ * Every `#[error(code = N)]` constant of the Aftermath DAO-pool vendor package
+ * `blast_aftermath_dao_presale`, by module and indexed by code, checked like
+ * `PRESALE_ABORTS`.
+ */
+export const AFTERMATH_PRESALE_ABORTS = {
+  blast_aftermath_dao_presale: [
+    "EPoolMismatch",
+    "EDaoFeePoolMismatch",
+    "EWrongPresale",
+  ],
+} as const;
+
+export type AftermathPresaleAbortName =
+  (typeof AFTERMATH_PRESALE_ABORTS)["blast_aftermath_dao_presale"][number];
+
+/**
+ * The error constant an abort in the Aftermath vendor package names; null for
+ * any other module or code. Check first that the abort location's package is
+ * the vendor package. Its `migrate` also aborts inside `blast_presale` and
+ * Aftermath's packages: name the former with `presaleAbortName`.
+ */
+export function aftermathPresaleAbortName(
+  module: string,
+  code: number,
+): AftermathPresaleAbortName | null {
+  return abortName(
+    AFTERMATH_PRESALE_ABORTS,
+    module,
+    code,
+  ) as AftermathPresaleAbortName | null;
+}
+
 function abortName(
   aborts: Readonly<Record<string, readonly string[]>>,
   module: string,
