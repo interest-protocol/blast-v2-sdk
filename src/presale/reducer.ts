@@ -5,6 +5,7 @@ import { apportionRaise, apportionSupply } from "./math.ts";
 import type {
   BpsShare,
   EligibilityPolicy,
+  HardCap,
   PresaleLifecycle,
   ProtocolFees,
   RecipientPayout,
@@ -36,6 +37,7 @@ export type PresaleProjection = {
   liquidityWindowMs: bigint;
   eligibility: EligibilityPolicy;
   uncapped: UncappedPhase | null;
+  hardCap: HardCap | null;
   migrationWitness: string;
   tickSpacing: number;
   poolFeeRate: bigint;
@@ -43,9 +45,13 @@ export type PresaleProjection = {
   holderRewardsBps: bigint;
   /** When commitments open, which may be after the share; zero until `PresaleOpened`. */
   startMs: bigint;
+  /** Scheduled by `PresaleOpened`; an early close's `PresaleFunded` moves it to the close. */
   endMs: bigint;
+  /** Scheduled by `PresaleOpened`; an early close's `PresaleFunded` counts it from the close. */
   liquidityDeadlineMs: bigint;
   uncappedFromMs: bigint;
+  /** When the hard cap takes hold; null without one, set by `PresaleOpened`. */
+  hardCapFromMs: bigint | null;
   totalCommitments: bigint;
   /** Wallets holding an undelivered commitment; each claim releases one. */
   participants: bigint;
@@ -210,6 +216,7 @@ function applyPresaleEvent(
         endMs: payload.end_ms,
         liquidityDeadlineMs: payload.liquidity_deadline_ms,
         uncappedFromMs: payload.uncapped_from_ms,
+        hardCapFromMs: payload.hard_cap_from_ms,
         partnerId: payload.partner_id,
       }));
     }
@@ -245,6 +252,8 @@ function applyPresaleEvent(
     case "PresaleFunded":
       return updatePresale(state, event.payload.presale_id, () => ({
         lifecycle: "Funded",
+        endMs: event.payload.end_ms,
+        liquidityDeadlineMs: event.payload.liquidity_deadline_ms,
       }));
     case "PresaleCancelled":
       return updatePresale(state, event.payload.presale_id, () => ({
@@ -332,7 +341,7 @@ function applyVaultEvent(
   event: DecodedPresaleEvent,
 ): PresaleEventProjection {
   switch (event.kind) {
-    case "PresaleVaultCreated": {
+    case "VaultCreated": {
       const { payload } = event;
       const feeRecipients = payload.fee_recipients.map((recipient, i) => ({
         recipient,
@@ -482,7 +491,7 @@ function applyVaultEvent(
   }
 }
 
-/** `blast_presale::new`'s initial custody, re-derived with the contract's apportionment. */
+/** `blast_presale::finalize`'s initial custody, re-derived with the contract's apportionment. */
 function createdPresale(
   event: Extract<DecodedPresaleEvent, { kind: "PresaleCreated" }>,
 ): PresaleProjection {
@@ -544,6 +553,7 @@ function createdPresale(
     liquidityWindowMs: payload.liquidity_window_ms,
     eligibility: payload.eligibility,
     uncapped: payload.uncapped,
+    hardCap: payload.hard_cap,
     migrationWitness: payload.migration_witness,
     tickSpacing: payload.tick_spacing,
     poolFeeRate: payload.pool_fee_rate,
@@ -553,6 +563,7 @@ function createdPresale(
     endMs: 0n,
     liquidityDeadlineMs: 0n,
     uncappedFromMs: 0n,
+    hardCapFromMs: null,
     totalCommitments: 0n,
     participants: 0n,
     commitments: {},

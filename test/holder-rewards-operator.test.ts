@@ -542,7 +542,7 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
         return {
           object: {
             ...base,
-            type: `${originalPackageId}::presale_vault::PresaleVault<${memeType},${quoteType}>`,
+            type: `${originalPackageId}::presale_vault::Vault<${memeType},${quoteType}>`,
             content: presaleVaultBcs
               .serialize({
                 id: uid(vaultId),

@@ -5,6 +5,7 @@ import { sqrtPriceX64 } from "../migrators/migration-math.ts";
 import type {
   BpsShare,
   EligibilityPolicy,
+  HardCap,
   PresaleCommitment,
   PresaleState,
   ProtocolFees,
@@ -34,6 +35,11 @@ export const BLUEFIN_PRESALE_MAX_SYMBOL_BYTES = 32;
  * steps and cliff. Product limits on vesting belong to creation tooling.
  */
 export const MAX_PRESALE_VESTING_DURATION_MS = 1n << 63n;
+/**
+ * `blast_presale::MIN_LIQUIDITY_WINDOW_MS`: seven days, the shortest time after
+ * the window before anyone may cancel an unmigrated funded sale.
+ */
+export const PRESALE_MIN_LIQUIDITY_WINDOW_MS = 7n * 24n * 60n * 60n * 1_000n;
 /** `migration_math` sqrt-price bounds shared by Cetus v15 and Bluefin v17. */
 export const PRESALE_MIN_SQRT_PRICE_X64 = 4_295_048_016n;
 export const PRESALE_MAX_SQRT_PRICE_X64 =
@@ -48,6 +54,7 @@ export type PresaleAbortCode =
   | "EInvalidLifecycle"
   | "EPresaleNotStarted"
   | "EPresaleEnded"
+  | "EPresaleNotEnded"
   | "EZeroCommitment"
   | "EWalletCapExceeded"
   | "EParticipantCapacityReached"
@@ -64,7 +71,9 @@ export type PresaleAbortCode =
   | "EInvalidRaiseAllocation"
   | "EInvalidTier"
   | "ESymbolTooLong"
-  | "EInvalidVestingTerms";
+  | "EInvalidVestingTerms"
+  | "EInvalidHardCap"
+  | "EMissingSetting";
 
 /** A preview found the abort the contract would raise. */
 export class PresaleAbortError extends RangeError {
@@ -154,11 +163,8 @@ export function allowlistedEligibility(
 }
 
 /** Mirrors `blast_presale::uncapped_for_eligible`. */
-export function uncappedForEligible(
-  startsAfterMs: bigint,
-  hardCap: boolean,
-): UncappedPhase {
-  return { startsAfterMs, access: { kind: "eligible" }, hardCap };
+export function uncappedForEligible(startsAfterMs: bigint): UncappedPhase {
+  return { startsAfterMs, access: { kind: "eligible" } };
 }
 
 /** Mirrors `blast_presale::uncapped_for_anyone`. */
@@ -166,7 +172,6 @@ export function uncappedForAnyone(
   startsAfterMs: bigint,
   maxParticipants: bigint,
   minCommitment: bigint,
-  hardCap: boolean,
 ): UncappedPhase {
   check(
     isU64(minCommitment) &&
@@ -179,7 +184,6 @@ export function uncappedForAnyone(
   return {
     startsAfterMs,
     access: { kind: "anyone", maxParticipants, minCommitment },
-    hardCap,
   };
 }
 
@@ -474,10 +478,25 @@ export function validateUncappedPhase(
     "EInvalidUncappedPhase",
     "an open-to-anyone phase must admit at least the policy's wallets",
   );
+  // `slots_at_minimum`: every slot under an open policy; under an allowlist only
+  // the slots beyond its leaves, whose wallets may commit any positive amount.
+  const slotsAtMinimum =
+    eligibility.kind === "open"
+      ? phase.access.maxParticipants
+      : phase.access.maxParticipants - eligibility.leafCount;
   check(
-    phase.access.minCommitment * phase.access.maxParticipants >= raiseTarget,
+    phase.access.minCommitment * slotsAtMinimum >= raiseTarget,
     "EUnreachableRaise",
-    "the phase's minimum times its participant bound must reach the raise",
+    "the phase's minimum times the slots held to it must reach the raise",
+  );
+}
+
+/** Mirrors `finalize`'s hard-cap bound: the hard cap starts inside the window. */
+export function validateHardCap(hardCap: HardCap, durationMs: bigint): void {
+  check(
+    hardCap.startsAfterMs < durationMs,
+    "EInvalidHardCap",
+    "a hard cap must start inside the commitment window",
   );
 }
 
@@ -505,6 +524,8 @@ export type PresaleCreationConfig = {
   liquidityWindowMs: bigint;
   eligibility: EligibilityPolicy;
   uncapped: UncappedPhase | null;
+  /** The sale's hard cap; null overflows for the whole window. */
+  hardCap: HardCap | null;
   feeRecipients: readonly BpsShare[];
   holderRewardsBps: bigint;
   /** The `FeePolicy` rates now, which `blast_presale::new` snapshots. */
@@ -522,12 +543,13 @@ export type PresaleCreationPreview = SupplyApportionment & {
 };
 
 /**
- * Mirrors the checks of `blast_presale::new` in its abort order, after the
- * constructors `PresaleCalls` runs first in Move argument order (`bps::new`
- * for each rate, `vesting_terms` for participant vesting, `recipient_share` or
- * `vesting_terms` and `vested_recipient_share` for token then raise recipients,
- * `open_eligibility` / `allowlisted_eligibility`, `uncapped_for_anyone`, then
- * the fee recipients and holder share), and returns the exact amounts it
+ * Mirrors the checks of `blast_presale::finalize` in its abort order, after the
+ * constructors `PresaleCalls` runs first in setter order (`bps::new` for the
+ * token rates and `recipient_share` or `vesting_terms` and
+ * `vested_recipient_share` for each token recipient, `vesting_terms` for
+ * participant vesting, the raise recipients, `open_eligibility` /
+ * `allowlisted_eligibility`, `uncapped_for_anyone`, then the fee recipients,
+ * holder share, and `fee_split`), and returns the exact amounts it
  * apportions. Does not check what only the chain knows: the `CreationPolicy`
  * (`PresaleClient.getCreationPolicy`), distinct coin types, a zero-supply
  * `TreasuryCap`, or a Cetus tier.
@@ -545,6 +567,8 @@ export function previewPresaleCreation(
     }
   };
   validateBps(config.tokenAllocationBps);
+  validateBps(config.liquidityTokenAllocationBps);
+  shareBps(config.recipientAllocations);
   const { participantVesting } = config;
   if (participantVesting) {
     vestingTerms(
@@ -553,10 +577,8 @@ export function previewPresaleCreation(
       participantVesting.periods,
     );
   }
-  validateBps(config.liquidityTokenAllocationBps);
-  shareBps(config.recipientAllocations);
   shareBps(config.raiseAllocations);
-  const { eligibility, uncapped } = config;
+  const { eligibility, uncapped, hardCap } = config;
   if (eligibility.kind === "open") {
     openEligibility(
       eligibility.walletCap,
@@ -571,11 +593,11 @@ export function previewPresaleCreation(
       uncapped.startsAfterMs,
       uncapped.access.maxParticipants,
       uncapped.access.minCommitment,
-      uncapped.hardCap,
     );
   }
   shareBps(config.feeRecipients);
   validateBps(config.holderRewardsBps);
+  validateFeeSplit(config.feeRecipients, config.holderRewardsBps);
 
   check(
     config.raiseTarget > 0n && isU64(config.raiseTarget),
@@ -593,11 +615,11 @@ export function previewPresaleCreation(
     config.protocolFees.tokenBps,
     config.recipientAllocations,
   );
-  validateFeeSplit(config.feeRecipients, config.holderRewardsBps);
   check(
-    config.durationMs > 0n && config.liquidityWindowMs > 0n,
+    config.durationMs > 0n &&
+      config.liquidityWindowMs >= PRESALE_MIN_LIQUIDITY_WINDOW_MS,
     "EInvalidWindow",
-    "commitment and liquidity windows must be positive",
+    "the commitment window must be positive and the liquidity window at least seven days",
   );
   check(
     canReachRaise(eligibility, config.raiseTarget),
@@ -612,6 +634,7 @@ export function previewPresaleCreation(
       config.raiseTarget,
     );
   }
+  if (hardCap) validateHardCap(hardCap, config.durationMs);
 
   const supply = apportionSupply(
     config.tokenSupply,
@@ -667,14 +690,21 @@ export function validateBluefinPresaleTier(
 /**
  * Mirrors `blast_presale::share`: the windows fixed from `startMs`, the later
  * of the requested start and the share's clock time. Without an uncapped phase
- * `uncappedFromMs` is `endMs`.
+ * `uncappedFromMs` is `endMs`; without a hard cap `hardCapFromMs` is null.
+ * After an early close, pass the stored `durationMs`, the time the sale ran.
  */
 export function presaleWindows(
   startMs: bigint,
   durationMs: bigint,
   liquidityWindowMs: bigint,
   uncapped: Pick<UncappedPhase, "startsAfterMs"> | null,
-): { endMs: bigint; liquidityDeadlineMs: bigint; uncappedFromMs: bigint } {
+  hardCap: Pick<HardCap, "startsAfterMs"> | null = null,
+): {
+  endMs: bigint;
+  liquidityDeadlineMs: bigint;
+  uncappedFromMs: bigint;
+  hardCapFromMs: bigint | null;
+} {
   const endMs = startMs + durationMs;
   const liquidityDeadlineMs = endMs + liquidityWindowMs;
   check(
@@ -686,6 +716,7 @@ export function presaleWindows(
     endMs,
     liquidityDeadlineMs,
     uncappedFromMs: uncapped ? startMs + uncapped.startsAfterMs : endMs,
+    hardCapFromMs: hardCap ? startMs + hardCap.startsAfterMs : null,
   };
 }
 
@@ -703,6 +734,7 @@ export type CommitPreviewInput = {
     | "eligibility"
     | "uncapped"
     | "uncappedFromMs"
+    | "hardCapFromMs"
     | "totalCommitments"
     | "participants"
   >;
@@ -732,7 +764,7 @@ export type CommitPreview = {
 /**
  * Mirrors `commit_open`, `commit_allowlisted` (except the Merkle proof, see
  * `verifyAllowlistProof`), and `commit_uncapped` through `record_commitment`,
- * `participant_limits`, `accepted_quote`, and `add_within_cap`, in abort order.
+ * `participant_limit`, `acceptable_quote`, and `add_within_cap`, in abort order.
  * Its values match the `Committed` event the call would emit.
  */
 export function previewCommit(input: CommitPreviewInput): CommitPreview {
@@ -752,28 +784,26 @@ export function previewCommit(input: CommitPreviewInput): CommitPreview {
 
   const { walletCap, maxParticipants, minCommitment } = routeLimits(input);
   const uncapped = nowMs >= presale.uncappedFromMs;
-  let limit = maxParticipants;
-  let hardCap = false;
-  if (uncapped && presale.uncapped) {
-    hardCap = presale.uncapped.hardCap;
-    if (presale.uncapped.access.kind === "anyone") {
-      limit = presale.uncapped.access.maxParticipants;
-    }
-  }
+  const hardCapped =
+    presale.hardCapFromMs !== null && nowMs >= presale.hardCapFromMs;
+  const limit =
+    uncapped && presale.uncapped?.access.kind === "anyone"
+      ? presale.uncapped.access.maxParticipants
+      : maxParticipants;
 
-  // accepted_quote
+  // acceptable_quote
   let accepted = offered;
-  if (hardCap) {
+  if (hardCapped) {
     check(
       presale.totalCommitments < presale.raiseTarget,
       "EPresaleFilled",
-      "the hard-capped sale already reached its raise",
+      "the sale already reached its raise under its hard cap",
     );
     const left = presale.raiseTarget - presale.totalCommitments;
     accepted = offered < left ? offered : left;
   }
   const fillsRaise =
-    hardCap && presale.totalCommitments + accepted === presale.raiseTarget;
+    hardCapped && presale.totalCommitments + accepted === presale.raiseTarget;
 
   // add_within_cap
   const current = input.commitment ?? { quote: 0n, walletCap };
@@ -864,21 +894,74 @@ function routeLimits(input: CommitPreviewInput): {
 // === Settlement and claims ===
 
 /**
- * Mirrors `blast_presale::settle`: after `endMs`, an underfunded sale cancels
- * and a funded one fixes the common fill rate `raise / commitments`.
+ * Mirrors `blast_presale::can_close_early`: the raise is full under a hard cap
+ * that closes the sale when filled, so it can take no more Quote.
+ */
+export function canClosePresaleEarly(
+  presale: Pick<
+    PresaleState,
+    "hardCap" | "hardCapFromMs" | "totalCommitments" | "raiseTarget"
+  >,
+  nowMs: bigint,
+): boolean {
+  return (
+    presale.hardCap?.closesWhenFilled === true &&
+    presale.hardCapFromMs !== null &&
+    nowMs >= presale.hardCapFromMs &&
+    presale.totalCommitments >= presale.raiseTarget
+  );
+}
+
+/**
+ * Mirrors `blast_presale::settle` at clock time `nowMs`, in abort order: from
+ * `endMs`, or earlier once the sale can close early, an underfunded sale
+ * cancels and a funded one fixes the common fill rate `raise / commitments`.
+ * An early close ends the window at `nowMs`, so `endMs` and the LP deadline
+ * it returns count from the close, matching `PresaleFunded`.
  */
 export function previewSettlement(
-  presale: Pick<PresaleState, "totalCommitments" | "raiseTarget">,
+  presale: Pick<
+    PresaleState,
+    | "lifecycle"
+    | "startMs"
+    | "endMs"
+    | "liquidityWindowMs"
+    | "hardCap"
+    | "hardCapFromMs"
+    | "totalCommitments"
+    | "raiseTarget"
+  >,
+  nowMs: bigint,
 ):
   | { outcome: "Cancelled"; refundableQuote: bigint }
-  | { outcome: "Funded"; acceptedQuote: bigint; refundableQuote: bigint } {
-  return presale.totalCommitments < presale.raiseTarget
-    ? { outcome: "Cancelled", refundableQuote: presale.totalCommitments }
-    : {
-        outcome: "Funded",
-        acceptedQuote: presale.raiseTarget,
-        refundableQuote: presale.totalCommitments - presale.raiseTarget,
-      };
+  | {
+      outcome: "Funded";
+      acceptedQuote: bigint;
+      refundableQuote: bigint;
+      endMs: bigint;
+      liquidityDeadlineMs: bigint;
+    } {
+  check(
+    presale.lifecycle === "Open",
+    "EInvalidLifecycle",
+    "only an open presale settles",
+  );
+  check(
+    nowMs >= presale.endMs || canClosePresaleEarly(presale, nowMs),
+    "EPresaleNotEnded",
+    "the window has not ended and the sale cannot close early",
+  );
+  if (presale.totalCommitments < presale.raiseTarget) {
+    return { outcome: "Cancelled", refundableQuote: presale.totalCommitments };
+  }
+  const endMs = nowMs < presale.endMs ? nowMs : presale.endMs;
+  return {
+    outcome: "Funded",
+    acceptedQuote: presale.raiseTarget,
+    refundableQuote: presale.totalCommitments - presale.raiseTarget,
+    endMs,
+    liquidityDeadlineMs: endMs + presale.liquidityWindowMs,
+  };
 }
 
 /**

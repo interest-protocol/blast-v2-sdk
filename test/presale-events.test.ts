@@ -51,7 +51,7 @@ function suiEvent<Kind extends PresaleEventKind>(
   sender = ALICE,
 ): SuiClientTypes.EventEntry {
   const module = presaleEventModules[kind];
-  const venue = kind === "PresaleVaultCreated" ? `, ${pkg}::cetus::Venue` : "";
+  const venue = kind === "VaultCreated" ? `, ${pkg}::cetus::Venue` : "";
   eventIndex += 1;
   return {
     packageId: pkg,
@@ -127,6 +127,7 @@ test("rejects events from another package, module, or arity", () => {
     end_ms: 2n,
     liquidity_deadline_ms: 3n,
     uncapped_from_ms: 2n,
+    hard_cap_from_ms: null,
     partner_id: null,
   });
   const packages = { originalPackageId: pkg };
@@ -163,6 +164,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       liquidity_window_ms: 50n,
       eligibility: openEligibility(5_000n, 2n, 500n),
       uncapped: null,
+      hard_cap: null,
       migration_witness: `${pkg}::cetus::Witness`,
       tick_spacing: 200,
       pool_fee_rate: 10_000n,
@@ -179,6 +181,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       end_ms: 1_100n,
       liquidity_deadline_ms: 1_150n,
       uncapped_from_ms: 1_100n,
+      hard_cap_from_ms: null,
       partner_id: null,
     }),
     decode(
@@ -209,6 +212,8 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       accepted_quote: 1_000n,
       refundable_quote: 3_000n,
       token_allocation: 10_001n,
+      end_ms: 1_100n,
+      liquidity_deadline_ms: 1_150n,
     }),
   ];
   let state = createPresaleEventProjection();
@@ -296,7 +301,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   );
 
   const vaultEvents: DecodedPresaleEvent[] = [
-    decode("PresaleVaultCreated", {
+    decode("VaultCreated", {
       vault_id: VAULT,
       presale_id: PRESALE,
       pool_id: id("0x90"),
@@ -445,6 +450,7 @@ test("a raise allocation leaves custody the migration's overflow", () => {
     liquidity_window_ms: 50n,
     eligibility: openEligibility(5_000n, 1n, 1_000n),
     uncapped: null,
+    hard_cap: null,
     migration_witness: `${pkg}::bluefin::Witness`,
     tick_spacing: 60,
     pool_fee_rate: 3_000n,
@@ -470,6 +476,8 @@ test("a raise allocation leaves custody the migration's overflow", () => {
       accepted_quote: 1_000n,
       refundable_quote: 200n,
       token_allocation: 10_001n,
+      end_ms: 1_100n,
+      liquidity_deadline_ms: 1_150n,
     }),
     decode("RaiseAllocated", {
       presale_id: PRESALE,
@@ -520,6 +528,7 @@ function feePayingSaleCreated() {
     liquidity_window_ms: 50n,
     eligibility: openEligibility(5_000n, 2n, 500n),
     uncapped: null,
+    hard_cap: null,
     migration_witness: `${pkg}::cetus::Witness`,
     tick_spacing: 200,
     pool_fee_rate: 10_000n,
@@ -584,7 +593,7 @@ test("tracks Blast's shares from creation through migration, LP fees, and an LP-
       liquidity_tokens: 2_000n,
       recipient_tokens: 7_000n,
     }),
-    decode("PresaleVaultCreated", {
+    decode("VaultCreated", {
       vault_id: VAULT,
       presale_id: PRESALE,
       pool_id: id("0x90"),
@@ -663,6 +672,7 @@ test("holds a partnered sale's Blast shares from migration until its partner is 
       end_ms: 1_100n,
       liquidity_deadline_ms: 1_150n,
       uncapped_from_ms: 1_100n,
+      hard_cap_from_ms: null,
       partner_id: PARTNER,
     }),
     decode("Committed", {
@@ -741,7 +751,7 @@ test("holds a partnered vault's Blast LP fees until its partner is paid", () => 
       holder_rewards_quote: 2n,
     });
   for (const event of [
-    decode("PresaleVaultCreated", {
+    decode("VaultCreated", {
       vault_id: VAULT,
       presale_id: PRESALE,
       pool_id: id("0x90"),
@@ -819,6 +829,7 @@ test("replaces a scheduled sale's Blast rates and amounts before the start", () 
       end_ms: 1_100n,
       liquidity_deadline_ms: 1_150n,
       uncapped_from_ms: 1_100n,
+      hard_cap_from_ms: null,
       partner_id: null,
     }),
     changed,
@@ -877,6 +888,7 @@ test("carries vesting terms from creation and schedule IDs from migration and cl
       liquidity_window_ms: 50n,
       eligibility: openEligibility(5_000n, 2n, 500n),
       uncapped: null,
+      hard_cap: null,
       migration_witness: `${pkg}::cetus::Witness`,
       tick_spacing: 200,
       pool_fee_rate: 10_000n,
@@ -1166,28 +1178,28 @@ function descriptor(type: unknown): string {
   if (name === "ID") return "id";
   if (name === "TypeName") return "typeName";
   if (name === "EligibilityPolicy") return "eligibility";
-  if (
-    name === "Option" &&
-    (datatype.type_arguments[0] as { argument: unknown }).argument === "address"
-  ) {
-    return "optionAddress";
-  }
-  const option =
-    name === "Option" &&
-    OPTION_DESCRIPTORS[
-      (
-        datatype.type_arguments[0] as {
-          argument: { Datatype: { name: string } };
-        }
-      ).argument.Datatype.name
-    ];
+  const option = name === "Option" && optionDescriptor(datatype);
   if (option) return option;
   throw new TypeError(`unsupported ABI event field ${JSON.stringify(type)}`);
+}
+
+/** The descriptor of an `Option<T>` field, by `T`: a primitive or a datatype. */
+function optionDescriptor(datatype: {
+  type_arguments: unknown[];
+}): string | undefined {
+  const argument = (datatype.type_arguments[0] as { argument: unknown })
+    .argument;
+  if (argument === "address") return "optionAddress";
+  if (argument === "u64") return "optionU64";
+  return OPTION_DESCRIPTORS[
+    (argument as { Datatype: { name: string } }).Datatype.name
+  ];
 }
 
 /** The event descriptor of each `Option<T>` an event carries, by `T`. */
 const OPTION_DESCRIPTORS: Record<string, string | undefined> = {
   UncappedPhase: "optionUncapped",
+  HardCap: "optionHardCap",
   ID: "optionId",
   VestingTerms: "optionVesting",
 };

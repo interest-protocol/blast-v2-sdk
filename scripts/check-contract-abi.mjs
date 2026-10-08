@@ -60,19 +60,23 @@ const artifactDeclarations = [
     // commit it follows: ADRs 0099 through 0102, team vesting, the
     // package's own two-tier administration (contracts PR 45), the AdminCap's
     // per-vault LP-fee rates, the package-internal Merkle check, and the
-    // scheduled start with the AdminCap's per-sale rates before it.
+    // scheduled start with the AdminCap's per-sale rates before it, vaults
+    // without a presale, and initializer creation with the sale-level hard cap
+    // and early close.
     baseline: {
-      contractsCommit: "55e1ac0841535e708554cb45f9c67ab20f6e979a",
+      contractsCommit: "80050682420d5674048dc1366ccf8f5c0986db14",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
       "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness",
       "contracts ADR 0106: one Blast partner per presale, named by set_partner before the share and accepted by creation_policy::add_partner and remove_partner; a partnered migration holds Blast's shares for pay_partner, PresaleOpened gains partner_id, and ProtocolFeesPaid gains partner_quote",
-      "contracts ADR 0099 (owner-requested cleanup, 2026-10-05): Presale derives its windows from start_ms, counts participants down as they claim (Claimed reports remaining_participants), and holds the LP-fee split as one FeeSplit that new, cetus::new, and bluefin::new take, built by blast_presale::fee_split; PresaleVault holds the same FeeSplit",
+      "contracts ADR 0099 (owner-requested cleanup, 2026-10-05): Presale derives its windows from start_ms, counts participants down as they claim (Claimed reports remaining_participants), and holds the LP-fee split as one FeeSplit that new, cetus::new, and bluefin::new take, built by blast_presale::fee_split; the Vault holds the same FeeSplit",
       "contracts ADR 0104 (amended 2026-10-05): set_migration_witness_allowed also rejects witness types defined at 0x1 and 0x2",
       "contracts ADR 0106 (source-style review, 2026-10-05): pay_partner is pay_protocol_fees_with_partner, since it pays Blast too, and FeeSplit names its recipients fee_recipients",
-      "contracts ADR 0107: the PresaleVault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
+      "contracts ADR 0107: the Vault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
+      "contracts ADR 0109: cetus::new_vault and bluefin::new_vault lock an owner's own position in a Vault with zero presale IDs; PresaleVault and PresaleVaultCreated become Vault and VaultCreated",
+      "contracts ADR 0110: blast_presale::new returns a PresaleInitializer that the set_* setters configure and finalize turns into (Presale, PresaleCap); cetus::new and bluefin::new take only their venue arguments; the hard cap moves from UncappedPhase to a sale-level HardCap with closes_when_filled, settle closes a full sale early, PresaleCreated gains hard_cap, PresaleOpened hard_cap_from_ms, and PresaleFunded end_ms and liquidity_deadline_ms",
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },
@@ -403,7 +407,17 @@ const presaleBuilders = new Set([
   "blast_presale::vested_recipient_share",
   "blast_presale::vesting_terms",
   "blast_presale::fee_split",
+  "blast_presale::set_supply",
+  "blast_presale::set_token_allocations",
+  "blast_presale::set_participant_vesting",
+  "blast_presale::set_raise",
+  "blast_presale::set_windows",
+  "blast_presale::set_eligibility",
+  "blast_presale::set_uncapped_phase",
+  "blast_presale::set_hard_cap",
+  "blast_presale::set_fee_split",
   "blast_presale::set_partner",
+  "blast_presale::finalize",
   "blast_presale::share",
   "blast_presale::set_protocol_fees",
   "blast_presale::commit_open",
@@ -423,9 +437,11 @@ const presaleBuilders = new Set([
   "cetus::new",
   "cetus::migrate",
   "cetus::collect_fees",
+  "cetus::new_vault",
   "bluefin::new",
   "bluefin::migrate",
   "bluefin::collect_fees",
+  "bluefin::new_vault",
   "presale_vault::claim_migration_residuals",
   "presale_vault::set_protocol_lp_fees",
   "presale_vault::pay_protocol_lp_fees_with_partner",
@@ -448,7 +464,7 @@ const presaleEventNames = new Set([
   "RaiseAllocated",
   "RecipientAllocated",
   "Claimed",
-  "PresaleVaultCreated",
+  "VaultCreated",
   "FeesCollected",
   "MigrationResidualsClaimed",
   "ProtocolLpFeesChanged",
@@ -473,7 +489,12 @@ function classifyPresaleFunction(moduleName, functionName) {
   if (key === "bps::new") return "compositional";
   // A migrator's module calls these with its own sealed witness, which no
   // transaction can construct; the SDK builds that migrator's entry points.
-  if (key === "blast_presale::new" || key === "blast_presale::migrate") {
+  // A migrator finalizing an initializer it is handed reads its witness in Move.
+  if (
+    key === "blast_presale::new" ||
+    key === "blast_presale::migrate" ||
+    key === "blast_presale::migration_witness"
+  ) {
     return "move-composition";
   }
   // `allowlist.ts` mirrors the Merkle tree and `math.ts` the BPS arithmetic off chain.

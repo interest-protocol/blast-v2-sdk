@@ -1,10 +1,12 @@
 # Presale
 
 `@interest-protocol/blast-sdk/presale` covers the standalone `blast_presale`
-package (contracts ADRs 0099 through 0102 and 0104): overflow presales with capped
-commitments, one common fill rate, migration-gated claims, full refunds when a
-sale does not migrate, permissionless Cetus or Bluefin migration into a
-`PresaleVault`, vesting token and raise shares, Blast's protocol fees and
+package (contracts ADRs 0099 through 0102, 0104, 0109, and 0110): presales with
+capped commitments that overflow at one common fill rate or fill first come up
+to a hard cap, an early close once a hard-capped raise is full, migration-gated
+claims, full refunds when a sale does not migrate, permissionless Cetus or
+Bluefin migration into a `Vault`, vaults for an owner's own position, vesting
+token and raise shares, Blast's protocol fees and
 creation allowlists, LP-fee splits, holder-reward rounds, and the package's own
 two-tier administration.
 
@@ -44,17 +46,25 @@ mutability its Move signature needs.
 `Pending -> Open -> Funded -> Migrated`; an underfunded `settle`, or
 `cancel_unlaunched` from the LP deadline, ends in `Cancelled`.
 
+A sale is created in one PTB in three stages (contracts ADR 0110): the venue's
+`new` returns a `PresaleInitializer`, the `set_*` setters record its terms, and
+`finalize` checks them together, mints the supply, and returns the pending
+`Presale`, which `share` publishes. `startCetusPresale` or
+`startBluefinPresale`, `configurePresale`, and `finalizePresale` build each
+stage; `newCetusPresale` and `newBluefinPresale` build all three.
+
 | Step | Builder | Notes |
 | --- | --- | --- |
-| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: every rate through `bps::new`, the `RecipientShare` vectors through `recipient_share` (or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), the eligibility policy, `Option<UncappedPhase>`, the LP-fee split through `fee_split`, the venue's `new`, `set_partner` when `partner` is given, `share` from `startMs`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
-| Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except in a hard-capped uncapped phase. |
-| Settle | `settle`, `cancelUnlaunched` | Anyone may call. |
+| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: the venue's `new`, then `set_supply`, `set_token_allocations` (every rate through `bps::new`, the `RecipientShare` vector through `recipient_share`, or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), `set_participant_vesting` when given, `set_raise`, `set_windows`, `set_eligibility`, `set_uncapped_phase` and `set_hard_cap` when given, `set_fee_split` through `fee_split`, `set_partner` when `partner` is given, `finalize`, `share` from `startMs`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
+| Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except under a hard cap. |
+| Settle | `settle`, `cancelUnlaunched` | Anyone may call. `settle` works from `endMs`, or earlier once the raise is full under a hard cap with `closesWhenFilled` (`canClosePresaleEarly`); an early close ends the window at the settle, and `PresaleFunded` carries the actual `end_ms` and `liquidity_deadline_ms`. |
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. Pass the sale's `partner` when it names one, and the same PTB pays it. |
 | Pay Blast and its partner | `payProtocolFeesWithPartner` | Anyone may call, once, after a partnered sale migrates; use it on its own for a sale another migrator migrated. See [Partners](#partners). |
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. Under participant vesting, each claim locks the participant's tokens in a new schedule starting at that claim. |
 | Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, or holds it on a partnered vault, then every fee recipient. The holder-reward share stays in the vault. Pass the vault's `partner` when it names one, and the same PTB pays what the vault held. |
 | Pay Blast's LP fees and the partner | `payProtocolLpFeesWithPartner` | Anyone may call, on a partnered vault; holding nothing pays nothing. See [Partners](#partners). |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
+| Own position | `newCetusVault`, `newBluefinVault` | Anyone, for their own position: locks it in a new `Vault` with zero presale IDs, the given fee split, and an optional accepted partner (contracts ADR 0109). |
 | Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication takes the `AdminCap` (`adminCapId`). |
 | Cap | `destroyCap` | After cancellation only. |
 | Blast's rates | `setProtocolFees` | Takes the `AdminCap`. Applies to presales created afterward. |
@@ -146,10 +156,10 @@ A cancelled sale pays Blast nothing, and its token share stays locked.
 ## Partners
 
 A sale may name one Blast partner (contracts ADR 0106), set once, at creation:
-pass `partner` to `createCetusPresale` or `createBluefinPresale`, and the PTB
-calls `set_partner` between the venue's `new` and `share`. The
-`CreationPolicy` must accept the partner (`EPartnerNotAccepted`); after the
-share it never changes. `PresaleOpened.partner_id` records it, and
+pass `partner` to `createCetusPresale` or `createBluefinPresale` (or to
+`configurePresale`), and the PTB calls `set_partner` on the initializer before
+`finalize`. The `CreationPolicy` must accept the partner
+(`EPartnerNotAccepted`); it never changes afterward. `PresaleOpened.partner_id` records it, and
 `PresaleState.partnerId` reads it.
 
 The partner earns its `blast_partners` cut of Blast's raise fee and, after
@@ -197,8 +207,9 @@ building a creation; `previewPresaleCreation` does not check it.
 `math.ts` mirrors the contract's arithmetic in integer atoms and its abort
 order. A preview throws `PresaleAbortError` with the Move error name.
 
-- `previewPresaleCreation` runs every check `blast_presale::new` makes in order,
-  after those of the PTB's constructors (`bps::new` throws `EInvalidBps` first),
+- `previewPresaleCreation` runs every check `blast_presale::finalize` makes in
+  order, after those of the PTB's constructors in setter order (`bps::new`
+  throws `EInvalidBps` first),
   and returns the exact apportionment:
   `apportionSupply` and `apportionRaise` use largest remainder, with Blast's
   token and raise shares from `config.protocolFees`. Earlier shares win ties. The function also returns the seed sqrt price that `is_seedable`
@@ -206,6 +217,9 @@ order. A preview throws `PresaleAbortError` with the Move error name.
 - `previewCommit` mirrors `record_commitment` with its route guards: wallet
   cap, minimum, participant bound, uncapped phase, and hard cap. It returns the
   accepted Quote, the change, and the `Committed` totals.
+- `previewSettlement(presale, nowMs)` mirrors `settle` at a clock time,
+  including the early close and the `end_ms` and LP deadline it records;
+  `canClosePresaleEarly` answers whether a sale may settle before `endMs`.
 - `previewSettlement` and `previewClaim` mirror `settle` and `claim`:
   `tokens = floor(allocation * c / C)` and `refund = floor((C - R) * c / C)`. On
   cancellation, the refund is the full commitment. `previewClaim` also returns
@@ -230,10 +244,10 @@ const manifest = buildRewardManifest({ ...round, leafDomain: PRESALE_REWARD_LEAF
 ## Reads and replay
 
 `PresaleClient` (`blastPresale()` extension) reads a `Presale`, a wallet's
-`Commitment` dynamic field, a `PresaleVault`, a reward `Round`, the
+`Commitment` dynamic field, a `Vault`, a reward `Round`, the
 `FeePolicy`, the `CreationPolicy`, and the `AdminRegistry`.
 `decodePresaleEvent` decodes the 16
-events generic over `<SaleToken, Quote>`. `PresaleVaultCreated` adds a `Venue`
+events generic over `<SaleToken, Quote>`. `VaultCreated` adds a `Venue`
 type argument. `decodePresalePolicyEvent` decodes `FeesChanged`,
 `DestinationChanged`, `QuoteSet`, `MigrationWitnessSet`, `PartnerAdded`,
 `PartnerRemoved`, `AdminCapReplaced`, and `AdminCapRevoked`, which have no type
