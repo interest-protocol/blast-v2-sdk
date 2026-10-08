@@ -21,6 +21,7 @@ const expectedEvents = {
   presale: 27,
   admin: 15,
   partners: 2,
+  aftermathDaoPresale: 2,
 };
 
 type Artifact = {
@@ -100,6 +101,7 @@ test("freezes every production package and event", () => {
   const presale = readArtifact("production-presale-v1.json");
   const admin = readArtifact("production-admin-v1.json");
   const partners = readArtifact("production-partners-v1.json");
+  const aftermath = readArtifact("production-aftermath-dao-presale-v1.json");
 
   assert.deepEqual(Object.keys(launchpad.packages).sort(), [
     "launchpad",
@@ -110,17 +112,29 @@ test("freezes every production package and event", () => {
   assert.deepEqual(Object.keys(presale.packages), ["presale"]);
   assert.deepEqual(Object.keys(admin.packages), ["admin"]);
   assert.deepEqual(Object.keys(partners.packages), ["partners"]);
+  assert.deepEqual(Object.keys(aftermath.packages), ["aftermathDaoPresale"]);
   assert.equal(countEvents(launchpad, "launchpad"), expectedEvents.launchpad);
   assert.equal(countEvents(launchpad, "migrators"), expectedEvents.migrators);
   assert.equal(countEvents(blastSui, "blastSui"), expectedEvents.blastSui);
   assert.equal(countEvents(presale, "presale"), expectedEvents.presale);
   assert.equal(countEvents(admin, "admin"), expectedEvents.admin);
   assert.equal(countEvents(partners, "partners"), expectedEvents.partners);
+  assert.equal(
+    countEvents(aftermath, "aftermathDaoPresale"),
+    expectedEvents.aftermathDaoPresale,
+  );
   const eventWrapper = blastSui.packages.blastSui?.modules.blast_events;
   assert.ok(eventWrapper);
   assert.ok(eventWrapper.structs.some(({ name }) => name === "Event"));
 
-  for (const artifact of [launchpad, blastSui, presale, admin, partners]) {
+  for (const artifact of [
+    launchpad,
+    blastSui,
+    presale,
+    admin,
+    partners,
+    aftermath,
+  ]) {
     assertEveryOperationIsClassified(artifact, artifact === admin);
   }
 });
@@ -166,6 +180,26 @@ test("rejects unknown blast_admin function classifications", () => {
   assert.match(
     result.stderr,
     /unclassified function blast_admin::blast_acl::future_operation/,
+  );
+});
+
+test("rejects unknown blast_aftermath_dao_presale function classifications", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "scripts/check-contract-abi.mjs",
+      "--classify-function",
+      "blast_aftermath_dao_presale",
+      "blast_aftermath_dao_presale",
+      "future_operation",
+    ],
+    { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /unclassified function blast_aftermath_dao_presale::blast_aftermath_dao_presale::future_operation/,
   );
 });
 

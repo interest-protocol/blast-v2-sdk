@@ -151,7 +151,7 @@ export const presaleEventSpecs = {
     },
   },
   presale_vault: {
-    PresaleVaultCreated: {
+    VaultCreated: {
       vault_id: "id",
       presale_id: "id",
       pool_id: "id",
@@ -344,8 +344,11 @@ export type DecodedPresaleEvent = {
     /** The event's `SaleToken` / `Meme` type argument. */
     memeType: string;
     quoteType: string;
-    /** `PresaleVaultCreated` only: the venue marker, e.g. `<pkg>::cetus::Venue`. */
-    venueType: Kind extends "PresaleVaultCreated" ? string : null;
+    /**
+     * `VaultCreated` only: the venue marker, e.g. `<pkg>::cetus::Venue`. Its
+     * `presale_id` is the zero ID for a vault without a presale.
+     */
+    venueType: Kind extends "VaultCreated" ? string : null;
     /** Transaction sender; for `Committed`, the committing wallet. */
     sender: string;
     position: SuiEventPosition;
@@ -355,7 +358,7 @@ export type DecodedPresaleEvent = {
 /**
  * Decodes one event whose type is `<originalPackageId>::<module>::<Kind><...>`.
  * Every presale event is generic over `<SaleToken, Quote>`, and
- * `PresaleVaultCreated` also over its `Venue`.
+ * `VaultCreated` also over its `Venue`.
  */
 export function decodePresaleEvent(
   event: SuiClientTypes.EventEntry,
@@ -370,7 +373,7 @@ export function decodePresaleEvent(
     presaleEventModules[kind] !== tag.module ||
     memeType === undefined ||
     quoteType === undefined ||
-    (venueType === null) === (kind === "PresaleVaultCreated") ||
+    (venueType === null) === (kind === "VaultCreated") ||
     extra.length > 0
   ) {
     throw new TypeError(`unexpected presale event type ${event.eventType}`);

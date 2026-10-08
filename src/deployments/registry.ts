@@ -10,6 +10,7 @@ import {
 import type { MigratorVenue } from "../migrators/state.ts";
 import { MIGRATOR_VENUES } from "../migrators/state.ts";
 import type { PartnersDeployment } from "../partners/transactions.ts";
+import { defineAftermathPresaleDeployment } from "../presale/aftermath.ts";
 import type { PresaleDeployment } from "../presale/transactions.ts";
 import type {
   BlastDeployment,
@@ -92,7 +93,8 @@ const PRESALE_SHARED_OBJECTS = SHARED_OBJECT_KEYS.presale;
 /**
  * Normalizes and freezes one standalone presale deployment. Presale publishes
  * on its own (contracts ADR 0099), so it registers before a complete
- * `BlastDeployment` exists.
+ * `BlastDeployment` exists. `aftermath`, the vendor package's configuration,
+ * is kept when given.
  */
 export function definePresaleDeployment(
   deployment: PresaleDeployment,
@@ -111,6 +113,9 @@ export function definePresaleDeployment(
         ),
       ]),
     ),
+    ...(deployment.aftermath === undefined
+      ? {}
+      : { aftermath: defineAftermathPresaleDeployment(deployment.aftermath) }),
   }) as PresaleDeployment;
 }
 

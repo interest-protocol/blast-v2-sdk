@@ -14,6 +14,7 @@ import {
   decodePresaleVaultObject,
   eligibilityPolicyBcs,
   getPresaleCommitment,
+  isVaultWithoutPresale,
   presaleBcs,
   presaleRewardIsClaimed,
   uncappedPhaseBcs,
@@ -242,7 +243,7 @@ test("rejects a foreign type, package, or mismatched UID", () => {
   );
 });
 
-test("decodes a PresaleVault from bytes laid out in Move field order", () => {
+test("decodes a presale Vault from bytes laid out in Move field order", () => {
   const content = Uint8Array.from([
     ...addr("0xba"), // id
     ...addr("0xab"), // presale_id
@@ -268,7 +269,7 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
   ]);
   const vault = decodePresaleVaultObject(
     object(
-      `${pkg}::presale_vault::PresaleVault<0xa::meme::MEME, 0x2::sui::SUI>`,
+      `${pkg}::presale_vault::Vault<0xa::meme::MEME, 0x2::sui::SUI>`,
       content,
       "0xba",
     ),
@@ -462,4 +463,10 @@ test("reads a wallet's commitment dynamic field, null when absent", async () => 
     await getPresaleCommitment(client(null), "0xab", "0xa11ce", pkg),
     null,
   );
+});
+
+test("tells a vault without a presale by its zero presale ID", () => {
+  assert.equal(isVaultWithoutPresale("0x0"), true);
+  assert.equal(isVaultWithoutPresale(normalizeSuiAddress("0x0")), true);
+  assert.equal(isVaultWithoutPresale("0xab"), false);
 });

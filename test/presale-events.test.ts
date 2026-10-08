@@ -51,7 +51,7 @@ function suiEvent<Kind extends PresaleEventKind>(
   sender = ALICE,
 ): SuiClientTypes.EventEntry {
   const module = presaleEventModules[kind];
-  const venue = kind === "PresaleVaultCreated" ? `, ${pkg}::cetus::Venue` : "";
+  const venue = kind === "VaultCreated" ? `, ${pkg}::cetus::Venue` : "";
   eventIndex += 1;
   return {
     packageId: pkg,
@@ -296,7 +296,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   );
 
   const vaultEvents: DecodedPresaleEvent[] = [
-    decode("PresaleVaultCreated", {
+    decode("VaultCreated", {
       vault_id: VAULT,
       presale_id: PRESALE,
       pool_id: id("0x90"),
@@ -584,7 +584,7 @@ test("tracks Blast's shares from creation through migration, LP fees, and an LP-
       liquidity_tokens: 2_000n,
       recipient_tokens: 7_000n,
     }),
-    decode("PresaleVaultCreated", {
+    decode("VaultCreated", {
       vault_id: VAULT,
       presale_id: PRESALE,
       pool_id: id("0x90"),
@@ -741,7 +741,7 @@ test("holds a partnered vault's Blast LP fees until its partner is paid", () => 
       holder_rewards_quote: 2n,
     });
   for (const event of [
-    decode("PresaleVaultCreated", {
+    decode("VaultCreated", {
       vault_id: VAULT,
       presale_id: PRESALE,
       pool_id: id("0x90"),
@@ -940,6 +940,33 @@ test("carries vesting terms from creation and schedule IDs from migration and cl
     [itemAt(recipients, 0)]: SCHEDULE,
   });
   assert.deepEqual(presale.raiseVestingIds, { [id("0x5a1e")]: RAISE_SCHEDULE });
+});
+
+test("a vault without a presale links no presale and is projected on its own", () => {
+  const ZERO = id("0x0");
+  let state = createPresaleEventProjection();
+  state = reducePresaleEvent(
+    state,
+    decode("VaultCreated", {
+      vault_id: VAULT,
+      presale_id: ZERO,
+      pool_id: id("0x90"),
+      position_id: id("0x91"),
+      liquidity: 77n,
+      fee_recipients: [id("0xc0ffee")],
+      fee_recipient_bps: [10_000n],
+      holder_rewards_bps: 0n,
+      protocol_lp_fee_meme_bps: 500n,
+      protocol_lp_fee_quote_bps: 500n,
+      migration_meme_residual: 0n,
+      migration_quote_residual: 0n,
+    }),
+  );
+  assert.deepEqual(state.presales, {});
+  const vault = required(state.vaults[VAULT]);
+  assert.equal(vault.presaleId, ZERO);
+  assert.equal(vault.venueType, normalizeStructTag(`${pkg}::cetus::Venue`));
+  assert.equal(vault.liquidity, 77n);
 });
 
 test("decodes AdminCap replacements and revocations, which have no type arguments", () => {
