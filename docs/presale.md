@@ -206,6 +206,13 @@ building a creation; `previewPresaleCreation` does not check it.
 `math.ts` mirrors the contract's arithmetic in integer atoms and its abort
 order. A preview throws `PresaleAbortError` with the Move error name.
 
+`presaleAbortName(module, code)` names an executed transaction's abort: the
+abort location's module and its clever error code (`errorCode`) index
+`PRESALE_ABORTS`, every `#[error(code = N)]` constant of the package, which
+`test/presale-aborts.test.ts` checks against the contracts source at the frozen
+commit. Check first that the abort's package is the presale package: other
+packages reuse module names such as `cetus` and `bluefin`.
+
 - `previewPresaleCreation` runs every check `blast_presale::new` makes in order,
   after those of the PTB's constructors (`bps::new` throws `EInvalidBps` first),
   and returns the exact apportionment:
