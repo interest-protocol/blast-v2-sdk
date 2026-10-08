@@ -59,7 +59,9 @@ function presaleBytes(): Uint8Array {
     ...u8(1), // access: Anyone
     ...u64(8n),
     ...u64(250n),
-    ...bool(true), // hard_cap
+    ...u8(1), // hard_cap: Some
+    ...u64(50n), // starts_after_ms
+    ...bool(true), // closes_when_filled
     ...ascii(witness), // migration_witness
     ...u32(200), // tick_spacing
     ...u64(10_000n), // pool_fee_rate
@@ -128,7 +130,10 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
   assert.deepEqual(state.uncapped, {
     startsAfterMs: 50n,
     access: { kind: "anyone", maxParticipants: 8n, minCommitment: 250n },
-    hardCap: true,
+  });
+  assert.deepEqual(state.hardCap, {
+    startsAfterMs: 50n,
+    closesWhenFilled: true,
   });
   assert.deepEqual(
     [
@@ -136,8 +141,9 @@ test("decodes a Presale from bytes laid out in Move field order", () => {
       state.endMs,
       state.liquidityDeadlineMs,
       state.uncappedFromMs,
+      state.hardCapFromMs,
     ],
-    [1_000n, 1_100n, 1_150n, 1_050n],
+    [1_000n, 1_100n, 1_150n, 1_050n, 1_050n],
   );
   assert.equal(state.migrationWitness, `0x${witness}`);
   assert.equal(state.tickSpacing, 200);
@@ -213,11 +219,10 @@ test("round-trips both eligibility policies and uncapped accesses", () => {
     eligibilityPolicyBcs.serialize(eligibilityPolicyBcs.parse(open)).toBytes(),
     open,
   );
-  const eligible = Uint8Array.from([...u64(50n), 0, 0]);
+  const eligible = Uint8Array.from([...u64(50n), 0]);
   assert.deepEqual(uncappedPhaseBcs.parse(eligible), {
     startsAfterMs: 50n,
     access: { kind: "eligible" },
-    hardCap: false,
   });
   assert.deepEqual(
     uncappedPhaseBcs.serialize(uncappedPhaseBcs.parse(eligible)).toBytes(),
@@ -242,7 +247,7 @@ test("rejects a foreign type, package, or mismatched UID", () => {
   );
 });
 
-test("decodes a PresaleVault from bytes laid out in Move field order", () => {
+test("decodes a Vault from bytes laid out in Move field order", () => {
   const content = Uint8Array.from([
     ...addr("0xba"), // id
     ...addr("0xab"), // presale_id
@@ -268,7 +273,7 @@ test("decodes a PresaleVault from bytes laid out in Move field order", () => {
   ]);
   const vault = decodePresaleVaultObject(
     object(
-      `${pkg}::presale_vault::PresaleVault<0xa::meme::MEME, 0x2::sui::SUI>`,
+      `${pkg}::presale_vault::Vault<0xa::meme::MEME, 0x2::sui::SUI>`,
       content,
       "0xba",
     ),

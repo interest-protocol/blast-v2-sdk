@@ -8,14 +8,17 @@ import type {
   PresaleCreationConfig,
 } from "../src/presale/math.ts";
 import {
+  allowlistedEligibility,
   apportion,
   apportionFee,
   apportionRaise,
   apportionSupply,
+  canClosePresaleEarly,
   isSeedable,
   MAX_PRESALE_VESTING_DURATION_MS,
   openEligibility,
   PRESALE_MAX_SQRT_PRICE_X64,
+  PRESALE_MIN_LIQUIDITY_WINDOW_MS,
   PRESALE_MIN_SQRT_PRICE_X64,
   PresaleAbortError,
   presaleWindows,
@@ -50,9 +53,10 @@ const config: PresaleCreationConfig = {
   raiseTarget: RAISE,
   raiseAllocations: [],
   durationMs: 100n,
-  liquidityWindowMs: 50n,
+  liquidityWindowMs: PRESALE_MIN_LIQUIDITY_WINDOW_MS,
   eligibility: openEligibility(5_000n, 2n, RAISE / 2n),
   uncapped: null,
+  hardCap: null,
   feeRecipients,
   holderRewardsBps: 3_000n,
   protocolFees: {
@@ -254,24 +258,42 @@ test("rejects every creation shape blast_presale::new aborts on", () => {
       "EInvalidFeeSplit",
     ],
     [{ durationMs: 0n }, "EInvalidWindow"],
+    // `a_liquidity_window_below_seven_days_is_rejected`.
+    [
+      { liquidityWindowMs: PRESALE_MIN_LIQUIDITY_WINDOW_MS - 1n },
+      "EInvalidWindow",
+    ],
     [
       { eligibility: openEligibility(5_000n, 2n, RAISE / 2n - 1n) },
       "EUnreachableRaise",
     ],
-    [{ uncapped: uncappedForEligible(100n, false) }, "EInvalidUncappedPhase"],
+    [{ uncapped: uncappedForEligible(100n) }, "EInvalidUncappedPhase"],
     [
       {
         eligibility: openEligibility(500n, 4n, RAISE / 4n),
-        uncapped: uncappedForAnyone(50n, 3n, RAISE, false),
+        uncapped: uncappedForAnyone(50n, 3n, RAISE),
       },
       "EInvalidUncappedPhase",
     ],
     [
       {
         eligibility: openEligibility(500n, 4n, RAISE / 4n),
-        uncapped: uncappedForAnyone(50n, 4n, RAISE / 4n - 1n, false),
+        uncapped: uncappedForAnyone(50n, 4n, RAISE / 4n - 1n),
       },
       "EUnreachableRaise",
+    ],
+    // `an_open_uncapped_phase_counts_only_the_slots_beyond_the_allowlist`.
+    [
+      {
+        eligibility: allowlistedEligibility("00".repeat(32), 1n),
+        uncapped: uncappedForAnyone(50n, 4n, RAISE / 4n),
+      },
+      "EUnreachableRaise",
+    ],
+    // `a_hard_cap_must_start_inside_the_window`.
+    [
+      { hardCap: { startsAfterMs: 100n, closesWhenFilled: true } },
+      "EInvalidHardCap",
     ],
     // `a_sale_whose_seed_price_no_venue_can_pool_is_rejected`.
     [
@@ -303,7 +325,7 @@ test("rejects every creation shape blast_presale::new aborts on", () => {
 test("mirrors the eligibility and uncapped constructors", () => {
   aborts(() => openEligibility(100n, 20n, 101n), "EInvalidEligibilityPolicy");
   aborts(() => openEligibility(100n, 65_537n, 1n), "EInvalidEligibilityPolicy");
-  aborts(() => uncappedForAnyone(0n, 1n, 0n, true), "EInvalidUncappedPhase");
+  aborts(() => uncappedForAnyone(0n, 1n, 0n), "EInvalidUncappedPhase");
 });
 
 test("mirrors is_seedable at both venue bounds", () => {
@@ -342,7 +364,13 @@ test("fixes the windows share starts", () => {
     endMs: 1_100n,
     liquidityDeadlineMs: 1_150n,
     uncappedFromMs: 1_050n,
+    hardCapFromMs: null,
   });
+  assert.equal(
+    presaleWindows(1_000n, 100n, 50n, null, { startsAfterMs: 0n })
+      .hardCapFromMs,
+    1_000n,
+  );
   assert.equal(presaleWindows(1_000n, 100n, 50n, null).uncappedFromMs, 1_100n);
   aborts(() => presaleWindows(U64_MAX, 1n, 1n, null), "EInvalidWindow");
 });
@@ -355,6 +383,7 @@ const openSale: CommitPreviewInput["presale"] = {
   eligibility: openEligibility(5_000n, 2n, RAISE / 2n),
   uncapped: null,
   uncappedFromMs: 1_100n,
+  hardCapFromMs: null,
   totalCommitments: 0n,
   participants: 0n,
 };
@@ -458,11 +487,13 @@ test("previews every commitment abort in contract order", () => {
   );
 });
 
+/** An uncapped phase from 1,050, hard-capped from then when `hardCap`. */
 const phased = (hardCap: boolean): CommitPreviewInput["presale"] => ({
   ...openSale,
   eligibility: openEligibility(500n, 4n, RAISE / 4n),
-  uncapped: uncappedForEligible(50n, hardCap),
+  uncapped: uncappedForEligible(50n),
   uncappedFromMs: 1_050n,
+  hardCapFromMs: hardCap ? 1_050n : null,
 });
 
 test("previews uncapped phases, hard caps, and returned change", () => {
@@ -521,6 +552,25 @@ test("previews uncapped phases, hard caps, and returned change", () => {
   );
 });
 
+test("previews a hard cap from the start that keeps wallet caps", () => {
+  // `a_hard_cap_from_the_start_fills_first_come_within_wallet_caps`.
+  const capped = {
+    ...openSale,
+    eligibility: openEligibility(500n, 4n, RAISE / 4n),
+    hardCapFromMs: 1_000n,
+  };
+  const carol = previewCommit({
+    presale: { ...capped, totalCommitments: 900n, participants: 2n },
+    route: "open",
+    offered: 500n,
+    nowMs: 1_000n,
+    commitment: null,
+  });
+  assert.deepEqual([carol.accepted, carol.change], [100n, 400n]);
+  // `a_hard_cap_keeps_wallet_caps`.
+  aborts(() => commit(capped, 501n), "EWalletCapExceeded");
+});
+
 test("previews the anyone route only once its phase starts", () => {
   // `an_uncapped_phase_open_to_anyone_admits_wallets_outside_the_allowlist`.
   const presale = {
@@ -530,7 +580,7 @@ test("previews the anyone route only once its phase starts", () => {
       root: "00".repeat(32),
       leafCount: 1n,
     },
-    uncapped: uncappedForAnyone(50n, 4n, RAISE / 4n, false),
+    uncapped: uncappedForAnyone(50n, 4n, RAISE / 4n),
     uncappedFromMs: 1_050n,
     totalCommitments: 500n,
     participants: 1n,
@@ -550,20 +600,36 @@ test("previews the anyone route only once its phase starts", () => {
 });
 
 test("previews settlement and every claim, the last taking the remainder", () => {
+  const settling = {
+    lifecycle: "Open" as const,
+    startMs: 1_000n,
+    endMs: 1_100n,
+    liquidityWindowMs: PRESALE_MIN_LIQUIDITY_WINDOW_MS,
+    hardCap: null,
+    hardCapFromMs: null,
+    raiseTarget: RAISE,
+  };
   assert.deepEqual(
-    previewSettlement({ totalCommitments: 4_000n, raiseTarget: RAISE }),
+    previewSettlement({ ...settling, totalCommitments: 4_000n }, 1_100n),
     {
       outcome: "Funded",
       acceptedQuote: RAISE,
       refundableQuote: 3_000n,
+      endMs: 1_100n,
+      liquidityDeadlineMs: 1_100n + PRESALE_MIN_LIQUIDITY_WINDOW_MS,
     },
   );
   assert.deepEqual(
-    previewSettlement({ totalCommitments: 999n, raiseTarget: RAISE }),
+    previewSettlement({ ...settling, totalCommitments: 999n }, 1_100n),
     {
       outcome: "Cancelled",
       refundableQuote: 999n,
     },
+  );
+  // `an_overflowing_sale_cannot_close_early`.
+  aborts(
+    () => previewSettlement({ ...settling, totalCommitments: 3_000n }, 1_099n),
+    "EPresaleNotEnded",
   );
 
   // `oversubscription_uses_one_fill_rate_and_refunds_the_rest`: Alice then Bob.
@@ -713,5 +779,55 @@ test("participant vesting locks every positive claim in a schedule from the clai
       500n,
     ),
     { tokens: 0n, quoteRefund: 500n, vesting: null },
+  );
+});
+
+test("previews an early close once the raise is full under a hard cap that closes when filled", () => {
+  const closing = {
+    lifecycle: "Open" as const,
+    startMs: 1_000n,
+    endMs: 1_100n,
+    liquidityWindowMs: PRESALE_MIN_LIQUIDITY_WINDOW_MS,
+    hardCap: { startsAfterMs: 0n, closesWhenFilled: true },
+    hardCapFromMs: 1_000n,
+    totalCommitments: RAISE,
+    raiseTarget: RAISE,
+  };
+  // `a_sale_that_closes_when_filled_settles_once_its_raise_is_full`.
+  assert.equal(canClosePresaleEarly(closing, 1_010n), true);
+  assert.deepEqual(previewSettlement(closing, 1_010n), {
+    outcome: "Funded",
+    acceptedQuote: RAISE,
+    refundableQuote: 0n,
+    endMs: 1_010n,
+    liquidityDeadlineMs: 1_010n + PRESALE_MIN_LIQUIDITY_WINDOW_MS,
+  });
+  // `a_full_sale_that_does_not_close_when_filled_waits_for_its_end`.
+  aborts(
+    () =>
+      previewSettlement(
+        { ...closing, hardCap: { startsAfterMs: 0n, closesWhenFilled: false } },
+        1_099n,
+      ),
+    "EPresaleNotEnded",
+  );
+  // `a_hard_capped_sale_short_of_its_raise_cannot_close_early`.
+  aborts(
+    () =>
+      previewSettlement({ ...closing, totalCommitments: RAISE - 1n }, 1_010n),
+    "EPresaleNotEnded",
+  );
+  // `a_sale_overfilled_before_its_hard_cap_cannot_close_before_the_hard_cap_starts`.
+  const overfilled = {
+    ...closing,
+    hardCap: { startsAfterMs: 50n, closesWhenFilled: true },
+    hardCapFromMs: 1_050n,
+    totalCommitments: 1_500n,
+  };
+  aborts(() => previewSettlement(overfilled, 1_049n), "EPresaleNotEnded");
+  assert.equal(previewSettlement(overfilled, 1_050n).outcome, "Funded");
+  aborts(
+    () => previewSettlement({ ...closing, lifecycle: "Funded" }, 1_010n),
+    "EInvalidLifecycle",
   );
 });

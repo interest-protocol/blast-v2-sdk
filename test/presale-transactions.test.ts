@@ -72,7 +72,8 @@ const terms: PresaleTerms = {
   durationMs: 100n,
   liquidityWindowMs: 50n,
   eligibility: openEligibility(500n, 4n, 250n),
-  uncapped: uncappedForAnyone(50n, 4n, 250n, true),
+  uncapped: uncappedForAnyone(50n, 4n, 250n),
+  hardCap: { startsAfterMs: 50n, closesWhenFilled: true },
   feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
   holderRewardsBps: 3_000n,
 };
@@ -120,7 +121,7 @@ test("orders Cetus coins by defining type name, both ways", () => {
   assert.deepEqual(collect.typeArguments, [memeB, sui, sui, memeB]);
 });
 
-test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
+test("starts, configures, finalizes, shares, and keeps the cap of a Cetus presale in one PTB", () => {
   const ptb = tx.createCetusPresale({
     ...terms,
     ...cetus,
@@ -129,46 +130,32 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     capRecipient: "0xc0",
   });
   assert.deepEqual(moveFunctions(ptb), [
+    "cetus::new",
+    "blast_presale::set_supply",
     "bps::new", // token_allocation_bps
-    "option::none", // participant_vesting
     "bps::new", // liquidity_token_allocation_bps
     ...recipientShare,
     ...recipientShare, // recipient_allocations
+    "blast_presale::set_token_allocations",
     ...recipientShare, // raise_allocations
+    "blast_presale::set_raise",
+    "blast_presale::set_windows",
     "blast_presale::open_eligibility",
+    "blast_presale::set_eligibility",
     "blast_presale::uncapped_for_anyone",
-    "option::some",
+    "blast_presale::set_uncapped_phase",
+    "blast_presale::set_hard_cap",
     ...recipientShare, // fee_split shares
     "bps::new", // fee_split holder_rewards_bps
     "blast_presale::fee_split",
-    "cetus::new",
+    "blast_presale::set_fee_split",
+    "blast_presale::finalize",
     "blast_presale::share",
   ]);
-  const feeSplit = moveCall(ptb, "blast_presale::fee_split");
-  assert.deepEqual(argumentKinds(ptb, feeSplit), [
-    `Result:${commandIndexOf(ptb, "MakeMoveVec", 2)}`,
-    `Result:${commandIndex(ptb, "blast_presale::fee_split") - 1}`,
-  ]);
-  const firstShare = moveCall(ptb, "blast_presale::recipient_share");
-  assert.deepEqual(argumentKinds(ptb, firstShare), ["pure", "Result:3"]);
   const created = moveCall(ptb, "cetus::new");
   assert.deepEqual(created.typeArguments, [memeA, sui]);
   assert.deepEqual(argumentKinds(ptb, created), [
     "object:0x7c",
-    "shared-mut:0xcc",
-    "pure",
-    "Result:0",
-    "Result:1",
-    "Result:2",
-    `Result:${commandIndexOf(ptb, "MakeMoveVec", 0)}`,
-    "pure",
-    "pure",
-    `Result:${commandIndexOf(ptb, "MakeMoveVec", 1)}`,
-    "pure",
-    "pure",
-    `Result:${commandIndex(ptb, "blast_presale::open_eligibility")}`,
-    `Result:${commandIndex(ptb, "option::some")}`,
-    `Result:${commandIndex(ptb, "blast_presale::fee_split")}`,
     "shared:0x62",
     "shared:0x61",
     "shared-mut:0x60",
@@ -176,9 +163,49 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
     "shared-mut:0x71",
     "pure",
   ]);
+  assert.equal(created.arguments.length, abiArity("cetus", "new"));
+  const initializer = `Result:${commandIndex(ptb, "cetus::new")}`;
+  for (const setter of [
+    "set_supply",
+    "set_token_allocations",
+    "set_raise",
+    "set_windows",
+    "set_eligibility",
+    "set_uncapped_phase",
+    "set_hard_cap",
+    "set_fee_split",
+  ]) {
+    const call = moveCall(ptb, `blast_presale::${setter}`);
+    assert.deepEqual(call.typeArguments, [memeA, sui]);
+    assert.equal(argumentKinds(ptb, call)[0], initializer);
+    assert.equal(call.arguments.length, abiArity("blast_presale", setter));
+  }
+  const allocations = moveCall(ptb, "blast_presale::set_token_allocations");
+  assert.deepEqual(argumentKinds(ptb, allocations), [
+    initializer,
+    `Result:${commandIndex(ptb, "bps::new")}`,
+    `Result:${commandIndex(ptb, "bps::new") + 1}`,
+    `Result:${commandIndexOf(ptb, "MakeMoveVec", 0)}`,
+  ]);
+  const hardCap = moveCall(ptb, "blast_presale::set_hard_cap");
+  assert.equal(pureU64(ptb, hardCap.arguments[1]), 50n);
+  const feeSplit = moveCall(ptb, "blast_presale::fee_split");
+  assert.deepEqual(argumentKinds(ptb, feeSplit), [
+    `Result:${commandIndexOf(ptb, "MakeMoveVec", 2)}`,
+    `Result:${commandIndex(ptb, "blast_presale::fee_split") - 1}`,
+  ]);
+  const finalize = moveCall(ptb, "blast_presale::finalize");
+  assert.deepEqual(argumentKinds(ptb, finalize), [
+    initializer,
+    "shared-mut:0xcc",
+  ]);
+  assert.equal(
+    finalize.arguments.length,
+    abiArity("blast_presale", "finalize"),
+  );
   const share = moveCall(ptb, "blast_presale::share");
   assert.deepEqual(argumentKinds(ptb, share), [
-    `NestedResult:${commandIndex(ptb, "cetus::new")}:0`,
+    `NestedResult:${commandIndex(ptb, "blast_presale::finalize")}:0`,
     "pure",
     CLOCK,
   ]);
@@ -195,7 +222,7 @@ test("creates, shares, and keeps the cap of a Cetus presale in one PTB", () => {
   );
 });
 
-test("names a partner between new and share, and pays it in the migration PTB", () => {
+test("names a partner on the initializer before finalize, and pays it in the migration PTB", () => {
   const ptb = tx.createCetusPresale({
     ...terms,
     ...cetus,
@@ -204,15 +231,16 @@ test("names a partner between new and share, and pays it in the migration PTB", 
     capRecipient: "0xc0",
     partner,
   });
-  assert.deepEqual(moveFunctions(ptb).slice(-3), [
-    "cetus::new",
+  assert.deepEqual(moveFunctions(ptb).slice(-4), [
+    "blast_presale::set_fee_split",
     "blast_presale::set_partner",
+    "blast_presale::finalize",
     "blast_presale::share",
   ]);
   const setPartner = moveCall(ptb, "blast_presale::set_partner");
   assert.deepEqual(setPartner.typeArguments, [memeA, sui]);
   assert.deepEqual(argumentKinds(ptb, setPartner), [
-    `NestedResult:${commandIndex(ptb, "cetus::new")}:0`,
+    `Result:${commandIndex(ptb, "cetus::new")}`,
     "shared:0x62",
     "shared:0x9a27",
     CLOCK,
@@ -295,10 +323,11 @@ test("names a partner between new and share, and pays it in the migration PTB", 
   }
 });
 
-test("creates a Bluefin presale without an uncapped phase", () => {
+test("creates a Bluefin presale without optional settings", () => {
   const ptb = tx.createBluefinPresale({
     ...terms,
     uncapped: null,
+    hardCap: null,
     eligibility: {
       kind: "allowlisted",
       root: "11".repeat(32),
@@ -309,23 +338,27 @@ test("creates a Bluefin presale without an uncapped phase", () => {
     startMs: 1_000n,
     capRecipient: "0xc0",
   });
-  assert.ok(
-    moveFunctions(ptb).includes("blast_presale::allowlisted_eligibility"),
-  );
-  const nones = ptb
-    .getData()
-    .commands.flatMap((command) =>
-      command.$kind === "MoveCall" && command.MoveCall.function === "none"
-        ? [command.MoveCall.typeArguments]
-        : [],
-    );
-  assert.deepEqual(nones, [
-    [normalizeStructTag("0x5e::blast_presale::VestingTerms")],
-    [normalizeStructTag("0x5e::blast_presale::UncappedPhase")],
-  ]);
+  const functions = moveFunctions(ptb);
+  assert.ok(functions.includes("blast_presale::allowlisted_eligibility"));
+  for (const optional of [
+    "set_participant_vesting",
+    "set_uncapped_phase",
+    "set_hard_cap",
+    "set_partner",
+  ]) {
+    assert.ok(!functions.includes(`blast_presale::${optional}`));
+  }
   const created = moveCall(ptb, "bluefin::new");
   assert.equal(created.arguments.length, abiArity("bluefin", "new"));
-  assert.deepEqual(argumentKinds(ptb, created).slice(-2), ["pure", "pure"]);
+  // The currency goes in mutably: the same PTB's `finalize` takes it so.
+  assert.deepEqual(argumentKinds(ptb, created), [
+    "object:0x7c",
+    "shared-mut:0xcc",
+    "shared:0x62",
+    "shared:0x61",
+    "pure",
+    "pure",
+  ]);
 });
 
 test("commits through each route and returns the change to the wallet", () => {
@@ -761,14 +794,16 @@ test("vested token and raise shares build their terms; fee shares cannot vest", 
     "blast_presale::vesting_terms",
     "blast_presale::vested_recipient_share",
   ];
-  assert.deepEqual(moveFunctions(ptb).slice(0, 12), [
+  assert.deepEqual(moveFunctions(ptb).slice(0, 14), [
+    "cetus::new",
+    "blast_presale::set_supply",
     "bps::new",
-    "option::none",
     "bps::new",
     ...vestedShare,
     ...recipientShare,
+    "blast_presale::set_token_allocations",
     ...vestedShare,
-    "blast_presale::open_eligibility",
+    "blast_presale::set_raise",
   ]);
   const terms0 = moveCall(ptb, "blast_presale::vesting_terms");
   assert.deepEqual(argumentKinds(ptb, terms0), ["pure", "pure", "pure"]);
@@ -821,7 +856,7 @@ test("vested token and raise shares build their terms; fee shares cannot vest", 
   );
 });
 
-test("participant vesting builds Some(vesting_terms) after the sale's token rate", () => {
+test("participant vesting builds vesting_terms for set_participant_vesting after the token allocations", () => {
   const vesting = { cliffMs: 100n, periodMs: 50n, periods: 4n };
   const ptb = tx.createCetusPresale({
     ...terms,
@@ -831,28 +866,26 @@ test("participant vesting builds Some(vesting_terms) after the sale's token rate
     startMs: 1_000n,
     capRecipient: "0xc0",
   });
-  assert.deepEqual(moveFunctions(ptb).slice(0, 4), [
-    "bps::new", // token_allocation_bps
+  const functions = moveFunctions(ptb);
+  const allocations = functions.indexOf("blast_presale::set_token_allocations");
+  assert.deepEqual(functions.slice(allocations + 1, allocations + 3), [
     "blast_presale::vesting_terms",
-    "option::some", // participant_vesting
-    "bps::new", // liquidity_token_allocation_bps
+    "blast_presale::set_participant_vesting",
   ]);
   const terms0 = moveCall(ptb, "blast_presale::vesting_terms");
   assert.deepEqual(
     terms0.arguments.map((argument) => pureU64(ptb, argument)),
     [100n, 50n, 4n],
   );
-  const some = moveCall(ptb, "option::some");
-  assert.deepEqual(some.typeArguments, [
-    normalizeStructTag("0x5e::blast_presale::VestingTerms"),
+  const setVesting = moveCall(ptb, "blast_presale::set_participant_vesting");
+  assert.deepEqual(argumentKinds(ptb, setVesting), [
+    `Result:${commandIndex(ptb, "cetus::new")}`,
+    `Result:${commandIndex(ptb, "blast_presale::vesting_terms")}`,
   ]);
-  assert.deepEqual(argumentKinds(ptb, some), ["Result:1"]);
-  const created = moveCall(ptb, "cetus::new");
-  assert.equal(created.arguments.length, abiArity("cetus", "new"));
-  assert.deepEqual(argumentKinds(ptb, created).slice(3, 5), [
-    "Result:0",
-    "Result:2",
-  ]);
+  assert.equal(
+    setVesting.arguments.length,
+    abiArity("blast_presale", "set_participant_vesting"),
+  );
 
   assert.throws(
     () =>
@@ -1017,3 +1050,42 @@ function describeInput(
   const prefix = reference.mutable ? "shared-mut" : "shared";
   return `${prefix}:0x${BigInt(reference.objectId).toString(16)}`;
 }
+
+test("locks an owner's own position in a vault through either venue", () => {
+  const vaultTerms = {
+    ...types,
+    position: "0x9051",
+    feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
+    holderRewardsBps: 3_000n,
+    partnerId: "0x9a27",
+    pool: shared("0x90", false),
+  };
+  const cetusVault = tx.newCetusVault({
+    ...vaultTerms,
+    burnManager: shared("0x72", true),
+  });
+  const cetusCall = moveCall(cetusVault, "cetus::new_vault");
+  assert.deepEqual(cetusCall.typeArguments, [memeA, sui, memeA, sui]);
+  assert.equal(cetusCall.arguments.length, abiArity("cetus", "new_vault"));
+  assert.deepEqual(argumentKinds(cetusVault, cetusCall), [
+    "object:0x9051",
+    `Result:${commandIndex(cetusVault, "blast_presale::fee_split")}`,
+    "pure",
+    "shared:0x62",
+    "shared:0x61",
+    "shared:0x90",
+    "shared-mut:0x72",
+    CLOCK,
+  ]);
+
+  const bluefinVault = tx.newBluefinVault({ ...vaultTerms, partnerId: null });
+  const bluefinCall = moveCall(bluefinVault, "bluefin::new_vault");
+  assert.deepEqual(bluefinCall.typeArguments, [memeA, sui]);
+  assert.equal(bluefinCall.arguments.length, abiArity("bluefin", "new_vault"));
+  assert.deepEqual(argumentKinds(bluefinVault, bluefinCall).slice(-4), [
+    "shared:0x62",
+    "shared:0x61",
+    "shared:0x90",
+    CLOCK,
+  ]);
+});

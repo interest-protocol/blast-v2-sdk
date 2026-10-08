@@ -10,6 +10,7 @@ import {
   isValidSuiAddress,
   normalizeStructTag,
   normalizeSuiAddress,
+  normalizeSuiObjectId,
   parseStructTag,
 } from "@mysten/sui/utils";
 
@@ -49,6 +50,7 @@ import {
 import type {
   BpsShare,
   EligibilityPolicy,
+  HardCap,
   ProtocolFees,
   UncappedPhase,
   VestingTerms,
@@ -89,12 +91,11 @@ export type PresaleMigrator =
   | { venue: PresaleVenue; witnessType?: never }
   | { witnessType: string; venue?: never };
 
-/** Per-sale terms shared by `cetus::new` and `bluefin::new`, in Move argument order. */
-export type PresaleTerms = LaunchTypes & {
-  /** The zero-supply `TreasuryCap<Meme>`, consumed. */
-  treasuryCap: TransactionObjectInput;
-  /** The Meme's Coin Registry `Currency<Meme>`. */
-  memeCurrency: SharedObjectReference<true>;
+/**
+ * Per-sale terms the `PresaleInitializer` setters record, in setter order
+ * (contracts ADR 0110).
+ */
+export type PresaleSettings = LaunchTypes & {
   tokenSupply: bigint;
   tokenAllocationBps: bigint;
   /**
@@ -112,8 +113,27 @@ export type PresaleTerms = LaunchTypes & {
   liquidityWindowMs: bigint;
   eligibility: EligibilityPolicy;
   uncapped: UncappedPhase | null;
+  /**
+   * Holds the sale to its raise from `startsAfterMs` into the window; with
+   * `closesWhenFilled` anyone may settle it once the raise is full. Null
+   * overflows for the whole window.
+   */
+  hardCap: HardCap | null;
   feeRecipients: readonly BpsShare[];
   holderRewardsBps: bigint;
+  /**
+   * A Blast partner the `CreationPolicy` accepts; it becomes the sale's
+   * partner for good, paid its cut of Blast's raise fee after migration.
+   */
+  partner?: SharedObjectReference<false>;
+};
+
+/** A sale's settings plus the coin objects its creation consumes and finalizes. */
+export type PresaleTerms = PresaleSettings & {
+  /** The zero-supply `TreasuryCap<Meme>`, consumed. */
+  treasuryCap: TransactionObjectInput;
+  /** The Meme's Coin Registry `Currency<Meme>`. */
+  memeCurrency: SharedObjectReference<true>;
 };
 
 export type CetusPresaleObjects = {
@@ -123,15 +143,10 @@ export type CetusPresaleObjects = {
   cetusPools: SharedObjectReference<true>;
 };
 
-/** What `createCetusPresale` and `createBluefinPresale` add to `new`. */
+/** What `createCetusPresale` and `createBluefinPresale` add to creation. */
 export type PresaleCreation = {
   startMs: bigint;
   capRecipient: string;
-  /**
-   * A Blast partner the `CreationPolicy` accepts; it becomes the sale's
-   * partner for good, paid its cut of Blast's raise fee after migration.
-   */
-  partner?: SharedObjectReference<false>;
 };
 
 /**
@@ -244,57 +259,34 @@ export class PresaleCalls {
       ]);
   }
 
-  /** `Option<UncappedPhase>`: `none`, or `some` of `uncapped_for_eligible` / `uncapped_for_anyone`. */
-  uncapped(phase: UncappedPhase | null) {
-    const type = this.#type("blast_presale::UncappedPhase");
-    if (phase) requireU64("startsAfterMs", phase.startsAfterMs);
-    const { access } = phase ?? {};
-    if (phase && access?.kind === "anyone") {
+  /** `uncapped_for_eligible` or `uncapped_for_anyone`. */
+  uncapped(phase: UncappedPhase) {
+    requireU64("startsAfterMs", phase.startsAfterMs);
+    const { access } = phase;
+    if (access.kind === "anyone") {
       uncappedForAnyone(
         phase.startsAfterMs,
         access.maxParticipants,
         access.minCommitment,
-        phase.hardCap,
       );
     }
-    return (tx: Transaction): TransactionResult => {
-      if (!phase) {
-        return tx.moveCall({
-          target: "0x1::option::none",
-          typeArguments: [type],
-        });
-      }
-      const value =
-        access?.kind === "anyone"
-          ? this.#presaleCall(tx, "uncapped_for_anyone", [
-              tx.pure.u64(phase.startsAfterMs),
-              tx.pure.u64(access.maxParticipants),
-              tx.pure.u64(access.minCommitment),
-              tx.pure.bool(phase.hardCap),
-            ])
-          : this.#presaleCall(tx, "uncapped_for_eligible", [
-              tx.pure.u64(phase.startsAfterMs),
-              tx.pure.bool(phase.hardCap),
-            ]);
-      return tx.moveCall({
-        target: "0x1::option::some",
-        typeArguments: [type],
-        arguments: [value],
-      });
-    };
+    return (tx: Transaction): TransactionResult =>
+      access.kind === "anyone"
+        ? this.#presaleCall(tx, "uncapped_for_anyone", [
+            tx.pure.u64(phase.startsAfterMs),
+            tx.pure.u64(access.maxParticipants),
+            tx.pure.u64(access.minCommitment),
+          ])
+        : this.#presaleCall(tx, "uncapped_for_eligible", [
+            tx.pure.u64(phase.startsAfterMs),
+          ]);
   }
 
-  /** `Option<VestingTerms>`: `none`, or `some` of `vesting_terms`. */
-  vesting(terms: VestingTerms | null) {
-    const type = this.#type("blast_presale::VestingTerms");
-    const vesting =
-      terms && vestingTerms(terms.cliffMs, terms.periodMs, terms.periods);
+  /** `vesting_terms`. */
+  vesting(terms: VestingTerms) {
+    const vesting = vestingTerms(terms.cliffMs, terms.periodMs, terms.periods);
     return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: vesting ? "0x1::option::some" : "0x1::option::none",
-        typeArguments: [type],
-        arguments: vesting ? [this.#vestingTerms(tx, vesting)] : [],
-      });
+      this.#vestingTerms(tx, vesting);
   }
 
   /** One `bps::Bps` through `bps::new`. */
@@ -357,61 +349,173 @@ export class PresaleCalls {
   }
 
   /**
-   * `cetus::new`: mints and seals the supply, reserves the pair's Cetus pool
-   * creation at `tickSpacing` (Cetus derives the fee rate), and returns
-   * `(Presale, PresaleCap)`; the same PTB must `share` the presale.
+   * `cetus::new`: reserves the pair's Cetus pool creation at `tickSpacing`
+   * (Cetus derives the fee rate) and returns the sale's `PresaleInitializer`,
+   * which the same PTB must `configurePresale` and `finalizePresale`.
    */
-  newCetusPresale(
-    options: PresaleTerms & CetusPresaleObjects & { tickSpacing: number },
+  startCetusPresale(
+    options: LaunchTypes &
+      CetusPresaleObjects & {
+        treasuryCap: TransactionObjectInput;
+        tickSpacing: number;
+      },
   ) {
     const tickSpacing = requireU32("tickSpacing", options.tickSpacing);
     return (tx: Transaction): TransactionResult =>
-      this.#newPresale(tx, "cetus", options, [
-        deploymentObject(tx, this.deployment.venueConfig, true),
-        sharedObject(tx, "cetusConfig", options.cetusConfig, false),
-        sharedObject(tx, "cetusPools", options.cetusPools, true),
-        tx.pure.u32(tickSpacing),
-      ]);
+      this.#presaleCall(
+        tx,
+        "new",
+        [
+          tx.object(options.treasuryCap),
+          this.#creationPolicy(tx),
+          this.#feePolicy(tx),
+          deploymentObject(tx, this.deployment.venueConfig, true),
+          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
+          sharedObject(tx, "cetusPools", options.cetusPools, true),
+          tx.pure.u32(tickSpacing),
+        ],
+        options,
+        "cetus",
+      );
   }
 
-  /** `bluefin::new` at the creator's tier; returns `(Presale, PresaleCap)`. */
-  newBluefinPresale(
-    options: PresaleTerms & { tickSpacing: number; feeRate: bigint },
+  /**
+   * `bluefin::new` at the creator's tier; returns the sale's
+   * `PresaleInitializer`, which the same PTB must configure and finalize.
+   */
+  startBluefinPresale(
+    options: LaunchTypes & {
+      treasuryCap: TransactionObjectInput;
+      memeCurrency: SharedObjectReference<true>;
+      tickSpacing: number;
+      feeRate: bigint;
+    },
   ) {
     const tickSpacing = requireU32("tickSpacing", options.tickSpacing);
     const feeRate = requireU64("feeRate", options.feeRate);
     return (tx: Transaction): TransactionResult =>
-      this.#newPresale(tx, "bluefin", options, [
-        tx.pure.u32(tickSpacing),
-        tx.pure.u64(feeRate),
-      ]);
+      this.#presaleCall(
+        tx,
+        "new",
+        [
+          tx.object(options.treasuryCap),
+          // The same PTB's `finalize` takes the currency mutably.
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          this.#creationPolicy(tx),
+          this.#feePolicy(tx),
+          tx.pure.u32(tickSpacing),
+          tx.pure.u64(feeRate),
+        ],
+        options,
+        "bluefin",
+      );
   }
 
   /**
-   * `blast_presale::set_partner`: names the new presale's Blast partner, which
-   * the `CreationPolicy` must accept now. Call it after `new` and before
-   * `share`, which fixes it for good; the partner earns its cut of Blast's
-   * raise fee through `payProtocolFeesWithPartner` once the sale migrates.
+   * Records every one of `options` on `initializer` through the
+   * `PresaleInitializer` setters, optional ones only when given: supply, token
+   * allocations, participant vesting, raise, windows, eligibility, uncapped
+   * phase, hard cap, LP-fee split, then the partner, which the
+   * `CreationPolicy` must accept now and which `finalize` fixes for good.
    */
-  setPartner(
+  configurePresale(
+    options: PresaleSettings & { initializer: TransactionArgument },
+  ) {
+    const tokenSupply = requireU64("tokenSupply", options.tokenSupply);
+    const raiseTarget = requireU64("raiseTarget", options.raiseTarget);
+    const durationMs = requireU64("durationMs", options.durationMs);
+    const liquidityWindowMs = requireU64(
+      "liquidityWindowMs",
+      options.liquidityWindowMs,
+    );
+    const { hardCap, participantVesting, uncapped, partner } = options;
+    if (hardCap) requireU64("hardCap.startsAfterMs", hardCap.startsAfterMs);
+    return (tx: Transaction): void => {
+      const set = (name: string, args: TransactionArgument[]) =>
+        this.#presaleCall(tx, name, [options.initializer, ...args], options);
+
+      set("set_supply", [
+        tx.pure.u64(tokenSupply),
+        tx.pure.bool(options.burnable),
+      ]);
+      set("set_token_allocations", [
+        tx.add(this.bps(options.tokenAllocationBps)),
+        tx.add(this.bps(options.liquidityTokenAllocationBps)),
+        tx.add(this.recipientShares(options.recipientAllocations)),
+      ]);
+      if (participantVesting) {
+        set("set_participant_vesting", [
+          tx.add(this.vesting(participantVesting)),
+        ]);
+      }
+      set("set_raise", [
+        tx.pure.u64(raiseTarget),
+        tx.add(this.recipientShares(options.raiseAllocations)),
+      ]);
+      set("set_windows", [
+        tx.pure.u64(durationMs),
+        tx.pure.u64(liquidityWindowMs),
+      ]);
+      set("set_eligibility", [tx.add(this.eligibility(options.eligibility))]);
+      if (uncapped)
+        set("set_uncapped_phase", [tx.add(this.uncapped(uncapped))]);
+      if (hardCap) {
+        set("set_hard_cap", [
+          tx.pure.u64(hardCap.startsAfterMs),
+          tx.pure.bool(hardCap.closesWhenFilled),
+        ]);
+      }
+      set("set_fee_split", [
+        tx.add(this.feeSplit(options.feeRecipients, options.holderRewardsBps)),
+      ]);
+      if (partner) {
+        set("set_partner", [
+          this.#creationPolicy(tx),
+          sharedObject(tx, "partner", partner, false),
+          tx.object.clock(),
+        ]);
+      }
+    };
+  }
+
+  /**
+   * `blast_presale::finalize`: checks every setting together, mints and seals
+   * the supply, and returns `(Presale, PresaleCap)`; the same PTB must `share`
+   * the presale.
+   */
+  finalizePresale(
     options: LaunchTypes & {
-      presale: TransactionArgument;
-      partner: SharedObjectReference<false>;
+      initializer: TransactionArgument;
+      memeCurrency: SharedObjectReference<true>;
     },
   ) {
-    return (tx: Transaction): void => {
+    return (tx: Transaction): TransactionResult =>
       this.#presaleCall(
         tx,
-        "set_partner",
+        "finalize",
         [
-          options.presale,
-          this.#creationPolicy(tx),
-          sharedObject(tx, "partner", options.partner, false),
-          tx.object.clock(),
+          options.initializer,
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
         ],
         options,
       );
-    };
+  }
+
+  /**
+   * `cetus::new`, every setter, and `finalize`: returns `(Presale,
+   * PresaleCap)`; the same PTB must `share` the presale.
+   */
+  newCetusPresale(
+    options: PresaleTerms & CetusPresaleObjects & { tickSpacing: number },
+  ) {
+    return this.#newPresale(this.startCetusPresale(options), options);
+  }
+
+  /** `bluefin::new`, every setter, and `finalize`; returns `(Presale, PresaleCap)`. */
+  newBluefinPresale(
+    options: PresaleTerms & { tickSpacing: number; feeRate: bigint },
+  ) {
+    return this.#newPresale(this.startBluefinPresale(options), options);
   }
 
   /**
@@ -742,6 +846,82 @@ export class PresaleCalls {
           this.#feePolicy(tx),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
           sharedObject(tx, "pool", options.pool, true),
+          tx.object.clock(),
+        ],
+        options,
+        "bluefin",
+      );
+    };
+  }
+
+  /**
+   * `cetus::new_vault`: burns the caller's own Cetus `position` in `pool`
+   * through Cetus LP Burn and seals the proof in a new shared `Vault` that
+   * splits its LP fees by the fee split, after Blast's current rates. The
+   * coin order comes from `cetusMemeSide`. Blast must allow Quote and the
+   * Cetus migrator, and accept `partnerId` when given (contracts ADR 0109).
+   */
+  newCetusVault(
+    options: LaunchTypes & {
+      position: TransactionObjectInput;
+      feeRecipients: readonly BpsShare[];
+      holderRewardsBps: bigint;
+      partnerId?: string | null;
+      pool: SharedObjectReference<false>;
+      /** Cetus LP Burn `lp_burn::BurnManager`. */
+      burnManager: SharedObjectReference<true>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const partnerId = optionalObjectId(options.partnerId);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::cetus::new_vault`,
+        typeArguments: cetusTypeArguments(types),
+        arguments: [
+          tx.object(options.position),
+          tx.add(
+            this.feeSplit(options.feeRecipients, options.holderRewardsBps),
+          ),
+          tx.pure.option("address", partnerId),
+          this.#creationPolicy(tx),
+          this.#feePolicy(tx),
+          sharedObject(tx, "pool", options.pool, false),
+          sharedObject(tx, "burnManager", options.burnManager, true),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /**
+   * `bluefin::new_vault`: seals the caller's own Bluefin `position` in `pool`,
+   * whose first coin must be Meme, in a new shared `Vault` splitting its LP
+   * fees by the fee split, after Blast's current rates (contracts ADR 0109).
+   */
+  newBluefinVault(
+    options: LaunchTypes & {
+      position: TransactionObjectInput;
+      feeRecipients: readonly BpsShare[];
+      holderRewardsBps: bigint;
+      partnerId?: string | null;
+      pool: SharedObjectReference<false>;
+    },
+  ) {
+    const partnerId = optionalObjectId(options.partnerId);
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "new_vault",
+        [
+          tx.object(options.position),
+          tx.add(
+            this.feeSplit(options.feeRecipients, options.holderRewardsBps),
+          ),
+          tx.pure.option("address", partnerId),
+          this.#creationPolicy(tx),
+          this.#feePolicy(tx),
+          sharedObject(tx, "pool", options.pool, false),
           tx.object.clock(),
         ],
         options,
@@ -1100,37 +1280,14 @@ export class PresaleCalls {
   }
 
   #newPresale(
-    tx: Transaction,
-    venue: PresaleVenue,
+    start: (tx: Transaction) => TransactionResult,
     options: PresaleTerms,
-    venueArguments: TransactionArgument[],
-  ): TransactionResult {
-    return this.#presaleCall(
-      tx,
-      "new",
-      [
-        tx.object(options.treasuryCap),
-        sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-        tx.pure.u64(options.tokenSupply),
-        tx.add(this.bps(options.tokenAllocationBps)),
-        tx.add(this.vesting(options.participantVesting)),
-        tx.add(this.bps(options.liquidityTokenAllocationBps)),
-        tx.add(this.recipientShares(options.recipientAllocations)),
-        tx.pure.bool(options.burnable),
-        tx.pure.u64(options.raiseTarget),
-        tx.add(this.recipientShares(options.raiseAllocations)),
-        tx.pure.u64(options.durationMs),
-        tx.pure.u64(options.liquidityWindowMs),
-        tx.add(this.eligibility(options.eligibility)),
-        tx.add(this.uncapped(options.uncapped)),
-        tx.add(this.feeSplit(options.feeRecipients, options.holderRewardsBps)),
-        this.#creationPolicy(tx),
-        this.#feePolicy(tx),
-        ...venueArguments,
-      ],
-      options,
-      venue,
-    );
+  ) {
+    return (tx: Transaction): TransactionResult => {
+      const initializer = tx.add(start);
+      tx.add(this.configurePresale({ ...options, initializer }));
+      return tx.add(this.finalizePresale({ ...options, initializer }));
+    };
   }
 
   #setAllowed(
@@ -1236,8 +1393,9 @@ export class PresaleTransactions {
   }
 
   /**
-   * `cetus::new`, then `set_partner` when `partner` is given, `share` from
-   * `startMs`, and transfers the `PresaleCap` to `capRecipient`.
+   * `cetus::new`, every setter (with `set_partner` when `partner` is given),
+   * `finalize`, `share` from `startMs`, and transfers the `PresaleCap` to
+   * `capRecipient`.
    */
   createCetusPresale(
     options: Parameters<PresaleCalls["newCetusPresale"]>[0] & PresaleCreation,
@@ -1248,8 +1406,9 @@ export class PresaleTransactions {
   }
 
   /**
-   * `bluefin::new`, then `set_partner` when `partner` is given, `share` from
-   * `startMs`, and transfers the `PresaleCap` to `capRecipient`.
+   * `bluefin::new`, every setter (with `set_partner` when `partner` is given),
+   * `finalize`, `share` from `startMs`, and transfers the `PresaleCap` to
+   * `capRecipient`.
    */
   createBluefinPresale(
     options: Parameters<PresaleCalls["newBluefinPresale"]>[0] & PresaleCreation,
@@ -1380,6 +1539,18 @@ export class PresaleTransactions {
   ): Transaction {
     const tx = single(this.call.collectBluefinFees(options));
     return this.#payProtocolLpFeesWithPartnerAfter(tx, options);
+  }
+
+  newCetusVault(
+    options: Parameters<PresaleCalls["newCetusVault"]>[0],
+  ): Transaction {
+    return single(this.call.newCetusVault(options));
+  }
+
+  newBluefinVault(
+    options: Parameters<PresaleCalls["newBluefinVault"]>[0],
+  ): Transaction {
+    return single(this.call.newBluefinVault(options));
   }
 
   /** Pays a partnered vault's partner and Blast the LP fees its collections held. */
@@ -1584,8 +1755,6 @@ export class PresaleTransactions {
     options: LaunchTypes & PresaleCreation,
   ): Transaction {
     const [presale, presaleCap] = moveResults(created, 2);
-    const { partner } = options;
-    if (partner) tx.add(this.call.setPartner({ ...options, presale, partner }));
     tx.add(this.call.share({ ...options, presale }));
     tx.transferObjects([presaleCap], normalizeSuiAddress(options.capRecipient));
     return tx;
@@ -1620,6 +1789,11 @@ function single(call: (tx: Transaction) => void): Transaction {
   const tx = new Transaction();
   tx.add(call);
   return tx;
+}
+
+/** A normalized object ID for an `Option<ID>` argument, or null for `none`. */
+function optionalObjectId(objectId: string | null | undefined): string | null {
+  return objectId ? normalizeSuiObjectId(objectId) : null;
 }
 
 function sharedObject<const Mutable extends boolean>(

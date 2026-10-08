@@ -14,11 +14,13 @@ import type { SuiEventPosition } from "../lib/events.ts";
 import { normalizeSuiEventPosition, suiEventId } from "../lib/events.ts";
 import type {
   EligibilityPolicy,
+  HardCap,
   UncappedPhase,
   VestingTerms,
 } from "./state.ts";
 import {
   eligibilityPolicyBcs,
+  hardCapBcs,
   uncappedPhaseBcs,
   vestingTermsBcs,
 } from "./state.ts";
@@ -36,6 +38,8 @@ type PresaleEventFieldDescriptor =
   | "u64Vector"
   | "eligibility"
   | "optionUncapped"
+  | "optionHardCap"
+  | "optionU64"
   | "optionAddress"
   | "optionId"
   | "optionVesting"
@@ -64,6 +68,7 @@ export const presaleEventSpecs = {
       liquidity_window_ms: "u64",
       eligibility: "eligibility",
       uncapped: "optionUncapped",
+      hard_cap: "optionHardCap",
       migration_witness: "typeName",
       tick_spacing: "u32",
       pool_fee_rate: "u64",
@@ -83,6 +88,7 @@ export const presaleEventSpecs = {
       end_ms: "u64",
       liquidity_deadline_ms: "u64",
       uncapped_from_ms: "u64",
+      hard_cap_from_ms: "optionU64",
       partner_id: "optionId",
     },
     ProtocolFeesChanged: {
@@ -108,6 +114,8 @@ export const presaleEventSpecs = {
       accepted_quote: "u64",
       refundable_quote: "u64",
       token_allocation: "u64",
+      end_ms: "u64",
+      liquidity_deadline_ms: "u64",
     },
     PresaleCancelled: {
       presale_id: "id",
@@ -151,7 +159,7 @@ export const presaleEventSpecs = {
     },
   },
   presale_vault: {
-    PresaleVaultCreated: {
+    VaultCreated: {
       vault_id: "id",
       presale_id: "id",
       pool_id: "id",
@@ -255,6 +263,10 @@ type DescriptorOutputs = {
   u64Vector: bigint[];
   eligibility: EligibilityPolicy;
   optionUncapped: UncappedPhase | null;
+  /** Null for a sale that overflows for its whole window. */
+  optionHardCap: HardCap | null;
+  /** Null for a sale without a hard cap. */
+  optionU64: bigint | null;
   /** Null when a partnered vault holds Blast's LP fees for its partner payout. */
   optionAddress: string | null;
   /** A `blast_fun_linear_vesting::Vesting` ID, or null for a direct payout. */
@@ -301,6 +313,8 @@ const FIELD_BCS: Record<PresaleEventFieldDescriptor, BcsType<unknown>> = {
   u64Vector: bcs.vector(u64) as BcsType<unknown>,
   eligibility: eligibilityPolicyBcs as BcsType<unknown>,
   optionUncapped: bcs.option(uncappedPhaseBcs) as BcsType<unknown>,
+  optionHardCap: bcs.option(hardCapBcs) as BcsType<unknown>,
+  optionU64: bcs.option(u64) as BcsType<unknown>,
   optionAddress: bcs.option(address) as BcsType<unknown>,
   optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown>,
   optionVesting: bcs.option(vestingTermsBcs) as BcsType<unknown>,
@@ -344,8 +358,8 @@ export type DecodedPresaleEvent = {
     /** The event's `SaleToken` / `Meme` type argument. */
     memeType: string;
     quoteType: string;
-    /** `PresaleVaultCreated` only: the venue marker, e.g. `<pkg>::cetus::Venue`. */
-    venueType: Kind extends "PresaleVaultCreated" ? string : null;
+    /** `VaultCreated` only: the venue marker, e.g. `<pkg>::cetus::Venue`. */
+    venueType: Kind extends "VaultCreated" ? string : null;
     /** Transaction sender; for `Committed`, the committing wallet. */
     sender: string;
     position: SuiEventPosition;
@@ -355,7 +369,7 @@ export type DecodedPresaleEvent = {
 /**
  * Decodes one event whose type is `<originalPackageId>::<module>::<Kind><...>`.
  * Every presale event is generic over `<SaleToken, Quote>`, and
- * `PresaleVaultCreated` also over its `Venue`.
+ * `VaultCreated` also over its `Venue`.
  */
 export function decodePresaleEvent(
   event: SuiClientTypes.EventEntry,
@@ -370,7 +384,7 @@ export function decodePresaleEvent(
     presaleEventModules[kind] !== tag.module ||
     memeType === undefined ||
     quoteType === undefined ||
-    (venueType === null) === (kind === "PresaleVaultCreated") ||
+    (venueType === null) === (kind === "VaultCreated") ||
     extra.length > 0
   ) {
     throw new TypeError(`unexpected presale event type ${event.eventType}`);
