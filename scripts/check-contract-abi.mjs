@@ -70,7 +70,7 @@ const artifactDeclarations = [
     // without a presale, initializer creation with the sale-level hard cap and
     // early close, and venue-owned pool tiers.
     baseline: {
-      contractsCommit: "6433aa1f1bce03e8a878e3a753cb8b2cb8c0ffd3",
+      contractsCommit: "af86ea4bf34080553a45d961d6db8cec719bb2a0",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
