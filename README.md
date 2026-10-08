@@ -27,8 +27,9 @@ It provides:
   holder-reward rounds for Cetus and Bluefin; and
 - typed BCS event decoding and deterministic launch-to-vault replay;
 - the standalone `blast_presale` package: creation, commitments, settlement,
-  Cetus and Bluefin migration, claims, LP-fee collection, and holder-reward
-  rounds, with exact previews and event replay;
+  Cetus and Bluefin migration, vaults for an owner's own position, Aftermath
+  DAO-pool migration through the partner's vendor package, claims, LP-fee
+  collection, and holder-reward rounds, with exact previews and event replay;
 - operator transactions for every administrator action: the shared
   `blast_admin` ACL (admins, roles, the timelocked root transfer), the
   `LaunchConfig` and `RuntimeConfig` setters, creator-cap reassignment,
@@ -398,8 +399,10 @@ preview.
 
 ## Presale
 
-`@interest-protocol/blast-sdk/presale` builds every product route of the
-`blast_presale` package published on mainnet. It previews creation, commitments, and
+`@interest-protocol/blast-sdk/presale` builds every product route of the next
+`blast_presale` generation (frozen at contracts `8392fd1`, not yet published;
+the live mainnet package has an older layout) and of the Aftermath DAO-pool
+vendor package that links it. It previews creation, commitments, and
 claims exactly as the contract enforces them, and it decodes and replays the
 package's objects and events. See [docs/presale.md](docs/presale.md).
 

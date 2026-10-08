@@ -1,4 +1,5 @@
 export * from "./aborts.ts";
+export * from "./aftermath.ts";
 export * from "./allowlist.ts";
 export * from "./client.ts";
 export * from "./events.ts";

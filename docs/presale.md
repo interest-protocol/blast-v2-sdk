@@ -44,7 +44,8 @@ const presale = new PresaleTransactions(definePresaleDeployment({
 ```
 
 Deployment shared objects carry no `mutable` flag: each call sets the
-mutability its Move signature needs.
+mutability its Move signature needs. `aftermath` adds the Aftermath DAO-pool
+vendor package once it is published; see [Aftermath DAO pools](#aftermath-dao-pools).
 
 ## Lifecycle
 
@@ -56,6 +57,8 @@ mutability its Move signature needs.
 | Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: every rate through `bps::new`, the `RecipientShare` vectors through `recipient_share` (or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), the eligibility policy, `Option<UncappedPhase>`, the LP-fee split through `fee_split`, the venue's `new`, `set_partner` when `partner` is given, `share` from `startMs`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
 | Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except in a hard-capped uncapped phase. |
 | Settle | `settle`, `cancelUnlaunched` | Anyone may call. |
+| Create an Aftermath sale | `createAftermathPresale` | The vendor's `AdminCap` holder only; see [Aftermath DAO pools](#aftermath-dao-pools). |
+| Migrate to Aftermath | `migrateAftermath`, `settleAndMigrateAftermath` | Anyone may call, with the sale's `PoolCreation` and `Lp` type (`getAftermathPoolCreation`). |
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. Pass the sale's `partner` when it names one, and the same PTB pays it. |
 | Pay Blast and its partner | `payProtocolFeesWithPartner` | Anyone may call, once, after a partnered sale migrates; use it on its own for a sale another migrator migrated. See [Partners](#partners). |
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. Under participant vesting, each claim locks the participant's tokens in a new schedule starting at that claim. |
@@ -74,6 +77,72 @@ mutability its Move signature needs.
 | Administration | `replaceAdminCap`, `revokeAdminCap`, `transferSuperAdmin` | Take the `SuperAdminCap` (`superAdminCapId`). See [Administration](#administration). |
 
 `PresaleCalls` exposes each Move call separately for composition.
+
+## Aftermath DAO pools
+
+`blast_aftermath_dao_presale` (contracts ADR 0104,
+`sui/vendors/aftermath_dao_presale`) is a partner's immutable vendor package. It
+creates `blast_presale` sales with its own `AdminCap` and migrates each funded
+sale into a 50/50 Aftermath weighted pool wrapped in Aftermath's DAO-fee pool,
+paying a 2% DAO fee to its compiled treasury and locking the LP at `0x0`. It
+links only the next `blast_presale` generation, so it needs that generation
+published first.
+
+Configure it on the presale deployment:
+
+```ts
+const presale = new PresaleTransactions({
+  ...presaleDeployment,
+  // poolRegistry and daoFeeVersion default to AFTERMATH_MAINNET_OBJECTS.
+  aftermath: defineAftermathPresaleDeployment({ packageId: vendorPackageId }),
+});
+```
+
+`AFTERMATH_MAINNET_OBJECTS` records Aftermath's `PoolRegistry`
+(`0xfcc7…77ae`, initial shared version 6808332) and DAO-fee `Version`
+(`0xb4bf…92b7`, 293243902), the objects the package was reviewed against;
+pass others if Aftermath moves them. Without `aftermath`, every Aftermath
+builder throws and `venueOf` never returns `"aftermath"`.
+
+- **Venue.** `PresaleVenue` includes `"aftermath"`; its witness is
+  `<vendor>::blast_aftermath_dao_presale::Witness`
+  (`migrationWitnessType("aftermath")`, `aftermathWitnessType`), which
+  `setMigrationWitnessAllowed({ venue: "aftermath" })` allows.
+  `venueOf(migrationWitness)` names a sale's venue.
+- **Creation.** `createAftermathPresale` calls the vendor's
+  `new<Lp, SaleToken, Quote>` with its `AdminCap` and the `CreatePoolCapV2` of a
+  freshly published LP coin `Lp`, then `set_partner` when `partner` is given,
+  and `share`. The terms are `PresaleTerms` without the LP-fee split, which the
+  vendor fixes; the vendor sends the `PresaleCap` to its treasury and shares a
+  `PoolCreation<Lp>` bound to the sale, emitting `PoolCreationReserved`.
+- **Binding.** `getAftermathPoolCreation(presaleId, { creationDigest })` on
+  `PresaleClient`, or `findAftermathPoolCreation`, returns the sale's
+  `poolCreationId`, `lpType`, and the call-ready `poolCreation` reference
+  (null once migrated). With the digest of the sale's creation transaction it
+  reads that one transaction's events; without it, it scans the vendor's
+  `PoolCreationReserved` events. `aftermathReservationOf` does the same over
+  events an indexer already holds, and `decodeAftermathPoolCreationObject`
+  reads the object.
+- **Migration.** `migrateAftermath` builds
+  `migrate<Lp, SaleToken, Quote>(sale, pool_creation, &FeePolicy,
+  &mut PoolRegistry, &Version, &Clock)`; the `PoolCreation` goes by value.
+  `settleAndMigrateAftermath` puts `settle` first in the same PTB. Both append
+  `pay_protocol_fees_with_partner` when the sale's `partner` is given. There is
+  no `Vault`: the treasury holds the DAO-fee pool's `OwnerCap`, so Blast's
+  LP-fee rates and holder rewards do not apply.
+- **Coin order.** The contract orders the pool's coins itself by
+  `sorts_before`, the byte order of their defining-ID type names;
+  `aftermathSaleTokenFirst` and `aftermathPoolCoinTypes` mirror it for reading
+  the pool. The builder's type arguments are the same either way.
+- **Events and aborts.** `decodeAftermathPresaleEvent` decodes
+  `PoolCreationReserved` and `Migrated` (pool, DAO-fee pool, owner cap, LP coin
+  IDs and LP amount), typed `<Lp, SaleToken, Quote>`.
+  `aftermathPresaleAbortName` names the vendor's aborts (`EPoolMismatch`,
+  `EDaoFeePoolMismatch`, `EWrongPresale`); its `migrate` also aborts inside
+  `blast_presale` (`presaleAbortName`) and Aftermath's packages.
+
+`abi/production-aftermath-dao-presale-v1.json` freezes the vendor package at the
+presale ABI's commit; `new` and `migrate` are builders.
 
 ## Administration
 

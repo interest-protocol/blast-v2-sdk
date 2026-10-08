@@ -38,6 +38,12 @@ import {
   normalizeSuiPackageReference,
 } from "../lib/sui.ts";
 import type { CetusMemeSide } from "../migrators/transactions.ts";
+import type { AftermathPresaleDeployment } from "./aftermath.ts";
+import {
+  AFTERMATH_PRESALE_MODULE,
+  aftermathWitnessType,
+  defineAftermathPresaleDeployment,
+} from "./aftermath.ts";
 import type { AllowlistProof } from "./allowlist.ts";
 import {
   allowlistedEligibility,
@@ -75,10 +81,20 @@ export type PresaleDeployment = {
    * administrator call accepts.
    */
   adminRegistry: SharedObjectIdentity;
+  /**
+   * The Aftermath DAO-pool vendor package and the Aftermath objects its
+   * migration takes (`defineAftermathPresaleDeployment`); absent until it is
+   * published. Every `aftermath` builder throws without it.
+   */
+  aftermath?: AftermathPresaleDeployment;
 };
 
-/** Venues the presale adapters ship. */
-export type PresaleVenue = "cetus" | "bluefin";
+/**
+ * Venues the SDK migrates to: this package's `cetus` and `bluefin`, and
+ * `aftermath`, the vendor package `blast_aftermath_dao_presale`, whose witness
+ * is `<vendor>::blast_aftermath_dao_presale::Witness` (contracts ADR 0104).
+ */
+export type PresaleVenue = "cetus" | "bluefin" | "aftermath";
 
 /**
  * A migrator the `CreationPolicy` can allow: one of this package's venues, or
@@ -121,6 +137,32 @@ export type CetusPresaleObjects = {
   cetusConfig: SharedObjectReference<false>;
   /** Cetus CLMM `factory::Pools`. */
   cetusPools: SharedObjectReference<true>;
+};
+
+/**
+ * `blast_aftermath_dao_presale::new`'s per-sale terms: those of `PresaleTerms`
+ * without the LP-fee split, which the vendor fixes (its treasury takes every
+ * LP fee), and the fresh LP coin's pool-creation capability.
+ */
+export type AftermathPresaleTerms = Omit<
+  PresaleTerms,
+  "feeRecipients" | "holderRewardsBps"
+> & {
+  /** The vendor package's `AdminCap`. */
+  adminCap: TransactionObjectInput;
+  /** The fresh LP coin `Lp`, published for this sale alone. */
+  lpType: string;
+  /** Aftermath's `CreatePoolCapV2` that `Lp`'s publication minted, consumed. */
+  createPoolCap: TransactionObjectInput;
+};
+
+/** A sale's Aftermath binding, which `migrate` consumes. */
+export type AftermathMigration = LaunchTypes & {
+  presale: SharedObjectReference<true>;
+  /** The sale's shared `PoolCreation<Lp>`, taken by value. */
+  poolCreation: SharedObjectReference<true>;
+  /** The fresh LP coin, from `findAftermathPoolCreation` or the event. */
+  lpType: string;
 };
 
 /** What `createCetusPresale` and `createBluefinPresale` add to `new`. */
@@ -236,12 +278,37 @@ export class PresaleCalls {
         "adminRegistry",
         deployment.adminRegistry,
       ),
+      ...(deployment.aftermath === undefined
+        ? {}
+        : {
+            aftermath: defineAftermathPresaleDeployment(deployment.aftermath),
+          }),
     };
   }
 
-  /** The type a presale stores as its `migration_witness`. */
+  /**
+   * The type a presale stores as its `migration_witness`. `aftermath` needs
+   * `deployment.aftermath`.
+   */
   migrationWitnessType(venue: PresaleVenue): string {
+    if (venue === "aftermath") {
+      return aftermathWitnessType(this.#aftermath().packageId);
+    }
     return this.#type(`${venue}::Witness`);
+  }
+
+  /**
+   * The venue a sale's `migration_witness` names, or null for any other
+   * migrator; `aftermath` only when `deployment.aftermath` is set.
+   */
+  venueOf(migrationWitness: string): PresaleVenue | null {
+    const witness = normalizeStructTag(migrationWitness);
+    const venues: PresaleVenue[] = ["cetus", "bluefin"];
+    if (this.deployment.aftermath) venues.push("aftermath");
+    return (
+      venues.find((venue) => this.migrationWitnessType(venue) === witness) ??
+      null
+    );
   }
 
   /** `blast_presale::open_eligibility` or `allowlisted_eligibility`. */
@@ -408,6 +475,57 @@ export class PresaleCalls {
         tx.pure.u32(tickSpacing),
         tx.pure.u64(feeRate),
       ]);
+  }
+
+  /**
+   * `blast_aftermath_dao_presale::new<Lp, SaleToken, Quote>` with the vendor's
+   * `AdminCap`: creates a sale migrating through the vendor, sends its
+   * `PresaleCap` to the vendor's treasury, shares the `PoolCreation<Lp>`
+   * binding `createPoolCap` to it, and returns the `Presale`, which the same
+   * PTB must `share`. The `CreationPolicy` must allow the vendor's witness
+   * (`migrationWitnessType("aftermath")`) and Quote.
+   */
+  newAftermathPresale(options: AftermathPresaleTerms) {
+    const aftermath = this.#aftermath();
+    const typeArguments = this.#aftermathTypes(options);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${aftermath.packageId}::${AFTERMATH_PRESALE_MODULE}::new`,
+        typeArguments,
+        arguments: [
+          tx.object(options.adminCap),
+          ...this.#saleTerms(tx, options),
+          tx.object(options.createPoolCap),
+          this.#creationPolicy(tx),
+          this.#feePolicy(tx),
+        ],
+      });
+  }
+
+  /**
+   * `blast_aftermath_dao_presale::migrate<Lp, SaleToken, Quote>`: consumes the
+   * sale's `PoolCreation`, seeds a 50/50 Aftermath pool with all the sale's LP
+   * tokens and Quote in Aftermath's coin order (`aftermathPoolCoinTypes`; the
+   * contract orders them itself), wraps it in a DAO-fee pool paying the
+   * vendor's treasury, and locks the LP. Anyone may call.
+   */
+  migrateAftermath(options: AftermathMigration) {
+    const aftermath = this.#aftermath();
+    const typeArguments = this.#aftermathTypes(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${aftermath.packageId}::${AFTERMATH_PRESALE_MODULE}::migrate`,
+        typeArguments,
+        arguments: [
+          this.#presale(tx, options),
+          sharedObject(tx, "poolCreation", options.poolCreation, true),
+          this.#feePolicy(tx),
+          deploymentObject(tx, aftermath.poolRegistry, true),
+          deploymentObject(tx, aftermath.daoFeeVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
   }
 
   /**
@@ -1177,7 +1295,7 @@ export class PresaleCalls {
 
   #newPresale(
     tx: Transaction,
-    venue: PresaleVenue,
+    venue: "cetus" | "bluefin",
     options: PresaleTerms,
     venueArguments: TransactionArgument[],
   ): TransactionResult {
@@ -1185,20 +1303,7 @@ export class PresaleCalls {
       tx,
       "new",
       [
-        tx.object(options.treasuryCap),
-        sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-        tx.pure.u64(options.tokenSupply),
-        tx.add(this.bps(options.tokenAllocationBps)),
-        tx.add(this.vesting(options.participantVesting)),
-        tx.add(this.bps(options.liquidityTokenAllocationBps)),
-        tx.add(this.recipientShares(options.recipientAllocations)),
-        tx.pure.bool(options.burnable),
-        tx.pure.u64(options.raiseTarget),
-        tx.add(this.recipientShares(options.raiseAllocations)),
-        tx.pure.u64(options.durationMs),
-        tx.pure.u64(options.liquidityWindowMs),
-        tx.add(this.eligibility(options.eligibility)),
-        tx.add(this.uncapped(options.uncapped)),
+        ...this.#saleTerms(tx, options),
         tx.add(this.feeSplit(options.feeRecipients, options.holderRewardsBps)),
         this.#creationPolicy(tx),
         this.#feePolicy(tx),
@@ -1207,6 +1312,43 @@ export class PresaleCalls {
       options,
       venue,
     );
+  }
+
+  /** `new`'s sale terms, from the `TreasuryCap` through `Option<UncappedPhase>`. */
+  #saleTerms(
+    tx: Transaction,
+    options: Omit<PresaleTerms, "feeRecipients" | "holderRewardsBps">,
+  ): TransactionArgument[] {
+    return [
+      tx.object(options.treasuryCap),
+      sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+      tx.pure.u64(options.tokenSupply),
+      tx.add(this.bps(options.tokenAllocationBps)),
+      tx.add(this.vesting(options.participantVesting)),
+      tx.add(this.bps(options.liquidityTokenAllocationBps)),
+      tx.add(this.recipientShares(options.recipientAllocations)),
+      tx.pure.bool(options.burnable),
+      tx.pure.u64(options.raiseTarget),
+      tx.add(this.recipientShares(options.raiseAllocations)),
+      tx.pure.u64(options.durationMs),
+      tx.pure.u64(options.liquidityWindowMs),
+      tx.add(this.eligibility(options.eligibility)),
+      tx.add(this.uncapped(options.uncapped)),
+    ];
+  }
+
+  #aftermath(): AftermathPresaleDeployment {
+    const { aftermath } = this.deployment;
+    if (!aftermath) {
+      throw new TypeError("deployment.aftermath is required for Aftermath");
+    }
+    return aftermath;
+  }
+
+  /** `<Lp, SaleToken, Quote>`, the vendor functions' type arguments. */
+  #aftermathTypes(options: LaunchTypes & { lpType: string }): string[] {
+    const { memeType, quoteType } = normalizeLaunchTypes(options);
+    return [normalizeStructTag(options.lpType), memeType, quoteType];
   }
 
   /** `position, fee_split, partner_id, &CreationPolicy, &FeePolicy`, shared by both `new_vault`s. */
@@ -1353,6 +1495,22 @@ export class PresaleTransactions {
   }
 
   /**
+   * `blast_aftermath_dao_presale::new` with the vendor's `AdminCap`, then
+   * `set_partner` when `partner` is given and `share` from `startMs`. The
+   * vendor sends the `PresaleCap` to its treasury itself.
+   */
+  createAftermathPresale(
+    options: AftermathPresaleTerms & Omit<PresaleCreation, "capRecipient">,
+  ): Transaction {
+    const tx = new Transaction();
+    const presale = tx.add(this.call.newAftermathPresale(options));
+    const { partner } = options;
+    if (partner) tx.add(this.call.setPartner({ ...options, presale, partner }));
+    tx.add(this.call.share({ ...options, presale }));
+    return tx;
+  }
+
+  /**
    * Commits `amount` Quote from the sender's coins through `route` and sends
    * the returned change (zero outside a hard-capped phase) to `recipient`,
    * normally the sender.
@@ -1446,6 +1604,31 @@ export class PresaleTransactions {
       balance: options.creationFee,
     });
     tx.add(this.call.migrateBluefin({ ...options, creationFee }));
+    return this.#payProtocolFeesWithPartnerAfter(tx, options);
+  }
+
+  /**
+   * Migrates a funded Aftermath sale, then pays the sale's partner when
+   * `partner` is given; see `payProtocolFeesWithPartner`.
+   */
+  migrateAftermath(options: AftermathMigration & PresalePayout): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.migrateAftermath(options));
+    return this.#payProtocolFeesWithPartnerAfter(tx, options);
+  }
+
+  /**
+   * `settle` and the Aftermath `migrate` in one PTB, then the partner payout
+   * when `partner` is given: the relayer's settle-and-migrate shape. If the
+   * sale settles as cancelled (underfunded), `migrate` aborts and the whole
+   * PTB with it, so settle alone in that case.
+   */
+  settleAndMigrateAftermath(
+    options: AftermathMigration & PresalePayout,
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.settle(options));
+    tx.add(this.call.migrateAftermath(options));
     return this.#payProtocolFeesWithPartnerAfter(tx, options);
   }
 
