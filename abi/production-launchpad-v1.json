@@ -1,8 +1,12 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "8392fd14bdad4c48246338c9cf181046dd14aea4",
-    "workingTreeDifferedAtFreeze": false,
+    "contractsCommit": "a5ed34ad49c6c001af2db5b9cbcb206075704412",
+    "workingTreeDifferedAtFreeze": true,
+    "abiNeutralDifferences": [
+      "sui/meme_template/Move.lock",
+      "docs/research/sui-deepbook-indexer-architecture-2026.md"
+    ],
     "approvedAbiAmendments": [
       "contracts ADR 0011: compact replay-complete event payloads before release",
       "contracts ADR 0027: make protocol ownership explicit in Quote migration fee names",
@@ -25,7 +29,7 @@
       "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
       "contracts ADR 0105: anyone claims Blast's launch fees, paid to the partner and to a RuntimeConfig treasury that runtime_config::set_treasury (TreasuryAdmin) rotates; ProtocolFeesClaimed records the treasury and TreasuryChanged records each rotation",
       "contracts ADR 0107: the LpVault inherits launch::partner_id and, when partnered, holds Blast's LP fees until anyone calls vault::claim_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesClaimed records each claim",
-      "contracts ADR 0108: sui/meme_template is renamed sui/launch_ticket_template, package and named address launch_ticket_template; its module meme and its ABI are unchanged"
+      "contracts ADR 0108: meme_template is launch_ticket_template with byte-identical bytecode, and the standalone coin_template, with no public functions, joins the generated-package templates"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -7608,7 +7612,7 @@
         }
       }
     },
-    "memeTemplate": {
+    "launchTicketTemplate": {
       "address": "launch_ticket_template",
       "modules": {
         "meme": {
@@ -7616,6 +7620,32 @@
           "structs": [
             {
               "name": "MEME",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        }
+      }
+    },
+    "coinTemplate": {
+      "address": "coin_template",
+      "modules": {
+        "my_coin": {
+          "functions": [],
+          "structs": [
+            {
+              "name": "MY_COIN",
               "abilities": [
                 "Drop"
               ],

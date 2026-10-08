@@ -29,6 +29,10 @@
       "types": "./dist/deployments/index.d.ts",
       "default": "./dist/deployments/index.js"
     },
+    "./coin": {
+      "types": "./dist/coin/index.d.ts",
+      "default": "./dist/coin/index.js"
+    },
     "./holder-rewards": {
       "types": "./dist/holder-rewards/index.d.ts",
       "default": "./dist/holder-rewards/index.js"

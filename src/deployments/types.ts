@@ -11,8 +11,9 @@ export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
 
 /**
  * Every published package a deployment names, each with its current and
- * original package IDs. `meme_template` has no entry: it is bytecode each
- * launch publishes as its own Meme package.
+ * original package IDs. `launch_ticket_template` and `coin_template` have no
+ * entry: each is bytecode a launch or a standalone coin publishes as its own
+ * package.
  *
  * `timelock`, `admin`, `partners` and `launchpad` are the core every manifest
  * records. A package a manifest does not record is absent, and the accessor

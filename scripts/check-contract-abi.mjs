@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
  * refreeze at contracts main with `check:abi:write` for an approved change,
  * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
  */
-const BASELINE_COMMIT = "8392fd14bdad4c48246338c9cf181046dd14aea4";
+const BASELINE_COMMIT = "af86ea4bf34080553a45d961d6db8cec719bb2a0";
 const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
@@ -28,7 +28,12 @@ const artifactDeclarations = [
     path: "production-launchpad-v1.json",
     packages: [
       ["launchpad", "launchpad", "blast_fun"],
-      ["memeTemplate", "launch_ticket_template", "launch_ticket_template"],
+      [
+        "launchTicketTemplate",
+        "launch_ticket_template",
+        "launch_ticket_template",
+      ],
+      ["coinTemplate", "coin_template", "coin_template"],
       ["migrators", "migrators", "blast_fun_migrators"],
     ],
     approvedAbiAmendments: [
@@ -53,42 +58,33 @@ const artifactDeclarations = [
       "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
       "contracts ADR 0105: anyone claims Blast's launch fees, paid to the partner and to a RuntimeConfig treasury that runtime_config::set_treasury (TreasuryAdmin) rotates; ProtocolFeesClaimed records the treasury and TreasuryChanged records each rotation",
       "contracts ADR 0107: the LpVault inherits launch::partner_id and, when partnered, holds Blast's LP fees until anyone calls vault::claim_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesClaimed records each claim",
-      "contracts ADR 0108: sui/meme_template is renamed sui/launch_ticket_template, package and named address launch_ticket_template; its module meme and its ABI are unchanged",
+      "contracts ADR 0108: meme_template is launch_ticket_template with byte-identical bytecode, and the standalone coin_template, with no public functions, joins the generated-package templates",
     ],
   },
   {
     path: "production-presale-v1.json",
-    // The next blast_presale generation is unpublished, so it is frozen at the
-    // contracts commit it follows; re-sync to contracts main before it is
-    // published. The live dependency-only generation (contracts 22e689c) is
-    // not what this artifact describes.
+    // The presale package is unpublished, so it is frozen at the contracts
+    // commit it follows: ADRs 0099 through 0102, team vesting, the
+    // package's own two-tier administration (contracts PR 45), the AdminCap's
+    // per-vault LP-fee rates, the package-internal Merkle check, and the
+    // scheduled start with the AdminCap's per-sale rates before it, vaults
+    // without a presale, initializer creation with the sale-level hard cap and
+    // early close, and venue-owned pool tiers.
     baseline: BASELINE,
     approvedAbiAmendments: [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
       "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness",
       "contracts ADR 0106: one Blast partner per presale, named by set_partner before the share and accepted by creation_policy::add_partner and remove_partner; a partnered migration holds Blast's shares for pay_partner, PresaleOpened gains partner_id, and ProtocolFeesPaid gains partner_quote",
-      "contracts ADR 0099 (owner-requested cleanup, 2026-10-05): Presale derives its windows from start_ms, counts participants down as they claim (Claimed reports remaining_participants), and holds the LP-fee split as one FeeSplit that new, cetus::new, and bluefin::new take, built by blast_presale::fee_split; PresaleVault holds the same FeeSplit",
+      "contracts ADR 0099 (owner-requested cleanup, 2026-10-05): Presale derives its windows from start_ms, counts participants down as they claim (Claimed reports remaining_participants), and holds the LP-fee split as one FeeSplit that new, cetus::new, and bluefin::new take, built by blast_presale::fee_split; the Vault holds the same FeeSplit",
       "contracts ADR 0104 (amended 2026-10-05): set_migration_witness_allowed also rejects witness types defined at 0x1 and 0x2",
       "contracts ADR 0106 (source-style review, 2026-10-05): pay_partner is pay_protocol_fees_with_partner, since it pays Blast too, and FeeSplit names its recipients fee_recipients",
-      "contracts ADR 0107: the PresaleVault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
+      "contracts ADR 0107: the Vault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
       "contracts ADR 0101 (amended 2026-10-05): set_protocol_fees also accepts a Pending sale, in its creation transaction before share",
-      "contracts ADR 0109: cetus::new_vault and bluefin::new_vault lock an owner's own position in a Vault without a presale (zero presale and creator-capability IDs) with an optional partner; PresaleVault is renamed Vault and PresaleVaultCreated VaultCreated, with unchanged fields",
+      "contracts ADR 0109: cetus::new_vault and bluefin::new_vault lock an owner's own position in a Vault with zero presale IDs; PresaleVault and PresaleVaultCreated become Vault and VaultCreated",
+      "contracts ADR 0110: blast_presale::new returns a PresaleInitializer that the set_* setters configure and finalize turns into (Presale, PresaleCap); cetus::new and bluefin::new take only their venue arguments; the hard cap moves from UncappedPhase to a sale-level HardCap with closes_when_filled, settle closes a full sale early, PresaleCreated gains hard_cap, PresaleOpened hard_cap_from_ms, and PresaleFunded end_ms and liquidity_deadline_ms",
+      "contracts ADR 0111: the pool tier belongs to the venue; blast_presale::new, Presale, and PresaleCreated drop tick_spacing and pool_fee_rate, bluefin::new and bluefin::migrate take the VenueConfig, and venue_config::PoolTierReserved<Meme, Quote, Venue> records each Cetus or Bluefin tier",
     ],
     packages: [["presale", "presale", "blast_presale"]],
-  },
-  {
-    path: "production-aftermath-dao-presale-v1.json",
-    // The Aftermath DAO-pool vendor package (contracts ADR 0104) links only
-    // the next blast_presale generation, so it is frozen with it; both are
-    // unpublished.
-    baseline: BASELINE,
-    packages: [
-      [
-        "aftermathDaoPresale",
-        "vendors/aftermath_dao_presale",
-        "blast_aftermath_dao_presale",
-      ],
-    ],
   },
   {
     path: "production-admin-v1.json",
@@ -104,6 +100,19 @@ const artifactDeclarations = [
     // First covered at contracts 442116a; its ABI is unchanged since.
     baseline: BASELINE,
     packages: [["partners", "partners", "blast_partners"]],
+  },
+  {
+    path: "production-aftermath-dao-presale-v1.json",
+    // The Aftermath DAO-pool vendor (contracts ADR 0104), at its
+    // initializer split (ADR 0110) and venue-owned tiers (ADR 0111).
+    baseline: BASELINE,
+    packages: [
+      [
+        "aftermathDaoPresale",
+        "vendors/aftermath_dao_presale",
+        "blast_aftermath_dao_presale",
+      ],
+    ],
   },
   {
     path: "production-blast-sui-v1.json",
@@ -331,30 +340,17 @@ function classifyFunction(packageName, moduleName, functionName) {
 const functionClassifiers = {
   blast_fun: (moduleName, functionName) =>
     classifyLaunchpadFunction("blast_fun", moduleName, functionName),
-  launch_ticket_template: classifyMemeTemplateFunction,
+  launch_ticket_template: (moduleName, functionName) =>
+    rejectTemplateFunction("launch_ticket_template", moduleName, functionName),
+  coin_template: (moduleName, functionName) =>
+    rejectTemplateFunction("coin_template", moduleName, functionName),
   blast_fun_migrators: classifyMigratorFunction,
   blast_sui: classifyBlastSuiFunction,
   blast_presale: classifyPresaleFunction,
   blast_admin: classifyAdminFunction,
   blast_partners: classifyPartnersFunction,
-  blast_aftermath_dao_presale: classifyAftermathPresaleFunction,
+  blast_aftermath_dao_presale: classifyAftermathDaoPresaleFunction,
 };
-
-/**
- * `new` takes the vendor's AdminCap and a fresh LP coin's `CreatePoolCapV2`;
- * `migrate` is permissionless. Both are SDK builders.
- */
-function classifyAftermathPresaleFunction(moduleName, functionName) {
-  if (
-    moduleName === "blast_aftermath_dao_presale" &&
-    (functionName === "new" || functionName === "migrate")
-  ) {
-    return "builder";
-  }
-  throw new Error(
-    `unclassified function blast_aftermath_dao_presale::${moduleName}::${functionName}`,
-  );
-}
 
 const partnersBuilders = new Set([
   "new_cap",
@@ -364,6 +360,19 @@ const partnersBuilders = new Set([
   "set_recipient",
   "destroy_cap",
 ]);
+
+/** `AftermathDaoPresaleCalls` builds every entry point of the vendor package. */
+function classifyAftermathDaoPresaleFunction(moduleName, functionName) {
+  if (
+    moduleName === "blast_aftermath_dao_presale" &&
+    ["new", "finalize", "migrate"].includes(functionName)
+  ) {
+    return "builder";
+  }
+  throw new Error(
+    `unclassified function blast_aftermath_dao_presale::${moduleName}::${functionName}`,
+  );
+}
 
 function classifyPartnersFunction(moduleName, functionName) {
   if (partnersBuilders.has(functionName)) return "builder";
@@ -428,7 +437,17 @@ const presaleBuilders = new Set([
   "blast_presale::vested_recipient_share",
   "blast_presale::vesting_terms",
   "blast_presale::fee_split",
+  "blast_presale::set_supply",
+  "blast_presale::set_token_allocations",
+  "blast_presale::set_participant_vesting",
+  "blast_presale::set_raise",
+  "blast_presale::set_windows",
+  "blast_presale::set_eligibility",
+  "blast_presale::set_uncapped_phase",
+  "blast_presale::set_hard_cap",
+  "blast_presale::set_fee_split",
   "blast_presale::set_partner",
+  "blast_presale::finalize",
   "blast_presale::share",
   "blast_presale::set_protocol_fees",
   "blast_presale::commit_open",
@@ -476,6 +495,7 @@ const presaleEventNames = new Set([
   "RecipientAllocated",
   "Claimed",
   "VaultCreated",
+  "PoolTierReserved",
   "FeesCollected",
   "MigrationResidualsClaimed",
   "ProtocolLpFeesChanged",
@@ -500,7 +520,12 @@ function classifyPresaleFunction(moduleName, functionName) {
   if (key === "bps::new") return "compositional";
   // A migrator's module calls these with its own sealed witness, which no
   // transaction can construct; the SDK builds that migrator's entry points.
-  if (key === "blast_presale::new" || key === "blast_presale::migrate") {
+  // A migrator finalizing an initializer it is handed reads its witness in Move.
+  if (
+    key === "blast_presale::new" ||
+    key === "blast_presale::migrate" ||
+    key === "blast_presale::migration_witness"
+  ) {
     return "move-composition";
   }
   // `allowlist.ts` mirrors the Merkle tree and `math.ts` the BPS arithmetic off chain.
@@ -510,9 +535,10 @@ function classifyPresaleFunction(moduleName, functionName) {
   return classifyPackageAdmin("blast_presale", moduleName, functionName);
 }
 
-function classifyMemeTemplateFunction(moduleName, functionName) {
+/** A generated-package template runs only its initializer: any public function is new surface. */
+function rejectTemplateFunction(packageName, moduleName, functionName) {
   throw new Error(
-    `unexpected public function meme_template::${moduleName}::${functionName}`,
+    `unexpected public function ${packageName}::${moduleName}::${functionName}`,
   );
 }
 
@@ -701,10 +727,10 @@ const blastSuiEventNames = new Set([
 ]);
 
 function isEventStruct(packageName, moduleName, structName) {
-  if (packageName === "blast_presale") return presaleEventNames.has(structName);
   if (packageName === "blast_aftermath_dao_presale") {
     return structName === "PoolCreationReserved" || structName === "Migrated";
   }
+  if (packageName === "blast_presale") return presaleEventNames.has(structName);
   if (packageName === "blast_admin") return moduleName === "blast_admin_events";
   if (packageName === "blast_partners") {
     return structName === "PartnerUpdated" || structName === "PartnerPaid";

@@ -7,10 +7,11 @@ checkout (`npm run check:abi` reads `../contracts`; CI checks out the commit
 pinned in `.github/workflows/check.yml`) and compares it with the frozen
 artifacts:
 
-- `abi/production-launchpad-v1.json` for `launchpad`, the Meme template
-  (`sui/launch_ticket_template`, formerly `meme_template`), and the migrators
-  package (Cetus and Bluefin adapters, LP vault, LP-fee policy, and holder
-  rewards);
+- `abi/production-launchpad-v1.json` for `launchpad`, the two
+  generated-package templates (`launch_ticket_template`, formerly
+  `meme_template`, and `coin_template`, contracts ADR 0108), and the
+  migrators package (Cetus and Bluefin adapters, LP vault, LP-fee policy, and
+  holder rewards);
 - `abi/production-blast-sui-v1.json` for `blast_sui`;
 - `abi/production-presale-v1.json` for `blast_presale` (see
   [presale](presale.md));

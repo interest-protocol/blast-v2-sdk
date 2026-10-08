@@ -41,7 +41,9 @@ It provides:
   LP-fee policy, buybacks, and the blastSUI redeem fee, each signed in with its
   typed role in the same transaction; and
 - the `blast_partners` package: partner caps, registration, timelocked share
-  and cap schedules, recipients, payment previews, and replay.
+  and cap schedules, recipients, payment previews, and replay; and
+- standalone coins from the coin template (`@interest-protocol/blast-sdk/coin`):
+  a plain Sui coin with no Blast dependency.
 
 See [holder rewards](docs/holder-rewards.md) for holder accounting, Merkle
 rounds funded from the vault's rewards share, and permissionless payouts.
@@ -127,9 +129,11 @@ original package IDs (`timelock`, `admin`, `partners` and `launchpad` always;
 shared-object IDs and initial versions grouped by the package that owns them,
 migration routes and their tiers, the contracts commit and ABI artifact
 digests it was built from, release transaction digests, the SDK version and
-commit, and post-deploy evidence. `meme_template` has no package entry: each
-launch publishes its own Meme package from the template bytecode, linking the
-timelock, admin, partners and launchpad packages.
+commit, and post-deploy evidence. The `launch_ticket_template` and
+`coin_template` packages have no entry: each launch publishes its own Meme
+package from the launch ticket template's bytecode, linking the timelock,
+admin, partners and launchpad packages, and each standalone coin publishes its
+own package from the coin template's.
 
 Each shared object therefore has one owner-qualified path: `admin.acl`;
 `launchpad.packageVersion`, `launchConfig`, `runtimeConfig`;
@@ -467,7 +471,8 @@ accepts a partner for new launches through `addPartner` and `removePartner`.
 
 ## Generated Meme package
 
-`publishMeme` uses the reviewed, compiled Move template. It patches the type
+`publishMeme` uses the reviewed, compiled Move launch ticket template
+(`launch_ticket_template`, formerly `meme_template`; contracts ADR 0108). It patches the type
 identifiers, decimals, metadata, creator recipient, launch policy, and deployed
 Blast package dependency. The publish lists every package the launchpad links:
 the `blast_fun_timelock`, `blast_admin`, and `blast_partners` packages from the
@@ -538,10 +543,46 @@ stays with the reserve named by the contract formula. Contract objects and
 completed events remain authoritative if transaction history changes after a
 preview.
 
+## Standalone coin
+
+`@interest-protocol/blast-sdk/coin` publishes a plain Sui coin from the
+compiled coin template (contracts ADR 0108). The coin has no Blast dependency,
+Blast holds no authority over it, and it can never launch on Blast. Its
+initializer creates the currency in the Coin Registry, mints the initial supply
+to one recipient, and settles the `TreasuryCap` by the supply mode:
+`mintable` sends it to a recipient, while `fixed` and `burnOnly` consume it
+and need a nonzero initial supply. The `MetadataCap` goes to a recipient, or a
+null recipient deletes it and freezes the metadata. The `Currency` goes to the
+Coin Registry address; anyone may share it with
+`coin_registry::finalize_registration` afterward.
+
+```ts
+import { publishCoin } from "@interest-protocol/blast-sdk/coin";
+
+const transaction = publishCoin({
+  symbol: "DOG",
+  name: "Dog Coin",
+  description: "A good dog",
+  iconUrl: "https://example.com/dog.png",
+  decimals: 9,
+  initialSupply: 1_000_000_000n * 10n ** 9n,
+  supplyRecipient: creator,
+  supply: { kind: "fixed" },
+  metadataCapRecipient: creator,
+  upgradeCapRecipient: null, // makes the package immutable
+});
+```
+
+Both templates are patched by constant type and default value. When two
+patched constants end up equal, which the bytecode verifier rejects as
+duplicates (one recipient for every capability, a name equal to the symbol,
+two false flags), the builder merges them into one and leaves the freed slot
+unused, so every publish verifies.
+
 ## Presale
 
 `@interest-protocol/blast-sdk/presale` builds every product route of the next
-`blast_presale` generation (frozen at contracts `8392fd1`, not yet published;
+`blast_presale` generation (frozen at contracts `af86ea4`, not yet published;
 the live mainnet package has an older layout) and of the Aftermath DAO-pool
 vendor package that links it. It previews creation, commitments, and
 claims exactly as the contract enforces them, and it decodes and replays the

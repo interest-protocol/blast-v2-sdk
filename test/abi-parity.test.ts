@@ -18,7 +18,7 @@ const expectedEvents = {
   launchpad: 28,
   migrators: 14,
   blastSui: 13,
-  presale: 27,
+  presale: 28,
   admin: 15,
   partners: 2,
   aftermathDaoPresale: 2,
@@ -101,18 +101,23 @@ test("freezes every production package and event", () => {
   const presale = readArtifact("production-presale-v1.json");
   const admin = readArtifact("production-admin-v1.json");
   const partners = readArtifact("production-partners-v1.json");
-  const aftermath = readArtifact("production-aftermath-dao-presale-v1.json");
+  const aftermathDaoPresale = readArtifact(
+    "production-aftermath-dao-presale-v1.json",
+  );
 
   assert.deepEqual(Object.keys(launchpad.packages).sort(), [
+    "coinTemplate",
+    "launchTicketTemplate",
     "launchpad",
-    "memeTemplate",
     "migrators",
   ]);
   assert.deepEqual(Object.keys(blastSui.packages), ["blastSui"]);
   assert.deepEqual(Object.keys(presale.packages), ["presale"]);
   assert.deepEqual(Object.keys(admin.packages), ["admin"]);
   assert.deepEqual(Object.keys(partners.packages), ["partners"]);
-  assert.deepEqual(Object.keys(aftermath.packages), ["aftermathDaoPresale"]);
+  assert.deepEqual(Object.keys(aftermathDaoPresale.packages), [
+    "aftermathDaoPresale",
+  ]);
   assert.equal(countEvents(launchpad, "launchpad"), expectedEvents.launchpad);
   assert.equal(countEvents(launchpad, "migrators"), expectedEvents.migrators);
   assert.equal(countEvents(blastSui, "blastSui"), expectedEvents.blastSui);
@@ -120,7 +125,7 @@ test("freezes every production package and event", () => {
   assert.equal(countEvents(admin, "admin"), expectedEvents.admin);
   assert.equal(countEvents(partners, "partners"), expectedEvents.partners);
   assert.equal(
-    countEvents(aftermath, "aftermathDaoPresale"),
+    countEvents(aftermathDaoPresale, "aftermathDaoPresale"),
     expectedEvents.aftermathDaoPresale,
   );
   const eventWrapper = blastSui.packages.blastSui?.modules.blast_events;
@@ -133,7 +138,7 @@ test("freezes every production package and event", () => {
     presale,
     admin,
     partners,
-    aftermath,
+    aftermathDaoPresale,
   ]) {
     assertEveryOperationIsClassified(artifact, artifact === admin);
   }

@@ -51,7 +51,10 @@ function suiEvent<Kind extends PresaleEventKind>(
   sender = ALICE,
 ): SuiClientTypes.EventEntry {
   const module = presaleEventModules[kind];
-  const venue = kind === "VaultCreated" ? `, ${pkg}::cetus::Venue` : "";
+  const venue =
+    kind === "VaultCreated" || kind === "PoolTierReserved"
+      ? `, ${pkg}::cetus::Venue`
+      : "";
   eventIndex += 1;
   return {
     packageId: pkg,
@@ -84,7 +87,7 @@ test("event specs match every event frozen in the presale ABI", () => {
     }),
     orderedModuleEventFields(readFrozenPresaleEventSpecs()),
   );
-  assert.equal(Object.keys(presaleEventModules).length, 19);
+  assert.equal(Object.keys(presaleEventModules).length, 20);
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
@@ -127,6 +130,7 @@ test("rejects events from another package, module, or arity", () => {
     end_ms: 2n,
     liquidity_deadline_ms: 3n,
     uncapped_from_ms: 2n,
+    hard_cap_from_ms: null,
     partner_id: null,
   });
   const packages = { originalPackageId: pkg };
@@ -163,9 +167,8 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       liquidity_window_ms: 50n,
       eligibility: openEligibility(5_000n, 2n, 500n),
       uncapped: null,
+      hard_cap: null,
       migration_witness: `${pkg}::cetus::Witness`,
-      tick_spacing: 200,
-      pool_fee_rate: 10_000n,
       fee_recipients: [id("0xc0ffee"), id("0xfee")],
       fee_recipient_bps: [5_000n, 2_000n],
       holder_rewards_bps: 3_000n,
@@ -179,6 +182,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       end_ms: 1_100n,
       liquidity_deadline_ms: 1_150n,
       uncapped_from_ms: 1_100n,
+      hard_cap_from_ms: null,
       partner_id: null,
     }),
     decode(
@@ -209,6 +213,8 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       accepted_quote: 1_000n,
       refundable_quote: 3_000n,
       token_allocation: 10_001n,
+      end_ms: 1_100n,
+      liquidity_deadline_ms: 1_150n,
     }),
   ];
   let state = createPresaleEventProjection();
@@ -391,6 +397,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   const twice = ["Committed", "Claimed", "RecipientAllocated"];
   // An unpartnered vault pays Blast at each collection, so it has no partner payout.
   const never = [
+    "PoolTierReserved",
     "RaiseAllocated",
     "PresaleCancelled",
     "ProtocolFeesChanged",
@@ -445,9 +452,8 @@ test("a raise allocation leaves custody the migration's overflow", () => {
     liquidity_window_ms: 50n,
     eligibility: openEligibility(5_000n, 1n, 1_000n),
     uncapped: null,
+    hard_cap: null,
     migration_witness: `${pkg}::bluefin::Witness`,
-    tick_spacing: 60,
-    pool_fee_rate: 3_000n,
     fee_recipients: [],
     fee_recipient_bps: [],
     holder_rewards_bps: 10_000n,
@@ -470,6 +476,8 @@ test("a raise allocation leaves custody the migration's overflow", () => {
       accepted_quote: 1_000n,
       refundable_quote: 200n,
       token_allocation: 10_001n,
+      end_ms: 1_100n,
+      liquidity_deadline_ms: 1_150n,
     }),
     decode("RaiseAllocated", {
       presale_id: PRESALE,
@@ -520,9 +528,8 @@ function feePayingSaleCreated() {
     liquidity_window_ms: 50n,
     eligibility: openEligibility(5_000n, 2n, 500n),
     uncapped: null,
+    hard_cap: null,
     migration_witness: `${pkg}::cetus::Witness`,
-    tick_spacing: 200,
-    pool_fee_rate: 10_000n,
     fee_recipients: [id("0xc0ffee")],
     fee_recipient_bps: [7_000n],
     holder_rewards_bps: 3_000n,
@@ -663,6 +670,7 @@ test("holds a partnered sale's Blast shares from migration until its partner is 
       end_ms: 1_100n,
       liquidity_deadline_ms: 1_150n,
       uncapped_from_ms: 1_100n,
+      hard_cap_from_ms: null,
       partner_id: PARTNER,
     }),
     decode("Committed", {
@@ -819,6 +827,7 @@ test("replaces a scheduled sale's Blast rates and amounts before the start", () 
       end_ms: 1_100n,
       liquidity_deadline_ms: 1_150n,
       uncapped_from_ms: 1_100n,
+      hard_cap_from_ms: null,
       partner_id: null,
     }),
     changed,
@@ -877,9 +886,8 @@ test("carries vesting terms from creation and schedule IDs from migration and cl
       liquidity_window_ms: 50n,
       eligibility: openEligibility(5_000n, 2n, 500n),
       uncapped: null,
+      hard_cap: null,
       migration_witness: `${pkg}::cetus::Witness`,
-      tick_spacing: 200,
-      pool_fee_rate: 10_000n,
       fee_recipients: [id("0xc0ffee")],
       fee_recipient_bps: [7_000n],
       holder_rewards_bps: 3_000n,
@@ -1193,28 +1201,28 @@ function descriptor(type: unknown): string {
   if (name === "ID") return "id";
   if (name === "TypeName") return "typeName";
   if (name === "EligibilityPolicy") return "eligibility";
-  if (
-    name === "Option" &&
-    (datatype.type_arguments[0] as { argument: unknown }).argument === "address"
-  ) {
-    return "optionAddress";
-  }
-  const option =
-    name === "Option" &&
-    OPTION_DESCRIPTORS[
-      (
-        datatype.type_arguments[0] as {
-          argument: { Datatype: { name: string } };
-        }
-      ).argument.Datatype.name
-    ];
+  const option = name === "Option" && optionDescriptor(datatype);
   if (option) return option;
   throw new TypeError(`unsupported ABI event field ${JSON.stringify(type)}`);
+}
+
+/** The descriptor of an `Option<T>` field, by `T`: a primitive or a datatype. */
+function optionDescriptor(datatype: {
+  type_arguments: unknown[];
+}): string | undefined {
+  const argument = (datatype.type_arguments[0] as { argument: unknown })
+    .argument;
+  if (argument === "address") return "optionAddress";
+  if (argument === "u64") return "optionU64";
+  return OPTION_DESCRIPTORS[
+    (argument as { Datatype: { name: string } }).Datatype.name
+  ];
 }
 
 /** The event descriptor of each `Option<T>` an event carries, by `T`. */
 const OPTION_DESCRIPTORS: Record<string, string | undefined> = {
   UncappedPhase: "optionUncapped",
+  HardCap: "optionHardCap",
   ID: "optionId",
   VestingTerms: "optionVesting",
 };
@@ -1223,3 +1231,32 @@ function required<T>(value: T | undefined): T {
   assert.ok(value !== undefined);
   return value;
 }
+
+test("records a venue's pool tier by sale token, apart from the sale", () => {
+  const tier = decode("PoolTierReserved", {
+    tick_spacing: 200,
+    pool_fee_rate: 10_000n,
+  });
+  assert.equal(tier.venueType, normalizeStructTag(`${pkg}::cetus::Venue`));
+  const state = reducePresaleEvent(createPresaleEventProjection(), tier);
+  assert.deepEqual(state.poolTiers[normalizeStructTag(meme)], {
+    venueType: normalizeStructTag(`${pkg}::cetus::Venue`),
+    quoteType: normalizeStructTag(quote),
+    tickSpacing: 200,
+    poolFeeRate: 10_000n,
+  });
+  // The tier event names its venue; without one it is rejected.
+  const event = suiEvent("PoolTierReserved", {
+    tick_spacing: 200,
+    pool_fee_rate: 10_000n,
+  });
+  assert.throws(() =>
+    decodePresaleEvent(
+      {
+        ...event,
+        eventType: `${pkg}::venue_config::PoolTierReserved<${meme}, ${quote}>`,
+      },
+      { originalPackageId: pkg },
+    ),
+  );
+});

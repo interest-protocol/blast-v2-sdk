@@ -1,5 +1,6 @@
 export * from "./aborts.ts";
 export * from "./aftermath.ts";
+export * from "./aftermath-dao.ts";
 export * from "./allowlist.ts";
 export * from "./client.ts";
 export * from "./events.ts";

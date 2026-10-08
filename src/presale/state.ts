@@ -38,11 +38,25 @@ export type UncappedAccess =
   | { kind: "eligible" }
   | { kind: "anyone"; maxParticipants: bigint; minCommitment: bigint };
 
-/** `blast_presale::UncappedPhase`; `startsAfterMs` is an offset into the window. */
+/**
+ * `blast_presale::UncappedPhase`; `startsAfterMs` is an offset into the window.
+ * It only lifts wallet caps; whether the sale then stops at its raise is the
+ * sale's `HardCap`.
+ */
 export type UncappedPhase = {
   startsAfterMs: bigint;
   access: UncappedAccess;
-  hardCap: boolean;
+};
+
+/**
+ * `blast_presale::HardCap`: from `startsAfterMs` into the window the sale takes
+ * Quote only up to its raise, first come, first served; before then it
+ * overflows. With `closesWhenFilled`, anyone may settle the sale as soon as its
+ * raise is full under the hard cap (contracts ADR 0110).
+ */
+export type HardCap = {
+  startsAfterMs: bigint;
+  closesWhenFilled: boolean;
 };
 
 /**
@@ -172,7 +186,6 @@ export const uncappedPhaseBcs = bcs
         min_commitment: u64,
       }),
     }),
-    hard_cap: bcs.bool(),
   })
   .transform({
     input: (phase: UncappedPhase) => ({
@@ -186,7 +199,6 @@ export const uncappedPhaseBcs = bcs
                 min_commitment: phase.access.minCommitment,
               },
             },
-      hard_cap: phase.hardCap,
     }),
     output: (value): UncappedPhase => ({
       startsAfterMs: value.starts_after_ms,
@@ -198,7 +210,20 @@ export const uncappedPhaseBcs = bcs
               maxParticipants: value.access.Anyone.max_participants,
               minCommitment: value.access.Anyone.min_commitment,
             },
-      hardCap: value.hard_cap,
+    }),
+  });
+
+/** BCS layout of `blast_presale::HardCap`. */
+export const hardCapBcs = bcs
+  .struct("HardCap", { starts_after_ms: u64, closes_when_filled: bcs.bool() })
+  .transform({
+    input: (value: HardCap) => ({
+      starts_after_ms: value.startsAfterMs,
+      closes_when_filled: value.closesWhenFilled,
+    }),
+    output: (value): HardCap => ({
+      startsAfterMs: value.starts_after_ms,
+      closesWhenFilled: value.closes_when_filled,
     }),
   });
 
@@ -290,9 +315,8 @@ export const presaleBcs = bcs.struct("Presale", {
   raise_target: u64,
   eligibility: eligibilityPolicyBcs,
   uncapped: bcs.option(uncappedPhaseBcs),
+  hard_cap: bcs.option(hardCapBcs),
   migration_witness: moveTypeNameBcs,
-  tick_spacing: bcs.u32(),
-  pool_fee_rate: u64,
   fee_split: presaleFeeSplitBcs,
   total_commitments: u64,
   participants: u64,
@@ -384,11 +408,15 @@ export type PresaleState = SharedObjectReference<true> & {
   quoteType: string;
   presaleCapId: string;
   lifecycle: PresaleLifecycle;
+  /** The window's length: as created until the sale closes early, then the time it ran. */
   durationMs: bigint;
   liquidityWindowMs: bigint;
   /** When commitments open, which may be after the share; zero while Pending. */
   startMs: bigint;
-  /** Exclusive commitment end, derived from the start; zero while Pending. */
+  /**
+   * Exclusive commitment end, derived from the start; zero while Pending. An
+   * early close moves it to the settle.
+   */
   endMs: bigint;
   /**
    * From this timestamp anyone may cancel an unmigrated funded sale, derived
@@ -403,9 +431,13 @@ export type PresaleState = SharedObjectReference<true> & {
    * uncapped phase, zero while Pending.
    */
   uncappedFromMs: bigint;
+  hardCap: HardCap | null;
+  /**
+   * When the hard cap takes hold, derived from the start; null without one,
+   * zero while Pending.
+   */
+  hardCapFromMs: bigint | null;
   migrationWitness: string;
-  tickSpacing: number;
-  poolFeeRate: bigint;
   feeRecipients: BpsShare[];
   holderRewardsBps: bigint;
   totalCommitments: bigint;
@@ -561,9 +593,8 @@ export function decodePresaleObject(
     raiseTarget: parsed.raise_target,
     eligibility: parsed.eligibility,
     uncapped: parsed.uncapped,
+    hardCap: parsed.hard_cap,
     migrationWitness: parsed.migration_witness,
-    tickSpacing: parsed.tick_spacing,
-    poolFeeRate: parsed.pool_fee_rate,
     feeRecipients: parsed.fee_split.fee_recipients,
     holderRewardsBps: parsed.fee_split.holder_rewards_bps,
     totalCommitments: parsed.total_commitments,
@@ -593,15 +624,24 @@ export function decodePresaleObject(
  */
 function presaleWindowsOf(
   parsed: ReturnType<typeof presaleBcs.parse>,
-): Pick<PresaleState, "endMs" | "liquidityDeadlineMs" | "uncappedFromMs"> {
+): Pick<
+  PresaleState,
+  "endMs" | "liquidityDeadlineMs" | "uncappedFromMs" | "hardCapFromMs"
+> {
   if (parsed.lifecycle === "Pending") {
-    return { endMs: 0n, liquidityDeadlineMs: 0n, uncappedFromMs: 0n };
+    return {
+      endMs: 0n,
+      liquidityDeadlineMs: 0n,
+      uncappedFromMs: 0n,
+      hardCapFromMs: parsed.hard_cap ? 0n : null,
+    };
   }
   return presaleWindows(
     parsed.start_ms,
     parsed.duration_ms,
     parsed.liquidity_window_ms,
     parsed.uncapped,
+    parsed.hard_cap,
   );
 }
 

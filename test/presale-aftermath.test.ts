@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
 import type { Transaction } from "@mysten/sui/transactions";
@@ -218,48 +219,97 @@ const terms: AftermathPresaleTerms = {
   liquidityWindowMs: 50n,
   eligibility: openEligibility(500n, 4n, 250n),
   uncapped: null,
+  hardCap: null,
 };
 
-test("creates an Aftermath sale with the vendor AdminCap, names its partner, and shares it", () => {
+test("creates an Aftermath sale through the initializer: vendor new, setters, vendor finalize, share", () => {
   const ptb = tx.createAftermathPresale({
     ...terms,
+    hardCap: { startsAfterMs: 40n, closesWhenFilled: true },
     startMs: 1_000n,
     partner,
   });
   const vendorCalls = assertBuildersMatchAbi(ptb, vendorAbi, VENDOR);
-  assert.deepEqual(vendorCalls, ["blast_aftermath_dao_presale::new"]);
-  const presaleCalls = assertBuildersMatchAbi(ptb, presaleAbi, "0x5f");
-  assert.deepEqual(presaleCalls.slice(-2), [
-    "blast_presale::set_partner",
-    "blast_presale::share",
+  assert.deepEqual(vendorCalls, [
+    "blast_aftermath_dao_presale::new",
+    "blast_aftermath_dao_presale::finalize",
   ]);
+  const presaleCalls = assertBuildersMatchAbi(ptb, presaleAbi, "0x5f");
+  // Every setter but the LP-fee split, which the vendor's finalize sets.
+  assert.deepEqual(
+    presaleCalls.filter((name) => /^blast_presale::(set_|share)/.test(name)),
+    [
+      "blast_presale::set_supply",
+      "blast_presale::set_token_allocations",
+      "blast_presale::set_raise",
+      "blast_presale::set_windows",
+      "blast_presale::set_eligibility",
+      "blast_presale::set_hard_cap",
+      "blast_presale::set_partner",
+      "blast_presale::share",
+    ],
+  );
   const calls = ptb
     .getData()
     .commands.flatMap((command) =>
       command.$kind === "MoveCall" ? [command.MoveCall] : [],
     );
-  const newIndex = calls.findIndex(
-    (call) =>
-      call.module === "blast_aftermath_dao_presale" && call.function === "new",
-  );
-  const created = calls[newIndex];
-  assert.ok(created);
-  assert.deepEqual(created.typeArguments, [LP, memeA, sui]);
-  const args = moveCallArguments(ptb, newIndex);
-  assert.equal(args[0], "object:0xad");
-  assert.equal(args[1], "object:0x7c");
-  assert.equal(args[2], "shared-mut:0xcc");
-  assert.deepEqual(args.slice(-3), [
-    "object:0xcc9",
+  const names = calls.map((call) => `${call.module}::${call.function}`);
+  assert.equal(names[0], "blast_aftermath_dao_presale::new");
+  assert.equal(names.at(-2), "blast_aftermath_dao_presale::finalize");
+  assert.equal(names.at(-1), "blast_presale::share");
+
+  // `new<SaleToken, Quote>(&AdminCap, TreasuryCap, &CreationPolicy, &FeePolicy)`.
+  assert.deepEqual(calls[0]?.typeArguments, [memeA, sui]);
+  assert.deepEqual(moveCallArguments(ptb, 0), [
+    "object:0xad",
+    "object:0x7c",
     "shared:0x62",
     "shared:0x61",
   ]);
+  const hardCap = calls[names.indexOf("blast_presale::set_hard_cap")];
+  assert.deepEqual(
+    hardCap?.arguments.slice(1).map((argument) => {
+      assert.ok(argument.$kind === "Input");
+      return ptb.getData().inputs[argument.Input]?.Pure?.bytes;
+    }),
+    [
+      bcs.u64().serialize(40n).toBase64(),
+      bcs.bool().serialize(true).toBase64(),
+    ],
+  );
+  // `finalize<Lp, SaleToken, Quote>(&AdminCap, initializer, &mut Currency, CreatePoolCapV2)`.
+  const finalizeIndex = names.length - 2;
+  assert.deepEqual(calls[finalizeIndex]?.typeArguments, [LP, memeA, sui]);
+  const finalizeArgs = moveCallArguments(ptb, finalizeIndex);
+  assert.equal(finalizeArgs[0], "object:0xad");
+  assert.equal(finalizeArgs[1], "result:0");
+  assert.deepEqual(finalizeArgs.slice(2), ["shared-mut:0xcc", "object:0xcc9"]);
+  assert.equal(
+    moveCallArguments(ptb, names.length - 1)[0],
+    `result:${ptb
+      .getData()
+      .commands.findIndex(
+        (command) => command.MoveCall?.function === "finalize",
+      )}`,
+  );
   // The vendor sends the PresaleCap to its treasury: nothing to transfer.
   assert.ok(
     ptb
       .getData()
       .commands.every((command) => command.$kind !== "TransferObjects"),
   );
+
+  // Without a hard cap or partner, those setters are left out.
+  const plain = tx
+    .createAftermathPresale({ ...terms, startMs: 0n })
+    .getData()
+    .commands.flatMap((command) =>
+      command.$kind === "MoveCall" ? [command.MoveCall.function] : [],
+    );
+  assert.ok(!plain.includes("set_hard_cap"));
+  assert.ok(!plain.includes("set_partner"));
+  assert.ok(!plain.includes("set_fee_split"));
 });
 
 test("migrates an Aftermath sale with its PoolCreation and Aftermath's objects", () => {
