@@ -23,12 +23,7 @@ import {
 } from "../lib/integers.ts";
 import type { SharedObjectReference } from "../lib/sui.ts";
 import type { AllocationPlan, FeeSplit } from "./allocation.ts";
-import {
-  allocationPlanBcs,
-  bpsBcs,
-  feeSplitBcs,
-  protocolAllocationBcs,
-} from "./allocation.ts";
+import { allocationPlanBcs, bpsBcs, feeSplitBcs } from "./allocation.ts";
 import type { CurveState } from "./curve.ts";
 
 const LifecycleBcs = bcs.enum("Lifecycle", {
@@ -402,7 +397,11 @@ export const launchConfigBcs = bcs.struct("LaunchConfig", {
   quote_fee_bps: bpsBcs,
   meme_fee_bps: bpsBcs,
   migration_witnesses: bcs.vector(moveTypeNameBcs),
-  protocol_allocation: protocolAllocationBcs,
+  // Snake-case keys, as the vendored integration SDK decoded them.
+  protocol_allocation: bcs.struct("ProtocolAllocation", {
+    meme_bps: bpsBcs,
+    quote_bps: bpsBcs,
+  }),
   creation_fee: bcs.u64(),
 });
 
@@ -497,8 +496,8 @@ export function decodeLaunchConfigObject(
     memeFeeBps: parsed.meme_fee_bps,
     migrationWitnessTypes: [...parsed.migration_witnesses],
     protocolAllocation: {
-      memeBps: parsed.protocol_allocation.memeBps,
-      quoteBps: parsed.protocol_allocation.quoteBps,
+      memeBps: parsed.protocol_allocation.meme_bps,
+      quoteBps: parsed.protocol_allocation.quote_bps,
     },
     creationFee: BigInt(parsed.creation_fee),
   };

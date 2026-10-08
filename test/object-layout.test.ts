@@ -89,7 +89,7 @@ test("SDK object layouts follow the frozen Move field order", () => {
         quote_fee_bps: 0n,
         meme_fee_bps: 0n,
         migration_witnesses: [],
-        protocol_allocation: { memeBps: 0n, quoteBps: 0n },
+        protocol_allocation: { meme_bps: 0n, quote_bps: 0n },
         creation_fee: 0n,
       },
     ],
