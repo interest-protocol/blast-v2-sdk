@@ -51,7 +51,10 @@ function suiEvent<Kind extends PresaleEventKind>(
   sender = ALICE,
 ): SuiClientTypes.EventEntry {
   const module = presaleEventModules[kind];
-  const venue = kind === "VaultCreated" ? `, ${pkg}::cetus::Venue` : "";
+  const venue =
+    kind === "VaultCreated" || kind === "PoolTierReserved"
+      ? `, ${pkg}::cetus::Venue`
+      : "";
   eventIndex += 1;
   return {
     packageId: pkg,
@@ -84,7 +87,7 @@ test("event specs match every event frozen in the presale ABI", () => {
     }),
     orderedModuleEventFields(readFrozenPresaleEventSpecs()),
   );
-  assert.equal(Object.keys(presaleEventModules).length, 19);
+  assert.equal(Object.keys(presaleEventModules).length, 20);
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
@@ -166,8 +169,6 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       uncapped: null,
       hard_cap: null,
       migration_witness: `${pkg}::cetus::Witness`,
-      tick_spacing: 200,
-      pool_fee_rate: 10_000n,
       fee_recipients: [id("0xc0ffee"), id("0xfee")],
       fee_recipient_bps: [5_000n, 2_000n],
       holder_rewards_bps: 3_000n,
@@ -396,6 +397,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   const twice = ["Committed", "Claimed", "RecipientAllocated"];
   // An unpartnered vault pays Blast at each collection, so it has no partner payout.
   const never = [
+    "PoolTierReserved",
     "RaiseAllocated",
     "PresaleCancelled",
     "ProtocolFeesChanged",
@@ -452,8 +454,6 @@ test("a raise allocation leaves custody the migration's overflow", () => {
     uncapped: null,
     hard_cap: null,
     migration_witness: `${pkg}::bluefin::Witness`,
-    tick_spacing: 60,
-    pool_fee_rate: 3_000n,
     fee_recipients: [],
     fee_recipient_bps: [],
     holder_rewards_bps: 10_000n,
@@ -530,8 +530,6 @@ function feePayingSaleCreated() {
     uncapped: null,
     hard_cap: null,
     migration_witness: `${pkg}::cetus::Witness`,
-    tick_spacing: 200,
-    pool_fee_rate: 10_000n,
     fee_recipients: [id("0xc0ffee")],
     fee_recipient_bps: [7_000n],
     holder_rewards_bps: 3_000n,
@@ -890,8 +888,6 @@ test("carries vesting terms from creation and schedule IDs from migration and cl
       uncapped: null,
       hard_cap: null,
       migration_witness: `${pkg}::cetus::Witness`,
-      tick_spacing: 200,
-      pool_fee_rate: 10_000n,
       fee_recipients: [id("0xc0ffee")],
       fee_recipient_bps: [7_000n],
       holder_rewards_bps: 3_000n,
@@ -1208,3 +1204,32 @@ function required<T>(value: T | undefined): T {
   assert.ok(value !== undefined);
   return value;
 }
+
+test("records a venue's pool tier by sale token, apart from the sale", () => {
+  const tier = decode("PoolTierReserved", {
+    tick_spacing: 200,
+    pool_fee_rate: 10_000n,
+  });
+  assert.equal(tier.venueType, normalizeStructTag(`${pkg}::cetus::Venue`));
+  const state = reducePresaleEvent(createPresaleEventProjection(), tier);
+  assert.deepEqual(state.poolTiers[normalizeStructTag(meme)], {
+    venueType: normalizeStructTag(`${pkg}::cetus::Venue`),
+    quoteType: normalizeStructTag(quote),
+    tickSpacing: 200,
+    poolFeeRate: 10_000n,
+  });
+  // The tier event names its venue; without one it is rejected.
+  const event = suiEvent("PoolTierReserved", {
+    tick_spacing: 200,
+    pool_fee_rate: 10_000n,
+  });
+  assert.throws(() =>
+    decodePresaleEvent(
+      {
+        ...event,
+        eventType: `${pkg}::venue_config::PoolTierReserved<${meme}, ${quote}>`,
+      },
+      { originalPackageId: pkg },
+    ),
+  );
+});

@@ -356,6 +356,7 @@ test("creates a Bluefin presale without optional settings", () => {
     "shared-mut:0xcc",
     "shared:0x62",
     "shared:0x61",
+    "shared-mut:0x60",
     "pure",
     "pure",
   ]);
@@ -458,6 +459,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       [
         "shared-mut:0xab",
         "shared:0x61",
+        "shared:0x60",
         "shared:0xcc",
         "shared:0xcd",
         "shared-mut:0x80",

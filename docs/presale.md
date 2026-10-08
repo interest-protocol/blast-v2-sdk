@@ -55,7 +55,7 @@ stage; `newCetusPresale` and `newBluefinPresale` build all three.
 
 | Step | Builder | Notes |
 | --- | --- | --- |
-| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: the venue's `new`, then `set_supply`, `set_token_allocations` (every rate through `bps::new`, the `RecipientShare` vector through `recipient_share`, or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), `set_participant_vesting` when given, `set_raise`, `set_windows`, `set_eligibility`, `set_uncapped_phase` and `set_hard_cap` when given, `set_fee_split` through `fee_split`, `set_partner` when `partner` is given, `finalize`, `share` from `startMs`, and the `PresaleCap` transfer. Cetus reserves the pair's pool creation in `VenueConfig` and derives the fee rate from `tickSpacing`. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
+| Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: the venue's `new`, then `set_supply`, `set_token_allocations` (every rate through `bps::new`, the `RecipientShare` vector through `recipient_share`, or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), `set_participant_vesting` when given, `set_raise`, `set_windows`, `set_eligibility`, `set_uncapped_phase` and `set_hard_cap` when given, `set_fee_split` through `fee_split`, `set_partner` when `partner` is given, `finalize`, `share` from `startMs`, and the `PresaleCap` transfer. The pool tier belongs to the venue (contracts ADR 0111): Cetus reserves the pair's pool creation and records `tickSpacing` (Cetus derives the fee rate) in `VenueConfig`, and Bluefin records `tickSpacing` and `feeRate` there too; the sale itself carries no tier. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
 | Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except under a hard cap. |
 | Settle | `settle`, `cancelUnlaunched` | Anyone may call. `settle` works from `endMs`, or earlier once the raise is full under a hard cap with `closesWhenFilled` (`canClosePresaleEarly`); an early close ends the window at the settle, and `PresaleFunded` carries the actual `end_ms` and `liquidity_deadline_ms`. |
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. Pass the sale's `partner` when it names one, and the same PTB pays it. |
@@ -186,6 +186,31 @@ and emits nothing, so pass the vault's `partner` to `collectCetusFees` or
 `payProtocolLpFeesWithPartner` does it alone, and aborts for any other partner
 (`EWrongPartner`).
 
+## Aftermath DAO-pool vendor
+
+`AftermathDaoPresaleTransactions` builds the one-off `blast_aftermath_dao_presale`
+package (contracts ADRs 0104, 0110, and 0111), constructed with the vendor's
+package IDs and the presale deployment. Its sales migrate into a 50/50 Aftermath
+pool behind a DAO-fee pool paying the partner treasury, so they carry no pool
+tier.
+
+- `createSale`, with the vendor `AdminCap`, is one PTB:
+  1. the vendor's `new` returns the `PresaleInitializer`;
+  2. `configurePresaleTerms` sets every term except the LP-fee split, with
+     `set_partner` when `partner` is given;
+  3. the vendor's `finalize` names the treasury as the only LP-fee recipient,
+     sends it the `PresaleCap`, and binds the fresh LP coin's `CreatePoolCapV2`
+     in a shared `PoolCreation<Lp>`;
+  4. `share` opens the sale from `startMs`.
+- `migrate` (anyone, while `Funded`) consumes the sale's `PoolCreation<Lp>`,
+  whose ID `PoolCreationReserved` carries, with Aftermath's `PoolRegistry` and
+  the DAO-fee `Version`. On a partnered sale, the same PTB pays the partner.
+- `decodeAftermathDaoPresaleEvent` decodes `PoolCreationReserved` and
+  `Migrated`, both typed `<Lp, SaleToken, Quote>`.
+
+`abi/production-aftermath-dao-presale-v1.json` freezes the vendor's three entry
+points and two events.
+
 ## Creation allowlists
 
 `creation_policy::CreationPolicy` lists the Quote types and the migration
@@ -246,9 +271,11 @@ const manifest = buildRewardManifest({ ...round, leafDomain: PRESALE_REWARD_LEAF
 `PresaleClient` (`blastPresale()` extension) reads a `Presale`, a wallet's
 `Commitment` dynamic field, a `Vault`, a reward `Round`, the
 `FeePolicy`, the `CreationPolicy`, and the `AdminRegistry`.
-`decodePresaleEvent` decodes the 16
-events generic over `<SaleToken, Quote>`. `VaultCreated` adds a `Venue`
-type argument. `decodePresalePolicyEvent` decodes `FeesChanged`,
+`decodePresaleEvent` decodes the 20
+events generic over `<SaleToken, Quote>`. `VaultCreated` and
+`PoolTierReserved` add a `Venue` type argument; the reducer keeps each
+`PoolTierReserved` in `poolTiers`, keyed by sale token, since it precedes the
+sale's `PresaleCreated`. `decodePresalePolicyEvent` decodes `FeesChanged`,
 `DestinationChanged`, `QuoteSet`, `MigrationWitnessSet`, `PartnerAdded`,
 `PartnerRemoved`, `AdminCapReplaced`, and `AdminCapRevoked`, which have no type
 arguments.

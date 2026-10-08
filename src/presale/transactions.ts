@@ -128,6 +128,12 @@ export type PresaleSettings = LaunchTypes & {
   partner?: SharedObjectReference<false>;
 };
 
+/** A sale's settings without its LP-fee split, which some migrators fix themselves. */
+export type PresaleTermsSettings = Omit<
+  PresaleSettings,
+  "feeRecipients" | "holderRewardsBps"
+>;
+
 /** A sale's settings plus the coin objects its creation consumes and finalizes. */
 export type PresaleTerms = PresaleSettings & {
   /** The zero-supply `TreasuryCap<Meme>`, consumed. */
@@ -403,6 +409,8 @@ export class PresaleCalls {
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           this.#creationPolicy(tx),
           this.#feePolicy(tx),
+          // Records the tier for the migration (contracts ADR 0111).
+          deploymentObject(tx, this.deployment.venueConfig, true),
           tx.pure.u32(tickSpacing),
           tx.pure.u64(feeRate),
         ],
@@ -420,6 +428,30 @@ export class PresaleCalls {
    */
   configurePresale(
     options: PresaleSettings & { initializer: TransactionArgument },
+  ) {
+    return this.#configure(options, {
+      feeRecipients: options.feeRecipients,
+      holderRewardsBps: options.holderRewardsBps,
+    });
+  }
+
+  /**
+   * Every `PresaleInitializer` setter `configurePresale` calls except
+   * `set_fee_split`, for a migrator whose own `finalize` fixes the LP-fee
+   * split, such as the Aftermath DAO-pool vendor (`AftermathDaoPresaleCalls`).
+   */
+  configurePresaleTerms(
+    options: PresaleTermsSettings & { initializer: TransactionArgument },
+  ) {
+    return this.#configure(options, null);
+  }
+
+  #configure(
+    options: PresaleTermsSettings & { initializer: TransactionArgument },
+    feeSplit: Pick<
+      PresaleSettings,
+      "feeRecipients" | "holderRewardsBps"
+    > | null,
   ) {
     const tokenSupply = requireU64("tokenSupply", options.tokenSupply);
     const raiseTarget = requireU64("raiseTarget", options.raiseTarget);
@@ -465,9 +497,13 @@ export class PresaleCalls {
           tx.pure.bool(hardCap.closesWhenFilled),
         ]);
       }
-      set("set_fee_split", [
-        tx.add(this.feeSplit(options.feeRecipients, options.holderRewardsBps)),
-      ]);
+      if (feeSplit) {
+        set("set_fee_split", [
+          tx.add(
+            this.feeSplit(feeSplit.feeRecipients, feeSplit.holderRewardsBps),
+          ),
+        ]);
+      }
       if (partner) {
         set("set_partner", [
           this.#creationPolicy(tx),
@@ -732,6 +768,7 @@ export class PresaleCalls {
         [
           this.#presale(tx, options),
           this.#feePolicy(tx),
+          deploymentObject(tx, this.deployment.venueConfig, false),
           sharedObject(tx, "memeCurrency", options.memeCurrency, false),
           sharedObject(tx, "quoteCurrency", options.quoteCurrency, false),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, true),

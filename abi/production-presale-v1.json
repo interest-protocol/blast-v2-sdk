@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "80050682420d5674048dc1366ccf8f5c0986db14",
+    "contractsCommit": "af86ea4bf34080553a45d961d6db8cec719bb2a0",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
@@ -12,7 +12,8 @@
       "contracts ADR 0106 (source-style review, 2026-10-05): pay_partner is pay_protocol_fees_with_partner, since it pays Blast too, and FeeSplit names its recipients fee_recipients",
       "contracts ADR 0107: the Vault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
       "contracts ADR 0109: cetus::new_vault and bluefin::new_vault lock an owner's own position in a Vault with zero presale IDs; PresaleVault and PresaleVaultCreated become Vault and VaultCreated",
-      "contracts ADR 0110: blast_presale::new returns a PresaleInitializer that the set_* setters configure and finalize turns into (Presale, PresaleCap); cetus::new and bluefin::new take only their venue arguments; the hard cap moves from UncappedPhase to a sale-level HardCap with closes_when_filled, settle closes a full sale early, PresaleCreated gains hard_cap, PresaleOpened hard_cap_from_ms, and PresaleFunded end_ms and liquidity_deadline_ms"
+      "contracts ADR 0110: blast_presale::new returns a PresaleInitializer that the set_* setters configure and finalize turns into (Presale, PresaleCap); cetus::new and bluefin::new take only their venue arguments; the hard cap moves from UncappedPhase to a sale-level HardCap with closes_when_filled, settle closes a full sale early, PresaleCreated gains hard_cap, PresaleOpened hard_cap_from_ms, and PresaleFunded end_ms and liquidity_deadline_ms",
+      "contracts ADR 0111: the pool tier belongs to the venue; blast_presale::new, Presale, and PresaleCreated drop tick_spacing and pool_fee_rate, bluefin::new and bluefin::migrate take the VenueConfig, and venue_config::PoolTierReserved<Meme, Quote, Venue> records each Cetus or Bluefin tier"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -1018,9 +1019,7 @@
                       }
                     }
                   ]
-                },
-                "u32",
-                "u64"
+                }
               ],
               "returns": [
                 {
@@ -2442,14 +2441,6 @@
                   }
                 },
                 {
-                  "name": "tick_spacing",
-                  "type": "u32"
-                },
-                {
-                  "name": "pool_fee_rate",
-                  "type": "u64"
-                },
-                {
                   "name": "fee_split",
                   "type": {
                     "Datatype": {
@@ -2797,14 +2788,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "tick_spacing",
-                  "type": "u32"
-                },
-                {
-                  "name": "pool_fee_rate",
-                  "type": "u64"
                 },
                 {
                   "name": "protocol_fees",
@@ -3775,14 +3758,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "tick_spacing",
-                  "type": "u32"
-                },
-                {
-                  "name": "pool_fee_rate",
-                  "type": "u64"
                 },
                 {
                   "name": "fee_recipients",
@@ -4816,6 +4791,21 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_presale",
+                          "name": "venue_config"
+                        },
+                        "name": "VenueConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "sui",
                           "name": "coin_registry"
                         },
@@ -5007,6 +4997,21 @@
                           "name": "fee_policy"
                         },
                         "name": "FeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "venue_config"
+                        },
+                        "name": "VenueConfig",
                         "type_arguments": []
                       }
                     }
@@ -8644,6 +8649,48 @@
           "functions": [],
           "structs": [
             {
+              "name": "PoolTier",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "tick_spacing",
+                  "type": "u32"
+                },
+                {
+                  "name": "pool_fee_rate",
+                  "type": "u64"
+                }
+              ]
+            },
+            {
+              "name": "PoolTierKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
               "name": "VenueConfig",
               "abilities": [
                 "Key"
@@ -8668,7 +8715,44 @@
             }
           ],
           "enums": [],
-          "events": []
+          "events": [
+            {
+              "name": "PoolTierReserved",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Venue",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "tick_spacing",
+                  "type": "u32"
+                },
+                {
+                  "name": "pool_fee_rate",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            }
+          ]
         }
       }
     }

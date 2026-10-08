@@ -67,10 +67,10 @@ const artifactDeclarations = [
     // package's own two-tier administration (contracts PR 45), the AdminCap's
     // per-vault LP-fee rates, the package-internal Merkle check, and the
     // scheduled start with the AdminCap's per-sale rates before it, vaults
-    // without a presale, and initializer creation with the sale-level hard cap
-    // and early close.
+    // without a presale, initializer creation with the sale-level hard cap and
+    // early close, and venue-owned pool tiers.
     baseline: {
-      contractsCommit: "80050682420d5674048dc1366ccf8f5c0986db14",
+      contractsCommit: "af86ea4bf34080553a45d961d6db8cec719bb2a0",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
@@ -83,6 +83,7 @@ const artifactDeclarations = [
       "contracts ADR 0107: the Vault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
       "contracts ADR 0109: cetus::new_vault and bluefin::new_vault lock an owner's own position in a Vault with zero presale IDs; PresaleVault and PresaleVaultCreated become Vault and VaultCreated",
       "contracts ADR 0110: blast_presale::new returns a PresaleInitializer that the set_* setters configure and finalize turns into (Presale, PresaleCap); cetus::new and bluefin::new take only their venue arguments; the hard cap moves from UncappedPhase to a sale-level HardCap with closes_when_filled, settle closes a full sale early, PresaleCreated gains hard_cap, PresaleOpened hard_cap_from_ms, and PresaleFunded end_ms and liquidity_deadline_ms",
+      "contracts ADR 0111: the pool tier belongs to the venue; blast_presale::new, Presale, and PresaleCreated drop tick_spacing and pool_fee_rate, bluefin::new and bluefin::migrate take the VenueConfig, and venue_config::PoolTierReserved<Meme, Quote, Venue> records each Cetus or Bluefin tier",
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },
@@ -106,6 +107,23 @@ const artifactDeclarations = [
       workingTreeDifferedAtFreeze: false,
     },
     packages: [["partners", "partners", "blast_partners"]],
+  },
+  {
+    path: "production-aftermath-dao-presale-v1.json",
+    // The Aftermath DAO-pool vendor (contracts ADR 0104) is new to SDK
+    // coverage, frozen at its initializer split (ADR 0110) and venue-owned
+    // tiers (ADR 0111).
+    baseline: {
+      contractsCommit: "af86ea4bf34080553a45d961d6db8cec719bb2a0",
+      workingTreeDifferedAtFreeze: false,
+    },
+    packages: [
+      [
+        "aftermathDaoPresale",
+        "vendors/aftermath_dao_presale",
+        "blast_aftermath_dao_presale",
+      ],
+    ],
   },
   {
     path: "production-blast-sui-v1.json",
@@ -342,6 +360,7 @@ const functionClassifiers = {
   blast_presale: classifyPresaleFunction,
   blast_admin: classifyAdminFunction,
   blast_partners: classifyPartnersFunction,
+  blast_aftermath_dao_presale: classifyAftermathDaoPresaleFunction,
 };
 
 const partnersBuilders = new Set([
@@ -352,6 +371,19 @@ const partnersBuilders = new Set([
   "set_recipient",
   "destroy_cap",
 ]);
+
+/** `AftermathDaoPresaleCalls` builds every entry point of the vendor package. */
+function classifyAftermathDaoPresaleFunction(moduleName, functionName) {
+  if (
+    moduleName === "blast_aftermath_dao_presale" &&
+    ["new", "finalize", "migrate"].includes(functionName)
+  ) {
+    return "builder";
+  }
+  throw new Error(
+    `unclassified function blast_aftermath_dao_presale::${moduleName}::${functionName}`,
+  );
+}
 
 function classifyPartnersFunction(moduleName, functionName) {
   if (partnersBuilders.has(functionName)) return "builder";
@@ -474,6 +506,7 @@ const presaleEventNames = new Set([
   "RecipientAllocated",
   "Claimed",
   "VaultCreated",
+  "PoolTierReserved",
   "FeesCollected",
   "MigrationResidualsClaimed",
   "ProtocolLpFeesChanged",
@@ -705,6 +738,9 @@ const blastSuiEventNames = new Set([
 ]);
 
 function isEventStruct(packageName, moduleName, structName) {
+  if (packageName === "blast_aftermath_dao_presale") {
+    return structName === "PoolCreationReserved" || structName === "Migrated";
+  }
   if (packageName === "blast_presale") return presaleEventNames.has(structName);
   if (packageName === "blast_admin") return moduleName === "blast_admin_events";
   if (packageName === "blast_partners") {
