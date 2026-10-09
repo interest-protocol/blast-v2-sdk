@@ -110,11 +110,6 @@ export const NON_PRODUCTION_MANIFEST = {
           "0xbcc266bcf4d3c29ccb43076f193efeb5477d30045ae432a616bf09df53665662",
         initialSharedVersion: "9",
       },
-      adminRegistry: {
-        objectId:
-          "0xd63e1fe42597abea7556bf39f202eb464472beaaff4a03ea94dea1c5f0216406",
-        initialSharedVersion: "9",
-      },
     },
   },
   routes: [

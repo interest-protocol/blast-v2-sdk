@@ -14,6 +14,8 @@ import {
   parseStructTag,
 } from "@mysten/sui/utils";
 
+import type { AdminDeployment } from "../admin/transactions.ts";
+import { AdminCalls, normalizeAdminDeployment } from "../admin/transactions.ts";
 import type {
   RewardManifest,
   RewardProof,
@@ -26,6 +28,7 @@ import {
 } from "../holder-rewards/allocations.ts";
 import type { LaunchTypes } from "../launchpad/transactions.ts";
 import { normalizeLaunchTypes } from "../launchpad/transactions.ts";
+import type { CoinSourceOptions } from "../lib/coins.ts";
 import { grossGasBudget } from "../lib/gas.ts";
 import { requireU64 } from "../lib/integers.ts";
 import { deploymentObject, moveResults } from "../lib/ptb.ts";
@@ -63,11 +66,12 @@ import type {
 } from "./state.ts";
 
 /**
- * The mainnet release is registered: `getPresaleDeployment("mainnet")`
- * returns it. For another deployment, pass the IDs the publish and
- * `package_admin::wrap` effects return. Publication shares `VenueConfig`, `CreationPolicy`, `FeePolicy`, and
- * `AdminRegistry`. The package administers itself, without the Blast ACL; it
- * links `blast_partners` only to pay a sale's partner.
+ * `getPresaleDeployment(network)` returns a registered release. For another
+ * deployment, pass the IDs the publish and `package_admin::wrap` effects
+ * return. Publication shares `VenueConfig`,
+ * `CreationPolicy`, and `FeePolicy`. Blast administers the package through the
+ * shared `blast_admin` ACL with the `blast_presale_domain` roles (contracts
+ * ADR 0099), and it links `blast_partners` to pay a sale's partner.
  */
 export type PresaleDeployment = {
   packageId: string;
@@ -78,11 +82,8 @@ export type PresaleDeployment = {
   creationPolicy: SharedObjectIdentity;
   /** `fee_policy::FeePolicy`: creation, migration, and fee collection read it. */
   feePolicy: SharedObjectIdentity;
-  /**
-   * `blast_presale_admin::AdminRegistry`: the one `AdminCap` every
-   * administrator call accepts.
-   */
-  adminRegistry: SharedObjectIdentity;
+  /** `blast_admin` and its ACL, where every administrator call signs in. */
+  admin: AdminDeployment;
   /**
    * The Aftermath DAO-pool vendor package and the Aftermath objects its
    * migration takes (`defineAftermathPresaleDeployment`); absent until it is
@@ -90,6 +91,18 @@ export type PresaleDeployment = {
    */
   aftermath?: AftermathPresaleDeployment;
 };
+
+/**
+ * The typed `blast_presale::blast_presale_domain` roles (contracts ADR 0099).
+ * Each administrator action takes the `AdminWitness` of exactly one of them.
+ */
+export type PresaleAdminRole =
+  | "UpgradeAdmin"
+  | "TreasuryAdmin"
+  | "FeeAdmin"
+  | "ListingAdmin"
+  | "AdapterAdmin"
+  | "RewardsAdmin";
 
 /**
  * Venues the SDK migrates to: this package's `cetus` and `bluefin`, and
@@ -259,6 +272,7 @@ function cetusTypeName(type: string): string {
 
 export class PresaleCalls {
   readonly deployment: PresaleDeployment;
+  readonly admin: AdminCalls;
 
   constructor(deployment: PresaleDeployment) {
     this.deployment = {
@@ -275,16 +289,30 @@ export class PresaleCalls {
         "feePolicy",
         deployment.feePolicy,
       ),
-      adminRegistry: normalizeSharedObjectIdentity(
-        "adminRegistry",
-        deployment.adminRegistry,
-      ),
+      admin: normalizeAdminDeployment(deployment.admin),
       ...(deployment.aftermath === undefined
         ? {}
         : {
             aftermath: defineAftermathPresaleDeployment(deployment.aftermath),
           }),
     };
+    this.admin = new AdminCalls(this.deployment.admin);
+  }
+
+  /** The Move type of one `blast_presale_domain` role, for `AdminCalls.grantRole`. */
+  roleType(role: PresaleAdminRole): string {
+    return this.#type(`blast_presale_domain::${role}`);
+  }
+
+  /** This PTB's `AdminWitness<Role>`; the `AdminCap` must hold `role`. */
+  signIn(options: {
+    adminCap: TransactionObjectInput;
+    role: PresaleAdminRole;
+  }) {
+    return this.admin.signIn({
+      adminCap: options.adminCap,
+      role: this.roleType(options.role),
+    });
   }
 
   /**
@@ -725,7 +753,7 @@ export class PresaleCalls {
   /**
    * `blast_presale::share`: shares the new presale and fixes its windows from
    * `startMs`, or from execution once that has passed (`0n` opens it at once).
-   * Commitments open at the start; until then the `AdminCap` may change the
+   * Commitments open at the start; until then Blast's `FeeAdmin` may change the
    * sale's Blast rates (`setPresaleProtocolFees`).
    */
   share(
@@ -1161,7 +1189,7 @@ export class PresaleCalls {
    * LP share at most 10,000) and rejects an unchanged set.
    */
   setProtocolFees(options: {
-    adminCap: TransactionObjectInput;
+    adminWitness: TransactionObjectInput;
     fees: ProtocolFees;
   }) {
     const { raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps } = options.fees;
@@ -1174,7 +1202,7 @@ export class PresaleCalls {
         "set_fees",
         [
           this.#feePolicy(tx, true),
-          ...this.#admin(tx, options.adminCap),
+          tx.object(options.adminWitness),
           ...rates.map((rate) => tx.add(rate)),
         ],
         undefined,
@@ -1195,7 +1223,7 @@ export class PresaleCalls {
   setPresaleProtocolFees(
     options: LaunchTypes & {
       presale: SharedObjectReference<true> | TransactionArgument;
-      adminCap: TransactionObjectInput;
+      adminWitness: TransactionObjectInput;
       fees: ProtocolFees;
     },
   ) {
@@ -1210,7 +1238,7 @@ export class PresaleCalls {
         "set_protocol_fees",
         [
           "objectId" in presale ? this.#presale(tx, { presale }) : presale,
-          ...this.#admin(tx, options.adminCap),
+          tx.object(options.adminWitness),
           ...rates.map((rate) => tx.add(rate)),
           tx.object.clock(),
         ],
@@ -1227,7 +1255,7 @@ export class PresaleCalls {
   setProtocolLpFees(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
-      adminCap: TransactionObjectInput;
+      adminWitness: TransactionObjectInput;
       lpFeeMemeBps: bigint;
       lpFeeQuoteBps: bigint;
     },
@@ -1241,7 +1269,7 @@ export class PresaleCalls {
         "set_protocol_lp_fees",
         [
           sharedObject(tx, "vault", options.vault, true),
-          ...this.#admin(tx, options.adminCap),
+          tx.object(options.adminWitness),
           ...rates.map((rate) => tx.add(rate)),
         ],
         options,
@@ -1252,7 +1280,7 @@ export class PresaleCalls {
 
   /** `creation_policy::set_quote_allowed<Quote>`: whether presales created afterward may raise it. */
   setQuoteAllowed(options: {
-    adminCap: TransactionObjectInput;
+    adminWitness: TransactionObjectInput;
     quoteType: string;
     allowed: boolean;
   }) {
@@ -1268,7 +1296,7 @@ export class PresaleCalls {
    */
   setMigrationWitnessAllowed(
     options: PresaleMigrator & {
-      adminCap: TransactionObjectInput;
+      adminWitness: TransactionObjectInput;
       allowed: boolean;
     },
   ) {
@@ -1283,7 +1311,7 @@ export class PresaleCalls {
 
   /** `creation_policy::add_partner`: new presales may name `partner` at once. */
   addPartner(options: {
-    adminCap: TransactionObjectInput;
+    adminWitness: TransactionObjectInput;
     partner: SharedObjectReference<false>;
   }) {
     return (tx: Transaction): void => {
@@ -1296,7 +1324,7 @@ export class PresaleCalls {
    * after `PARTNER_DELAY_MS`; sales that name it keep paying it.
    */
   removePartner(options: {
-    adminCap: TransactionObjectInput;
+    adminWitness: TransactionObjectInput;
     partner: SharedObjectReference<false>;
   }) {
     return (tx: Transaction): void => {
@@ -1306,7 +1334,7 @@ export class PresaleCalls {
 
   /** `fee_policy::set_destination`: redirects every later protocol payout. */
   setProtocolDestination(options: {
-    adminCap: TransactionObjectInput;
+    adminWitness: TransactionObjectInput;
     destination: string;
   }) {
     const destination = normalizeSuiAddress(options.destination);
@@ -1316,7 +1344,7 @@ export class PresaleCalls {
         "set_destination",
         [
           this.#feePolicy(tx, true),
-          ...this.#admin(tx, options.adminCap),
+          tx.object(options.adminWitness),
           tx.pure.address(destination),
         ],
         undefined,
@@ -1333,7 +1361,7 @@ export class PresaleCalls {
   publishHolderRewardRound(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
-      adminCap: TransactionObjectInput;
+      adminWitness: TransactionObjectInput;
       manifest: RewardManifest;
       claimDeadlineMs: bigint;
     },
@@ -1357,7 +1385,7 @@ export class PresaleCalls {
         "publish_round",
         [
           sharedObject(tx, "vault", options.vault, true),
-          ...this.#admin(tx, options.adminCap),
+          tx.object(options.adminWitness),
           tx.pure.u64(manifest.number),
           tx.pure.u64(manifest.startCheckpoint),
           tx.pure.u64(manifest.endCheckpoint),
@@ -1434,58 +1462,6 @@ export class PresaleCalls {
     };
   }
 
-  /**
-   * `blast_presale_admin::replace_admin_cap`: mints a new `AdminCap`, returned,
-   * and records it as the only accepted cap, so the previous cap stops working
-   * in the same transaction.
-   */
-  replaceAdminCap(options: { superAdminCap: TransactionObjectInput }) {
-    return (tx: Transaction): TransactionResult =>
-      this.#presaleCall(
-        tx,
-        "replace_admin_cap",
-        [this.#adminRegistry(tx, true), tx.object(options.superAdminCap)],
-        undefined,
-        "blast_presale_admin",
-      );
-  }
-
-  /**
-   * `blast_presale_admin::revoke_admin_cap`: clears the accepted cap, stopping
-   * every administrator call until `replaceAdminCap`.
-   */
-  revokeAdminCap(options: { superAdminCap: TransactionObjectInput }) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "revoke_admin_cap",
-        [this.#adminRegistry(tx, true), tx.object(options.superAdminCap)],
-        undefined,
-        "blast_presale_admin",
-      );
-    };
-  }
-
-  /**
-   * `blast_presale_admin::transfer_super_admin`: the only way the key-only
-   * `SuperAdminCap` moves. The contract rejects the zero address.
-   */
-  transferSuperAdmin(options: {
-    superAdminCap: TransactionObjectInput;
-    recipient: string;
-  }) {
-    const recipient = normalizeSuiAddress(options.recipient);
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "transfer_super_admin",
-        [tx.object(options.superAdminCap), tx.pure.address(recipient)],
-        undefined,
-        "blast_presale_admin",
-      );
-    };
-  }
-
   #newPresale(
     start: (tx: Transaction) => TransactionResult,
     options: PresaleTerms,
@@ -1520,14 +1496,14 @@ export class PresaleCalls {
     tx: Transaction,
     functionName: string,
     typeArgument: string,
-    options: { adminCap: TransactionObjectInput; allowed: boolean },
+    options: { adminWitness: TransactionObjectInput; allowed: boolean },
   ): void {
     tx.moveCall({
       target: `${this.deployment.packageId}::creation_policy::${functionName}`,
       typeArguments: [typeArgument],
       arguments: [
         this.#creationPolicy(tx, true),
-        ...this.#admin(tx, options.adminCap),
+        tx.object(options.adminWitness),
         tx.pure.bool(options.allowed),
       ],
     });
@@ -1537,7 +1513,7 @@ export class PresaleCalls {
     tx: Transaction,
     functionName: "add_partner" | "remove_partner",
     options: {
-      adminCap: TransactionObjectInput;
+      adminWitness: TransactionObjectInput;
       partner: SharedObjectReference<false>;
     },
     trailing: TransactionArgument[],
@@ -1546,7 +1522,7 @@ export class PresaleCalls {
       target: `${this.deployment.packageId}::creation_policy::${functionName}`,
       arguments: [
         this.#creationPolicy(tx, true),
-        ...this.#admin(tx, options.adminCap),
+        tx.object(options.adminWitness),
         sharedObject(tx, "partner", options.partner, false),
         ...trailing,
       ],
@@ -1594,18 +1570,6 @@ export class PresaleCalls {
     return deploymentObject(tx, this.deployment.creationPolicy, mutable);
   }
 
-  #adminRegistry(tx: Transaction, mutable = false): TransactionObjectArgument {
-    return deploymentObject(tx, this.deployment.adminRegistry, mutable);
-  }
-
-  /** The `&AdminRegistry, &AdminCap` pair every administrator call takes. */
-  #admin(
-    tx: Transaction,
-    adminCap: TransactionObjectInput,
-  ): TransactionObjectArgument[] {
-    return [this.#adminRegistry(tx), tx.object(adminCap)];
-  }
-
   #type(name: string): string {
     return normalizeStructTag(`${this.deployment.originalPackageId}::${name}`);
   }
@@ -1613,9 +1577,11 @@ export class PresaleCalls {
 
 export class PresaleTransactions {
   readonly call: PresaleCalls;
+  readonly #useGasCoin: boolean;
 
-  constructor(deployment: PresaleDeployment) {
+  constructor(deployment: PresaleDeployment, options: CoinSourceOptions = {}) {
     this.call = new PresaleCalls(deployment);
+    this.#useGasCoin = options.useGasCoin ?? true;
   }
 
   /**
@@ -1669,7 +1635,8 @@ export class PresaleTransactions {
       presale: SharedObjectReference<true>;
       amount: bigint;
       recipient: string;
-    } & (
+    } & CoinSourceOptions &
+      (
         | { route: "open" | "uncapped" }
         | { route: "allowlisted"; allowlist: AllowlistProof }
       ),
@@ -1680,6 +1647,7 @@ export class PresaleTransactions {
     const quote = tx.coin({
       type: normalizeStructTag(options.quoteType),
       balance: amount,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
     });
     const change = tx.add(
       options.route === "allowlisted"
@@ -1737,20 +1705,22 @@ export class PresaleTransactions {
   }
 
   /**
-   * Pays Bluefin's SUI pool-creation fee from gas as an exact-balance coin,
+   * Pays Bluefin's SUI pool-creation fee as an exact-balance coin,
    * then the sale's partner when `partner` is given; see `payProtocolFeesWithPartner`.
    */
   migrateBluefin(
     options: Omit<
       Parameters<PresaleCalls["migrateBluefin"]>[0],
       "creationFee"
-    > & { creationFee: bigint } & PresalePayout,
+    > & { creationFee: bigint } & PresalePayout &
+      CoinSourceOptions,
   ): Transaction {
     requireU64("creationFee", options.creationFee);
     const tx = new Transaction();
     const creationFee = tx.coin({
       type: "0x2::sui::SUI",
       balance: options.creationFee,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
     });
     tx.add(this.call.migrateBluefin({ ...options, creationFee }));
     return this.#payProtocolFeesWithPartnerAfter(tx, options);
@@ -1847,151 +1817,90 @@ export class PresaleTransactions {
     return tx;
   }
 
-  /** Publishes a holder-reward round with the deployment's accepted `AdminCap`. */
+  /** Signs in as `RewardsAdmin` and publishes a holder-reward round. */
   publishHolderRewardRound(
-    options: Omit<
-      Parameters<PresaleCalls["publishHolderRewardRound"]>[0],
-      "adminCap"
-    > & { adminCapId: string },
+    options: AsAdmin<Parameters<PresaleCalls["publishHolderRewardRound"]>[0]>,
   ): Transaction {
-    return single(
-      this.call.publishHolderRewardRound({
-        ...options,
-        adminCap: options.adminCapId,
-      }),
+    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
+      this.call.publishHolderRewardRound({ ...options, adminWitness }),
     );
   }
 
-  /** Sets the rates future presales snapshot. */
-  setProtocolFees(options: {
-    adminCapId: string;
-    fees: ProtocolFees;
-  }): Transaction {
-    return single(
-      this.call.setProtocolFees({ ...options, adminCap: options.adminCapId }),
+  /** Signs in as `FeeAdmin` and sets the rates future presales snapshot. */
+  setProtocolFees(
+    options: AsAdmin<Parameters<PresaleCalls["setProtocolFees"]>[0]>,
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.setProtocolFees({ ...options, adminWitness }),
     );
   }
 
-  /** Replaces one sale's Blast rates before its window starts. */
+  /** Signs in as `FeeAdmin` and replaces one sale's Blast rates before its window starts. */
   setPresaleProtocolFees(
     options: Omit<
       Parameters<PresaleCalls["setPresaleProtocolFees"]>[0],
-      "adminCap" | "presale"
+      "adminWitness" | "presale"
     > & { presale: SharedObjectReference<true>; adminCapId: string },
   ): Transaction {
-    return single(
-      this.call.setPresaleProtocolFees({
-        ...options,
-        adminCap: options.adminCapId,
-      }),
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.setPresaleProtocolFees({ ...options, adminWitness }),
     );
   }
 
-  /** Sets Blast's LP-fee rates on one migrated vault. */
+  /** Signs in as `FeeAdmin` and sets Blast's LP-fee rates on one migrated vault. */
   setProtocolLpFees(
-    options: Omit<
-      Parameters<PresaleCalls["setProtocolLpFees"]>[0],
-      "adminCap"
-    > & { adminCapId: string },
+    options: AsAdmin<Parameters<PresaleCalls["setProtocolLpFees"]>[0]>,
   ): Transaction {
-    return single(
-      this.call.setProtocolLpFees({ ...options, adminCap: options.adminCapId }),
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.setProtocolLpFees({ ...options, adminWitness }),
     );
   }
 
-  /** Lists or delists a Quote type for new presales. */
-  setQuoteAllowed(options: {
-    adminCapId: string;
-    quoteType: string;
-    allowed: boolean;
-  }): Transaction {
-    return single(
-      this.call.setQuoteAllowed({ ...options, adminCap: options.adminCapId }),
+  /** Signs in as `ListingAdmin` and lists or delists a Quote type for new presales. */
+  setQuoteAllowed(
+    options: AsAdmin<Parameters<PresaleCalls["setQuoteAllowed"]>[0]>,
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "ListingAdmin", (adminWitness) =>
+      this.call.setQuoteAllowed({ ...options, adminWitness }),
     );
   }
 
-  /** Lists or delists a venue or external migrator for new presales. */
+  /** Signs in as `AdapterAdmin` and lists or delists a venue or external migrator. */
   setMigrationWitnessAllowed(
     options: PresaleMigrator & {
       adminCapId: string;
       allowed: boolean;
     },
   ): Transaction {
-    return single(
-      this.call.setMigrationWitnessAllowed({
-        ...options,
-        adminCap: options.adminCapId,
-      }),
+    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
+      this.call.setMigrationWitnessAllowed({ ...options, adminWitness }),
     );
   }
 
-  /** Lets new presales name `partner` at once. */
-  addPartner(options: {
-    adminCapId: string;
-    partner: SharedObjectReference<false>;
-  }): Transaction {
-    return single(
-      this.call.addPartner({ ...options, adminCap: options.adminCapId }),
+  /** Signs in as `FeeAdmin` and lets new presales name `partner` at once. */
+  addPartner(
+    options: AsAdmin<Parameters<PresaleCalls["addPartner"]>[0]>,
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.addPartner({ ...options, adminWitness }),
     );
   }
 
-  /** Stops new presales naming `partner` after `PARTNER_DELAY_MS`. */
-  removePartner(options: {
-    adminCapId: string;
-    partner: SharedObjectReference<false>;
-  }): Transaction {
-    return single(
-      this.call.removePartner({ ...options, adminCap: options.adminCapId }),
+  /** Signs in as `FeeAdmin` and stops new presales naming `partner` after `PARTNER_DELAY_MS`. */
+  removePartner(
+    options: AsAdmin<Parameters<PresaleCalls["removePartner"]>[0]>,
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.removePartner({ ...options, adminWitness }),
     );
   }
 
-  /** Redirects every later protocol payout. */
-  setProtocolDestination(options: {
-    adminCapId: string;
-    destination: string;
-  }): Transaction {
-    return single(
-      this.call.setProtocolDestination({
-        ...options,
-        adminCap: options.adminCapId,
-      }),
-    );
-  }
-
-  /**
-   * Replaces the accepted `AdminCap` with a new one sent to `recipient`; the
-   * previous cap stops working in the same transaction.
-   */
-  replaceAdminCap(options: {
-    superAdminCapId: string;
-    recipient: string;
-  }): Transaction {
-    const recipient = normalizeSuiAddress(options.recipient);
-    const tx = new Transaction();
-    const adminCap = tx.add(
-      this.call.replaceAdminCap({ superAdminCap: options.superAdminCapId }),
-    );
-    tx.transferObjects([adminCap], recipient);
-    return tx;
-  }
-
-  /** Revokes the accepted `AdminCap`, stopping administration until a replacement. */
-  revokeAdminCap(options: { superAdminCapId: string }): Transaction {
-    return single(
-      this.call.revokeAdminCap({ superAdminCap: options.superAdminCapId }),
-    );
-  }
-
-  /** Moves the `SuperAdminCap`, for example to Blast's cold multisig. */
-  transferSuperAdmin(options: {
-    superAdminCapId: string;
-    recipient: string;
-  }): Transaction {
-    return single(
-      this.call.transferSuperAdmin({
-        superAdminCap: options.superAdminCapId,
-        recipient: options.recipient,
-      }),
+  /** Signs in as `TreasuryAdmin` and redirects every later protocol payout. */
+  setProtocolDestination(
+    options: AsAdmin<Parameters<PresaleCalls["setProtocolDestination"]>[0]>,
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
+      this.call.setProtocolDestination({ ...options, adminWitness }),
     );
   }
 
@@ -2013,6 +1922,22 @@ export class PresaleTransactions {
     options: Parameters<PresaleCalls["closeHolderRewardRound"]>[0],
   ): Transaction {
     return single(this.call.closeHolderRewardRound(options));
+  }
+
+  /** Signs in as `role` and runs one administrator call in the same PTB. */
+  #asAdmin(
+    adminCapId: string,
+    role: PresaleAdminRole,
+    call: (
+      adminWitness: TransactionObjectArgument,
+    ) => (tx: Transaction) => void,
+  ): Transaction {
+    const tx = new Transaction();
+    const adminWitness = tx.add(
+      this.call.signIn({ adminCap: adminCapId, role }),
+    );
+    tx.add(call(adminWitness));
+    return tx;
   }
 
   #shareAndKeepCap(
@@ -2050,6 +1975,12 @@ export class PresaleTransactions {
     return tx;
   }
 }
+
+/** A builder's options with the `AdminCap` ID that signs in in place of its witness. */
+type AsAdmin<Options extends { adminWitness: TransactionObjectInput }> = Omit<
+  Options,
+  "adminWitness"
+> & { adminCapId: string };
 
 function single(call: (tx: Transaction) => void): Transaction {
   const tx = new Transaction();

@@ -2,7 +2,7 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
-
+import type { CoinSourceOptions } from "../lib/coins.ts";
 import type {
   BlastSuiDepositReceiptState,
   BlastSuiVaultState,
@@ -16,10 +16,14 @@ export class BlastSuiClient {
   readonly tx: BlastSuiTransactions;
   readonly #client: ClientWithCoreApi;
 
-  constructor(client: ClientWithCoreApi, deployment: BlastSuiDeployment) {
+  constructor(
+    client: ClientWithCoreApi,
+    deployment: BlastSuiDeployment,
+    options: CoinSourceOptions = {},
+  ) {
     this.#client = client;
     this.call = new BlastSuiCalls(deployment);
-    this.tx = new BlastSuiTransactions(deployment);
+    this.tx = new BlastSuiTransactions(deployment, options);
   }
 
   async getVault(): Promise<BlastSuiVaultState> {

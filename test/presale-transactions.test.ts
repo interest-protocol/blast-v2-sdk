@@ -44,7 +44,10 @@ const deployment: PresaleDeployment = {
   venueConfig: shared("0x60", false),
   feePolicy: shared("0x61", false),
   creationPolicy: shared("0x62", false),
-  adminRegistry: shared("0x63", false),
+  admin: {
+    packageId: "0xad",
+    acl: { objectId: "0x63", initialSharedVersion: "3" },
+  },
 };
 const tx = new PresaleTransactions(deployment);
 const memeA = normalizeStructTag("0xa::meme::MEME");
@@ -79,8 +82,8 @@ const terms: PresaleTerms = {
   feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
   holderRewardsBps: 3_000n,
 };
-/** The `&AdminRegistry, &AdminCap` pair every administrator call takes. */
-const ADMIN = ["shared:0x63", "object:0xadc"];
+/** The `&AdminWitness<Role>` that the PTB's first command, `blast_acl::sign_in`, returns. */
+const ADMIN = ["Result:0"];
 /** One `RecipientShare`: its rate, then the constructor. */
 const recipientShare = ["bps::new", "blast_presale::recipient_share"];
 const cetus = {
@@ -551,10 +554,10 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       [
         "shared-mut:0x61",
         ...ADMIN,
-        "Result:0",
         "Result:1",
         "Result:2",
         "Result:3",
+        "Result:4",
       ],
     ],
     [
@@ -573,10 +576,10 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       [
         "shared-mut:0xab",
         ...ADMIN,
-        "Result:0",
         "Result:1",
         "Result:2",
         "Result:3",
+        "Result:4",
         CLOCK,
       ],
     ],
@@ -589,7 +592,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         lpFeeQuoteBps: 0n,
       }),
       "presale_vault::set_protocol_lp_fees",
-      ["shared-mut:0xba", ...ADMIN, "Result:0", "Result:1"],
+      ["shared-mut:0xba", ...ADMIN, "Result:1", "Result:2"],
     ],
     [
       tx.setQuoteAllowed({
@@ -608,21 +611,6 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       }),
       "creation_policy::set_migration_witness_allowed",
       ["shared-mut:0x62", ...ADMIN, "pure"],
-    ],
-    [
-      tx.replaceAdminCap({ superAdminCapId: "0x5ad", recipient: "0xc0" }),
-      "blast_presale_admin::replace_admin_cap",
-      ["shared-mut:0x63", "object:0x5ad"],
-    ],
-    [
-      tx.revokeAdminCap({ superAdminCapId: "0x5ad" }),
-      "blast_presale_admin::revoke_admin_cap",
-      ["shared-mut:0x63", "object:0x5ad"],
-    ],
-    [
-      tx.transferSuperAdmin({ superAdminCapId: "0x5ad", recipient: "0xc01d" }),
-      "blast_presale_admin::transfer_super_admin",
-      ["object:0x5ad", "pure"],
     ],
     [
       tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
@@ -770,11 +758,14 @@ test("replaces a sale's Blast rates in its creation PTB, before share", () => {
     ),
     2,
   );
+  const adminWitness = ptb.add(
+    tx.call.signIn({ adminCap: "0xadc", role: "FeeAdmin" }),
+  );
   ptb.add(
     tx.call.setPresaleProtocolFees({
       ...types,
       presale: sale,
-      adminCap: "0xadc",
+      adminWitness,
       fees: {
         raiseBps: 100n,
         tokenBps: 100n,
@@ -784,9 +775,9 @@ test("replaces a sale's Blast rates in its creation PTB, before share", () => {
     }),
   );
   const call = moveCall(ptb, "blast_presale::set_protocol_fees");
-  assert.deepEqual(argumentKinds(ptb, call).slice(0, 3), [
+  assert.deepEqual(argumentKinds(ptb, call).slice(0, 2), [
     `NestedResult:${commandIndex(ptb, "blast_presale::finalize")}:0`,
-    ...ADMIN,
+    `Result:${commandIndex(ptb, "blast_acl::sign_in")}`,
   ]);
   assert.equal(
     call.arguments.length,
@@ -794,7 +785,7 @@ test("replaces a sale's Blast rates in its creation PTB, before share", () => {
   );
 });
 
-test("administers with the presale AdminCap and never signs in to blast_acl", () => {
+test("signs each administrator call in to blast_acl with its own presale role", () => {
   const vault = shared("0xba", true);
   const noFees = {
     raiseBps: 0n,
@@ -812,26 +803,47 @@ test("administers with the presale AdminCap and never signs in to blast_acl", ()
     venue: "cetus",
     allowed: true,
   });
-  for (const ptb of [
-    tx.setProtocolFees({ adminCapId: "0xadc", fees: noFees }),
-    listQuote,
-    listVenue,
-    tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
-    tx.setPresaleProtocolFees({
-      ...types,
-      presale,
-      adminCapId: "0xadc",
-      fees: noFees,
-    }),
-    tx.setProtocolLpFees({
-      ...types,
-      vault,
-      adminCapId: "0xadc",
-      lpFeeMemeBps: 0n,
-      lpFeeQuoteBps: 0n,
-    }),
-  ]) {
-    assert.ok(!moveFunctions(ptb).some((name) => name.startsWith("blast_acl")));
+  const cases: [Transaction, string][] = [
+    [tx.setProtocolFees({ adminCapId: "0xadc", fees: noFees }), "FeeAdmin"],
+    [listQuote, "ListingAdmin"],
+    [listVenue, "AdapterAdmin"],
+    [
+      tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
+      "TreasuryAdmin",
+    ],
+    [
+      tx.setPresaleProtocolFees({
+        ...types,
+        presale,
+        adminCapId: "0xadc",
+        fees: noFees,
+      }),
+      "FeeAdmin",
+    ],
+    [
+      tx.setProtocolLpFees({
+        ...types,
+        vault,
+        adminCapId: "0xadc",
+        lpFeeMemeBps: 0n,
+        lpFeeQuoteBps: 0n,
+      }),
+      "FeeAdmin",
+    ],
+    [tx.addPartner({ adminCapId: "0xadc", partner }), "FeeAdmin"],
+    [tx.removePartner({ adminCapId: "0xadc", partner }), "FeeAdmin"],
+  ];
+  for (const [ptb, role] of cases) {
+    const signIn = moveCall(ptb, "blast_acl::sign_in");
+    assert.equal(commandIndex(ptb, "blast_acl::sign_in"), 0, role);
+    assert.deepEqual(signIn.typeArguments, [
+      normalizeStructTag(`0x5e::blast_presale_domain::${role}`),
+    ]);
+    assert.deepEqual(argumentKinds(ptb, signIn), [
+      "shared:0x63",
+      "object:0xadc",
+    ]);
+    assert.equal(BigInt(signIn.package), 0xadn, "sign_in targets blast_admin");
   }
   assert.deepEqual(
     moveCall(listQuote, "creation_policy::set_quote_allowed").typeArguments,
@@ -899,19 +911,6 @@ test("allows an external migrator's witness and rejects types anyone can constru
       witnessType,
     );
   }
-});
-
-test("replacing the AdminCap sends the new cap to its recipient", () => {
-  const ptb = tx.replaceAdminCap({
-    superAdminCapId: "0x5ad",
-    recipient: "0xc0",
-  });
-  const replace = commandIndex(ptb, "blast_presale_admin::replace_admin_cap");
-  const transfer = ptb.getData().commands.at(-1);
-  assert.ok(transfer?.$kind === "TransferObjects");
-  assert.deepEqual(transfer.TransferObjects.objects, [
-    { $kind: "Result", Result: replace },
-  ]);
 });
 
 test("vested token and raise shares build their terms; fee shares cannot vest", () => {
@@ -1056,7 +1055,7 @@ test("rejects a manifest from the migrators' leaf domain or another vault", () =
     call.publishHolderRewardRound({
       ...types,
       vault: shared(vault, true),
-      adminCap: "0xadc",
+      adminWitness: "0xadc",
       manifest,
       claimDeadlineMs: 1n,
     });

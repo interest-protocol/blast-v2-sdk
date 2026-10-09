@@ -31,7 +31,10 @@ const presaleDeployment: PresaleDeployment = {
   venueConfig: shared("0x60", false),
   feePolicy: shared("0x61", false),
   creationPolicy: shared("0x62", false),
-  adminRegistry: shared("0x63", false),
+  admin: {
+    packageId: "0xad",
+    acl: { objectId: "0x63", initialSharedVersion: "3" },
+  },
 };
 const vendor = { packageId: "0x7a", originalPackageId: "0x7a" };
 const tx = new AftermathDaoPresaleTransactions(vendor, presaleDeployment);

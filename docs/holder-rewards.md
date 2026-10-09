@@ -86,8 +86,9 @@ Create a JSON config outside the public artifacts:
 
 For a presale vault, set `"product": "presale"`, pass the call-ready
 `PresaleDeployment` (`getPresaleDeployment("mainnet")`) as `deployment`, the
-`PresaleVault` ID as `vaultId`, and the presale package's `AdminCap` as
-`adminCapId`. Presale rounds also need `claimWindowMs`: `publish-tx` sets the
+`Vault` ID as `vaultId`, and a Blast `AdminCap` holding the presale's
+`blast_presale_domain::RewardsAdmin` role as `adminCapId`; `publish-tx` signs it
+in. Presale rounds also need `claimWindowMs`: `publish-tx` sets the
 round's claim deadline that far after it builds the transaction. Presale
 manifests use `PRESALE_REWARD_LEAF_DOMAIN`, and `relay` reads the presale
 `holder_rewards::Round`; the commands are otherwise the same.
@@ -98,9 +99,9 @@ manifests use `PRESALE_REWARD_LEAF_DOMAIN`, and `relay` reads the presale
   "network": "mainnet",
   "chainId": "EXPECTED-GENESIS-DIGEST",
   "product": "presale",
-  "deployment": { "packageId": "0x...", "originalPackageId": "0x...", "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1" }, "creationPolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "feePolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "adminRegistry": { "objectId": "0x...", "initialSharedVersion": "1" } },
+  "deployment": { "packageId": "0x...", "originalPackageId": "0x...", "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1" }, "creationPolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "feePolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "admin": { "packageId": "0x...", "acl": { "objectId": "0x...", "initialSharedVersion": "1" } } },
   "vaultId": "0xVERIFIED_PRESALE_VAULT",
-  "adminCapId": "0xPRESALE_ADMIN_CAP",
+  "adminCapId": "0xBLAST_ADMIN_CAP",
   "claimWindowMs": "604800000",
   "sender": "0xADMIN_MULTISIG",
   "excludedAddresses": []

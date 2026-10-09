@@ -374,12 +374,6 @@ export const creationPolicyBcs = bcs.struct("CreationPolicy", {
   allowed_migration_witnesses: typeNameSet,
 });
 
-/** BCS layout of `blast_presale_admin::AdminRegistry`, the package's one shared admin record. */
-export const adminRegistryBcs = bcs.struct("AdminRegistry", {
-  id: suiUidBcs,
-  admin_cap_id: bcs.option(suiObjectIdBcs),
-});
-
 /** BCS layout of `holder_rewards::Round<Meme, Quote>`. */
 export const presaleRewardRoundBcs = bcs.struct("Round", {
   id: suiUidBcs,
@@ -465,7 +459,7 @@ export type PresaleState = SharedObjectReference<true> & {
   recipientPayouts: RecipientPayout[];
   recipientTokens: bigint;
   raisePayouts: RecipientPayout[];
-  /** Blast's rates: snapshotted at creation; the `AdminCap` may replace them before the start. */
+  /** Blast's rates: snapshotted at creation; Blast's `FeeAdmin` may replace them before the start. */
   protocolFees: ProtocolFees;
   /** Blast's share of the raise, paid on migration. */
   protocolQuote: bigint;
@@ -555,15 +549,6 @@ export type PresaleFeePolicyState = SharedObjectReference<true> & {
 export type PresaleCreationPolicyState = SharedObjectReference<true> & {
   allowedQuotes: string[];
   allowedMigrationWitnesses: string[];
-};
-
-/**
- * `blast_presale_admin::AdminRegistry`: the one `AdminCap` every presale
- * administrator call accepts; null after `revoke_admin_cap` until a
- * `replace_admin_cap`.
- */
-export type PresaleAdminRegistryState = SharedObjectReference<true> & {
-  adminCapId: string | null;
 };
 
 export type PresaleCommitment = { quote: bigint; walletCap: bigint };
@@ -743,23 +728,6 @@ export function decodePresaleCreationPolicyObject(
   };
 }
 
-export function decodePresaleAdminRegistryObject(
-  object: PresaleObject,
-  originalPackageId?: string,
-): PresaleAdminRegistryState {
-  assertSingletonType(
-    object,
-    "blast_presale_admin",
-    "AdminRegistry",
-    originalPackageId,
-  );
-  const parsed = adminRegistryBcs.parse(object.content);
-  return {
-    ...sharedIdentity(object, parsed.id.id.bytes),
-    adminCapId: parsed.admin_cap_id,
-  };
-}
-
 /** Mirrors `holder_rewards::claim_bit`: whether leaf `index` was already paid. */
 export function presaleRewardIsClaimed(
   round: Pick<PresaleRewardRoundState, "leafCount" | "claimedBitmap">,
@@ -822,17 +790,6 @@ export async function getPresaleCreationPolicy(
   originalPackageId?: string,
 ): Promise<PresaleCreationPolicyState> {
   return decodePresaleCreationPolicyObject(
-    await getSharedObject(client, objectId),
-    originalPackageId,
-  );
-}
-
-export async function getPresaleAdminRegistry(
-  client: ClientWithCoreApi,
-  objectId: string,
-  originalPackageId?: string,
-): Promise<PresaleAdminRegistryState> {
-  return decodePresaleAdminRegistryObject(
     await getSharedObject(client, objectId),
     originalPackageId,
   );

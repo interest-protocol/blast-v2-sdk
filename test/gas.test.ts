@@ -185,7 +185,10 @@ const presaleDeployment: PresaleDeployment = {
   venueConfig: shared("0x60", false),
   feePolicy: shared("0x61", false),
   creationPolicy: shared("0x62", false),
-  adminRegistry: shared("0x63", false),
+  admin: {
+    packageId: "0xad",
+    acl: { objectId: "0x63", initialSharedVersion: "3" },
+  },
 };
 const presale = new PresaleTransactions(presaleDeployment);
 const types = { memeType: "0xa::meme::MEME", quoteType: "0x2::sui::SUI" };

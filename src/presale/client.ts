@@ -3,10 +3,10 @@ import type {
   SuiClientRegistration,
 } from "@mysten/sui/client";
 
+import type { CoinSourceOptions } from "../lib/coins.ts";
 import type { AftermathPoolCreation } from "./aftermath.ts";
 import { findAftermathPoolCreation } from "./aftermath.ts";
 import type {
-  PresaleAdminRegistryState,
   PresaleCommitment,
   PresaleCreationPolicyState,
   PresaleFeePolicyState,
@@ -16,7 +16,6 @@ import type {
 } from "./state.ts";
 import {
   getPresale,
-  getPresaleAdminRegistry,
   getPresaleCommitment,
   getPresaleCreationPolicy,
   getPresaleFeePolicy,
@@ -31,10 +30,14 @@ export class PresaleClient {
   readonly tx: PresaleTransactions;
   readonly #client: ClientWithCoreApi;
 
-  constructor(client: ClientWithCoreApi, deployment: PresaleDeployment) {
+  constructor(
+    client: ClientWithCoreApi,
+    deployment: PresaleDeployment,
+    options: CoinSourceOptions = {},
+  ) {
     this.#client = client;
     this.call = new PresaleCalls(deployment);
-    this.tx = new PresaleTransactions(deployment);
+    this.tx = new PresaleTransactions(deployment, options);
   }
 
   async getPresale(objectId: string): Promise<PresaleState> {
@@ -72,15 +75,6 @@ export class PresaleClient {
     return getPresaleCreationPolicy(
       this.#client,
       this.call.deployment.creationPolicy.objectId,
-      this.#originalPackageId,
-    );
-  }
-
-  /** The deployment's `AdminRegistry`: the one `AdminCap` administrator calls accept. */
-  async getAdminRegistry(): Promise<PresaleAdminRegistryState> {
-    return getPresaleAdminRegistry(
-      this.#client,
-      this.call.deployment.adminRegistry.objectId,
       this.#originalPackageId,
     );
   }

@@ -4,6 +4,7 @@ import type {
 } from "@mysten/sui/client";
 import type { RewardRoundState } from "../holder-rewards/state.ts";
 import { getRewardRound } from "../holder-rewards/state.ts";
+import type { CoinSourceOptions } from "../lib/coins.ts";
 import type { LpFeePolicyState, LpFeeShares, LpVaultState } from "./state.ts";
 import { getLpFeePolicy, getLpFeeShares, getLpVault } from "./state.ts";
 import type { MigratorsDeployment } from "./transactions.ts";
@@ -14,10 +15,14 @@ export class MigratorsClient {
   readonly tx: MigratorTransactions;
   readonly #client: ClientWithCoreApi;
 
-  constructor(client: ClientWithCoreApi, deployment: MigratorsDeployment) {
+  constructor(
+    client: ClientWithCoreApi,
+    deployment: MigratorsDeployment,
+    options: CoinSourceOptions = {},
+  ) {
     this.#client = client;
     this.call = new MigratorCalls(deployment);
-    this.tx = new MigratorTransactions(deployment);
+    this.tx = new MigratorTransactions(deployment, options);
   }
 
   async getLpVault(objectId: string): Promise<LpVaultState> {

@@ -2,6 +2,7 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
+import type { CoinSourceOptions } from "../lib/coins.ts";
 import type {
   BuyPreview,
   OpeningRoundSettlementPreview,
@@ -22,10 +23,14 @@ export class LaunchpadClient {
   readonly tx: LaunchpadTransactions;
   readonly #client: ClientWithCoreApi;
 
-  constructor(client: ClientWithCoreApi, deployment: LaunchpadDeployment) {
+  constructor(
+    client: ClientWithCoreApi,
+    deployment: LaunchpadDeployment,
+    options: CoinSourceOptions = {},
+  ) {
     this.#client = client;
     this.call = new LaunchpadCalls(deployment);
-    this.tx = new LaunchpadTransactions(deployment);
+    this.tx = new LaunchpadTransactions(deployment, options);
   }
 
   async getLaunch(objectId: string): Promise<LaunchState> {

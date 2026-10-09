@@ -7,25 +7,30 @@ to a hard cap, an early close once a hard-capped raise is full, migration-gated
 claims, full refunds when a sale does not migrate, permissionless Cetus or
 Bluefin migration into a `Vault`, vaults for an owner's own position, vesting
 token and raise shares, Blast's protocol fees and
-creation allowlists, LP-fee splits, holder-reward rounds, and the package's own
-two-tier administration.
+creation allowlists, LP-fee splits, holder-reward rounds, and administration through the shared
+Blast ACL.
 
-This SDK follows the next `blast_presale` generation, frozen at contracts
-`af86ea4` (see [ABI coverage](#abi-coverage)), which is not published yet. The
-live mainnet package (contracts `22e689c`, the release
-`BLAST_PRESALE_DEPLOYMENTS.mainnet` registers) has an older `Presale` and
-event layout that these decoders do not read.
+This SDK follows the `blast_presale` package published on mainnet on
+2026-10-09 from contracts `acad02e` (see [ABI coverage](#abi-coverage)), which
+Blast administers through the shared `blast_admin` ACL.
 
-The package is published on mainnet on its own (contracts ADR 0099), so it
-registers before the rest of Blast. `getPresaleDeployment(network)` returns the
-complete Blast release's presale once one is registered, and the standalone
-release (`BLAST_PRESALE_DEPLOYMENTS`) until then:
+The package publishes before the rest of Blast (contracts ADR 0099), after
+`blast_admin` and `blast_partners`, so it registers on its own.
+`getPresaleDeployment(network)` returns the complete Blast release's presale
+once one is registered, and the standalone release
+(`BLAST_PRESALE_DEPLOYMENTS`, which also carries the Aftermath vendor under
+`aftermath`) until then:
 
 ```ts
 import { getPresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
 
 const presale = new PresaleTransactions(getPresaleDeployment("mainnet"));
 ```
+
+When a sponsor pays gas, pass `{ useGasCoin: false }` as the second argument
+(or on a single `commit` or `migrateBluefin` call) so a SUI quote or fee comes
+from the sender's coins, never the sponsor's gas coin; see the README's
+[SUI payments and sponsored gas](../README.md#sui-payments-and-sponsored-gas).
 
 For another deployment, pass the IDs from the publish and `package_admin::wrap`
 effects, validated with `definePresaleDeployment`:
@@ -39,8 +44,8 @@ const presale = new PresaleTransactions(definePresaleDeployment({
   creationPolicy: { objectId, initialSharedVersion },
   // Shared by publication; creation, migration, and fee collection read it.
   feePolicy: { objectId, initialSharedVersion },
-  // Shared by publication; every administrator call checks its AdminCap here.
-  adminRegistry: { objectId, initialSharedVersion },
+  // blast_admin and its ACL, where every administrator call signs in.
+  admin: { packageId, acl: { objectId, initialSharedVersion } },
 }));
 ```
 
@@ -67,7 +72,7 @@ stage; `newCetusPresale` and `newBluefinPresale` build all three.
 | Settle | `settle`, `cancelUnlaunched` | Anyone may call. `settle` works from `endMs`, or earlier once the raise is full under a hard cap with `closesWhenFilled` (`canClosePresaleEarly`); an early close ends the window at the settle, and `PresaleFunded` carries the actual `end_ms` and `liquidity_deadline_ms`. |
 | Create an Aftermath sale | `createAftermathPresale` | The vendor's `AdminCap` holder only; see [Aftermath DAO pools](#aftermath-dao-pools). |
 | Migrate to Aftermath | `migrateAftermath`, `settleAndMigrateAftermath` | Anyone may call, with the sale's `PoolCreation` and `Lp` type (`getAftermathPoolCreation`). |
-| Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee from gas. Pass the sale's `partner` when it names one, and the same PTB pays it. |
+| Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee, from gas unless `useGasCoin: false`. Pass the sale's `partner` when it names one, and the same PTB pays it. |
 | Pay Blast and its partner | `payProtocolFeesWithPartner` | Anyone may call, once, after a partnered sale migrates; use it on its own for a sale another migrator migrated. See [Partners](#partners). |
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. Under participant vesting, each claim locks the participant's tokens in a new schedule starting at that claim. |
 | Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, or holds it on a partnered vault, then every fee recipient. The holder-reward share stays in the vault. Pass the vault's `partner` when it names one, and the same PTB pays what the vault held. |
@@ -75,15 +80,14 @@ stage; `newCetusPresale` and `newBluefinPresale` build all three.
 | Vault without a presale | `newCetusVault`, `newBluefinVault` | Anyone may lock their own Cetus or Bluefin `position` in a new `Vault` with their own LP-fee split and an optional accepted `partnerId` (contracts ADR 0109). Cetus burns the position through LP Burn and takes either coin order (`cetusMemeSide`); Bluefin's pool must be `Pool<Meme, Quote>`. The `CreationPolicy` must allow Quote and the venue's migrator. The vault's presale and `PresaleCap` IDs are zero (`isVaultWithoutPresale`), so it has no residuals; fees and holder rewards work as on any vault. |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
 | Own position | `newCetusVault`, `newBluefinVault` | Anyone, for their own position: locks it in a new `Vault` with zero presale IDs, the given fee split, and an optional accepted partner (contracts ADR 0109). |
-| Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication takes the `AdminCap` (`adminCapId`). |
+| Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication signs in as `RewardsAdmin` (`adminCapId`). |
 | Cap | `destroyCap` | After cancellation only. |
-| Blast's rates | `setProtocolFees` | Takes the `AdminCap`. Applies to presales created afterward. |
-| Blast's rates on one sale | `setPresaleProtocolFees` | Takes the `AdminCap`. In the creation PTB before `share` (pass the `Presale` result), or once shared until the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
-| Blast's LP-fee rates on one vault | `setProtocolLpFees` | Takes the `AdminCap`. Applies to that vault's later collections, including fees already in the pool. The contract rejects an unchanged pair (`ProtocolLpFeesChanged`). |
-| Blast's payout address | `setProtocolDestination` | Takes the `AdminCap`. Applies to every later payout. |
-| Partners | `addPartner`, `removePartner` | Take the `AdminCap`. Which Blast partners presales created afterward may name: added at once, removed after `PARTNER_DELAY_MS`. |
-| Listing | `setQuoteAllowed`, `setMigrationWitnessAllowed` | Takes the `AdminCap`. Which Quote types and migrators presales created afterward may use; existing sales are unaffected. A migrator is a `venue` of this package or the `witnessType` of an external migrator's `Witness` struct. |
-| Administration | `replaceAdminCap`, `revokeAdminCap`, `transferSuperAdmin` | Take the `SuperAdminCap` (`superAdminCapId`). See [Administration](#administration). |
+| Blast's rates | `setProtocolFees` | Signs in as `FeeAdmin`. Applies to presales created afterward. |
+| Blast's rates on one sale | `setPresaleProtocolFees` | Signs in as `FeeAdmin`. In the creation PTB before `share` (pass the `Presale` result and an `adminWitness` from `call.signIn`), or once shared until the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
+| Blast's LP-fee rates on one vault | `setProtocolLpFees` | Signs in as `FeeAdmin`. Applies to that vault's later collections, including fees already in the pool. The contract rejects an unchanged pair (`ProtocolLpFeesChanged`). |
+| Blast's payout address | `setProtocolDestination` | Signs in as `TreasuryAdmin`. Applies to every later payout. |
+| Partners | `addPartner`, `removePartner` | Sign in as `FeeAdmin`. Which Blast partners presales created afterward may name: added at once, removed after `PARTNER_DELAY_MS`. |
+| Listing | `setQuoteAllowed`, `setMigrationWitnessAllowed` | Sign in as `ListingAdmin` and `AdapterAdmin`. Which Quote types and migrators presales created afterward may use; existing sales are unaffected. A migrator is a `venue` of this package or the `witnessType` of an external migrator's `Witness` struct. |
 
 `PresaleCalls` exposes each Move call separately for composition.
 
@@ -170,19 +174,25 @@ builders.
 
 ## Administration
 
-The package does not link `blast_admin`. Publication sends the publisher a
-key-only `SuperAdminCap` and one `AdminCap`, and shares an `AdminRegistry`
-recording the accepted cap. Every administrator builder passes
-`&AdminRegistry` from the deployment and the `AdminCap`; the contract aborts
-with `EInvalidAdminCap` unless that cap is the registered one.
+Blast administers the package through the shared `blast_admin` ACL (contracts
+ADR 0099); it mints no capability of its own. `blast_presale_domain` declares
+six roles, and every administrator transaction signs in with
+`blast_acl::sign_in<Role>` in the same PTB, so the `AdminCap` (`adminCapId`)
+must hold that role:
 
-The `SuperAdminCap` cannot administer anything itself. `replaceAdminCap` mints a
-new `AdminCap`, sends it to `recipient`, and stops the old cap in the same
-transaction; `revokeAdminCap` stops all administration until the next
-replacement. The `SuperAdminCap` has no `store`, so `transferSuperAdmin` is the
-only way to move it. `PresaleClient.getAdminRegistry` reads the accepted cap ID
-(null after a revocation), and `decodePresalePolicyEvent` decodes
-`AdminCapReplaced` and `AdminCapRevoked`.
+| Role | Transactions |
+| --- | --- |
+| `FeeAdmin` | `setProtocolFees`, `setPresaleProtocolFees`, `setProtocolLpFees`, `addPartner`, `removePartner` |
+| `TreasuryAdmin` | `setProtocolDestination` |
+| `ListingAdmin` | `setQuoteAllowed` |
+| `AdapterAdmin` | `setMigrationWitnessAllowed` |
+| `RewardsAdmin` | `publishHolderRewardRound` |
+| `UpgradeAdmin` | none: upgrade custody stays with the CLI publish tooling |
+
+`PresaleCalls.roleType(role)` names a role's Move type for
+`AdminTransactions.grantRole`, and `PresaleCalls.signIn` composes the sign-in
+for a custom PTB; its builders take that `adminWitness`. The root grants,
+revokes, and replaces administrators through `@interest-protocol/blast-sdk/admin`.
 
 ## Vesting
 
@@ -369,7 +379,7 @@ const manifest = buildRewardManifest({ ...round, leafDomain: PRESALE_REWARD_LEAF
 
 `PresaleClient` (`blastPresale()` extension) reads a `Presale`, a wallet's
 `Commitment` dynamic field, a `Vault`, a reward `Round`, the
-`FeePolicy`, the `CreationPolicy`, and the `AdminRegistry`.
+`FeePolicy`, and the `CreationPolicy`.
 `decodePresaleEvent` decodes the 20
 events generic over `<SaleToken, Quote>`. `VaultCreated` and
 `PoolTierReserved` add a `Venue` type argument; the reducer keeps each
@@ -378,8 +388,7 @@ sale's `PresaleCreated`. A `VaultCreated` for a vault
 without a presale carries the zero `presale_id`, which the reducer projects
 without linking a presale. `decodePresalePolicyEvent` decodes `FeesChanged`,
 `DestinationChanged`, `QuoteSet`, `MigrationWitnessSet`, `PartnerAdded`,
-`PartnerRemoved`, `AdminCapReplaced`, and `AdminCapRevoked`, which have no type
-arguments.
+and `PartnerRemoved`, which have no type arguments.
 `reducePresaleEvent` rebuilds each presale's lifecycle, windows, commitments,
 and custody balances, its vault, and its rounds. `Committed` has no wallet
 field, so the reducer keys commitments by the event sender. The `Presale`
@@ -390,15 +399,11 @@ the claim that leaves one takes the rounding remainder.
 
 ## ABI coverage
 
-`abi/production-presale-v1.json` freezes the package at contracts `af86ea4`
-(`baseline.contractsCommit`), with the approved amendments it lists. Contracts
-main still moves: re-run `npm run check:abi` against contracts main, and
-refreeze with `check:abi:write` for an approved change, before the generation
-is published. Every public function is classified:
+`abi/production-presale-v1.json` freezes the package at contracts `acad02e`,
+the 2026-10-09 mainnet publication, with the approved amendments it lists.
+Every public function is classified:
 
-- **Builders:** all 19 `blast_presale` functions; `blast_presale_admin`
-  `replace_admin_cap`, `revoke_admin_cap`, and `transfer_super_admin`;
-  `fee_policy` `set_fees` and
+- **Builders:** all 19 `blast_presale` functions; `fee_policy` `set_fees` and
   `set_destination`; `creation_policy` `set_quote_allowed`,
   `set_migration_witness_allowed`, `add_partner`, and `remove_partner`; `cetus` and `bluefin` `new`, `migrate`,
   `collect_fees`, and `new_vault`; `presale_vault` `claim_migration_residuals` and

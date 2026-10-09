@@ -73,7 +73,10 @@ const deployment: PresaleDeployment = {
   venueConfig: shared("0x60", false),
   feePolicy: shared("0x61", false),
   creationPolicy: shared("0x62", false),
-  adminRegistry: shared("0x63", false),
+  admin: {
+    packageId: "0x64",
+    acl: { objectId: "0x63", initialSharedVersion: "3" },
+  },
   aftermath,
 };
 const tx = new PresaleTransactions(deployment);
@@ -129,7 +132,10 @@ test("names the Aftermath venue by the vendor's witness", () => {
     venue: "aftermath",
     allowed: true,
   });
-  assert.deepEqual(moveCallTypeArguments(allow), [[witness]]);
+  assert.deepEqual(moveCallTypeArguments(allow), [
+    [normalizeStructTag(`${PRESALE_PKG}::blast_presale_domain::AdapterAdmin`)],
+    [witness],
+  ]);
 
   // Without the vendor's configuration, nothing reaches Aftermath.
   const { aftermath: _, ...bare } = deployment;

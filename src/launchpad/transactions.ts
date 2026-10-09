@@ -15,6 +15,7 @@ import {
 
 import type { AdminDeployment } from "../admin/transactions.ts";
 import { AdminCalls, normalizeAdminDeployment } from "../admin/transactions.ts";
+import type { CoinSourceOptions } from "../lib/coins.ts";
 import {
   requireBasisPoints,
   requirePositiveU64,
@@ -857,9 +858,14 @@ export class LaunchpadCalls {
 
 export class LaunchpadTransactions {
   readonly call: LaunchpadCalls;
+  readonly #useGasCoin: boolean;
 
-  constructor(deployment: LaunchpadDeployment) {
+  constructor(
+    deployment: LaunchpadDeployment,
+    options: CoinSourceOptions = {},
+  ) {
     this.call = new LaunchpadCalls(deployment);
+    this.#useGasCoin = options.useGasCoin ?? true;
   }
 
   /**
@@ -900,13 +906,14 @@ export class LaunchpadTransactions {
       quoteAmount: bigint;
       minMemeOut: bigint;
       recipient: string;
-    },
+    } & CoinSourceOptions,
   ): Transaction {
     requirePositiveU64("quoteAmount", options.quoteAmount);
     const tx = new Transaction();
     const quoteCoin = tx.coin({
       type: normalizeStructTag(options.quoteType),
       balance: options.quoteAmount,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
     });
     const buyResult = tx.add(this.call.buy({ ...options, quoteCoin }));
     tx.transferObjects(
@@ -1066,13 +1073,14 @@ export class LaunchpadTransactions {
     options: LaunchTypes & {
       launch: SharedObjectReference<true>;
       quoteAmount: bigint;
-    },
+    } & CoinSourceOptions,
   ): Transaction {
     requirePositiveU64("quoteAmount", options.quoteAmount);
     const tx = new Transaction();
     const quoteCoin = tx.coin({
       type: normalizeStructTag(options.quoteType),
       balance: options.quoteAmount,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
     });
     tx.add(this.call.joinOpeningRound({ ...options, quoteCoin }));
     return tx;
@@ -1247,9 +1255,9 @@ export class LaunchpadTransactions {
 
 /**
  * Completes an adapter-started launch in `tx`: pays the exact SUI
- * `creationFee` from gas, applies the settings, finalizes, runs the optional
- * purchase or opening-round bid on the owned launch and routes its coins, then
- * shares.
+ * `creationFee` and the optional purchase's Quote as `useGasCoin` directs,
+ * applies the settings, finalizes, runs the optional purchase or opening-round
+ * bid on the owned launch and routes its coins, then shares.
  */
 export function addLaunchCompletion(
   tx: Transaction,
@@ -1260,14 +1268,15 @@ export function addLaunchCompletion(
       /** `LaunchConfig.creation_fee`, in MIST (`LaunchpadClient.getLaunchConfig`). */
       creationFee: bigint;
       preShareBuy?: PreShareBuyInput;
-    },
+    } & CoinSourceOptions,
 ): void {
-  const { preShareBuy, ...rest } = options;
+  const { preShareBuy, useGasCoin = true, ...rest } = options;
   const settings = {
     ...rest,
     creationFee: tx.coin({
       type: "0x2::sui::SUI",
       balance: requireU64("creationFee", options.creationFee),
+      useGasCoin,
     }),
   };
   if (!preShareBuy) {
@@ -1278,6 +1287,7 @@ export function addLaunchCompletion(
   const quoteCoin = tx.coin({
     type: normalizeStructTag(options.quoteType),
     balance: preShareBuy.quoteAmount,
+    useGasCoin,
   });
   const bought = tx.add(
     calls.completeLaunch({

@@ -152,7 +152,6 @@ export function runtimeFor(
     "presale.venueConfig": `${original("presale")}::venue_config::VenueConfig`,
     "presale.creationPolicy": `${original("presale")}::creation_policy::CreationPolicy`,
     "presale.feePolicy": `${original("presale")}::fee_policy::FeePolicy`,
-    "presale.adminRegistry": `${original("presale")}::blast_presale_admin::AdminRegistry`,
     "cetus.config": `${original("cetusClmm")}::config::GlobalConfig`,
     "cetus.pools": `${original("cetusClmm")}::factory::Pools`,
     "cetus.burnManager": `${original("cetusLpBurn")}::lp_burn::BurnManager`,

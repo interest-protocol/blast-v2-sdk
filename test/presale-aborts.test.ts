@@ -52,7 +52,6 @@ test("names a presale abort by its module and code", () => {
   assert.equal(presaleAbortName("blast_presale", 32), "ENoPartnerPayout");
   assert.equal(presaleAbortName("blast_presale", 33), "EInvalidHardCap");
   assert.equal(presaleAbortName("blast_presale", 34), "EMissingSetting");
-  assert.equal(presaleAbortName("blast_presale_admin", 0), "EInvalidAdminCap");
   assert.equal(
     presaleAbortName("presale_vault", 3),
     "EProtocolLpFeesUnchanged",

@@ -383,11 +383,6 @@ function expectedObjectTypes(
       module: "fee_policy",
       name: "FeePolicy",
     };
-    types["presale.adminRegistry"] = {
-      packageId: presale,
-      module: "blast_presale_admin",
-      name: "AdminRegistry",
-    };
   }
   return types;
 }

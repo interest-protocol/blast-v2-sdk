@@ -119,7 +119,6 @@ test("names every recorded shared object by its owner-qualified path", () => {
       "presale.venueConfig",
       "presale.creationPolicy",
       "presale.feePolicy",
-      "presale.adminRegistry",
     ],
   );
   // The observation an SDK consumer builds uses exactly those keys.

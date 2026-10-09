@@ -1,6 +1,7 @@
 import { isValidTransactionDigest } from "@mysten/sui/utils";
 
 import type { AdminDeployment } from "../admin/transactions.ts";
+import { normalizeAdminDeployment } from "../admin/transactions.ts";
 import { requirePositiveU64, requireU64 } from "../lib/integers.ts";
 import type { SharedObjectIdentity } from "../lib/sui.ts";
 import {
@@ -40,7 +41,7 @@ const SHARED_OBJECT_KEYS = {
   admin: ["acl"],
   launchpad: ["packageVersion", "launchConfig", "runtimeConfig"],
   migrators: ["packageVersion", "lpFeePolicy", "venueConfig"],
-  presale: ["venueConfig", "creationPolicy", "feePolicy", "adminRegistry"],
+  presale: ["venueConfig", "creationPolicy", "feePolicy"],
   blastSui: ["packageVersion", "vault"],
   cetus: ["config", "pools", "burnManager"],
   bluefin: ["config"],
@@ -93,8 +94,8 @@ const PRESALE_SHARED_OBJECTS = SHARED_OBJECT_KEYS.presale;
 /**
  * Normalizes and freezes one standalone presale deployment. Presale publishes
  * on its own (contracts ADR 0099), so it registers before a complete
- * `BlastDeployment` exists. `aftermath`, the vendor package's configuration,
- * is kept when given.
+ * `BlastDeployment` exists; it still needs the published `blast_admin` ACL.
+ * `aftermath`, the vendor package's configuration, is kept when given.
  */
 export function definePresaleDeployment(
   deployment: PresaleDeployment,
@@ -116,42 +117,60 @@ export function definePresaleDeployment(
     ...(deployment.aftermath === undefined
       ? {}
       : { aftermath: defineAftermathPresaleDeployment(deployment.aftermath) }),
+    admin: Object.freeze(
+      normalizeAdminDeployment(
+        required<AdminDeployment>(deployment, "presale", "admin"),
+      ),
+    ),
   }) as PresaleDeployment;
 }
 
 /**
- * Canonical standalone presale releases, from the publish and
- * `package_admin::wrap` effects recorded in contracts
- * `deployments/sui/mainnet/2026-10-04-blast-presale-scheduled-start.json`.
+ * Canonical standalone presale releases. Mainnet is the 2026-10-09
+ * publication from contracts `d2a5bf6` (contracts
+ * `deployments/sui/mainnet/2026-10-09-blast-presale.json`), administered
+ * through the `blast_admin` ACL published with it; `packageId` is its
+ * version 2, a dependency-only upgrade with identical modules. The earlier package at
+ * `0x76cb…8400` administers itself with an `AdminRegistry`, which these
+ * builders cannot drive.
  */
 export const BLAST_PRESALE_DEPLOYMENTS: Readonly<
   Partial<Record<BlastNetwork, PresaleDeployment>>
 > = Object.freeze({
   mainnet: definePresaleDeployment({
     packageId:
-      "0x76cb0508fc94234fddd910b5616248f8a42998048a28e55f5fe1cc89e7b98400",
+      "0x33897a946e231652f00d712834665831ada3e3ffb3cd3ef11f4a449058ab43c6",
     originalPackageId:
-      "0x76cb0508fc94234fddd910b5616248f8a42998048a28e55f5fe1cc89e7b98400",
+      "0x2d300f3d8819c6e09fd1558e518c2ffab97b324479843d4f94b561b10a441fd0",
     venueConfig: {
       objectId:
-        "0x129346213a5959533e854092076dc3f2494ba1e2ef08669e86cf1d2561d9f39f",
-      initialSharedVersion: "986577439",
+        "0x5399abde7eeb48fec9d38d048d9faebe2a51a82df03f35ae8feb52e7d9ef32dc",
+      initialSharedVersion: "1",
     },
     creationPolicy: {
       objectId:
-        "0xa496515a86087bad827e8190d48f103d900ad5404948dcdf9ca18f5dad738658",
-      initialSharedVersion: "986577439",
+        "0xe5a202e29aa436e75d64af0eb286572bf32e35e0ce0f39ddf3ac4154d47d93a5",
+      initialSharedVersion: "1",
     },
     feePolicy: {
       objectId:
-        "0xe2a276bbd2cb922e71e1d6b35b393537df3642e07b2f4d753fdab09c5bd6fb11",
-      initialSharedVersion: "986577439",
+        "0xe9eccc8b1281998240372a113b494ecfc7f57f47d3545880988ae3c05624c348",
+      initialSharedVersion: "1",
     },
-    adminRegistry: {
-      objectId:
-        "0xe7a5cc95aa47e7bc8dfcccce070f6ebc123350c3e478588e23817ee97c8c8cd4",
-      initialSharedVersion: "986577439",
+    admin: {
+      packageId:
+        "0x726fb49b880faa89719b95c6ef3a91be794f771ed3560fe5894d0a605c8469f9",
+      acl: {
+        objectId:
+          "0xc9fbcfc4eda38626d7daad17902cc145b4008beb20470135438298aa7a005a6d",
+        initialSharedVersion: "1",
+      },
     },
+    // The immutable Aftermath DAO-pool vendor published with it.
+    aftermath: defineAftermathPresaleDeployment({
+      packageId:
+        "0xac58d338925ac96304ca573a4dab80d442df6f2427291bcddbea7fc65279678e",
+    }),
   }),
 });
 
@@ -289,7 +308,11 @@ export function presaleDeployment(
     deployment.sharedObjects.presale,
     "sharedObjects.presale",
   );
-  return { ...packageReference, ...objects };
+  return {
+    ...packageReference,
+    ...objects,
+    admin: adminDeployment(deployment),
+  };
 }
 
 /** Checks one route tier in its venue's native units. */

@@ -43,7 +43,6 @@ export const PRESALE_ABORTS = {
     "EInvalidHardCap",
     "EMissingSetting",
   ],
-  blast_presale_admin: ["EInvalidAdminCap", "ENoAdminCap", "EInvalidRecipient"],
   holder_rewards: [
     "EWrongRound",
     "EInvalidInterval",

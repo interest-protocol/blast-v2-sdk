@@ -232,8 +232,10 @@ config of another lineage is a `BluefinPoolCreationFeeError`; there is no
 default.
 
 Presale publishes on its own, so `BLAST_PRESALE_DEPLOYMENTS` registers its
-standalone mainnet release, and `getPresaleDeployment(network)` prefers the
-complete release's presale once `BLAST_DEPLOYMENTS` has one.
+standalone mainnet release (the 2026-10-09 publication, administered through
+the `blast_admin` ACL, with the Aftermath DAO-pool vendor under `aftermath`),
+and `getPresaleDeployment(network)` prefers the complete release's presale
+once `BLAST_DEPLOYMENTS` has one.
 
 ## Launch creation
 
@@ -324,8 +326,8 @@ Quote, as `<Meme, Quote, CoinA, CoinB>`, to Cetus's single route per operation
 
 - Migration is permissionless. Cetus burns the full-range position through
   Cetus LP Burn and takes the mutable `BurnManager`; Bluefin takes its SUI
-  pool-creation fee, which `tx.migrateBluefin` pays from gas as an
-  exact-balance coin.
+  pool-creation fee, which `tx.migrateBluefin` pays as an exact-balance SUI
+  coin (see [SUI payments and sponsored gas](#sui-payments-and-sponsored-gas)).
 - `collectCetusFees` (with the immutable `BurnManager`) and
   `collectBluefinFees` are permissionless. One call collects the position's
   fees, pays Blast's live share from `LpFeePolicy` to its protocol destination,
@@ -448,6 +450,10 @@ must hold that role:
 | migrators | `setLpFeeProtocolDestination`, `claimProtocolFees` | `TreasuryAdmin` |
 | migrators | `buybackAndBurnCetus`, `buybackAndBurnBluefin` | `BuybackAdmin` |
 | migrators | `publishHolderRewardRound` | `RewardsAdmin` |
+| presale | `setProtocolFees`, `setPresaleProtocolFees`, `setProtocolLpFees`, `addPartner`, `removePartner` | `blast_presale_domain::FeeAdmin` |
+| presale | `setProtocolDestination` | `blast_presale_domain::TreasuryAdmin` |
+| presale | `setQuoteAllowed` | `blast_presale_domain::ListingAdmin` |
+| presale | `setMigrationWitnessAllowed` | `blast_presale_domain::AdapterAdmin` |
 | presale | `publishHolderRewardRound` | `blast_presale_domain::RewardsAdmin` |
 | blast SUI | `setRedeemFee` | `blast_sui_domain::FeeAdmin` |
 | partners | `register`, `scheduleShare`, `scheduleCap` | `blast_partners::PartnerAdmin` |
@@ -581,10 +587,10 @@ unused, so every publish verifies.
 
 ## Presale
 
-`@interest-protocol/blast-sdk/presale` builds every product route of the next
-`blast_presale` generation (frozen at contracts `af86ea4`, not yet published;
-the live mainnet package has an older layout) and of the Aftermath DAO-pool
-vendor package that links it. It previews creation, commitments, and
+`@interest-protocol/blast-sdk/presale` builds every product route of the
+`blast_presale` package (published on mainnet on 2026-10-09 from contracts
+`acad02e`) and of the Aftermath DAO-pool vendor package that links it. It
+previews creation, commitments, and
 claims exactly as the contract enforces them, and it decodes and replays the
 package's objects and events. See [docs/presale.md](docs/presale.md).
 
@@ -605,6 +611,34 @@ one. Every other SDK transaction is deterministic and keeps the default budget.
 
 A plugin does not survive JSON serialization: after `Transaction.from(json)` of
 a Cetus migration, add it again with `tx.addBuildPlugin(grossGasBudget())`.
+
+## SUI payments and sponsored gas
+
+Builders that spend SUI (a creation fee, a vault deposit, or a SUI-quoted
+buy or commitment) take it with `@mysten/sui`'s `tx.coin`. Its default
+withdraws from the sender's address balance when that covers the amount and
+otherwise splits the gas coin. That suits a sender who pays their own gas. In
+a sponsored transaction the gas coin is the sponsor's, so pass
+`useGasCoin: false` and the SUI comes from the sender's own coins and address
+balance instead:
+
+```ts
+// Once for every builder of a client or transaction builder...
+const presale = new PresaleClient(client, deployment, { useGasCoin: false });
+const blastSui = new BlastSuiTransactions(deployment, { useGasCoin: false });
+
+// ...or per call, which wins over the builder's setting.
+const tx = presale.tx.commit({ ...commit, useGasCoin: false });
+```
+
+Every SUI-spending builder honors it: `BlastSuiTransactions` `mintFunSui`,
+`requestBlastSui`, and `donateSui`; `LaunchpadTransactions` `buy` and
+`joinOpeningRound`; `MigratorTransactions` `createCetusLaunch`,
+`createBluefinLaunch`, and `migrateBluefin`; `PresaleTransactions` `commit` and
+`migrateBluefin`; and `addLaunchCompletion`. Other coin types never touch the
+gas coin. The `call` builders take coin arguments you construct, so a PTB you
+compose sources its coins however you choose. A self-paying sender with
+`useGasCoin: false` needs SUI beyond what gas selection takes.
 
 ## Integer helpers
 

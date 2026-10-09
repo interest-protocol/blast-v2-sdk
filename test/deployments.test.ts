@@ -121,6 +121,7 @@ test("derives every package's call-ready deployment", () => {
   assert.deepEqual(presaleDeployment(deployment), {
     ...packages.presale,
     ...sharedObjects.presale,
+    admin,
   });
   assert.deepEqual(blastSuiDeployment(deployment), {
     packageId: id("0x423"),
@@ -162,14 +163,14 @@ test("requires every shared object a recorded group owns", () => {
       }),
     /sharedObjects\.migrators\.venueConfig is required/,
   );
-  const { adminRegistry: _dropped, ...presale } = input.sharedObjects.presale;
+  const { feePolicy: _dropped, ...presale } = input.sharedObjects.presale;
   assert.throws(
     () =>
       defineBlastDeployment({
         ...input,
         sharedObjects: { ...input.sharedObjects, presale },
       }),
-    /sharedObjects\.presale\.adminRegistry is required/,
+    /sharedObjects\.presale\.feePolicy is required/,
   );
 });
 
@@ -266,33 +267,38 @@ test("rejects placeholder package IDs", () => {
   );
 });
 
-test("registers the standalone mainnet presale release", () => {
+test("registers the 2026-10-09 mainnet presale, administered through the ACL", () => {
   const presale = getPresaleDeployment("mainnet");
   assert.equal(presale, BLAST_PRESALE_DEPLOYMENTS.mainnet);
   assert.equal(
-    presale.packageId,
-    id("0x76cb0508fc94234fddd910b5616248f8a42998048a28e55f5fe1cc89e7b98400"),
+    presale.originalPackageId,
+    "0x2d300f3d8819c6e09fd1558e518c2ffab97b324479843d4f94b561b10a441fd0",
   );
-  assert.equal(presale.originalPackageId, presale.packageId);
-  assert.deepEqual(presale.adminRegistry, {
-    objectId: id(
-      "0xe7a5cc95aa47e7bc8dfcccce070f6ebc123350c3e478588e23817ee97c8c8cd4",
-    ),
-    initialSharedVersion: "986577439",
-  });
-  assert.equal(Object.isFrozen(presale), true);
-  assert.equal(Object.isFrozen(presale.feePolicy), true);
+  assert.equal(
+    presale.packageId,
+    "0x33897a946e231652f00d712834665831ada3e3ffb3cd3ef11f4a449058ab43c6",
+  );
+  assert.equal(
+    presale.admin.acl.objectId,
+    "0xc9fbcfc4eda38626d7daad17902cc145b4008beb20470135438298aa7a005a6d",
+  );
+  assert.equal(Object.isFrozen(presale.admin), true);
   new PresaleCalls(presale);
 });
 
 test("normalizes a standalone presale manifest and requires every singleton", () => {
   const manifest = presaleDeployment(deployment);
-  assert.deepEqual(definePresaleDeployment(manifest), manifest);
+  const presale = definePresaleDeployment(manifest);
+  assert.deepEqual(presale, manifest);
+  assert.equal(Object.isFrozen(presale), true);
+  assert.equal(Object.isFrozen(presale.feePolicy), true);
+  assert.equal(Object.isFrozen(presale.admin), true);
+  new PresaleCalls(presale);
   for (const name of [
     "venueConfig",
     "creationPolicy",
     "feePolicy",
-    "adminRegistry",
+    "admin",
   ] as const) {
     const { [name]: _removed, ...rest } = manifest;
     assert.throws(
