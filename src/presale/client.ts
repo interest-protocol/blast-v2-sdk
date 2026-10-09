@@ -2,7 +2,7 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
-
+import type { CoinSourceOptions } from "../lib/coins.ts";
 import type {
   PresaleCommitment,
   PresaleCreationPolicyState,
@@ -27,10 +27,14 @@ export class PresaleClient {
   readonly tx: PresaleTransactions;
   readonly #client: ClientWithCoreApi;
 
-  constructor(client: ClientWithCoreApi, deployment: PresaleDeployment) {
+  constructor(
+    client: ClientWithCoreApi,
+    deployment: PresaleDeployment,
+    options: CoinSourceOptions = {},
+  ) {
     this.#client = client;
     this.call = new PresaleCalls(deployment);
-    this.tx = new PresaleTransactions(deployment);
+    this.tx = new PresaleTransactions(deployment, options);
   }
 
   async getPresale(objectId: string): Promise<PresaleState> {

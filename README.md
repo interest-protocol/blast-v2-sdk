@@ -228,8 +228,8 @@ Quote, as `<Meme, Quote, CoinA, CoinB>`, to Cetus's single route per operation
 
 - Migration is permissionless. Cetus burns the full-range position through
   Cetus LP Burn and takes the mutable `BurnManager`; Bluefin takes its SUI
-  pool-creation fee, which `tx.migrateBluefin` pays from gas as an
-  exact-balance coin.
+  pool-creation fee, which `tx.migrateBluefin` pays as an exact-balance SUI
+  coin (see [SUI payments and sponsored gas](#sui-payments-and-sponsored-gas)).
 - `collectCetusFees` (with the immutable `BurnManager`) and
   `collectBluefinFees` are permissionless. One call collects the position's
   fees, pays Blast's live share from `LpFeePolicy` to its protocol destination,
@@ -466,6 +466,34 @@ one. Every other SDK transaction is deterministic and keeps the default budget.
 
 A plugin does not survive JSON serialization: after `Transaction.from(json)` of
 a Cetus migration, add it again with `tx.addBuildPlugin(grossGasBudget())`.
+
+## SUI payments and sponsored gas
+
+Builders that spend SUI (a creation fee, a vault deposit, or a SUI-quoted
+buy or commitment) take it with `@mysten/sui`'s `tx.coin`. Its default
+withdraws from the sender's address balance when that covers the amount and
+otherwise splits the gas coin. That suits a sender who pays their own gas. In
+a sponsored transaction the gas coin is the sponsor's, so pass
+`useGasCoin: false` and the SUI comes from the sender's own coins and address
+balance instead:
+
+```ts
+// Once for every builder of a client or transaction builder...
+const presale = new PresaleClient(client, deployment, { useGasCoin: false });
+const blastSui = new BlastSuiTransactions(deployment, { useGasCoin: false });
+
+// ...or per call, which wins over the builder's setting.
+const tx = presale.tx.commit({ ...commit, useGasCoin: false });
+```
+
+Every SUI-spending builder honors it: `BlastSuiTransactions` `mintFunSui`,
+`requestBlastSui`, and `donateSui`; `LaunchpadTransactions` `buy` and
+`joinOpeningRound`; `MigratorTransactions` `createCetusLaunch`,
+`createBluefinLaunch`, and `migrateBluefin`; `PresaleTransactions` `commit` and
+`migrateBluefin`; and `addLaunchCompletion`. Other coin types never touch the
+gas coin. The `call` builders take coin arguments you construct, so a PTB you
+compose sources its coins however you choose. A self-paying sender with
+`useGasCoin: false` needs SUI beyond what gas selection takes.
 
 ## Integer helpers
 

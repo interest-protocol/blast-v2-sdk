@@ -28,6 +28,7 @@ import {
 } from "../holder-rewards/allocations.ts";
 import type { LaunchTypes } from "../launchpad/transactions.ts";
 import { normalizeLaunchTypes } from "../launchpad/transactions.ts";
+import type { CoinSourceOptions } from "../lib/coins.ts";
 import { grossGasBudget } from "../lib/gas.ts";
 import { requireU64 } from "../lib/integers.ts";
 import { deploymentObject, moveResults } from "../lib/ptb.ts";
@@ -1387,9 +1388,11 @@ export class PresaleCalls {
 
 export class PresaleTransactions {
   readonly call: PresaleCalls;
+  readonly #useGasCoin: boolean;
 
-  constructor(deployment: PresaleDeployment) {
+  constructor(deployment: PresaleDeployment, options: CoinSourceOptions = {}) {
     this.call = new PresaleCalls(deployment);
+    this.#useGasCoin = options.useGasCoin ?? true;
   }
 
   /**
@@ -1428,7 +1431,8 @@ export class PresaleTransactions {
       presale: SharedObjectReference<true>;
       amount: bigint;
       recipient: string;
-    } & (
+    } & CoinSourceOptions &
+      (
         | { route: "open" | "uncapped" }
         | { route: "allowlisted"; allowlist: AllowlistProof }
       ),
@@ -1439,6 +1443,7 @@ export class PresaleTransactions {
     const quote = tx.coin({
       type: normalizeStructTag(options.quoteType),
       balance: amount,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
     });
     const change = tx.add(
       options.route === "allowlisted"
@@ -1496,20 +1501,22 @@ export class PresaleTransactions {
   }
 
   /**
-   * Pays Bluefin's SUI pool-creation fee from gas as an exact-balance coin,
+   * Pays Bluefin's SUI pool-creation fee as an exact-balance coin,
    * then the sale's partner when `partner` is given; see `payProtocolFeesWithPartner`.
    */
   migrateBluefin(
     options: Omit<
       Parameters<PresaleCalls["migrateBluefin"]>[0],
       "creationFee"
-    > & { creationFee: bigint } & PresalePayout,
+    > & { creationFee: bigint } & PresalePayout &
+      CoinSourceOptions,
   ): Transaction {
     requireU64("creationFee", options.creationFee);
     const tx = new Transaction();
     const creationFee = tx.coin({
       type: "0x2::sui::SUI",
       balance: options.creationFee,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
     });
     tx.add(this.call.migrateBluefin({ ...options, creationFee }));
     return this.#payProtocolFeesWithPartnerAfter(tx, options);
