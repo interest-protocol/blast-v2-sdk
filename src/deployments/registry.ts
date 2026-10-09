@@ -75,15 +75,48 @@ export function definePresaleDeployment(
 }
 
 /**
- * Canonical standalone presale releases. Empty: the package at
- * `0x76cb…8400` that contracts `deployments/sui/mainnet/2026-10-04-blast-presale-scheduled-start.json`
- * records administers itself with an `AdminRegistry`, so these builders cannot
- * drive it; the next publication, which signs in through the `blast_admin`
- * ACL, registers here.
+ * Canonical standalone presale releases. Mainnet is the 2026-10-09
+ * publication from contracts `d2a5bf6` (contracts
+ * `deployments/sui/mainnet/2026-10-09-blast-presale.json`), administered
+ * through the `blast_admin` ACL published with it; `packageId` is its
+ * version 2, a dependency-only upgrade with identical modules. The earlier package at
+ * `0x76cb…8400` administers itself with an `AdminRegistry`, which these
+ * builders cannot drive.
  */
 export const BLAST_PRESALE_DEPLOYMENTS: Readonly<
   Partial<Record<BlastNetwork, PresaleDeployment>>
-> = Object.freeze({});
+> = Object.freeze({
+  mainnet: definePresaleDeployment({
+    packageId:
+      "0x33897a946e231652f00d712834665831ada3e3ffb3cd3ef11f4a449058ab43c6",
+    originalPackageId:
+      "0x2d300f3d8819c6e09fd1558e518c2ffab97b324479843d4f94b561b10a441fd0",
+    venueConfig: {
+      objectId:
+        "0x5399abde7eeb48fec9d38d048d9faebe2a51a82df03f35ae8feb52e7d9ef32dc",
+      initialSharedVersion: "1",
+    },
+    creationPolicy: {
+      objectId:
+        "0xe5a202e29aa436e75d64af0eb286572bf32e35e0ce0f39ddf3ac4154d47d93a5",
+      initialSharedVersion: "1",
+    },
+    feePolicy: {
+      objectId:
+        "0xe9eccc8b1281998240372a113b494ecfc7f57f47d3545880988ae3c05624c348",
+      initialSharedVersion: "1",
+    },
+    admin: {
+      packageId:
+        "0x726fb49b880faa89719b95c6ef3a91be794f771ed3560fe5894d0a605c8469f9",
+      acl: {
+        objectId:
+          "0xc9fbcfc4eda38626d7daad17902cc145b4008beb20470135438298aa7a005a6d",
+        initialSharedVersion: "1",
+      },
+    },
+  }),
+});
 
 /**
  * The released presale deployment on `network`: the complete Blast release's

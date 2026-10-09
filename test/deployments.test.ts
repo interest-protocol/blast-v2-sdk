@@ -195,12 +195,23 @@ test("rejects placeholder package IDs", () => {
   );
 });
 
-test("registers no presale until one that signs in through the ACL is published", () => {
-  assert.deepEqual(BLAST_PRESALE_DEPLOYMENTS, {});
-  assert.throws(
-    () => getPresaleDeployment("mainnet"),
-    /Blast presale is not deployed on Sui mainnet/,
+test("registers the 2026-10-09 mainnet presale, administered through the ACL", () => {
+  const presale = getPresaleDeployment("mainnet");
+  assert.equal(presale, BLAST_PRESALE_DEPLOYMENTS.mainnet);
+  assert.equal(
+    presale.originalPackageId,
+    "0x2d300f3d8819c6e09fd1558e518c2ffab97b324479843d4f94b561b10a441fd0",
   );
+  assert.equal(
+    presale.packageId,
+    "0x33897a946e231652f00d712834665831ada3e3ffb3cd3ef11f4a449058ab43c6",
+  );
+  assert.equal(
+    presale.admin.acl.objectId,
+    "0xc9fbcfc4eda38626d7daad17902cc145b4008beb20470135438298aa7a005a6d",
+  );
+  assert.equal(Object.isFrozen(presale.admin), true);
+  new PresaleCalls(presale);
 });
 
 test("normalizes a standalone presale manifest and requires every singleton", () => {
