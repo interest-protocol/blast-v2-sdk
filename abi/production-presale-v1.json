@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "af86ea4bf34080553a45d961d6db8cec719bb2a0",
+    "contractsCommit": "84e9ada652906eb6af81c42c49705af16431928c",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
@@ -13,7 +13,8 @@
       "contracts ADR 0107: the Vault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
       "contracts ADR 0109: cetus::new_vault and bluefin::new_vault lock an owner's own position in a Vault with zero presale IDs; PresaleVault and PresaleVaultCreated become Vault and VaultCreated",
       "contracts ADR 0110: blast_presale::new returns a PresaleInitializer that the set_* setters configure and finalize turns into (Presale, PresaleCap); cetus::new and bluefin::new take only their venue arguments; the hard cap moves from UncappedPhase to a sale-level HardCap with closes_when_filled, settle closes a full sale early, PresaleCreated gains hard_cap, PresaleOpened hard_cap_from_ms, and PresaleFunded end_ms and liquidity_deadline_ms",
-      "contracts ADR 0111: the pool tier belongs to the venue; blast_presale::new, Presale, and PresaleCreated drop tick_spacing and pool_fee_rate, bluefin::new and bluefin::migrate take the VenueConfig, and venue_config::PoolTierReserved<Meme, Quote, Venue> records each Cetus or Bluefin tier"
+      "contracts ADR 0111: the pool tier belongs to the venue; blast_presale::new, Presale, and PresaleCreated drop tick_spacing and pool_fee_rate, bluefin::new and bluefin::migrate take the VenueConfig, and venue_config::PoolTierReserved<Meme, Quote, Venue> records each Cetus or Bluefin tier",
+      "contracts ADR 0099 (amended 2026-10-08): the shared Blast ACL administers the presale; every administrator call takes blast_admin::blast_acl::AdminWitness of one typed blast_presale_domain role (FeeAdmin, TreasuryAdmin, ListingAdmin, AdapterAdmin, RewardsAdmin, UpgradeAdmin) in place of the AdminRegistry and AdminCap, and blast_presale_admin with its SuperAdminCap, AdminCap, AdminRegistry, AdminCapReplaced, and AdminCapRevoked is deleted"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -1577,26 +1578,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
+                          "address": "blast_admin",
+                          "name": "blast_acl"
                         },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "FeeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -4280,312 +4280,84 @@
             }
           ]
         },
-        "blast_presale_admin": {
-          "functions": [
-            {
-              "name": "replace_admin_cap",
-              "sdk": "builder",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "SuperAdminCap",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_presale",
-                      "name": "blast_presale_admin"
-                    },
-                    "name": "AdminCap",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
-              "name": "revoke_admin_cap",
-              "sdk": "builder",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "SuperAdminCap",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "transfer_super_admin",
-              "sdk": "builder",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_presale",
-                      "name": "blast_presale_admin"
-                    },
-                    "name": "SuperAdminCap",
-                    "type_arguments": []
-                  }
-                },
-                "address"
-              ],
-              "returns": []
-            }
-          ],
+        "blast_presale_domain": {
+          "functions": [],
           "structs": [
             {
-              "name": "AdminCap",
-              "abilities": [
-                "Key",
-                "Store"
-              ],
+              "name": "AdapterAdmin",
+              "abilities": [],
               "typeParameters": [],
-              "positional": false,
+              "positional": true,
               "fields": [
                 {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
+                  "name": "dummy_field",
+                  "type": "bool"
                 }
               ]
             },
             {
-              "name": "AdminRegistry",
-              "abilities": [
-                "Key"
-              ],
+              "name": "FeeAdmin",
+              "abilities": [],
               "typeParameters": [],
-              "positional": false,
+              "positional": true,
               "fields": [
                 {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "admin_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "option"
-                      },
-                      "name": "Option",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "sui",
-                                "name": "object"
-                              },
-                              "name": "ID",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": false
-                        }
-                      ]
-                    }
-                  }
+                  "name": "dummy_field",
+                  "type": "bool"
                 }
               ]
             },
             {
-              "name": "SuperAdminCap",
-              "abilities": [
-                "Key"
-              ],
+              "name": "ListingAdmin",
+              "abilities": [],
               "typeParameters": [],
-              "positional": false,
+              "positional": true,
               "fields": [
                 {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "RewardsAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "TreasuryAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "UpgradeAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
                 }
               ]
             }
           ],
           "enums": [],
-          "events": [
-            {
-              "name": "AdminCapReplaced",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "previous_admin_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "option"
-                      },
-                      "name": "Option",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "sui",
-                                "name": "object"
-                              },
-                              "name": "ID",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": false
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
-                  "name": "admin_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "AdminCapRevoked",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "admin_cap_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            }
-          ]
+          "events": []
         },
         "bluefin": {
           "functions": [
@@ -6061,26 +5833,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
+                          "address": "blast_admin",
+                          "name": "blast_acl"
                         },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "FeeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -6130,26 +5901,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
+                          "address": "blast_admin",
+                          "name": "blast_acl"
                         },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "FeeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -6222,26 +5992,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
+                          "address": "blast_admin",
+                          "name": "blast_acl"
                         },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "AdapterAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -6283,26 +6052,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
+                          "address": "blast_admin",
+                          "name": "blast_acl"
                         },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "ListingAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -6561,26 +6329,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
+                          "address": "blast_admin",
+                          "name": "blast_acl"
                         },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "TreasuryAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -6616,26 +6383,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
+                          "address": "blast_admin",
+                          "name": "blast_acl"
                         },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "FeeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -7049,26 +6815,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
+                          "address": "blast_admin",
+                          "name": "blast_acl"
                         },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "RewardsAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -7496,26 +7261,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
+                          "address": "blast_admin",
+                          "name": "blast_acl"
                         },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "UpgradeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -7564,26 +7328,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
+                          "address": "blast_admin",
+                          "name": "blast_acl"
                         },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "UpgradeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -7951,26 +7714,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
+                          "address": "blast_admin",
+                          "name": "blast_acl"
                         },
-                        "name": "AdminRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_admin"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_presale",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "FeeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]

@@ -43,7 +43,6 @@ export type BlastSharedObjects = Readonly<{
     venueConfig: SharedObjectIdentity;
     creationPolicy: SharedObjectIdentity;
     feePolicy: SharedObjectIdentity;
-    adminRegistry: SharedObjectIdentity;
   }>;
   blastSui: Readonly<{
     packageVersion: SharedObjectIdentity;

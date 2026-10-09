@@ -63,14 +63,14 @@ const artifactDeclarations = [
   {
     path: "production-presale-v1.json",
     // The presale package is unpublished, so it is frozen at the contracts
-    // commit it follows: ADRs 0099 through 0102, team vesting, the
-    // package's own two-tier administration (contracts PR 45), the AdminCap's
+    // commit it follows: ADRs 0099 through 0102, team vesting, Blast's
     // per-vault LP-fee rates, the package-internal Merkle check, and the
-    // scheduled start with the AdminCap's per-sale rates before it, vaults
-    // without a presale, initializer creation with the sale-level hard cap and
-    // early close, and venue-owned pool tiers.
+    // scheduled start with per-sale rates before it, vaults without a presale,
+    // initializer creation with the sale-level hard cap and early close,
+    // venue-owned pool tiers, and administration through the shared Blast ACL
+    // (contracts PR 80).
     baseline: {
-      contractsCommit: "af86ea4bf34080553a45d961d6db8cec719bb2a0",
+      contractsCommit: "84e9ada652906eb6af81c42c49705af16431928c",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
@@ -84,6 +84,7 @@ const artifactDeclarations = [
       "contracts ADR 0109: cetus::new_vault and bluefin::new_vault lock an owner's own position in a Vault with zero presale IDs; PresaleVault and PresaleVaultCreated become Vault and VaultCreated",
       "contracts ADR 0110: blast_presale::new returns a PresaleInitializer that the set_* setters configure and finalize turns into (Presale, PresaleCap); cetus::new and bluefin::new take only their venue arguments; the hard cap moves from UncappedPhase to a sale-level HardCap with closes_when_filled, settle closes a full sale early, PresaleCreated gains hard_cap, PresaleOpened hard_cap_from_ms, and PresaleFunded end_ms and liquidity_deadline_ms",
       "contracts ADR 0111: the pool tier belongs to the venue; blast_presale::new, Presale, and PresaleCreated drop tick_spacing and pool_fee_rate, bluefin::new and bluefin::migrate take the VenueConfig, and venue_config::PoolTierReserved<Meme, Quote, Venue> records each Cetus or Bluefin tier",
+      "contracts ADR 0099 (amended 2026-10-08): the shared Blast ACL administers the presale; every administrator call takes blast_admin::blast_acl::AdminWitness of one typed blast_presale_domain role (FeeAdmin, TreasuryAdmin, ListingAdmin, AdapterAdmin, RewardsAdmin, UpgradeAdmin) in place of the AdminRegistry and AdminCap, and blast_presale_admin with its SuperAdminCap, AdminCap, AdminRegistry, AdminCapReplaced, and AdminCapRevoked is deleted",
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },
@@ -489,9 +490,6 @@ const presaleBuilders = new Set([
   "holder_rewards::publish_round",
   "holder_rewards::claim",
   "holder_rewards::close_round",
-  "blast_presale_admin::replace_admin_cap",
-  "blast_presale_admin::revoke_admin_cap",
-  "blast_presale_admin::transfer_super_admin",
 ]);
 const presaleEventNames = new Set([
   "PresaleCreated",
@@ -520,8 +518,6 @@ const presaleEventNames = new Set([
   "RoundPublished",
   "RoundClosed",
   "RewardClaimed",
-  "AdminCapReplaced",
-  "AdminCapRevoked",
 ]);
 
 function classifyPresaleFunction(moduleName, functionName) {

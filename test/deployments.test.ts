@@ -62,7 +62,6 @@ const input: BlastDeployment = {
       venueConfig: object("0x57", "21"),
       creationPolicy: object("0x59", "21"),
       feePolicy: object("0x58", "21"),
-      adminRegistry: object("0x5a", "21"),
     },
     blastSui: {
       packageVersion: object("0x8", "16"),
@@ -120,7 +119,7 @@ test("derives every package's call-ready deployment", () => {
     venueConfig: { objectId: id("0x57"), initialSharedVersion: "21" },
     creationPolicy: { objectId: id("0x59"), initialSharedVersion: "21" },
     feePolicy: { objectId: id("0x58"), initialSharedVersion: "21" },
-    adminRegistry: { objectId: id("0x5a"), initialSharedVersion: "21" },
+    admin,
   });
   assert.deepEqual(blastSuiDeployment(deployment), {
     packageId: id("0x423"),
@@ -196,33 +195,27 @@ test("rejects placeholder package IDs", () => {
   );
 });
 
-test("registers the standalone mainnet presale release", () => {
-  const presale = getPresaleDeployment("mainnet");
-  assert.equal(presale, BLAST_PRESALE_DEPLOYMENTS.mainnet);
-  assert.equal(
-    presale.packageId,
-    id("0x76cb0508fc94234fddd910b5616248f8a42998048a28e55f5fe1cc89e7b98400"),
+test("registers no presale until one that signs in through the ACL is published", () => {
+  assert.deepEqual(BLAST_PRESALE_DEPLOYMENTS, {});
+  assert.throws(
+    () => getPresaleDeployment("mainnet"),
+    /Blast presale is not deployed on Sui mainnet/,
   );
-  assert.equal(presale.originalPackageId, presale.packageId);
-  assert.deepEqual(presale.adminRegistry, {
-    objectId: id(
-      "0xe7a5cc95aa47e7bc8dfcccce070f6ebc123350c3e478588e23817ee97c8c8cd4",
-    ),
-    initialSharedVersion: "986577439",
-  });
-  assert.equal(Object.isFrozen(presale), true);
-  assert.equal(Object.isFrozen(presale.feePolicy), true);
-  new PresaleCalls(presale);
 });
 
 test("normalizes a standalone presale manifest and requires every singleton", () => {
   const manifest = presaleDeployment(deployment);
-  assert.deepEqual(definePresaleDeployment(manifest), manifest);
+  const presale = definePresaleDeployment(manifest);
+  assert.deepEqual(presale, manifest);
+  assert.equal(Object.isFrozen(presale), true);
+  assert.equal(Object.isFrozen(presale.feePolicy), true);
+  assert.equal(Object.isFrozen(presale.admin), true);
+  new PresaleCalls(presale);
   for (const name of [
     "venueConfig",
     "creationPolicy",
     "feePolicy",
-    "adminRegistry",
+    "admin",
   ] as const) {
     const { [name]: _removed, ...rest } = manifest;
     assert.throws(

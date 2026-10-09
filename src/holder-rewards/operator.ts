@@ -78,8 +78,9 @@ export type HolderRewardsOperatorConfig = {
   /** The migrated launch's `LpVault` or presale's `PresaleVault`, whose holder share funds every round. */
   vaultId: string;
   /**
-   * Migrators: Blast `blast_acl::AdminCap` holding the launchpad `RewardsAdmin`
-   * role, which signs in. Presale: the presale package's `AdminCap`.
+   * Blast `blast_acl::AdminCap` that signs in to publish: holding the
+   * launchpad's `RewardsAdmin` role for migrators, or the presale's
+   * `blast_presale_domain::RewardsAdmin` role for a presale.
    */
   adminCapId?: string;
   /** Presale only: claims stay open this many milliseconds after `publishTransaction` builds the round. */

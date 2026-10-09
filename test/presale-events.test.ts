@@ -950,59 +950,21 @@ test("carries vesting terms from creation and schedule IDs from migration and cl
   assert.deepEqual(presale.raiseVestingIds, { [id("0x5a1e")]: RAISE_SCHEDULE });
 });
 
-test("decodes AdminCap replacements and revocations, which have no type arguments", () => {
-  const packages = { originalPackageId: pkg };
-  const entry = (
-    eventType: string,
-    bytes: number[],
-  ): SuiClientTypes.EventEntry => ({
+test("rejects the retired blast_presale_admin events: Blast's ACL administers the presale", () => {
+  const event: SuiClientTypes.EventEntry = {
     packageId: pkg,
     module: "blast_presale_admin",
     sender: ALICE,
-    eventType,
-    bcs: Uint8Array.from(bytes),
+    eventType: `${pkg}::blast_presale_admin::AdminCapRevoked`,
+    bcs: Uint8Array.from(Buffer.from(id("0xadc").slice(2), "hex")),
     json: null,
     checkpoint: "9",
     transactionDigest: "admin",
     eventIndex: 0,
-  });
-  const address = (value: string) => [...Buffer.from(value.slice(2), "hex")];
-  const OLD = id("0xadc");
-  const NEW = id("0xadd");
-  const replaced = decodePresalePolicyEvent(
-    entry(`${pkg}::blast_presale_admin::AdminCapReplaced`, [
-      1,
-      ...address(OLD),
-      ...address(NEW),
-    ]),
-    packages,
-  );
-  assert.equal(replaced.kind, "AdminCapReplaced");
-  assert.deepEqual(replaced.payload, {
-    previous_admin_cap_id: OLD,
-    admin_cap_id: NEW,
-  });
-  const afterRevocation = decodePresalePolicyEvent(
-    entry(`${pkg}::blast_presale_admin::AdminCapReplaced`, [
-      0,
-      ...address(NEW),
-    ]),
-    packages,
-  );
-  assert.deepEqual(afterRevocation.payload, {
-    previous_admin_cap_id: null,
-    admin_cap_id: NEW,
-  });
-  const revoked = decodePresalePolicyEvent(
-    entry(`${pkg}::blast_presale_admin::AdminCapRevoked`, address(NEW)),
-    packages,
-  );
-  assert.deepEqual(revoked.payload, { admin_cap_id: NEW });
-  assert.throws(() =>
-    decodePresalePolicyEvent(
-      entry(`${pkg}::fee_policy::AdminCapRevoked`, address(NEW)),
-      packages,
-    ),
+  };
+  assert.throws(
+    () => decodePresalePolicyEvent(event, { originalPackageId: pkg }),
+    /unexpected presale policy event/,
   );
 });
 

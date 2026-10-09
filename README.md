@@ -129,9 +129,10 @@ For an unreleased mainnet deployment, validate one manifest with
 built-in registry remains empty until publish output supplies real IDs; the SDK
 does not ship placeholder addresses.
 
-Presale publishes on its own, so `BLAST_PRESALE_DEPLOYMENTS` registers its
-standalone mainnet release, and `getPresaleDeployment(network)` prefers the
-complete release's presale once `BLAST_DEPLOYMENTS` has one.
+Presale can publish before the rest of Blast, so `BLAST_PRESALE_DEPLOYMENTS`
+holds a standalone release, and `getPresaleDeployment(network)` prefers the
+complete release's presale once `BLAST_DEPLOYMENTS` has one. It is empty until
+a presale that signs in through the `blast_admin` ACL is published.
 
 ## Launch creation
 
@@ -308,6 +309,10 @@ must hold that role:
 | migrators | `setLpFeeProtocolDestination`, `claimProtocolFees` | `TreasuryAdmin` |
 | migrators | `buybackAndBurnCetus`, `buybackAndBurnBluefin` | `BuybackAdmin` |
 | migrators | `publishHolderRewardRound` | `RewardsAdmin` |
+| presale | `setProtocolFees`, `setPresaleProtocolFees`, `setProtocolLpFees`, `addPartner`, `removePartner` | `blast_presale_domain::FeeAdmin` |
+| presale | `setProtocolDestination` | `blast_presale_domain::TreasuryAdmin` |
+| presale | `setQuoteAllowed` | `blast_presale_domain::ListingAdmin` |
+| presale | `setMigrationWitnessAllowed` | `blast_presale_domain::AdapterAdmin` |
 | presale | `publishHolderRewardRound` | `blast_presale_domain::RewardsAdmin` |
 | blast SUI | `setRedeemFee` | `blast_sui_domain::FeeAdmin` |
 | partners | `register`, `scheduleShare`, `scheduleCap` | `blast_partners::PartnerAdmin` |
@@ -440,7 +445,7 @@ unused, so every publish verifies.
 ## Presale
 
 `@interest-protocol/blast-sdk/presale` builds every product route of the
-`blast_presale` package published on mainnet. It previews creation, commitments, and
+`blast_presale` package. It previews creation, commitments, and
 claims exactly as the contract enforces them, and it decodes and replays the
 package's objects and events. See [docs/presale.md](docs/presale.md).
 

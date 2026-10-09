@@ -421,8 +421,7 @@ export function presaleEventId(event: DecodedPresaleEvent): string {
 }
 
 /**
- * The `fee_policy`, `creation_policy`, and `blast_presale_admin` events, by
- * module. Unlike every other presale event they have no type arguments.
+ * The `fee_policy` and `creation_policy` events, by module. Unlike every other presale event they have no type arguments.
  */
 export const presalePolicyEventSpecs = {
   fee_policy: {
@@ -440,10 +439,6 @@ export const presalePolicyEventSpecs = {
     PartnerAdded: { partner_id: "id" },
     PartnerRemoved: { partner_id: "id", accepted_until_ms: "u64" },
   },
-  blast_presale_admin: {
-    AdminCapReplaced: { previous_admin_cap_id: "optionId", admin_cap_id: "id" },
-    AdminCapRevoked: { admin_cap_id: "id" },
-  },
 } as const satisfies Record<
   string,
   Record<string, Record<string, PresaleEventFieldDescriptor>>
@@ -451,8 +446,7 @@ export const presalePolicyEventSpecs = {
 
 type PolicySpecs = typeof presalePolicyEventSpecs;
 type FlatPolicySpecs = PolicySpecs["fee_policy"] &
-  PolicySpecs["creation_policy"] &
-  PolicySpecs["blast_presale_admin"];
+  PolicySpecs["creation_policy"];
 export type PresalePolicyEventKind = keyof FlatPolicySpecs;
 
 export type DecodedPresalePolicyEvent = {
@@ -494,8 +488,8 @@ const presalePolicyEventBcs = Object.fromEntries(
 ) as Record<PresalePolicyEventKind, BcsType<unknown>>;
 
 /**
- * Decodes one `<originalPackageId>::fee_policy::<Kind>`,
- * `creation_policy::<Kind>`, or `blast_presale_admin::<Kind>` event.
+ * Decodes one `<originalPackageId>::fee_policy::<Kind>` or
+ * `creation_policy::<Kind>` event.
  */
 export function decodePresalePolicyEvent(
   event: SuiClientTypes.EventEntry,

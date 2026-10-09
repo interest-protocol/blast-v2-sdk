@@ -467,7 +467,7 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
       venueConfig: shared("0x90"),
       creationPolicy: shared("0x91"),
       feePolicy: shared("0x92"),
-      adminRegistry: shared("0x93"),
+      admin: { packageId: address("0xad"), acl: shared("0x93") },
     },
     vaultId,
     adminCapId: address("0x94"),
@@ -617,10 +617,10 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
   const publishTx = Transaction.from(
     (await readJson(join(dir, "publish-tx.json"))).transaction,
   );
-  const call = publishTx.getData().commands[0]?.MoveCall;
+  const call = publishTx.getData().commands[1]?.MoveCall;
   assert.deepEqual(
     publishTx.getData().commands.map((command) => command.MoveCall?.function),
-    ["publish_round"],
+    ["sign_in", "publish_round"],
   );
   assert.equal(call?.package, packageId);
   assert.equal(call?.module, "holder_rewards");

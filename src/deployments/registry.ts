@@ -1,4 +1,5 @@
 import type { AdminDeployment } from "../admin/transactions.ts";
+import { normalizeAdminDeployment } from "../admin/transactions.ts";
 import type { BlastSuiDeployment } from "../blast-sui/types.ts";
 import type { LaunchpadDeployment } from "../launchpad/transactions.ts";
 import type { SharedObjectIdentity, SuiPackageReference } from "../lib/sui.ts";
@@ -31,7 +32,7 @@ const SHARED_OBJECTS = {
   admin: ["acl"],
   launchpad: ["packageVersion", "launchConfig", "runtimeConfig"],
   migrators: ["packageVersion", "lpFeePolicy", "venueConfig"],
-  presale: ["venueConfig", "creationPolicy", "feePolicy", "adminRegistry"],
+  presale: ["venueConfig", "creationPolicy", "feePolicy"],
   blastSui: ["packageVersion", "vault"],
 } as const;
 
@@ -45,8 +46,8 @@ const PRESALE_SHARED_OBJECTS = SHARED_OBJECTS.presale;
 
 /**
  * Normalizes and freezes one standalone presale deployment. Presale publishes
- * on its own (contracts ADR 0099), so it registers before a complete
- * `BlastDeployment` exists.
+ * before the launchpad (contracts ADR 0099), so it registers before a complete
+ * `BlastDeployment` exists; it still needs the published `blast_admin` ACL.
  */
 export function definePresaleDeployment(
   deployment: PresaleDeployment,
@@ -65,44 +66,24 @@ export function definePresaleDeployment(
         ),
       ]),
     ),
+    admin: Object.freeze(
+      normalizeAdminDeployment(
+        required<AdminDeployment>(deployment, "presale", "admin"),
+      ),
+    ),
   }) as PresaleDeployment;
 }
 
 /**
- * Canonical standalone presale releases, from the publish and
- * `package_admin::wrap` effects recorded in contracts
- * `deployments/sui/mainnet/2026-10-04-blast-presale-scheduled-start.json`.
+ * Canonical standalone presale releases. Empty: the package at
+ * `0x76cb…8400` that contracts `deployments/sui/mainnet/2026-10-04-blast-presale-scheduled-start.json`
+ * records administers itself with an `AdminRegistry`, so these builders cannot
+ * drive it; the next publication, which signs in through the `blast_admin`
+ * ACL, registers here.
  */
 export const BLAST_PRESALE_DEPLOYMENTS: Readonly<
   Partial<Record<BlastNetwork, PresaleDeployment>>
-> = Object.freeze({
-  mainnet: definePresaleDeployment({
-    packageId:
-      "0x76cb0508fc94234fddd910b5616248f8a42998048a28e55f5fe1cc89e7b98400",
-    originalPackageId:
-      "0x76cb0508fc94234fddd910b5616248f8a42998048a28e55f5fe1cc89e7b98400",
-    venueConfig: {
-      objectId:
-        "0x129346213a5959533e854092076dc3f2494ba1e2ef08669e86cf1d2561d9f39f",
-      initialSharedVersion: "986577439",
-    },
-    creationPolicy: {
-      objectId:
-        "0xa496515a86087bad827e8190d48f103d900ad5404948dcdf9ca18f5dad738658",
-      initialSharedVersion: "986577439",
-    },
-    feePolicy: {
-      objectId:
-        "0xe2a276bbd2cb922e71e1d6b35b393537df3642e07b2f4d753fdab09c5bd6fb11",
-      initialSharedVersion: "986577439",
-    },
-    adminRegistry: {
-      objectId:
-        "0xe7a5cc95aa47e7bc8dfcccce070f6ebc123350c3e478588e23817ee97c8c8cd4",
-      initialSharedVersion: "986577439",
-    },
-  }),
-});
+> = Object.freeze({});
 
 /**
  * The released presale deployment on `network`: the complete Blast release's
@@ -239,6 +220,7 @@ export function presaleDeployment(
   return {
     ...deployment.packages.presale,
     ...deployment.sharedObjects.presale,
+    admin: adminDeployment(deployment),
   };
 }
 
