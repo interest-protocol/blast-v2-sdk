@@ -30,6 +30,7 @@ import {
   LaunchpadCalls,
   normalizeLaunchTypes,
 } from "../launchpad/transactions.ts";
+import type { CoinSourceOptions } from "../lib/coins.ts";
 import { grossGasBudget } from "../lib/gas.ts";
 import { requireU64 } from "../lib/integers.ts";
 import { deploymentObject, moveResults } from "../lib/ptb.ts";
@@ -80,12 +81,13 @@ export type CetusObjects = {
 
 /** Settings for starting a launch through an adapter in one transaction. */
 export type CreateLaunchOptions = LaunchTypes &
-  LaunchSettings & {
+  LaunchSettings &
+  CoinSourceOptions & {
     /** The `LaunchTicket<Meme>` the generated package's initializer transferred to its publisher. */
     ticket: TransactionObjectInput;
     /** The Meme `Currency<Meme>` in the Coin Registry, fixed at finalization. */
     memeCurrency: SharedObjectReference<true>;
-    /** `LaunchConfig.creation_fee` in MIST, paid from gas as an exact coin. */
+    /** `LaunchConfig.creation_fee` in MIST, paid as an exact SUI coin. */
     creationFee: bigint;
     preShareBuy?: PreShareBuyInput;
   };
@@ -729,9 +731,14 @@ export class MigratorCalls {
 
 export class MigratorTransactions {
   readonly call: MigratorCalls;
+  readonly #useGasCoin: boolean;
 
-  constructor(deployment: MigratorsDeployment) {
+  constructor(
+    deployment: MigratorsDeployment,
+    options: CoinSourceOptions = {},
+  ) {
     this.call = new MigratorCalls(deployment);
+    this.#useGasCoin = options.useGasCoin ?? true;
   }
 
   /**
@@ -751,6 +758,7 @@ export class MigratorTransactions {
       ...options,
       initializer,
       currency: options.memeCurrency,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
     });
     return tx;
   }
@@ -765,6 +773,7 @@ export class MigratorTransactions {
       ...options,
       initializer,
       currency: options.memeCurrency,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
     });
     return tx;
   }
@@ -777,20 +786,21 @@ export class MigratorTransactions {
     return tx;
   }
 
-  /** Pays Bluefin's SUI pool-creation fee from gas as an exact-balance coin. */
+  /** Pays Bluefin's SUI pool-creation fee as an exact-balance coin. */
   migrateBluefin(
     options: Omit<
       Parameters<MigratorCalls["migrateBluefin"]>[0],
       "creationFee"
     > & {
       creationFee: bigint;
-    },
+    } & CoinSourceOptions,
   ): Transaction {
     requireU64("creationFee", options.creationFee);
     const tx = new Transaction();
     const creationFee = tx.coin({
       type: "0x2::sui::SUI",
       balance: options.creationFee,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
     });
     tx.add(this.call.migrateBluefin({ ...options, creationFee }));
     return tx;

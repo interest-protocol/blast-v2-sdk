@@ -6,6 +6,7 @@ import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiAddress, SUI_TYPE_ARG } from "@mysten/sui/utils";
 
 import { AdminCalls } from "../admin/transactions.ts";
+import type { CoinSourceOptions } from "../lib/coins.ts";
 import { requireU64 } from "../lib/integers.ts";
 import { deploymentObject } from "../lib/ptb.ts";
 import type { BlastSuiAdminRole, BlastSuiDeployment } from "./types.ts";
@@ -192,15 +193,23 @@ export class BlastSuiCalls {
 
 export class BlastSuiTransactions {
   readonly call: BlastSuiCalls;
+  readonly #useGasCoin: boolean;
 
-  constructor(deployment: BlastSuiDeployment) {
+  constructor(deployment: BlastSuiDeployment, options: CoinSourceOptions = {}) {
     this.call = new BlastSuiCalls(deployment);
+    this.#useGasCoin = options.useGasCoin ?? true;
   }
 
-  mintFunSui(options: { amount: bigint; recipient: string }): Transaction {
+  mintFunSui(
+    options: { amount: bigint; recipient: string } & CoinSourceOptions,
+  ): Transaction {
     requireU64("amount", options.amount);
     const tx = new Transaction();
-    const suiCoin = tx.coin({ type: SUI_TYPE_ARG, balance: options.amount });
+    const suiCoin = tx.coin({
+      type: SUI_TYPE_ARG,
+      balance: options.amount,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
+    });
     const funSuiCoin = tx.add(this.call.mintFunSui({ suiCoin }));
     transfer(tx, funSuiCoin, options.recipient);
     return tx;
@@ -218,10 +227,16 @@ export class BlastSuiTransactions {
     return tx;
   }
 
-  requestBlastSui(options: { amount: bigint }): Transaction {
+  requestBlastSui(
+    options: { amount: bigint } & CoinSourceOptions,
+  ): Transaction {
     requireU64("amount", options.amount);
     const tx = new Transaction();
-    const suiCoin = tx.coin({ type: SUI_TYPE_ARG, balance: options.amount });
+    const suiCoin = tx.coin({
+      type: SUI_TYPE_ARG,
+      balance: options.amount,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
+    });
     const receipt = tx.add(this.call.requestBlastSui({ suiCoin }));
     tx.add(this.call.keepDepositReceipt({ receipt }));
     return tx;
@@ -255,10 +270,14 @@ export class BlastSuiTransactions {
     return tx;
   }
 
-  donateSui(options: { amount: bigint }): Transaction {
+  donateSui(options: { amount: bigint } & CoinSourceOptions): Transaction {
     requireU64("amount", options.amount);
     const tx = new Transaction();
-    const suiCoin = tx.coin({ type: SUI_TYPE_ARG, balance: options.amount });
+    const suiCoin = tx.coin({
+      type: SUI_TYPE_ARG,
+      balance: options.amount,
+      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
+    });
     tx.add(this.call.donateSui({ suiCoin }));
     return tx;
   }
