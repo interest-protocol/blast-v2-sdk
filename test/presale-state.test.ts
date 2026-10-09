@@ -6,7 +6,6 @@ import { ObjectError } from "@mysten/sui/client";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 import {
-  decodePresaleAdminRegistryObject,
   decodePresaleCreationPolicyObject,
   decodePresaleFeePolicyObject,
   decodePresaleObject,
@@ -344,29 +343,6 @@ test("decodes the FeePolicy from bytes laid out in Move field order", () => {
     decodePresaleFeePolicyObject(
       object(`${pkg}::fee_policy::Other`, content, "0xfe"),
     ),
-  );
-});
-
-test("decodes the AdminRegistry's accepted AdminCap, or none after a revocation", () => {
-  const type = `${pkg}::blast_presale_admin::AdminRegistry`;
-  const accepting = Uint8Array.from([
-    ...addr("0xad"), // id
-    ...u8(1), // admin_cap_id: Some
-    ...addr("0xadc"),
-  ]);
-  assert.equal(
-    decodePresaleAdminRegistryObject(object(type, accepting, "0xad"), pkg)
-      .adminCapId,
-    normalizeSuiAddress("0xadc"),
-  );
-  const revoked = Uint8Array.from([...addr("0xad"), ...u8(0)]);
-  assert.equal(
-    decodePresaleAdminRegistryObject(object(type, revoked, "0xad"), pkg)
-      .adminCapId,
-    null,
-  );
-  assert.throws(() =>
-    decodePresaleAdminRegistryObject(object(type, accepting, "0xad"), "0x99"),
   );
 });
 
