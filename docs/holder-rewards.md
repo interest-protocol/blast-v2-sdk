@@ -60,6 +60,38 @@ const relay = client.blastMigrators.tx.claimHolderRewards({
 });
 ```
 
+## Paged construction
+
+For large daily presale allocations, `allocateHolderRewardPage` divides every
+wallet's weight by the same frozen global weight. Supply distinct qualifying
+wallets in canonical address order and carry each result's `lastAddress` into
+the next page. Count qualifying wallets before atomic-unit flooring, sum
+`pageWeight` to check complete global coverage, and sum `quoteAllocated` to
+calculate holder-owned dust. This helper applies no pricing or eligibility policy.
+
+`buildRewardManifestPages` consumes a `RewardManifestPageStore` with bounded
+allocation, Merkle-hash and proof reads/writes. It preserves the existing BCS
+digest, leaf domains, positional indices and odd-node pairing byte for byte.
+The caller selects a positive bounded `pageSize`; the 65,536 positive-leaf limit
+still applies. Every output page is read back, every proof is checked against
+the root, and the function returns a `RewardManifestSummary` only after all
+pages complete. Working memory grows with the selected page size and proof
+depth rather than all beneficiaries.
+
+The store must bind one immutable allocation snapshot and output namespace,
+reject overwrites with different content, and resolve writes only after
+durability. Repeating construction after a crash replays identical writes.
+Snapshot identity, hashes, durable progress, locks and readiness evidence belong
+to the caller's persistence layer. Keep proofs publicly available through a
+paged endpoint; a summary alone cannot recover them.
+
+`PresaleTransactions.publishHolderRewardReserveRound` accepts the completed
+summary without loading all proofs. Its summary checks cover canonical fields,
+the presale leaf domain, bounded leaf count, positive funding and full digest
+lengths. They cannot prove allocations or eligibility from a summary alone:
+the caller must require complete durable construction evidence before signing.
+`verifyRewardSummaryProof` checks an individual proof against that commitment.
+
 ## Operator configuration
 
 Create a JSON config outside the public artifacts:

@@ -18,6 +18,7 @@ import type { AdminDeployment } from "../admin/transactions.ts";
 import { AdminCalls, normalizeAdminDeployment } from "../admin/transactions.ts";
 import type {
   RewardManifest,
+  RewardManifestSummary,
   RewardProof,
 } from "../holder-rewards/allocations.ts";
 import {
@@ -25,6 +26,7 @@ import {
   rewardAddress,
   rewardDigest,
   validateRewardManifest,
+  validateRewardManifestSummary,
 } from "../holder-rewards/allocations.ts";
 import type { LaunchTypes } from "../launchpad/transactions.ts";
 import { normalizeLaunchTypes } from "../launchpad/transactions.ts";
@@ -1238,15 +1240,22 @@ export class PresaleCalls {
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
       adminWitness: TransactionObjectInput;
-      manifest: RewardManifest;
+      manifest: RewardManifest | RewardManifestSummary;
       gasReserveAmount: bigint;
       claimDeadlineMs: bigint;
     },
   ) {
-    const manifest = validateRewardManifest(
-      options.manifest,
-      PRESALE_REWARD_LEAF_DOMAIN,
-    );
+    const manifest =
+      "allocations" in options.manifest
+        ? validateRewardManifest(options.manifest, PRESALE_REWARD_LEAF_DOMAIN)
+        : validateRewardManifestSummary(
+            options.manifest,
+            PRESALE_REWARD_LEAF_DOMAIN,
+          );
+    const leafCount =
+      "allocations" in manifest
+        ? manifest.allocations.length
+        : manifest.leafCount;
     if (
       rewardAddress(manifest.vaultId) !== rewardAddress(options.vault.objectId)
     )
@@ -1272,7 +1281,7 @@ export class PresaleCalls {
           tx.pure.u64(manifest.endCheckpoint),
           tx.pure.vector("u8", rewardDigest(manifest.root)),
           tx.pure.vector("u8", rewardDigest(manifest.manifestDigest)),
-          tx.pure.u64(manifest.allocations.length),
+          tx.pure.u64(leafCount),
           tx.pure.u64(manifest.memeAmount),
           tx.pure.u64(manifest.quoteAmount),
           tx.pure.u64(gasReserveAmount),

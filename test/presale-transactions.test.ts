@@ -10,6 +10,7 @@ import {
   SUI_CLOCK_OBJECT_ID,
 } from "@mysten/sui/utils";
 
+import type { RewardManifestSummary } from "../src/holder-rewards/allocations.ts";
 import {
   buildRewardManifest,
   MIGRATOR_REWARD_LEAF_DOMAIN,
@@ -971,6 +972,44 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
       pureU64(publication, publishCall.arguments[i]),
     ),
     [2n, 21n, 30n, 0n, 970n, 30n, 605_800_000n],
+  );
+  const { allocations: proofs, ...header } = manifest;
+  const summary: RewardManifestSummary = {
+    ...header,
+    leafCount: proofs.length,
+    leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
+  };
+  const publishSummary = (input: typeof summary) =>
+    tx.publishHolderRewardReserveRound({
+      ...types,
+      vault,
+      adminCapId: "0xadc",
+      manifest: input,
+      gasReserveAmount: 30n,
+      claimDeadlineMs: 605_800_000n,
+    });
+  assert.deepEqual(publishSummary(summary).getData(), publication.getData());
+  for (const invalid of [
+    { ...summary, leafCount: 0 },
+    { ...summary, leafCount: 65_537 },
+    { ...summary, root: "00" },
+    { ...summary, manifestDigest: "00" },
+    { ...summary, quoteAmount: "0970" },
+    { ...summary, memeAmount: "0", quoteAmount: "0" },
+    { ...summary, startCheckpoint: summary.endCheckpoint },
+  ])
+    assert.throws(() => publishSummary(invalid));
+  assert.throws(
+    () =>
+      tx.publishHolderRewardReserveRound({
+        ...types,
+        vault,
+        adminCapId: "0xadc",
+        manifest: { ...summary, leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN },
+        gasReserveAmount: 30n,
+        claimDeadlineMs: 1n,
+      }),
+    /leaf domain mismatch/,
   );
   const claim = tx.claimHolderRewardReserves({
     ...types,
