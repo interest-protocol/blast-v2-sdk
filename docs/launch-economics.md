@@ -37,7 +37,6 @@ T = graduation target (real Quote reserve when trading closes)
 C = apportion_meme(plan, S).curve
 L = apportion_meme(plan, S).lp
 N = apportion_quote(plan, T).lp
-P = apportion_meme(plan, S).protocol, Q = apportion_quote(plan, T).protocol
 
 R = ceil(C * V / (V + T))
 B = C - R
@@ -48,13 +47,19 @@ DEX opening valuation    = floor(S * N       / L)
 ```
 
 `R` is terminal curve Meme, `B` is Meme released by the curve, `N` is Quote
-handed to the destination pool, and `T - N` is Quote paid to the plan's
-recipients or accrued as Blast's migration fee `Q` (`P` in Meme). `plan` is the
-complete plan with Blast's shares set (`addProtocolAllocation` with the
-`LaunchConfig` protocol allocation, zero until Blast sets one). Apportionment
-gives Blast its ceiling, every other part its floor, and the residue one atom
-each by descending remainder, earlier parts first on ties (curve, pool, then
-recipients in plan order); `allocation.ts` mirrors it exactly.
+handed to the destination pool, and `T - N` is Quote split between Blast's
+one-time fee and the plan's recipients. `plan` is the complete plan with
+Blast's protocol shares stored (`addProtocolAllocation`); at migration Blast's
+parts accrue to the launch's protocol fees and the recipients are paid.
+Apportionment gives Blast its ceiling, every other part its floor, and the
+residue one atom each by descending remainder, earlier parts first on ties
+(Meme: curve, pool, Blast, then recipients in plan order; Quote: pool, Blast,
+then recipients); `allocation.ts` mirrors it exactly.
+
+The virtual Quote reserve `V` is the creator's choice (`set_virtual_quote`),
+not a `LaunchConfig` value. Display prices, live supply, market cap, and
+progress use the formulas in `market-data.ts`, checked against blast-infra's
+pinned `market-data.json` vectors.
 
 With an opening round, settlement buys once with the whole pot at the curve's
 opening price, and `previewOpeningRoundDelivery` gives a bidder

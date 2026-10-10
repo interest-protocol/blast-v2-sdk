@@ -494,17 +494,30 @@ export type PresaleState = SharedObjectReference<true> & {
   unpaidProtocolQuote: bigint | null;
 };
 
+/**
+ * `presale_vault::Vault<Meme, Quote>`: a presale's position after migration,
+ * or an owner's own position locked directly by `cetus::new_vault` or
+ * `bluefin::new_vault` (contracts ADR 0109).
+ */
 export type PresaleVaultState = SharedObjectReference<true> & {
   memeType: string;
   quoteType: string;
+  /** The zero ID for a vault without a presale; see `isVaultWithoutPresale`. */
   presaleId: string;
+  /** The zero ID for a vault without a presale, so no `PresaleCap` matches it. */
   presaleCapId: string;
   poolId: string;
   feeRecipients: BpsShare[];
   holderRewardsBps: bigint;
-  /** The presale's snapshotted rates; only the LP-fee shares apply to the vault. */
+  /**
+   * The presale's snapshotted rates, or the `FeePolicy`'s at creation for a
+   * vault without a presale; only the LP-fee shares apply to the vault.
+   */
   protocolFees: ProtocolFees;
-  /** The partner the sale named, paid its cut of Blast's LP fees; null for none. */
+  /**
+   * The partner the sale, or the owner of a vault without a presale, named,
+   * paid its cut of Blast's LP fees; null for none.
+   */
   partnerId: string | null;
   /** Blast's LP fees a partnered vault holds until `payProtocolLpFeesWithPartner`. */
   unpaidProtocolMeme: bigint;
@@ -636,6 +649,14 @@ function presaleWindowsOf(
     parsed.uncapped,
     parsed.hard_cap,
   );
+}
+
+/**
+ * Whether `presaleId`, a vault's `presaleId` or a `VaultCreated` event's
+ * `presale_id`, is the zero ID of a vault an owner created without a presale.
+ */
+export function isVaultWithoutPresale(presaleId: string): boolean {
+  return BigInt(normalizeSuiObjectId(presaleId)) === 0n;
 }
 
 export function decodePresaleVaultObject(

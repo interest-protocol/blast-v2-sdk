@@ -14,6 +14,7 @@ import {
   decodePresaleVaultObject,
   eligibilityPolicyBcs,
   getPresaleCommitment,
+  isVaultWithoutPresale,
   presaleBcs,
   presaleRewardIsClaimed,
   uncappedPhaseBcs,
@@ -497,4 +498,10 @@ test("reads a wallet's commitment dynamic field, null when absent", async () => 
     await getPresaleCommitment(client(null), "0xab", "0xa11ce", pkg),
     null,
   );
+});
+
+test("tells a vault without a presale by its zero presale ID", () => {
+  assert.equal(isVaultWithoutPresale("0x0"), true);
+  assert.equal(isVaultWithoutPresale(normalizeSuiAddress("0x0")), true);
+  assert.equal(isVaultWithoutPresale("0xab"), false);
 });

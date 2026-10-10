@@ -188,6 +188,26 @@ test("rejects unknown blast_admin function classifications", () => {
   );
 });
 
+test("rejects unknown blast_aftermath_dao_presale function classifications", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "scripts/check-contract-abi.mjs",
+      "--classify-function",
+      "blast_aftermath_dao_presale",
+      "blast_aftermath_dao_presale",
+      "future_operation",
+    ],
+    { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /unclassified function blast_aftermath_dao_presale::blast_aftermath_dao_presale::future_operation/,
+  );
+});
+
 test("rejects unknown blast_presale function classifications", () => {
   const result = spawnSync(
     process.execPath,

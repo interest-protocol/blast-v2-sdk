@@ -12,14 +12,15 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const BASELINE_COMMIT = "a5ed34ad49c6c001af2db5b9cbcb206075704412";
-const LAUNCHPAD_BASELINE = {
+/**
+ * Every artifact is frozen at the contracts commit the next releases follow;
+ * refreeze at contracts main with `check:abi:write` for an approved change,
+ * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
+ */
+const BASELINE_COMMIT = "af86ea4bf34080553a45d961d6db8cec719bb2a0";
+const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
-  workingTreeDifferedAtFreeze: true,
-  abiNeutralDifferences: [
-    "sui/meme_template/Move.lock",
-    "docs/research/sui-deepbook-indexer-architecture-2026.md",
-  ],
+  workingTreeDifferedAtFreeze: false,
 };
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
@@ -65,7 +66,7 @@ const artifactDeclarations = [
     // Source ABI plus approved amendments; the registered Oct09 publication
     // predates reserve/routing APIs. A new verified lineage is needed to call them.
     baseline: {
-      contractsCommit: "84e9ada652906eb6af81c42c49705af16431928c",
+      contractsCommit: "acad02ecd6c1b4be70f7b9c611c8d23cb318e9e5",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
@@ -76,6 +77,7 @@ const artifactDeclarations = [
       "contracts ADR 0104 (amended 2026-10-05): set_migration_witness_allowed also rejects witness types defined at 0x1 and 0x2",
       "contracts ADR 0106 (source-style review, 2026-10-05): pay_partner is pay_protocol_fees_with_partner, since it pays Blast too, and FeeSplit names its recipients fee_recipients",
       "contracts ADR 0107: the Vault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
+      "contracts ADR 0101 (amended 2026-10-05): set_protocol_fees also accepts a Pending sale, in its creation transaction before share",
       "contracts ADR 0109: cetus::new_vault and bluefin::new_vault lock an owner's own position in a Vault with zero presale IDs; PresaleVault and PresaleVaultCreated become Vault and VaultCreated",
       "contracts ADR 0110: blast_presale::new returns a PresaleInitializer that the set_* setters configure and finalize turns into (Presale, PresaleCap); cetus::new and bluefin::new take only their venue arguments; the hard cap moves from UncappedPhase to a sale-level HardCap with closes_when_filled, settle closes a full sale early, PresaleCreated gains hard_cap, PresaleOpened hard_cap_from_ms, and PresaleFunded end_ms and liquidity_deadline_ms",
       "contracts ADR 0111: the pool tier belongs to the venue; blast_presale::new, Presale, and PresaleCreated drop tick_spacing and pool_fee_rate, bluefin::new and bluefin::migrate take the VenueConfig, and venue_config::PoolTierReserved<Meme, Quote, Venue> records each Cetus or Bluefin tier",
@@ -87,11 +89,8 @@ const artifactDeclarations = [
   },
   {
     path: "production-admin-v1.json",
-    // The shared ACL package is new to SDK coverage, frozen at contracts main.
-    baseline: {
-      contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
-      workingTreeDifferedAtFreeze: false,
-    },
+    // First covered at contracts 442116a; its ABI is unchanged since.
+    baseline: BASELINE,
     approvedAbiAmendments: [
       "contracts ADR 0097 (amended 2026-10-02, admin package review): upgrade_custody::publisher borrows the sealed Publisher, operational_version::new takes the package's one-time witness, and advance takes the versioned object's UID",
     ],
@@ -99,22 +98,15 @@ const artifactDeclarations = [
   },
   {
     path: "production-partners-v1.json",
-    // The immutable partner package is new to SDK coverage, frozen at contracts main.
-    baseline: {
-      contractsCommit: "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
-      workingTreeDifferedAtFreeze: false,
-    },
+    // First covered at contracts 442116a; its ABI is unchanged since.
+    baseline: BASELINE,
     packages: [["partners", "partners", "blast_partners"]],
   },
   {
     path: "production-aftermath-dao-presale-v1.json",
-    // The Aftermath DAO-pool vendor (contracts ADR 0104) is new to SDK
-    // coverage, frozen at its initializer split (ADR 0110) and venue-owned
-    // tiers (ADR 0111).
-    baseline: {
-      contractsCommit: "af86ea4bf34080553a45d961d6db8cec719bb2a0",
-      workingTreeDifferedAtFreeze: false,
-    },
+    // The Aftermath DAO-pool vendor (contracts ADR 0104), at its
+    // initializer split (ADR 0110) and venue-owned tiers (ADR 0111).
+    baseline: BASELINE,
     packages: [
       [
         "aftermathDaoPresale",
@@ -164,7 +156,7 @@ function checkArtifact(declaration) {
       summarizePackage(join(contractsRoot, "sui", directory), packageName),
     ]),
   );
-  const baseline = declaration.baseline ?? LAUNCHPAD_BASELINE;
+  const baseline = declaration.baseline ?? BASELINE;
   const artifact = {
     schemaVersion: 1,
     baseline: {

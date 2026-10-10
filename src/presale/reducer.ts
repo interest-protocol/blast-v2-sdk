@@ -102,6 +102,7 @@ export type PresaleProjection = {
 
 export type PresaleVaultProjection = {
   vaultId: string;
+  /** The zero ID for a vault an owner created without a presale (contracts ADR 0109). */
   presaleId: string;
   poolId: string;
   positionId: string;
@@ -381,6 +382,7 @@ function applyVaultEvent(
           },
         },
       };
+    // A vault without a presale carries the zero `presale_id`, which links no presale.
     case "VaultCreated": {
       const { payload } = event;
       const feeRecipients = payload.fee_recipients.map((recipient, i) => ({

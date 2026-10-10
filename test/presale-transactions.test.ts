@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { bcs } from "@mysten/sui/bcs";
-import type { Transaction } from "@mysten/sui/transactions";
+import { Transaction } from "@mysten/sui/transactions";
 import {
   fromBase64,
   normalizeStructTag,
+  normalizeSuiAddress,
   SUI_CLOCK_OBJECT_ID,
 } from "@mysten/sui/utils";
 
@@ -17,6 +18,7 @@ import {
   PRESALE_REWARD_LEAF_DOMAIN,
 } from "../src/holder-rewards/allocations.ts";
 import { itemAt } from "../src/lib/arrays.ts";
+import { moveResults } from "../src/lib/ptb.ts";
 import type { SharedObjectReference } from "../src/lib/sui.ts";
 import { buildAllowlist } from "../src/presale/allowlist.ts";
 import { openEligibility, uncappedForAnyone } from "../src/presale/math.ts";
@@ -627,6 +629,47 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       ["shared-mut:0xba", "shared:0x61", "shared:0x9a27", CLOCK],
     ],
     [
+      tx.newCetusVault({
+        ...types,
+        position: "0x905",
+        feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
+        holderRewardsBps: 3_000n,
+        pool: shared("0x90", false),
+        burnManager: shared("0x72", true),
+      }),
+      "cetus::new_vault",
+      [
+        "object:0x905",
+        "Result:4",
+        "pure",
+        "shared:0x62",
+        "shared:0x61",
+        "shared:0x90",
+        "shared-mut:0x72",
+        CLOCK,
+      ],
+    ],
+    [
+      tx.newBluefinVault({
+        ...types,
+        position: "0x905",
+        feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
+        holderRewardsBps: 3_000n,
+        partnerId: "0x9a27",
+        pool: shared("0x90", false),
+      }),
+      "bluefin::new_vault",
+      [
+        "object:0x905",
+        "Result:4",
+        "pure",
+        "shared:0x62",
+        "shared:0x61",
+        "shared:0x90",
+        CLOCK,
+      ],
+    ],
+    [
       tx.addPartner({ adminCapId: "0xadc", partner }),
       "creation_policy::add_partner",
       ["shared-mut:0x62", ...ADMIN, "shared:0x9a27"],
@@ -644,6 +687,103 @@ test("builds every lifecycle call with the ABI's argument count", () => {
     assert.equal(call.arguments.length, abiArity(module, fn), name);
     assert.equal(call.typeArguments.length, abiTypeArity(module, fn), name);
   }
+});
+
+test("locks an owner's own position in a vault without a presale", () => {
+  const options = {
+    position: "0x905",
+    feeRecipients: [{ recipient: "0xc0ffee", bps: 10_000n }],
+    holderRewardsBps: 0n,
+    pool: shared("0x90", false),
+  };
+  // Cetus takes the pool's coin order, either way round.
+  for (const [memeType, coins] of [
+    [memeA, [memeA, sui]],
+    [memeB, [sui, memeB]],
+  ] as const) {
+    const ptb = tx.newCetusVault({
+      memeType,
+      quoteType: sui,
+      ...options,
+      burnManager: shared("0x72", true),
+    });
+    const call = moveCall(ptb, "cetus::new_vault");
+    assert.deepEqual(call.typeArguments, [memeType, sui, ...coins]);
+    assert.equal(optionalId(ptb, call.arguments[2]), null);
+  }
+  // Bluefin's pool is `Pool<Meme, Quote>`; the partner is an `Option<ID>`.
+  const ptb = tx.newBluefinVault({
+    ...types,
+    ...options,
+    partnerId: "0x9a27",
+  });
+  const call = moveCall(ptb, "bluefin::new_vault");
+  assert.deepEqual(call.typeArguments, [memeA, sui]);
+  assert.equal(
+    optionalId(ptb, call.arguments[2]),
+    normalizeSuiAddress("0x9a27"),
+  );
+  assert.deepEqual(moveFunctions(ptb), [
+    "bps::new",
+    "blast_presale::recipient_share",
+    "bps::new",
+    "blast_presale::fee_split",
+    "bluefin::new_vault",
+  ]);
+  assert.throws(
+    () =>
+      tx.newBluefinVault({
+        ...types,
+        ...options,
+        feeRecipients: [
+          {
+            recipient: "0xc0ffee",
+            bps: 10_000n,
+            vesting: { cliffMs: 0n, periodMs: 1n, periods: 1n },
+          },
+        ],
+      }),
+    /fee recipients cannot vest/,
+  );
+});
+
+test("replaces a sale's Blast rates in its creation PTB, before share", () => {
+  const ptb = new Transaction();
+  const [sale] = moveResults(
+    ptb.add(
+      tx.call.newBluefinPresale({
+        ...terms,
+        tickSpacing: 60,
+        feeRate: 3_000n,
+      }),
+    ),
+    2,
+  );
+  const adminWitness = ptb.add(
+    tx.call.signIn({ adminCap: "0xadc", role: "FeeAdmin" }),
+  );
+  ptb.add(
+    tx.call.setPresaleProtocolFees({
+      ...types,
+      presale: sale,
+      adminWitness,
+      fees: {
+        raiseBps: 100n,
+        tokenBps: 100n,
+        lpFeeMemeBps: 0n,
+        lpFeeQuoteBps: 0n,
+      },
+    }),
+  );
+  const call = moveCall(ptb, "blast_presale::set_protocol_fees");
+  assert.deepEqual(argumentKinds(ptb, call).slice(0, 2), [
+    `NestedResult:${commandIndex(ptb, "blast_presale::finalize")}:0`,
+    `Result:${commandIndex(ptb, "blast_acl::sign_in")}`,
+  ]);
+  assert.equal(
+    call.arguments.length,
+    abiArity("blast_presale", "set_protocol_fees"),
+  );
 });
 
 test("signs each administrator call in to blast_acl with its own presale role", () => {
@@ -1209,6 +1349,17 @@ function argumentKinds(
     if (argument.$kind !== "Input") return argument.$kind;
     return describeInput(ptb.getData().inputs[argument.Input]);
   });
+}
+
+/** Decodes the pure `Option<ID>` input `argument` names. */
+function optionalId(
+  ptb: Transaction,
+  argument: ReturnType<typeof moveCall>["arguments"][number] | undefined,
+): string | null {
+  assert.ok(argument?.$kind === "Input");
+  const input = ptb.getData().inputs[argument.Input];
+  assert.ok(input?.$kind === "Pure");
+  return bcs.option(bcs.Address).parse(fromBase64(input.Pure.bytes)) ?? null;
 }
 
 /** Decodes the pure `u64` input `argument` names. */

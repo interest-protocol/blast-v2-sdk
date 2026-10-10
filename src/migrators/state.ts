@@ -24,6 +24,44 @@ import type { SharedObjectReference } from "../lib/sui.ts";
 export const MIGRATOR_VENUES = ["bluefin", "cetus"] as const;
 export type MigratorVenue = (typeof MIGRATOR_VENUES)[number];
 
+export type LaunchMigrationRoute = {
+  venue: MigratorVenue;
+  tickSpacing: number;
+  feeRate: bigint;
+};
+
+/**
+ * Identifies a launch's recorded route from its `migration_witness` (the
+ * adapter's `Witness` type, by original package ID) and its pool tier. Rejects
+ * a witness from another migrators package or a venue this SDK cannot route.
+ */
+export function launchMigrationRoute(
+  launch: {
+    migrationWitnessType: string;
+    poolTickSpacing: number;
+    poolFeeRate: bigint;
+  },
+  migratorsOriginalPackageId: string,
+): LaunchMigrationRoute {
+  const tag = parseStructTag(launch.migrationWitnessType);
+  if (tag.address !== normalizeSuiAddress(migratorsOriginalPackageId)) {
+    throw new TypeError(
+      "the launch migrates through another migrators package",
+    );
+  }
+  const venue = tag.module as MigratorVenue;
+  if (!MIGRATOR_VENUES.includes(venue) || tag.name !== "Witness") {
+    throw new RangeError(
+      `unsupported migration route ${tag.module}::${tag.name}`,
+    );
+  }
+  return {
+    venue,
+    tickSpacing: launch.poolTickSpacing,
+    feeRate: launch.poolFeeRate,
+  };
+}
+
 /** BCS layout of `blast_fun_migrators::vault::LpVault<Meme, Quote>`. */
 export const lpVaultBcs = bcs.struct("LpVault", {
   id: suiUidBcs,

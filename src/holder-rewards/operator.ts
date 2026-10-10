@@ -75,7 +75,7 @@ export type HolderRewardsOperatorConfig = {
    * its launchpad deployment) or `PresaleDeployment`.
    */
   deployment: MigratorsDeployment | PresaleDeployment;
-  /** The migrated launch's `LpVault` or presale's `PresaleVault`, whose holder share funds every round. */
+  /** The migrated launch's `LpVault` or presale package's `Vault`, whose holder share funds every round. */
   vaultId: string;
   /**
    * Blast `blast_acl::AdminCap` that signs in to publish: holding the
