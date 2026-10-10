@@ -3,9 +3,11 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import type { TestContext } from "node:test";
+import { bcs } from "@mysten/sui/bcs";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Transaction } from "@mysten/sui/transactions";
-import { fromHex, normalizeSuiAddress } from "@mysten/sui/utils";
+import { fromBase64, fromHex, normalizeSuiAddress } from "@mysten/sui/utils";
 import { withOperatorLock, writeOperatorJson } from "../operator/file-store.ts";
 import { runHolderRewardsOperator } from "../operator/holder-rewards.ts";
 import type { RewardManifest } from "../src/holder-rewards/allocations.ts";
@@ -19,6 +21,7 @@ import type { HolderLedger } from "../src/holder-rewards/holders.ts";
 import {
   createHolderLedger,
   holderWeights,
+  resetHolderWeights,
 } from "../src/holder-rewards/holders.ts";
 import {
   assertRewardRoundMatchesManifest,
@@ -426,7 +429,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
   );
 });
 
-test("CLI runs a presale vault's round under the presale leaf domain and claim window", async (t) => {
+async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
   const dir = await mkdtemp(join(tmpdir(), "blast-holder-rewards-presale-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const address = normalizeSuiAddress;
@@ -486,6 +489,8 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
   });
   const ledgerPrototype = Object.getPrototypeOf(client.ledgerService);
   let published: RewardManifest | undefined;
+  let previousEnd = skippedDay ? 0n : null;
+  const number = skippedDay ? 1n : 0n;
   t.mock.method(console, "log", () => {});
   t.mock.method(ledgerPrototype, "getServiceInfo", () => ({
     response: Promise.resolve({
@@ -549,7 +554,10 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
                 presale_id: { bytes: address("0x20") },
                 presale_cap_id: { bytes: address("0x21") },
                 pool_id: { bytes: address("0x22") },
-                fee_split: { fee_recipients: [], holder_rewards_bps: 10_000n },
+                fee_split: {
+                  fee_recipients: [],
+                  holder_rewards_bps: 10_000n,
+                },
                 protocol_fees: {
                   raiseBps: 0n,
                   tokenBps: 0n,
@@ -563,8 +571,8 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
                 migration_quote_residual: { value: 0n },
                 holder_rewards_meme: { value: published ? 0n : 4000n },
                 holder_rewards_quote: { value: published ? 0n : 800n },
-                next_round: published ? 1n : 0n,
-                last_checkpoint: published ? 2n : null,
+                next_round: published ? number + 1n : number,
+                last_checkpoint: published ? 2n : previousEnd,
               })
               .toBytes(),
           },
@@ -579,7 +587,7 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
             .serialize({
               id: uid(roundId),
               vault_id: { bytes: vaultId },
-              number: 0n,
+              number,
               claim_deadline_ms: 9_999_999_999_999n,
               root: published.root,
               leaf_count: 2n,
@@ -593,9 +601,26 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
     },
   );
 
+  if (skippedDay) {
+    await run("index", "--until", "1");
+    const statePath = join(dir, "state.json");
+    const state = await readJson(statePath);
+    await writeOperatorJson(statePath, {
+      ...state,
+      ledger: resetHolderWeights(state.ledger),
+    });
+  }
   await run("index", "--until", "2");
+  if (skippedDay) {
+    previousEnd = 2n;
+    await assert.rejects(() => run("prepare"), /ledger interval/);
+    previousEnd = 0n;
+  }
   await run("prepare");
   const prepared = (await readJson(pendingPath)) as RewardManifest;
+  assert.equal(prepared.number, number.toString());
+  assert.equal(prepared.startCheckpoint, skippedDay ? "1" : "0");
+  assert.equal(prepared.endCheckpoint, "2");
   validateRewardManifest(prepared, PRESALE_REWARD_LEAF_DOMAIN);
   assert.throws(() =>
     validateRewardManifest(prepared, MIGRATOR_REWARD_LEAF_DOMAIN),
@@ -612,7 +637,11 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
     ],
   );
   await assert.rejects(() => run("publish-tx"), /claimWindowMs/);
-  await writeOperatorJson(configPath, { ...config, claimWindowMs: "86400000" });
+  await writeOperatorJson(configPath, {
+    ...config,
+    claimWindowMs: "604800000",
+  });
+  const preparedAt = Date.now();
   await run("publish-tx");
   const publishTx = Transaction.from(
     (await readJson(join(dir, "publish-tx.json"))).transaction,
@@ -624,6 +653,15 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
   );
   assert.equal(call?.package, packageId);
   assert.equal(call?.module, "holder_rewards");
+  const deadlineArgument = call?.arguments[10];
+  assert.ok(deadlineArgument?.$kind === "Input");
+  const deadlineInput = publishTx.getData().inputs[deadlineArgument.Input];
+  assert.ok(deadlineInput?.$kind === "Pure");
+  const deadline = BigInt(
+    bcs.u64().parse(fromBase64(deadlineInput.Pure.bytes)),
+  );
+  assert.ok(deadline >= BigInt(preparedAt) + 604_800_000n);
+  assert.ok(deadline <= BigInt(Date.now()) + 604_800_000n);
 
   published = prepared;
   await run("advance", "--round", roundId);
@@ -632,10 +670,11 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
     "--round",
     roundId,
     "--manifest",
-    join(dir, "rounds", "0", "manifest.json"),
+    join(dir, "rounds", number.toString(), "manifest.json"),
   );
   const relayTx = Transaction.from(
-    (await readJson(join(dir, "rounds", "0", "relay-1.json"))).transaction,
+    (await readJson(join(dir, "rounds", number.toString(), "relay-1.json")))
+      .transaction,
   );
   assert.deepEqual(
     relayTx
@@ -646,4 +685,9 @@ test("CLI runs a presale vault's round under the presale leaf domain and claim w
       ]),
     [["holder_rewards", "claim"]],
   );
-});
+}
+
+for (const skippedDay of [false, true]) {
+  test(`CLI runs a presale round ${skippedDay ? "after a skipped day" : "from activation"} with its own claim window`, (t) =>
+    presaleRoundJourney(t, skippedDay));
+}

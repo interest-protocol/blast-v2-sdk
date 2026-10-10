@@ -294,11 +294,14 @@ async function prepareRound(context: OperatorContext): Promise<RewardManifest> {
   if (await store.read("pending"))
     throw new Error("a prepared round already exists");
   const state = await readState(context);
+  const start = BigInt(state.ledger.startCheckpoint);
   const end = BigInt(state.ledger.nextCheckpoint) - 1n;
   if (
     end <= BigInt(state.activationCheckpoint) ||
     (vault.lastCheckpoint !== null &&
-      vault.lastCheckpoint !== BigInt(state.ledger.startCheckpoint))
+      (config.product === "presale"
+        ? vault.lastCheckpoint > start
+        : vault.lastCheckpoint !== start))
   )
     throw new Error(
       "ledger interval does not match vault; index or advance first",
@@ -317,7 +320,7 @@ async function prepareRound(context: OperatorContext): Promise<RewardManifest> {
   const manifest = buildRewardManifest({
     vaultId: vault.objectId,
     number: vault.nextRound,
-    startCheckpoint: BigInt(state.ledger.startCheckpoint),
+    startCheckpoint: start,
     endCheckpoint: end,
     allocations: allocation.allocations,
     leafDomain: product.leafDomain,

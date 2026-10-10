@@ -408,6 +408,53 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     assert.equal(state.eventCounts[kind], expected, kind);
   }
 
+  const oldRound = structuredClone(required(state.rounds[ROUND]));
+  const gapRound = id("0xd1");
+  const dailyEvents = [
+    decode("RoundPublished", {
+      vault_id: VAULT,
+      round_id: gapRound,
+      number: 1n,
+      start_checkpoint: 21n,
+      end_checkpoint: 30n,
+      claim_deadline_ms: 604_800_000n + 1_000_000n,
+      root: "44".repeat(32),
+      manifest_digest: "55".repeat(32),
+      leaf_count: 1n,
+      meme_amount: 0n,
+      quote_amount: 1n,
+      meme_unallocated: 10n,
+      quote_unallocated: 0n,
+    }),
+    decode("RewardClaimed", {
+      round_id: gapRound,
+      index: 0n,
+      beneficiary: BOB,
+      meme_amount: 0n,
+      quote_amount: 1n,
+      meme_remaining: 0n,
+      quote_remaining: 0n,
+    }),
+    decode("RoundClosed", {
+      vault_id: VAULT,
+      round_id: gapRound,
+      number: 1n,
+      meme_returned: 0n,
+      quote_returned: 0n,
+    }),
+  ];
+  for (const event of dailyEvents) state = reducePresaleEvent(state, event);
+  assert.deepEqual(required(state.rounds[ROUND]), oldRound);
+  const daily = required(state.rounds[gapRound]);
+  assert.deepEqual(
+    [daily.startCheckpoint, daily.endCheckpoint, daily.claimDeadlineMs],
+    [21n, 30n, 605_800_000n],
+  );
+  assert.equal(daily.closed, true);
+  assert.equal(Object.keys(state.rounds).length, 2);
+  assert.equal(required(state.vaults[VAULT]).nextRound, 2n);
+  assert.equal(required(state.vaults[VAULT]).lastCheckpoint, 30n);
+
   // Cancellation refunds every commitment in full.
   const cancelled = required(
     reducePresaleEvent(

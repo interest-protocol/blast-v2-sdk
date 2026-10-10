@@ -500,7 +500,7 @@ export type PresaleVaultState = SharedObjectReference<true> & {
   holderRewardsMeme: bigint;
   holderRewardsQuote: bigint;
   nextRound: bigint;
-  /** Checkpoint the next round must start at; null before the first round. */
+  /** Earliest checkpoint the next round may start at; null before the first round. */
   lastCheckpoint: bigint | null;
 };
 
