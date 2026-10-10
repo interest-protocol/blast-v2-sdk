@@ -512,7 +512,7 @@ function applyVaultEvent(
             gasReserveRemaining: payload.gas_reserve_amount,
             gasReimbursed: 0n,
             gasReturned: 0n,
-            gasSettled: payload.gas_reserve_amount === 0n,
+            gasSettled: false,
           },
         },
       };

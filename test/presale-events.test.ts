@@ -583,6 +583,11 @@ for (const settle of [false, true]) {
       }),
     );
     const funded = required(state.rounds[roundId]);
+    assert.equal(
+      funded.gasSettled,
+      false,
+      "publication does not fabricate a settlement receipt",
+    );
     assert.deepEqual(
       [funded.quoteRemaining, funded.gasReserveRemaining, funded.treasury],
       [970n, 30n, TREASURY],
