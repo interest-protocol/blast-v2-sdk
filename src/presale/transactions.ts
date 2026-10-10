@@ -1360,53 +1360,9 @@ export class PresaleCalls {
    * `PRESALE_REWARD_LEAF_DOMAIN`; reserves its budget from the vault's holder
    * share and shares the `Round`, claimable until `claimDeadlineMs`.
    */
-  publishHolderRewardRound(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-      manifest: RewardManifest;
-      claimDeadlineMs: bigint;
-    },
-  ) {
-    const manifest = validateRewardManifest(
-      options.manifest,
-      PRESALE_REWARD_LEAF_DOMAIN,
-    );
-    if (
-      rewardAddress(manifest.vaultId) !== rewardAddress(options.vault.objectId)
-    ) {
-      throw new TypeError("manifest belongs to another vault");
-    }
-    const claimDeadlineMs = requireU64(
-      "claimDeadlineMs",
-      options.claimDeadlineMs,
-    );
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "publish_round",
-        [
-          sharedObject(tx, "vault", options.vault, true),
-          tx.object(options.adminWitness),
-          tx.pure.u64(manifest.number),
-          tx.pure.u64(manifest.startCheckpoint),
-          tx.pure.u64(manifest.endCheckpoint),
-          tx.pure.vector("u8", rewardDigest(manifest.root)),
-          tx.pure.vector("u8", rewardDigest(manifest.manifestDigest)),
-          tx.pure.u64(manifest.allocations.length),
-          tx.pure.u64(manifest.memeAmount),
-          tx.pure.u64(manifest.quoteAmount),
-          tx.pure.u64(claimDeadlineMs),
-          tx.object.clock(),
-        ],
-        options,
-        "holder_rewards",
-      );
-    };
-  }
 
   /** Funds immutable holder leaves and separate Quote gas custody; treasury comes from the governed FeePolicy. */
-  publishHolderRewardReserveRound(
+  publishHolderRewardRound(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
       adminWitness: TransactionObjectInput;
@@ -1441,7 +1397,7 @@ export class PresaleCalls {
     return (tx: Transaction): void => {
       this.#presaleCall(
         tx,
-        "publish_reserve_round",
+        "publish_round",
         [
           sharedObject(tx, "vault", options.vault, true),
           tx.object(options.adminWitness),
@@ -1475,18 +1431,13 @@ export class PresaleCalls {
   }
 
   /** Relays the same presale proof domain against the distinct reserve-bearing round. */
-  claimHolderRewardReserve(
-    options: Parameters<PresaleCalls["claimHolderReward"]>[0],
-  ) {
-    return this.#claimHolderReward(options, "claim_reserve_round");
-  }
 
   #claimHolderReward(
     options: LaunchTypes & {
       round: SharedObjectReference<true>;
       allocation: RewardProof;
     },
-    functionName: "claim" | "claim_reserve_round",
+    functionName: "claim",
   ) {
     const { allocation } = options;
     const index = requireU64("index", BigInt(allocation.index));
@@ -1570,48 +1521,6 @@ export class PresaleCalls {
   }
 
   /** Permissionless actual close returns holder custody and any unsettled reserve to the bound vault. */
-  closeHolderRewardReserveRound(
-    options: Parameters<PresaleCalls["closeHolderRewardRound"]>[0],
-  ) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "close_reserve_round",
-        [
-          sharedObject(tx, "round", options.round, true),
-          sharedObject(tx, "vault", options.vault, true),
-          tx.object.clock(),
-        ],
-        options,
-        "holder_rewards",
-      );
-    };
-  }
-
-  /** Restricted, exact-amount reconciliation of unallocated legacy Meme; recipient is governed. */
-  reconcileUnallocatedHolderMeme(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-      expectedMemeAmount: bigint;
-    },
-  ) {
-    const amount = requireU64("expectedMemeAmount", options.expectedMemeAmount);
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "reconcile_unallocated_meme",
-        [
-          sharedObject(tx, "vault", options.vault, true),
-          tx.object(options.adminWitness),
-          this.#feePolicy(tx),
-          tx.pure.u64(amount),
-        ],
-        options,
-        "presale_vault",
-      );
-    };
-  }
 
   #newPresale(
     start: (tx: Transaction) => TransactionResult,
@@ -1977,16 +1886,6 @@ export class PresaleTransactions {
     );
   }
 
-  publishHolderRewardReserveRound(
-    options: AsAdmin<
-      Parameters<PresaleCalls["publishHolderRewardReserveRound"]>[0]
-    >,
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
-      this.call.publishHolderRewardReserveRound({ ...options, adminWitness }),
-    );
-  }
-
   settleHolderRewardGasReserve(
     options: AsAdmin<
       Parameters<PresaleCalls["settleHolderRewardGasReserve"]>[0]
@@ -1994,16 +1893,6 @@ export class PresaleTransactions {
   ): Transaction {
     return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
       this.call.settleHolderRewardGasReserve({ ...options, adminWitness }),
-    );
-  }
-
-  reconcileUnallocatedHolderMeme(
-    options: AsAdmin<
-      Parameters<PresaleCalls["reconcileUnallocatedHolderMeme"]>[0]
-    >,
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
-      this.call.reconcileUnallocatedHolderMeme({ ...options, adminWitness }),
     );
   }
 
@@ -2103,21 +1992,6 @@ export class PresaleTransactions {
     options: Parameters<PresaleCalls["closeHolderRewardRound"]>[0],
   ): Transaction {
     return single(this.call.closeHolderRewardRound(options));
-  }
-
-  claimHolderRewardReserves(
-    options: Parameters<PresaleTransactions["claimHolderRewards"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    for (const allocation of options.allocations)
-      tx.add(this.call.claimHolderRewardReserve({ ...options, allocation }));
-    return tx;
-  }
-
-  closeHolderRewardReserveRound(
-    options: Parameters<PresaleCalls["closeHolderRewardReserveRound"]>[0],
-  ): Transaction {
-    return single(this.call.closeHolderRewardReserveRound(options));
   }
 
   /** Signs in as `role` and runs one administrator call in the same PTB. */

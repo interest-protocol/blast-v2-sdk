@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "78739ce84255a63991ca8b3f91533f280baead9e",
+    "contractsCommit": "ba4f811890684fac4bf087f0fb17dd4417ec409a",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
@@ -17,7 +17,7 @@
       "contracts ADR 0111: the pool tier belongs to the venue; blast_presale::new, Presale, and PresaleCreated drop tick_spacing and pool_fee_rate, bluefin::new and bluefin::migrate take the VenueConfig, and venue_config::PoolTierReserved<Meme, Quote, Venue> records each Cetus or Bluefin tier",
       "contracts ADR 0099 (amended 2026-10-08): the shared Blast ACL administers the presale; every administrator call takes blast_admin::blast_acl::AdminWitness of one typed blast_presale_domain role (FeeAdmin, TreasuryAdmin, ListingAdmin, AdapterAdmin, RewardsAdmin, UpgradeAdmin) in place of the AdminRegistry and AdminCap, and blast_presale_admin with its SuperAdminCap, AdminCap, AdminRegistry, AdminCapReplaced, and AdminCapRevoked is deleted",
       "contracts ADR 0112: presale holding intervals may follow confirmed skipped days while preserving sequential funded rounds, proof domains and independent claim deadlines",
-      "contracts ADR 0113: distinct BlastRewardRound reserves separate gas custody, governed one-shot capped settlement and permissionless reserve return; holder Meme collection and explicit exact-amount legacy reconciliation pay the governed FeePolicy destination without changing old Round or Vault layouts"
+      "contracts ADR 0113: republished canonical Round reserves optional separate gas custody, zero reserve selects Blast-paid gas, governed one-shot capped settlement and permissionless reserve return; holder Meme collection pays the governed FeePolicy destination"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -6682,164 +6682,6 @@
               "returns": []
             },
             {
-              "name": "claim_reserve_round",
-              "sdk": "builder",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "holder_rewards"
-                        },
-                        "name": "BlastRewardRound",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "u64",
-                "address",
-                "u64",
-                "u64",
-                {
-                  "vector": {
-                    "vector": "u8"
-                  }
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "close_reserve_round",
-              "sdk": "builder",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_presale",
-                      "name": "holder_rewards"
-                    },
-                    "name": "BlastRewardRound",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Meme"
-                        },
-                        "phantom": true
-                      },
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "presale_vault"
-                        },
-                        "name": "Vault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "clock"
-                        },
-                        "name": "Clock",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
               "name": "close_round",
               "sdk": "builder",
               "entry": false,
@@ -6926,7 +6768,7 @@
               "returns": []
             },
             {
-              "name": "publish_reserve_round",
+              "name": "publish_round",
               "sdk": "builder",
               "entry": false,
               "typeParameters": [
@@ -7062,126 +6904,6 @@
               "returns": []
             },
             {
-              "name": "publish_round",
-              "sdk": "builder",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "presale_vault"
-                        },
-                        "name": "Vault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_presale",
-                                  "name": "blast_presale_domain"
-                                },
-                                "name": "RewardsAdmin",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "u64",
-                "u64",
-                "u64",
-                {
-                  "vector": "u8"
-                },
-                {
-                  "vector": "u8"
-                },
-                "u64",
-                "u64",
-                "u64",
-                "u64",
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "clock"
-                        },
-                        "name": "Clock",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
               "name": "settle_gas_reserve",
               "sdk": "builder",
               "entry": false,
@@ -7207,7 +6929,7 @@
                           "address": "blast_presale",
                           "name": "holder_rewards"
                         },
-                        "name": "BlastRewardRound",
+                        "name": "Round",
                         "type_arguments": [
                           {
                             "argument": {
@@ -7305,7 +7027,7 @@
           ],
           "structs": [
             {
-              "name": "BlastRewardRound",
+              "name": "Round",
               "abilities": [
                 "Key"
               ],
@@ -7452,351 +7174,10 @@
                   }
                 }
               ]
-            },
-            {
-              "name": "Round",
-              "abilities": [
-                "Key"
-              ],
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": true,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": true,
-                  "constraints": []
-                }
-              ],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "number",
-                  "type": "u64"
-                },
-                {
-                  "name": "claim_deadline_ms",
-                  "type": "u64"
-                },
-                {
-                  "name": "root",
-                  "type": {
-                    "vector": "u8"
-                  }
-                },
-                {
-                  "name": "leaf_count",
-                  "type": "u64"
-                },
-                {
-                  "name": "claimed_bitmap",
-                  "type": {
-                    "vector": "u256"
-                  }
-                },
-                {
-                  "name": "meme",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "balance"
-                      },
-                      "name": "Balance",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "NamedTypeParameter": "Meme"
-                          },
-                          "phantom": true
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
-                  "name": "quote",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "balance"
-                      },
-                      "name": "Balance",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "NamedTypeParameter": "Quote"
-                          },
-                          "phantom": true
-                        }
-                      ]
-                    }
-                  }
-                }
-              ]
             }
           ],
           "enums": [],
           "events": [
-            {
-              "name": "BlastRewardClaimed",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": true,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": true,
-                  "constraints": []
-                }
-              ],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "round_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "index",
-                  "type": "u64"
-                },
-                {
-                  "name": "beneficiary",
-                  "type": "address"
-                },
-                {
-                  "name": "meme_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "meme_remaining",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_remaining",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "BlastRoundClosed",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": true,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": true,
-                  "constraints": []
-                }
-              ],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "round_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "number",
-                  "type": "u64"
-                },
-                {
-                  "name": "meme_returned",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_returned",
-                  "type": "u64"
-                },
-                {
-                  "name": "gas_reserve_returned",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "BlastRoundPublished",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": true,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": true,
-                  "constraints": []
-                }
-              ],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "round_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "number",
-                  "type": "u64"
-                },
-                {
-                  "name": "start_checkpoint",
-                  "type": "u64"
-                },
-                {
-                  "name": "end_checkpoint",
-                  "type": "u64"
-                },
-                {
-                  "name": "claim_deadline_ms",
-                  "type": "u64"
-                },
-                {
-                  "name": "root",
-                  "type": {
-                    "vector": "u8"
-                  }
-                },
-                {
-                  "name": "manifest_digest",
-                  "type": {
-                    "vector": "u8"
-                  }
-                },
-                {
-                  "name": "leaf_count",
-                  "type": "u64"
-                },
-                {
-                  "name": "meme_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "meme_unallocated",
-                  "type": "u64"
-                },
-                {
-                  "name": "quote_unallocated",
-                  "type": "u64"
-                },
-                {
-                  "name": "treasury",
-                  "type": "address"
-                },
-                {
-                  "name": "gas_reserve_amount",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
             {
               "name": "GasReserveSettled",
               "abilities": [
@@ -7983,6 +7364,10 @@
                 {
                   "name": "quote_returned",
                   "type": "u64"
+                },
+                {
+                  "name": "gas_reserve_returned",
+                  "type": "u64"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -8079,6 +7464,14 @@
                 },
                 {
                   "name": "quote_unallocated",
+                  "type": "u64"
+                },
+                {
+                  "name": "treasury",
+                  "type": "address"
+                },
+                {
+                  "name": "gas_reserve_amount",
                   "type": "u64"
                 }
               ],
@@ -8530,114 +7923,6 @@
               "returns": []
             },
             {
-              "name": "reconcile_unallocated_meme",
-              "sdk": "builder",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "presale_vault"
-                        },
-                        "name": "Vault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_presale",
-                                  "name": "blast_presale_domain"
-                                },
-                                "name": "RewardsAdmin",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "fee_policy"
-                        },
-                        "name": "FeePolicy",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                "u64",
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
               "name": "set_protocol_lp_fees",
               "sdk": "builder",
               "entry": false,
@@ -9030,102 +8315,6 @@
           "enums": [],
           "events": [
             {
-              "name": "BlastHolderMemePaid",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": true,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": true,
-                  "constraints": []
-                }
-              ],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "treasury",
-                  "type": "address"
-                },
-                {
-                  "name": "meme_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "unallocated_meme_remaining",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "BlastUnallocatedMemeReconciled",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [
-                {
-                  "name": "Meme",
-                  "phantom": true,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": true,
-                  "constraints": []
-                }
-              ],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "vault_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "treasury",
-                  "type": "address"
-                },
-                {
-                  "name": "meme_amount",
-                  "type": "u64"
-                },
-                {
-                  "name": "unallocated_meme_remaining",
-                  "type": "u64"
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
               "name": "FeesCollected",
               "abilities": [
                 "Copy",
@@ -9210,6 +8399,54 @@
                 },
                 {
                   "name": "holder_rewards_quote",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "HolderMemePaid",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "treasury",
+                  "type": "address"
+                },
+                {
+                  "name": "meme_amount",
+                  "type": "u64"
+                },
+                {
+                  "name": "unallocated_meme_remaining",
                   "type": "u64"
                 }
               ],

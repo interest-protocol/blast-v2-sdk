@@ -36,7 +36,7 @@ jobs:
         with:
           repository: interest-protocol/blast-v2-contracts
           # Bump with every `npm run check:abi:write`.
-          ref: acad02ecd6c1b4be70f7b9c611c8d23cb318e9e5
+          ref: ba4f811890684fac4bf087f0fb17dd4417ec409a
           token: ${{ secrets.CONTRACTS_READ_TOKEN }}
           path: contracts
       - name: Install the pinned Sui CLI

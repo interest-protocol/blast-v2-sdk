@@ -62,7 +62,7 @@ test("names a presale abort by its module and code", () => {
   assert.equal(presaleAbortName("holder_rewards", 13), "EInsufficientBudget");
   assert.equal(presaleAbortName("holder_rewards", 14), "EReserveSettled");
   assert.equal(presaleAbortName("holder_rewards", 15), "EOverReserve");
-  assert.equal(presaleAbortName("presale_vault", 5), "ELegacyMemeMismatch");
+  assert.equal(presaleAbortName("presale_vault", 5), null);
   assert.equal(presaleAbortName("bps", 0), "EInvalidBps");
   assert.equal(presaleAbortName("bluefin", 1), "EInvalidTier");
   assert.equal(

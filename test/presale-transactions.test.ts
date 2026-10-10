@@ -522,10 +522,17 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         vault,
         adminCapId: "0xadc",
         manifest,
+        gasReserveAmount: 0n,
         claimDeadlineMs: 9_000n,
       }),
       "holder_rewards::publish_round",
-      ["shared-mut:0xba", ...ADMIN, ...Array(9).fill("pure"), CLOCK],
+      [
+        "shared-mut:0xba",
+        ...ADMIN,
+        "shared:0x61",
+        ...Array(10).fill("pure"),
+        CLOCK,
+      ],
     ],
     [
       tx.claimHolderRewards({
@@ -1058,6 +1065,7 @@ test("rejects a manifest from the migrators' leaf domain or another vault", () =
       vault: shared(vault, true),
       adminWitness: "0xadc",
       manifest,
+      gasReserveAmount: 0n,
       claimDeadlineMs: 1n,
     });
   assert.throws(
@@ -1088,7 +1096,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     allocations: [{ beneficiary: "0xb0b", memeAmount: 0n, quoteAmount: 970n }],
     leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
   });
-  const publication = tx.publishHolderRewardReserveRound({
+  const publication = tx.publishHolderRewardRound({
     ...types,
     vault,
     adminCapId: "0xadc",
@@ -1096,10 +1104,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     gasReserveAmount: 30n,
     claimDeadlineMs: 605_800_000n,
   });
-  const publishCall = moveCall(
-    publication,
-    "holder_rewards::publish_reserve_round",
-  );
+  const publishCall = moveCall(publication, "holder_rewards::publish_round");
   assert.deepEqual(argumentKinds(publication, publishCall), [
     "shared-mut:0xba",
     ...ADMIN,
@@ -1120,7 +1125,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
   };
   const publishSummary = (input: typeof summary) =>
-    tx.publishHolderRewardReserveRound({
+    tx.publishHolderRewardRound({
       ...types,
       vault,
       adminCapId: "0xadc",
@@ -1141,7 +1146,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     assert.throws(() => publishSummary(invalid));
   assert.throws(
     () =>
-      tx.publishHolderRewardReserveRound({
+      tx.publishHolderRewardRound({
         ...types,
         vault,
         adminCapId: "0xadc",
@@ -1151,7 +1156,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
       }),
     /leaf domain mismatch/,
   );
-  const claim = tx.claimHolderRewardReserves({
+  const claim = tx.claimHolderRewards({
     ...types,
     round,
     allocations: manifest.allocations,
@@ -1163,22 +1168,16 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     adminCapId: "0xadc",
     reimbursementAmount: 24n,
   });
-  const close = tx.closeHolderRewardReserveRound({ ...types, vault, round });
-  const reconcile = tx.reconcileUnallocatedHolderMeme({
-    ...types,
-    vault,
-    adminCapId: "0xadc",
-    expectedMemeAmount: 100n,
-  });
+  const close = tx.closeHolderRewardRound({ ...types, vault, round });
   const cases: [Transaction, string, string[]][] = [
     [
       publication,
-      "holder_rewards::publish_reserve_round",
+      "holder_rewards::publish_round",
       argumentKinds(publication, publishCall),
     ],
     [
       claim,
-      "holder_rewards::claim_reserve_round",
+      "holder_rewards::claim",
       ["shared-mut:0xd1", ...Array.from({ length: 5 }, () => "pure")],
     ],
     [
@@ -1188,13 +1187,8 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     ],
     [
       close,
-      "holder_rewards::close_reserve_round",
+      "holder_rewards::close_round",
       ["shared-mut:0xd1", "shared-mut:0xba", CLOCK],
-    ],
-    [
-      reconcile,
-      "presale_vault::reconcile_unallocated_meme",
-      ["shared-mut:0xba", ...ADMIN, "shared:0x61", "pure"],
     ],
   ];
   for (const [ptb, name, kinds] of cases) {
@@ -1204,7 +1198,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     assert.equal(call.arguments.length, abiArity(module, fn), name);
     assert.equal(call.typeArguments.length, abiTypeArity(module, fn), name);
   }
-  for (const ptb of [publication, settle, reconcile]) {
+  for (const ptb of [publication, settle]) {
     assert.deepEqual(moveCall(ptb, "blast_acl::sign_in").typeArguments, [
       normalizeStructTag("0x5e::blast_presale_domain::RewardsAdmin"),
     ]);
@@ -1219,7 +1213,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
   for (const gasReserveAmount of [-1n, 1n << 64n]) {
     assert.throws(
       () =>
-        tx.publishHolderRewardReserveRound({
+        tx.publishHolderRewardRound({
           ...types,
           vault,
           adminCapId: "0xadc",
@@ -1232,7 +1226,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
   }
   assert.throws(
     () =>
-      tx.publishHolderRewardReserveRound({
+      tx.publishHolderRewardRound({
         ...types,
         vault: shared("0xbb", true),
         adminCapId: "0xadc",
@@ -1244,7 +1238,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
   );
   assert.throws(
     () =>
-      tx.publishHolderRewardReserveRound({
+      tx.publishHolderRewardRound({
         ...types,
         vault,
         adminCapId: "0xadc",

@@ -69,7 +69,6 @@ export const PRESALE_ABORTS = {
     "EWrongPresaleCap",
     "EProtocolLpFeesUnchanged",
     "EWrongPartner",
-    "ELegacyMemeMismatch",
   ],
   fee_policy: ["EInvalidFees", "EFeesUnchanged", "EInvalidDestination"],
   creation_policy: [

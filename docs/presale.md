@@ -26,8 +26,8 @@ itself with an `AdminRegistry`, so these builders cannot drive it.
 The reserve and holder Meme routing APIs below require a new, verified presale
 publication. They are absent from the registered October 9 lineage, whose
 dependency-only upgrade policy cannot change Move logic. Existing deployment
-IDs and funded legacy rounds remain unchanged. These source bindings authorize
-no live publication, payment, sweep, or activation.
+The SDK targets the republished canonical reward ABI. Deployment registration
+must identify that publication before these calls can execute.
 
 ```ts
 import { getPresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
@@ -83,14 +83,12 @@ stage; `newCetusPresale` and `newBluefinPresale` build all three.
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee, from gas unless `useGasCoin: false`. Pass the sale's `partner` when it names one, and the same PTB pays it. |
 | Pay Blast and its partner | `payProtocolFeesWithPartner` | Anyone may call, once, after a partnered sale migrates; use it on its own for a sale another migrator migrated. See [Partners](#partners). |
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. Under participant vesting, each claim locks the participant's tokens in a new schedule starting at that claim. |
-| Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, or holds it on a partnered vault, then every fee recipient. On the new routing lineage, holder Quote stays in the vault and only the holder Meme remainder goes to the governed treasury; legacy collection retains both. Pass the vault's `partner` when it names one, and the same PTB pays what the vault held. |
+| Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, or holds it on a partnered vault, then every fee recipient. Holder Quote stays in the vault and holder Meme goes to the governed treasury. Pass the vault's `partner` when it names one, and the same PTB pays what the vault held. |
 | Pay Blast's LP fees and the partner | `payProtocolLpFeesWithPartner` | Anyone may call, on a partnered vault; holding nothing pays nothing. See [Partners](#partners). |
 | Vault without a presale | `newCetusVault`, `newBluefinVault` | Anyone may lock their own Cetus or Bluefin `position` in a new `Vault` with their own LP-fee split and an optional accepted `partnerId` (contracts ADR 0109). Cetus burns the position through LP Burn and takes either coin order (`cetusMemeSide`); Bluefin's pool must be `Pool<Meme, Quote>`. The `CreationPolicy` must allow Quote and the venue's migrator. The vault's presale and `PresaleCap` IDs are zero (`isVaultWithoutPresale`), so it has no residuals; fees and holder rewards work as on any vault. |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
 | Own position | `newCetusVault`, `newBluefinVault` | Anyone, for their own position: locks it in a new `Vault` with zero presale IDs, the given fee split, and an optional accepted partner (contracts ADR 0109). |
 | Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication signs in as `RewardsAdmin` (`adminCapId`). |
-| Reserve-backed holder rewards | `publishHolderRewardReserveRound`, `claimHolderRewardReserves`, `settleHolderRewardGasReserve`, `closeHolderRewardReserveRound` | New lineage only. Publication and terminal settlement sign in as `RewardsAdmin`; claims and actual close are permissionless. |
-| Legacy unallocated Meme | `reconcileUnallocatedHolderMeme` | New safe lineage/migration only, after obligation reconciliation. `RewardsAdmin`, exact `expectedMemeAmount`, governed recipient; funded leaves stay untouched. |
 | Cap | `destroyCap` | After cancellation only. |
 | Blast's rates | `setProtocolFees` | Signs in as `FeeAdmin`. Applies to presales created afterward. |
 | Blast's rates on one sale | `setPresaleProtocolFees` | Signs in as `FeeAdmin`. In the creation PTB before `share` (pass the `Presale` result and an `adminWitness` from `call.signIn`), or once shared until the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
@@ -196,7 +194,7 @@ must hold that role:
 | `TreasuryAdmin` | `setProtocolDestination` |
 | `ListingAdmin` | `setQuoteAllowed` |
 | `AdapterAdmin` | `setMigrationWitnessAllowed` |
-| `RewardsAdmin` | `publishHolderRewardRound`, `publishHolderRewardReserveRound`, `settleHolderRewardGasReserve`, `reconcileUnallocatedHolderMeme` |
+| `RewardsAdmin` | `publishHolderRewardRound`, `settleHolderRewardGasReserve` |
 | `UpgradeAdmin` | none: upgrade custody stays with the CLI publish tooling |
 
 `PresaleCalls.roleType(role)` names a role's Move type for
@@ -391,33 +389,28 @@ holding interval and claim deadline are independent. Mainnet daily publication
 prepares the full seven-day deadline from current publication preparation
 time, including when recovering an older holding period.
 
-`publishHolderRewardReserveRound` takes the same manifest, an exact
-`gasReserveAmount` in Quote atoms, and `claimDeadlineMs`. Its distinct
-`BlastRewardRound` holds the immutable leaf balances separately from gas.
-The bound treasury is read from the deployment's governed `FeePolicy`; no
-publication or settlement caller chooses a recipient. The SDK applies no USD
-conversion or eligibility policy.
+`publishHolderRewardRound` takes a manifest or verified paged summary, a required
+`gasReserveAmount` in Quote atoms, and `claimDeadlineMs`. The administrator
+chooses the reserve for each publication: zero disables reimbursement and Blast
+pays gas; a positive amount funds separate gas custody inside the canonical
+`Round`. Holder leaf balances and proofs never include that reserve. Treasury
+comes from the governed FeePolicy and is fixed in the round.
 
-`settleHolderRewardGasReserve` pays `reimbursementAmount` Quote atoms to that
-bound treasury once and returns the unused reserve to the matching vault.
-The contract rejects over-reserve, duplicate, unauthorized, and wrong-vault
-settlement. `closeHolderRewardReserveRound` returns unclaimed holder balances
-and any unsettled reserve to the bound vault after the independent deadline.
-Elapsed time alone returns nothing; authority loss cannot prevent actual close.
+`settleHolderRewardGasReserve` reimburses the fixed treasury once, capped by the
+positive original reserve, and returns the remainder to the vault. A zero
+reserve needs no settlement. `closeHolderRewardRound` is permissionless after
+the deadline and returns actual unclaimed holder funds and any unsettled gas
+reserve. The SDK performs no USD pricing or gas reimbursement policy.
 
-New collection retains all existing per-asset protocol, partner, and creator
-rounding, sends only the holder Meme remainder to the current governed
-destination, and leaves Quote for rewards. It does not transfer legacy
-unallocated Meme. `reconcileUnallocatedHolderMeme` is a separate restricted
-call bound to the exact current unallocated balance. Existing funded Meme
-leaves and unresolved commitments require preservation and reconciliation
-before activation; old callable routing bypasses block activation.
+Holder Meme fees are paid to the governed treasury at collection; holder Quote
+stays in the vault for reward publication. The canonical `HolderMemePaid` event
+records that transfer.
 
 ## Reads and replay
 
 `PresaleClient` (`blastPresale()` extension) reads a `Presale`, a wallet's
 `Commitment` dynamic field, a `Vault`, a reward `Round`, the distinct
-`BlastRewardRound` (`getHolderRewardReserveRound`), the
+`Round` (`getHolderRewardRound`), the
 `FeePolicy`, and the `CreationPolicy`.
 `decodePresaleEvent` decodes the 26
 events generic over `<SaleToken, Quote>`. `VaultCreated` and
@@ -436,17 +429,15 @@ uncapped start from it, and `participants` counts the wallets still holding a
 commitment, which `Claimed.remaining_participants` reports after each claim;
 the claim that leaves one takes the rounding remainder.
 
-Legacy `rounds` and new `reserveRounds` are separate projections. New round
-reads expose exact holder custody, bound treasury, and
-`gasReserveRemaining`: `null` means terminal settlement; `0n` can mean an
-unsettled zero reserve. Replay retains the original reserve, actual reimbursed
-and returned atoms, and actual close. `BlastHolderMemePaid` and
-`BlastUnallocatedMemeReconciled` update the vault's authoritative unallocated
-Meme balance, so transferred Meme is never reported as retained custody.
+The canonical `rounds` projection records holder balances separately from gas
+reserve custody, settled reimbursement, returned atoms and actual close.
+`gasReserveRemaining: null` in decoded object state means reimbursement was
+disabled or already settled. The publication event distinguishes the original
+choice. `HolderMemePaid` records the vault's treasury transfer.
 
 ## ABI coverage
 
-`abi/production-presale-v1.json` freezes the source ABI at contracts `78739ce`,
+`abi/production-presale-v1.json` freezes the source ABI at contracts `ba4f811`,
 including the approved reserve and holder Meme routing amendments. The
 registered 2026-10-09 publication is still contracts `acad02e`; it does not
 contain those later APIs. The Aftermath vendor keeps its independent `af86ea4`

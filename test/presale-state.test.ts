@@ -9,7 +9,6 @@ import {
   decodePresaleCreationPolicyObject,
   decodePresaleFeePolicyObject,
   decodePresaleObject,
-  decodePresaleRewardReserveRoundObject,
   decodePresaleRewardRoundObject,
   decodePresaleVaultObject,
   eligibilityPolicyBcs,
@@ -379,6 +378,8 @@ test("decodes a holder-reward Round and its claim bitmap", () => {
     ...vec([le(1n << 5n, 32), le(1n, 32)]), // claimed_bitmap: leaves 5 and 256
     ...u64(40n), // meme
     ...u64(5n), // quote
+    ...addr("0x7ea5"), // treasury
+    0, // no gas reserve
   ]);
   const round = decodePresaleRewardRoundObject(
     object(
@@ -405,8 +406,8 @@ test("decodes a holder-reward Round and its claim bitmap", () => {
   assert.throws(() => presaleRewardIsClaimed(round, 300n), /out of bounds/);
 });
 
-test("reads separate reserve custody in Move field order and rejects legacy type substitution", () => {
-  const type = `${pkg}::holder_rewards::BlastRewardRound<0xa::meme::MEME, 0x2::sui::SUI>`;
+test("reads canonical optional gas custody in Move field order and rejects another type", () => {
+  const type = `${pkg}::holder_rewards::Round<0xa::meme::MEME, 0x2::sui::SUI>`;
   const fields = [
     ...addr("0xd1"),
     ...addr("0xba"),
@@ -428,36 +429,28 @@ test("reads separate reserve custody in Move field order and rejects legacy type
       ]),
       "0xd1",
     );
-    const round = decodePresaleRewardReserveRoundObject(value, pkg);
+    const round = decodePresaleRewardRoundObject(value, pkg);
     assert.equal(round.treasury, normalizeSuiAddress("0x7ea5"));
     assert.equal(round.gasReserveRemaining, reserve);
     assert.equal(round.quoteRemaining, 970n);
     assert.equal(presaleRewardIsClaimed(round, 256n), true);
     assert.throws(
-      () => decodePresaleRewardRoundObject(value, pkg),
-      /not a presale/,
-    );
-    assert.throws(
       () =>
-        decodePresaleRewardReserveRoundObject(
+        decodePresaleRewardRoundObject(
           {
             ...value,
-            type: type.replace("BlastRewardRound", "Round"),
+            type: type.replace("Round", "OtherRound"),
           },
           pkg,
         ),
       /not a presale/,
     );
     assert.throws(
-      () => decodePresaleRewardReserveRoundObject(value, "0x99"),
+      () => decodePresaleRewardRoundObject(value, "0x99"),
       /not a presale/,
     );
     assert.throws(
-      () =>
-        decodePresaleRewardReserveRoundObject(
-          { ...value, objectId: "0xd2" },
-          pkg,
-        ),
+      () => decodePresaleRewardRoundObject({ ...value, objectId: "0xd2" }, pkg),
       /mismatched UID/,
     );
   }

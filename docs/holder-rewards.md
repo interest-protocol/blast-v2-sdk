@@ -78,7 +78,7 @@ Snapshot identity, hashes, durable progress, locks and readiness evidence belong
 to the caller's persistence layer. Keep proofs publicly available through a
 paged endpoint; a summary alone cannot recover them.
 
-`PresaleTransactions.publishHolderRewardReserveRound` accepts the completed
+`PresaleTransactions.publishHolderRewardRound` accepts the completed
 summary without loading all proofs. Its summary checks cover canonical fields,
 the presale leaf domain, bounded leaf count, positive funding and full digest
 lengths. They cannot prove allocations or eligibility from a summary alone:

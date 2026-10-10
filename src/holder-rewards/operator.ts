@@ -85,6 +85,8 @@ export type HolderRewardsOperatorConfig = {
   adminCapId?: string;
   /** Presale only: claims stay open this many milliseconds after `publishTransaction` builds the round. */
   claimWindowMs?: string;
+  /** Explicit per-publication Quote gas reserve; zero chooses Blast-paid gas. */
+  gasReserveAmount?: string;
   /** Sender set on unsigned publication and relay transactions. */
   sender?: string;
   excludedAddresses?: string[];
@@ -529,12 +531,20 @@ async function loadProduct(
       publish: (manifest, adminCapId) => {
         if (!config.claimWindowMs || !/^\d+$/.test(config.claimWindowMs))
           throw new Error("presale publish-tx needs claimWindowMs");
+        if (
+          config.gasReserveAmount === undefined ||
+          !/^(0|[1-9][0-9]*)$/.test(config.gasReserveAmount)
+        )
+          throw new Error(
+            "presale publish-tx needs explicit gasReserveAmount (0 disables reimbursement)",
+          );
         return transactions.publishHolderRewardRound({
           ...pair,
           vault,
           adminCapId,
           manifest,
           claimDeadlineMs: BigInt(Date.now()) + BigInt(config.claimWindowMs),
+          gasReserveAmount: BigInt(config.gasReserveAmount),
         });
       },
       claim: (round, allocations) =>

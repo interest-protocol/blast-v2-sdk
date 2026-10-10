@@ -10,7 +10,6 @@ import type {
   PresaleCommitment,
   PresaleCreationPolicyState,
   PresaleFeePolicyState,
-  PresaleRewardReserveRoundState,
   PresaleRewardRoundState,
   PresaleState,
   PresaleVaultState,
@@ -20,7 +19,6 @@ import {
   getPresaleCommitment,
   getPresaleCreationPolicy,
   getPresaleFeePolicy,
-  getPresaleRewardReserveRound,
   getPresaleRewardRound,
   getPresaleVault,
 } from "./state.ts";
@@ -107,16 +105,6 @@ export class PresaleClient {
     objectId: string,
   ): Promise<PresaleRewardRoundState> {
     return getPresaleRewardRound(
-      this.#client,
-      objectId,
-      this.#originalPackageId,
-    );
-  }
-
-  async getHolderRewardReserveRound(
-    objectId: string,
-  ): Promise<PresaleRewardReserveRoundState> {
-    return getPresaleRewardReserveRound(
       this.#client,
       objectId,
       this.#originalPackageId,
