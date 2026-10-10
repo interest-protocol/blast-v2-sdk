@@ -6,6 +6,10 @@ It uses [viem](https://viem.sh/docs/contract/simulateContract) for ABI encoding,
 reads, simulations, writes and event decoding. Supply your existing public
 and wallet clients; the SDK owns no RPC endpoint, chain list, signer or state.
 
+Argument checks use `tiny-invariant` and still throw in production, where
+messages become generic. For runtimes without `process`, configure your bundler
+to replace `process.env.NODE_ENV`, as required by `tiny-invariant`.
+
 ## Deposit address and forwarding
 
 ```ts

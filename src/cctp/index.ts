@@ -1,4 +1,5 @@
 import { isValidSuiAddress, normalizeSuiAddress } from "@mysten/sui/utils";
+import invariant from "tiny-invariant";
 import type { Address, Hex } from "viem";
 import { getAddress, zeroAddress, zeroHash } from "viem";
 
@@ -27,22 +28,20 @@ export function cctpDepositParameters({
   index?: number;
 }) {
   const address = getAddress(factory);
-  if (address === zeroAddress) {
-    throw new Error("CCTP factory must be nonzero");
-  }
+  invariant(address !== zeroAddress, "CCTP factory must be nonzero");
   const normalizedRecipient = normalizeSuiAddress(recipient);
-  if (
-    !isValidSuiAddress(normalizedRecipient) ||
-    normalizedRecipient === zeroHash
-  ) {
-    throw new Error("CCTP recipient must be a nonzero Sui address");
-  }
-  if (mode !== CCTP_MODE_STANDARD && mode !== CCTP_MODE_FAST) {
-    throw new Error("CCTP mode must be Standard (0) or Fast (1)");
-  }
-  if (!Number.isInteger(index) || index < 0 || index > 0xffff_ffff) {
-    throw new Error("CCTP index must be a uint32");
-  }
+  invariant(
+    isValidSuiAddress(normalizedRecipient) && normalizedRecipient !== zeroHash,
+    "CCTP recipient must be a nonzero Sui address",
+  );
+  invariant(
+    mode === CCTP_MODE_STANDARD || mode === CCTP_MODE_FAST,
+    "CCTP mode must be Standard (0) or Fast (1)",
+  );
+  invariant(
+    Number.isInteger(index) && index >= 0 && index <= 0xffff_ffff,
+    "CCTP index must be a uint32",
+  );
   return {
     address,
     abi: cctpForwarderFactoryAbi,
