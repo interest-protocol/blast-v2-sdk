@@ -87,7 +87,7 @@ test("event specs match every event frozen in the presale ABI", () => {
     }),
     orderedModuleEventFields(readFrozenPresaleEventSpecs()),
   );
-  assert.equal(Object.keys(presaleEventModules).length, 20);
+  assert.equal(Object.keys(presaleEventModules).length, 26);
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
@@ -402,11 +402,64 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     "PresaleCancelled",
     "ProtocolFeesChanged",
     "ProtocolLpFeesPaid",
+    "BlastHolderMemePaid",
+    "BlastUnallocatedMemeReconciled",
+    "BlastRoundPublished",
+    "BlastRewardClaimed",
+    "GasReserveSettled",
+    "BlastRoundClosed",
   ];
   for (const kind of Object.keys(presaleEventModules) as PresaleEventKind[]) {
     const expected = twice.includes(kind) ? 2 : never.includes(kind) ? 0 : 1;
     assert.equal(state.eventCounts[kind], expected, kind);
   }
+
+  const oldRound = structuredClone(required(state.rounds[ROUND]));
+  const gapRound = id("0xd1");
+  const dailyEvents = [
+    decode("RoundPublished", {
+      vault_id: VAULT,
+      round_id: gapRound,
+      number: 1n,
+      start_checkpoint: 21n,
+      end_checkpoint: 30n,
+      claim_deadline_ms: 604_800_000n + 1_000_000n,
+      root: "44".repeat(32),
+      manifest_digest: "55".repeat(32),
+      leaf_count: 1n,
+      meme_amount: 0n,
+      quote_amount: 1n,
+      meme_unallocated: 10n,
+      quote_unallocated: 0n,
+    }),
+    decode("RewardClaimed", {
+      round_id: gapRound,
+      index: 0n,
+      beneficiary: BOB,
+      meme_amount: 0n,
+      quote_amount: 1n,
+      meme_remaining: 0n,
+      quote_remaining: 0n,
+    }),
+    decode("RoundClosed", {
+      vault_id: VAULT,
+      round_id: gapRound,
+      number: 1n,
+      meme_returned: 0n,
+      quote_returned: 0n,
+    }),
+  ];
+  for (const event of dailyEvents) state = reducePresaleEvent(state, event);
+  assert.deepEqual(required(state.rounds[ROUND]), oldRound);
+  const daily = required(state.rounds[gapRound]);
+  assert.deepEqual(
+    [daily.startCheckpoint, daily.endCheckpoint, daily.claimDeadlineMs],
+    [21n, 30n, 605_800_000n],
+  );
+  assert.equal(daily.closed, true);
+  assert.equal(Object.keys(state.rounds).length, 2);
+  assert.equal(required(state.vaults[VAULT]).nextRound, 2n);
+  assert.equal(required(state.vaults[VAULT]).lastCheckpoint, 30n);
 
   // Cancellation refunds every commitment in full.
   const cancelled = required(
@@ -429,6 +482,186 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     vesting: null,
   });
 });
+
+for (const settle of [false, true]) {
+  test(`replays holder and reserve custody through ${settle ? "settlement and close" : "permissionless unsettled close"}`, () => {
+    let state = createPresaleEventProjection();
+    const apply = (event: DecodedPresaleEvent) => {
+      state = reducePresaleEvent(state, event);
+      assert.equal(
+        reducePresaleEvent(state, event),
+        state,
+        "replay cannot pay or return twice",
+      );
+    };
+    apply(
+      decode("VaultCreated", {
+        vault_id: VAULT,
+        presale_id: PRESALE,
+        pool_id: id("0x9001"),
+        position_id: id("0x9051"),
+        liquidity: 100n,
+        fee_recipients: [],
+        fee_recipient_bps: [],
+        holder_rewards_bps: 10_000n,
+        protocol_lp_fee_meme_bps: 0n,
+        protocol_lp_fee_quote_bps: 0n,
+        migration_meme_residual: 0n,
+        migration_quote_residual: 0n,
+      }),
+    );
+    apply(
+      decode("FeesCollected", {
+        vault_id: VAULT,
+        gross_meme: 40n,
+        gross_quote: 1_000n,
+        protocol_destination: TREASURY,
+        protocol_meme: 0n,
+        protocol_quote: 0n,
+        fee_recipient_meme: [],
+        fee_recipient_quote: [],
+        holder_rewards_meme: 40n,
+        holder_rewards_quote: 1_000n,
+      }),
+    );
+    apply(
+      decode("RoundPublished", {
+        vault_id: VAULT,
+        round_id: ROUND,
+        number: 0n,
+        start_checkpoint: 0n,
+        end_checkpoint: 10n,
+        claim_deadline_ms: 1_000n,
+        root: "11".repeat(32),
+        manifest_digest: "22".repeat(32),
+        leaf_count: 1n,
+        meme_amount: 10n,
+        quote_amount: 0n,
+        meme_unallocated: 30n,
+        quote_unallocated: 1_000n,
+      }),
+    );
+    const legacy = structuredClone(required(state.rounds[ROUND]));
+    apply(
+      decode("FeesCollected", {
+        vault_id: VAULT,
+        gross_meme: 5n,
+        gross_quote: 0n,
+        protocol_destination: TREASURY,
+        protocol_meme: 0n,
+        protocol_quote: 0n,
+        fee_recipient_meme: [],
+        fee_recipient_quote: [],
+        holder_rewards_meme: 5n,
+        holder_rewards_quote: 0n,
+      }),
+    );
+    apply(
+      decode("BlastHolderMemePaid", {
+        vault_id: VAULT,
+        treasury: TREASURY,
+        meme_amount: 5n,
+        unallocated_meme_remaining: 30n,
+      }),
+    );
+    assert.equal(required(state.vaults[VAULT]).holderRewardsMeme, 30n);
+    apply(
+      decode("BlastUnallocatedMemeReconciled", {
+        vault_id: VAULT,
+        treasury: TREASURY,
+        meme_amount: 30n,
+        unallocated_meme_remaining: 0n,
+      }),
+    );
+    const roundId = id("0xd1");
+    apply(
+      decode("BlastRoundPublished", {
+        vault_id: VAULT,
+        round_id: roundId,
+        number: 1n,
+        start_checkpoint: 21n,
+        end_checkpoint: 30n,
+        claim_deadline_ms: 605_800_000n,
+        root: "33".repeat(32),
+        manifest_digest: "44".repeat(32),
+        leaf_count: 2n,
+        meme_amount: 0n,
+        quote_amount: 970n,
+        meme_unallocated: 0n,
+        quote_unallocated: 0n,
+        treasury: TREASURY,
+        gas_reserve_amount: 30n,
+      }),
+    );
+    const funded = required(state.reserveRounds[roundId]);
+    assert.deepEqual(
+      [funded.quoteRemaining, funded.gasReserveRemaining, funded.treasury],
+      [970n, 30n, TREASURY],
+    );
+    apply(
+      decode("BlastRewardClaimed", {
+        round_id: roundId,
+        index: 0n,
+        beneficiary: ALICE,
+        meme_amount: 0n,
+        quote_amount: 200n,
+        meme_remaining: 0n,
+        quote_remaining: 770n,
+      }),
+    );
+    assert.equal(
+      required(state.reserveRounds[roundId]).gasReserveRemaining,
+      30n,
+    );
+    if (settle) {
+      apply(
+        decode("GasReserveSettled", {
+          vault_id: VAULT,
+          round_id: roundId,
+          number: 1n,
+          treasury: TREASURY,
+          reimbursement_amount: 24n,
+          reserve_returned: 6n,
+          quote_unallocated: 6n,
+        }),
+      );
+      assert.equal(required(state.reserveRounds[roundId]).quoteRemaining, 770n);
+    }
+    apply(
+      decode("BlastRoundClosed", {
+        vault_id: VAULT,
+        round_id: roundId,
+        number: 1n,
+        meme_returned: 0n,
+        quote_returned: 770n,
+        gas_reserve_returned: settle ? 0n : 30n,
+      }),
+    );
+    const closed = required(state.reserveRounds[roundId]);
+    const vault = required(state.vaults[VAULT]);
+    assert.deepEqual(
+      [closed.quoteRemaining, closed.gasReserveRemaining, closed.closed],
+      [0n, 0n, true],
+    );
+    assert.deepEqual(
+      [closed.gasSettled, closed.gasReimbursed, closed.gasReturned],
+      [settle, settle ? 24n : 0n, settle ? 6n : 30n],
+    );
+    assert.equal(
+      vault.holderRewardsQuote + 200n + closed.gasReimbursed,
+      1_000n,
+    );
+    assert.deepEqual(
+      [vault.holderRewardsMeme, vault.holderMemeTreasuryPaid],
+      [0n, 35n],
+    );
+    assert.deepEqual(
+      state.rounds[ROUND],
+      legacy,
+      "funded legacy leaves and roots stay untouched",
+    );
+  });
+}
 
 test("a raise allocation leaves custody the migration's overflow", () => {
   let state = createPresaleEventProjection();

@@ -936,6 +936,156 @@ test("rejects a manifest from the migrators' leaf domain or another vault", () =
   assert.throws(() => publish(presaleManifest, "0xbb"), /another vault/);
 });
 
+test("builds reserve publication, immutable beneficiary claims, settlement and safe close against the new ABI", () => {
+  const vault = shared("0xba", true);
+  const round = shared("0xd1", true);
+  const manifest = buildRewardManifest({
+    vaultId: vault.objectId,
+    number: 2n,
+    startCheckpoint: 21n,
+    endCheckpoint: 30n,
+    allocations: [{ beneficiary: "0xb0b", memeAmount: 0n, quoteAmount: 970n }],
+    leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
+  });
+  const publication = tx.publishHolderRewardReserveRound({
+    ...types,
+    vault,
+    adminCapId: "0xadc",
+    manifest,
+    gasReserveAmount: 30n,
+    claimDeadlineMs: 605_800_000n,
+  });
+  const publishCall = moveCall(
+    publication,
+    "holder_rewards::publish_reserve_round",
+  );
+  assert.deepEqual(argumentKinds(publication, publishCall), [
+    "shared-mut:0xba",
+    ...ADMIN,
+    "shared:0x61",
+    ...Array.from({ length: 10 }, () => "pure"),
+    CLOCK,
+  ]);
+  assert.deepEqual(
+    [3, 4, 5, 9, 10, 11, 12].map((i) =>
+      pureU64(publication, publishCall.arguments[i]),
+    ),
+    [2n, 21n, 30n, 0n, 970n, 30n, 605_800_000n],
+  );
+  const claim = tx.claimHolderRewardReserves({
+    ...types,
+    round,
+    allocations: manifest.allocations,
+  });
+  const settle = tx.settleHolderRewardGasReserve({
+    ...types,
+    vault,
+    round,
+    adminCapId: "0xadc",
+    reimbursementAmount: 24n,
+  });
+  const close = tx.closeHolderRewardReserveRound({ ...types, vault, round });
+  const reconcile = tx.reconcileUnallocatedHolderMeme({
+    ...types,
+    vault,
+    adminCapId: "0xadc",
+    expectedMemeAmount: 100n,
+  });
+  const cases: [Transaction, string, string[]][] = [
+    [
+      publication,
+      "holder_rewards::publish_reserve_round",
+      argumentKinds(publication, publishCall),
+    ],
+    [
+      claim,
+      "holder_rewards::claim_reserve_round",
+      ["shared-mut:0xd1", ...Array.from({ length: 5 }, () => "pure")],
+    ],
+    [
+      settle,
+      "holder_rewards::settle_gas_reserve",
+      ["shared-mut:0xd1", ...ADMIN, "shared-mut:0xba", "pure"],
+    ],
+    [
+      close,
+      "holder_rewards::close_reserve_round",
+      ["shared-mut:0xd1", "shared-mut:0xba", CLOCK],
+    ],
+    [
+      reconcile,
+      "presale_vault::reconcile_unallocated_meme",
+      ["shared-mut:0xba", ...ADMIN, "shared:0x61", "pure"],
+    ],
+  ];
+  for (const [ptb, name, kinds] of cases) {
+    const call = moveCall(ptb, name);
+    const [module, fn] = name.split("::") as [string, string];
+    assert.deepEqual(argumentKinds(ptb, call), kinds, name);
+    assert.equal(call.arguments.length, abiArity(module, fn), name);
+    assert.equal(call.typeArguments.length, abiTypeArity(module, fn), name);
+  }
+  for (const ptb of [publication, settle, reconcile]) {
+    assert.deepEqual(moveCall(ptb, "blast_acl::sign_in").typeArguments, [
+      normalizeStructTag("0x5e::blast_presale_domain::RewardsAdmin"),
+    ]);
+  }
+  assert.equal(
+    pureU64(
+      settle,
+      moveCall(settle, "holder_rewards::settle_gas_reserve").arguments[3],
+    ),
+    24n,
+  );
+  for (const gasReserveAmount of [-1n, 1n << 64n]) {
+    assert.throws(
+      () =>
+        tx.publishHolderRewardReserveRound({
+          ...types,
+          vault,
+          adminCapId: "0xadc",
+          manifest,
+          gasReserveAmount,
+          claimDeadlineMs: 1n,
+        }),
+      /gasReserveAmount/,
+    );
+  }
+  assert.throws(
+    () =>
+      tx.publishHolderRewardReserveRound({
+        ...types,
+        vault: shared("0xbb", true),
+        adminCapId: "0xadc",
+        manifest,
+        gasReserveAmount: 30n,
+        claimDeadlineMs: 1n,
+      }),
+    /another vault/,
+  );
+  assert.throws(
+    () =>
+      tx.publishHolderRewardReserveRound({
+        ...types,
+        vault,
+        adminCapId: "0xadc",
+        manifest: buildRewardManifest({
+          vaultId: vault.objectId,
+          number: 2n,
+          startCheckpoint: 21n,
+          endCheckpoint: 30n,
+          allocations: [
+            { beneficiary: "0xb0b", memeAmount: 0n, quoteAmount: 970n },
+          ],
+          leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
+        }),
+        gasReserveAmount: 30n,
+        claimDeadlineMs: 1n,
+      }),
+    /root mismatch/,
+  );
+});
+
 // === ABI and PTB inspection ===
 
 type AbiFunction = {

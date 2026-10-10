@@ -14,12 +14,15 @@ workflow over a `HolderRewardsStore` that you supply. The transaction builders
 are `MigratorTransactions.publishHolderRewardRound` and `claimHolderRewards`.
 The Node operator is `npm run holder-rewards -- <command> ...` from this
 repository; it runs the same workflow over a file store (`operator/`). The
-packages are unpublished; supply verified deployment IDs.
+builders require verified deployment IDs. Presale's registered October 9
+lineage predates the reserve/routing APIs; those require a new verified
+publication and a safe financial cutover. See [presale rounds](presale.md#allowlists-and-reward-rounds).
 
 ## Rounds
 
 `publish_round` requires the vault's next round number, a checkpoint interval
-that starts where the previous round ended, a 32-byte root and manifest digest,
+that starts where the previous round ended for migrators, or at/after it for
+the new presale daily publication logic, a 32-byte root and manifest digest,
 1 to 65,536 leaves, and a nonzero budget within the vault's unreserved rewards.
 It reserves that budget into the `Round`, which keeps the vault, number, root,
 leaf count, claim bitmap, and funds; the checkpoints and manifest digest are in

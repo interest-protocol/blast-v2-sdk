@@ -317,7 +317,7 @@ must hold that role:
 | presale | `setProtocolDestination` | `blast_presale_domain::TreasuryAdmin` |
 | presale | `setQuoteAllowed` | `blast_presale_domain::ListingAdmin` |
 | presale | `setMigrationWitnessAllowed` | `blast_presale_domain::AdapterAdmin` |
-| presale | `publishHolderRewardRound` | `blast_presale_domain::RewardsAdmin` |
+| presale | `publishHolderRewardRound`, `publishHolderRewardReserveRound`, `settleHolderRewardGasReserve`, `reconcileUnallocatedHolderMeme` | `blast_presale_domain::RewardsAdmin` |
 | blast SUI | `setRedeemFee` | `blast_sui_domain::FeeAdmin` |
 | partners | `register`, `scheduleShare`, `scheduleCap` | `blast_partners::PartnerAdmin` |
 

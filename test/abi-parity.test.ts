@@ -18,7 +18,7 @@ const expectedEvents = {
   launchpad: 28,
   migrators: 14,
   blastSui: 13,
-  presale: 26,
+  presale: 32,
   admin: 15,
   partners: 2,
   aftermathDaoPresale: 2,
