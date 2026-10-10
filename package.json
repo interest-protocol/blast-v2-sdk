@@ -29,6 +29,10 @@
       "types": "./dist/deployments/index.d.ts",
       "default": "./dist/deployments/index.js"
     },
+    "./boosts": {
+      "types": "./dist/boosts/index.d.ts",
+      "default": "./dist/boosts/index.js"
+    },
     "./coin": {
       "types": "./dist/coin/index.d.ts",
       "default": "./dist/coin/index.js"
