@@ -37,6 +37,10 @@
       "types": "./dist/coin/index.d.ts",
       "default": "./dist/coin/index.js"
     },
+    "./cctp": {
+      "types": "./dist/cctp/index.d.ts",
+      "default": "./dist/cctp/index.js"
+    },
     "./holder-rewards": {
       "types": "./dist/holder-rewards/index.d.ts",
       "default": "./dist/holder-rewards/index.js"
@@ -100,7 +104,8 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@noble/hashes": "2.4.0"
+    "@noble/hashes": "2.4.0",
+    "viem": "^2.57.4"
   },
   "publishConfig": {
     "access": "public"
