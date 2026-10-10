@@ -39,6 +39,10 @@ It provides:
 - standalone coins from the coin template (`@interest-protocol/blast-sdk/coin`):
   a plain Sui coin with no Blast dependency.
 
+The `@interest-protocol/blast-sdk/cctp` entry point adds viem-compatible
+parameters and typed factory/forwarder ABIs for EVM USDC deposits to Sui.
+See [CCTP deposits](docs/cctp.md) for reads, forwarding and events.
+
 See [holder rewards](docs/holder-rewards.md) for holder accounting, Merkle
 rounds funded from the vault's rewards share, and permissionless payouts.
 
