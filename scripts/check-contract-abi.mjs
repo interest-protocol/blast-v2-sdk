@@ -66,7 +66,7 @@ const artifactDeclarations = [
     // Source ABI plus approved amendments; the registered Oct09 publication
     // predates reserve/routing APIs. A new verified lineage is needed to call them.
     baseline: {
-      contractsCommit: "ba4f811890684fac4bf087f0fb17dd4417ec409a",
+      contractsCommit: "c36057d4eaea8e284e24fda4fd459eb721731b14",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
@@ -83,7 +83,7 @@ const artifactDeclarations = [
       "contracts ADR 0111: the pool tier belongs to the venue; blast_presale::new, Presale, and PresaleCreated drop tick_spacing and pool_fee_rate, bluefin::new and bluefin::migrate take the VenueConfig, and venue_config::PoolTierReserved<Meme, Quote, Venue> records each Cetus or Bluefin tier",
       "contracts ADR 0099 (amended 2026-10-08): the shared Blast ACL administers the presale; every administrator call takes blast_admin::blast_acl::AdminWitness of one typed blast_presale_domain role (FeeAdmin, TreasuryAdmin, ListingAdmin, AdapterAdmin, RewardsAdmin, UpgradeAdmin) in place of the AdminRegistry and AdminCap, and blast_presale_admin with its SuperAdminCap, AdminCap, AdminRegistry, AdminCapReplaced, and AdminCapRevoked is deleted",
       "contracts ADR 0112: presale holding intervals may follow confirmed skipped days while preserving sequential funded rounds, proof domains and independent claim deadlines",
-      "contracts ADR 0113: republished canonical Round reserves optional separate gas custody, zero reserve selects Blast-paid gas, governed one-shot capped settlement and permissionless reserve return; holder Meme collection pays the governed FeePolicy destination",
+      "contracts ADR 0113: republished canonical Round reserves optional separate gas custody, zero reserve selects Blast-paid gas, governed one-shot capped settlement and permissionless reserve return; holder Meme collection pays the governed FeePolicy destination; publication atomically rejects a changed expected treasury",
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },

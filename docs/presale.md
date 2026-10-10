@@ -390,11 +390,12 @@ prepares the full seven-day deadline from current publication preparation
 time, including when recovering an older holding period.
 
 `publishHolderRewardRound` takes a manifest or verified paged summary, a required
-`gasReserveAmount` in Quote atoms, and `claimDeadlineMs`. The administrator
+`gasReserveAmount` in Quote atoms, `expectedTreasury`, and `claimDeadlineMs`. The administrator
 chooses the reserve for each publication: zero disables reimbursement and Blast
 pays gas; a positive amount funds separate gas custody inside the canonical
 `Round`. Holder leaf balances and proofs never include that reserve. Treasury
-comes from the governed FeePolicy and is fixed in the round.
+comes from the governed FeePolicy and is fixed in the round. Publication checks
+that it still equals the explicit `expectedTreasury` before withdrawing funds.
 
 `settleHolderRewardGasReserve` reimburses the fixed treasury once, capped by the
 positive original reserve, and returns the remainder to the vault. A zero
@@ -437,7 +438,7 @@ choice. `HolderMemePaid` records the vault's treasury transfer.
 
 ## ABI coverage
 
-`abi/production-presale-v1.json` freezes the source ABI at contracts `ba4f811`,
+`abi/production-presale-v1.json` freezes the source ABI at contracts `c36057d`,
 including the approved reserve and holder Meme routing amendments. The
 registered 2026-10-09 publication is still contracts `acad02e`; it does not
 contain those later APIs. The Aftermath vendor keeps its independent `af86ea4`

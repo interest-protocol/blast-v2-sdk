@@ -1361,13 +1361,14 @@ export class PresaleCalls {
    * share and shares the `Round`, claimable until `claimDeadlineMs`.
    */
 
-  /** Funds immutable holder leaves and separate Quote gas custody; treasury comes from the governed FeePolicy. */
+  /** Funds holder leaves and gas custody only if the governed treasury still matches the prepared destination. */
   publishHolderRewardRound(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
       adminWitness: TransactionObjectInput;
       manifest: RewardManifest | RewardManifestSummary;
       gasReserveAmount: bigint;
+      expectedTreasury: string;
       claimDeadlineMs: bigint;
     },
   ) {
@@ -1386,6 +1387,9 @@ export class PresaleCalls {
       rewardAddress(manifest.vaultId) !== rewardAddress(options.vault.objectId)
     )
       throw new TypeError("manifest belongs to another vault");
+    const expectedTreasury = normalizeSuiAddress(options.expectedTreasury);
+    if (!isValidSuiAddress(expectedTreasury))
+      throw new TypeError("invalid expectedTreasury address");
     const gasReserveAmount = requireU64(
       "gasReserveAmount",
       options.gasReserveAmount,
@@ -1402,6 +1406,7 @@ export class PresaleCalls {
           sharedObject(tx, "vault", options.vault, true),
           tx.object(options.adminWitness),
           this.#feePolicy(tx),
+          tx.pure.address(expectedTreasury),
           tx.pure.u64(manifest.number),
           tx.pure.u64(manifest.startCheckpoint),
           tx.pure.u64(manifest.endCheckpoint),

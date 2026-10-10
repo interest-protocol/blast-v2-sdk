@@ -123,7 +123,9 @@ For a presale vault, set `"product": "presale"`, pass the call-ready
 `PresaleDeployment` (`getPresaleDeployment("mainnet")`) as `deployment`, the
 `Vault` ID as `vaultId`, and a Blast `AdminCap` holding the presale's
 `blast_presale_domain::RewardsAdmin` role as `adminCapId`; `publish-tx` signs it
-in. Presale rounds also need `claimWindowMs`: `publish-tx` sets the
+in. Presale publication also requires `expectedTreasury` and an explicit
+`gasReserveAmount` (zero disables reimbursement). A changed governed treasury
+aborts publication before funds move. Presale rounds need `claimWindowMs`: `publish-tx` sets the
 round's claim deadline that far after it builds the transaction. Presale
 manifests use `PRESALE_REWARD_LEAF_DOMAIN`, and `relay` reads the presale
 `holder_rewards::Round`; the commands are otherwise the same.
@@ -138,6 +140,8 @@ manifests use `PRESALE_REWARD_LEAF_DOMAIN`, and `relay` reads the presale
   "vaultId": "0xVERIFIED_PRESALE_VAULT",
   "adminCapId": "0xBLAST_ADMIN_CAP",
   "claimWindowMs": "604800000",
+  "gasReserveAmount": "0",
+  "expectedTreasury": "0xVERIFIED_BLAST_TREASURY",
   "sender": "0xADMIN_MULTISIG",
   "excludedAddresses": []
 }

@@ -644,6 +644,13 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
     claimWindowMs: "604800000",
     gasReserveAmount: "0",
   });
+  await assert.rejects(() => run("publish-tx"), /expectedTreasury/);
+  await writeOperatorJson(configPath, {
+    ...config,
+    claimWindowMs: "604800000",
+    gasReserveAmount: "0",
+    expectedTreasury: address("0xc0"),
+  });
   const preparedAt = Date.now();
   await run("publish-tx");
   const publishTx = Transaction.from(
@@ -656,7 +663,7 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
   );
   assert.equal(call?.package, packageId);
   assert.equal(call?.module, "holder_rewards");
-  const deadlineArgument = call?.arguments[12];
+  const deadlineArgument = call?.arguments[13];
   assert.ok(deadlineArgument?.$kind === "Input");
   const deadlineInput = publishTx.getData().inputs[deadlineArgument.Input];
   assert.ok(deadlineInput?.$kind === "Pure");

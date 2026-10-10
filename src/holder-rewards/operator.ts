@@ -87,6 +87,8 @@ export type HolderRewardsOperatorConfig = {
   claimWindowMs?: string;
   /** Explicit per-publication Quote gas reserve; zero chooses Blast-paid gas. */
   gasReserveAmount?: string;
+  /** Presale only: explicit governed treasury expected by this publication. */
+  expectedTreasury?: string;
   /** Sender set on unsigned publication and relay transactions. */
   sender?: string;
   excludedAddresses?: string[];
@@ -538,6 +540,8 @@ async function loadProduct(
           throw new Error(
             "presale publish-tx needs explicit gasReserveAmount (0 disables reimbursement)",
           );
+        if (config.expectedTreasury === undefined)
+          throw new Error("presale publish-tx needs explicit expectedTreasury");
         return transactions.publishHolderRewardRound({
           ...pair,
           vault,
@@ -545,6 +549,7 @@ async function loadProduct(
           manifest,
           claimDeadlineMs: BigInt(Date.now()) + BigInt(config.claimWindowMs),
           gasReserveAmount: BigInt(config.gasReserveAmount),
+          expectedTreasury: config.expectedTreasury,
         });
       },
       claim: (round, allocations) =>

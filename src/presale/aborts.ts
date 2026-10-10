@@ -60,6 +60,7 @@ export const PRESALE_ABORTS = {
     "EInsufficientBudget",
     "EReserveSettled",
     "EOverReserve",
+    "ETreasuryChanged",
   ],
   cetus: ["EInvalidCoinOrder", "EPositionPoolMismatch", "EWrongCoinPair"],
   bluefin: ["EPositionPoolMismatch", "EInvalidTier", "ESymbolTooLong"],

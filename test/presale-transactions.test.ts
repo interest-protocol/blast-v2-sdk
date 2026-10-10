@@ -523,6 +523,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         adminCapId: "0xadc",
         manifest,
         gasReserveAmount: 0n,
+        expectedTreasury: "0xc0",
         claimDeadlineMs: 9_000n,
       }),
       "holder_rewards::publish_round",
@@ -530,7 +531,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         "shared-mut:0xba",
         ...ADMIN,
         "shared:0x61",
-        ...Array(10).fill("pure"),
+        ...Array(11).fill("pure"),
         CLOCK,
       ],
     ],
@@ -1066,6 +1067,7 @@ test("rejects a manifest from the migrators' leaf domain or another vault", () =
       adminWitness: "0xadc",
       manifest,
       gasReserveAmount: 0n,
+      expectedTreasury: "0xc0",
       claimDeadlineMs: 1n,
     });
   assert.throws(
@@ -1102,6 +1104,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     adminCapId: "0xadc",
     manifest,
     gasReserveAmount: 30n,
+    expectedTreasury: "0xc0",
     claimDeadlineMs: 605_800_000n,
   });
   const publishCall = moveCall(publication, "holder_rewards::publish_round");
@@ -1109,14 +1112,39 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     "shared-mut:0xba",
     ...ADMIN,
     "shared:0x61",
-    ...Array.from({ length: 10 }, () => "pure"),
+    ...Array.from({ length: 11 }, () => "pure"),
     CLOCK,
   ]);
   assert.deepEqual(
-    [3, 4, 5, 9, 10, 11, 12].map((i) =>
+    [4, 5, 6, 10, 11, 12, 13].map((i) =>
       pureU64(publication, publishCall.arguments[i]),
     ),
     [2n, 21n, 30n, 0n, 970n, 30n, 605_800_000n],
+  );
+  const treasuryArgument = publishCall.arguments[3];
+  assert.ok(treasuryArgument?.$kind === "Input");
+  const treasuryInput = publication.getData().inputs[treasuryArgument.Input];
+  assert.ok(treasuryInput?.$kind === "Pure");
+  assert.equal(
+    bcs.Address.parse(fromBase64(treasuryInput.Pure.bytes)),
+    normalizeSuiAddress("0xc0"),
+  );
+  const options = {
+    ...types,
+    vault,
+    adminCapId: "0xadc",
+    manifest,
+    gasReserveAmount: 30n,
+    expectedTreasury: "0xc0",
+    claimDeadlineMs: 605_800_000n,
+  };
+  assert.throws(() =>
+    tx.publishHolderRewardRound({ ...options, expectedTreasury: "invalid" }),
+  );
+  Reflect.deleteProperty(options, "expectedTreasury");
+  assert.throws(
+    () => tx.publishHolderRewardRound(options),
+    "treasury has no implicit fallback",
   );
   const { allocations: proofs, ...header } = manifest;
   const summary: RewardManifestSummary = {
@@ -1131,6 +1159,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
       adminCapId: "0xadc",
       manifest: input,
       gasReserveAmount: 30n,
+      expectedTreasury: "0xc0",
       claimDeadlineMs: 605_800_000n,
     });
   assert.deepEqual(publishSummary(summary).getData(), publication.getData());
@@ -1152,6 +1181,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
         adminCapId: "0xadc",
         manifest: { ...summary, leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN },
         gasReserveAmount: 30n,
+        expectedTreasury: "0xc0",
         claimDeadlineMs: 1n,
       }),
     /leaf domain mismatch/,
@@ -1219,6 +1249,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
           adminCapId: "0xadc",
           manifest,
           gasReserveAmount,
+          expectedTreasury: "0xc0",
           claimDeadlineMs: 1n,
         }),
       /gasReserveAmount/,
@@ -1232,6 +1263,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
         adminCapId: "0xadc",
         manifest,
         gasReserveAmount: 30n,
+        expectedTreasury: "0xc0",
         claimDeadlineMs: 1n,
       }),
     /another vault/,
@@ -1253,6 +1285,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
           leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
         }),
         gasReserveAmount: 30n,
+        expectedTreasury: "0xc0",
         claimDeadlineMs: 1n,
       }),
     /root mismatch/,
