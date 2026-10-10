@@ -57,6 +57,9 @@ export const PRESALE_ABORTS = {
     "EWrongVault",
     "EClaimsStillOpen",
     "EEmptyClaim",
+    "EInsufficientBudget",
+    "EReserveSettled",
+    "EOverReserve",
   ],
   cetus: ["EInvalidCoinOrder", "EPositionPoolMismatch", "EWrongCoinPair"],
   bluefin: ["EPositionPoolMismatch", "EInvalidTier", "ESymbolTooLong"],
@@ -66,6 +69,7 @@ export const PRESALE_ABORTS = {
     "EWrongPresaleCap",
     "EProtocolLpFeesUnchanged",
     "EWrongPartner",
+    "ELegacyMemeMismatch",
   ],
   fee_policy: ["EInvalidFees", "EFeesUnchanged", "EInvalidDestination"],
   creation_policy: [

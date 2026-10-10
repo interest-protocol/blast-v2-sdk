@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "acad02ecd6c1b4be70f7b9c611c8d23cb318e9e5",
+    "contractsCommit": "78739ce84255a63991ca8b3f91533f280baead9e",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",

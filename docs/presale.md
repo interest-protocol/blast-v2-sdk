@@ -446,8 +446,11 @@ Meme balance, so transferred Meme is never reported as retained custody.
 
 ## ABI coverage
 
-`abi/production-presale-v1.json` freezes the package at contracts `acad02e`,
-the 2026-10-09 mainnet publication, with the approved amendments it lists.
+`abi/production-presale-v1.json` freezes the source ABI at contracts `78739ce`,
+including the approved reserve and holder Meme routing amendments. The
+registered 2026-10-09 publication is still contracts `acad02e`; it does not
+contain those later APIs. The Aftermath vendor keeps its independent `af86ea4`
+source freeze.
 Every public function is classified:
 
 - **Builders:** all 19 `blast_presale` functions; `fee_policy` `set_fees` and

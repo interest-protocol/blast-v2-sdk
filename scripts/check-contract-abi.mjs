@@ -66,7 +66,7 @@ const artifactDeclarations = [
     // Source ABI plus approved amendments; the registered Oct09 publication
     // predates reserve/routing APIs. A new verified lineage is needed to call them.
     baseline: {
-      contractsCommit: "acad02ecd6c1b4be70f7b9c611c8d23cb318e9e5",
+      contractsCommit: "78739ce84255a63991ca8b3f91533f280baead9e",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
