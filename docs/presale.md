@@ -14,9 +14,15 @@ The package publishes before the rest of Blast (contracts ADR 0099), after
 `blast_admin` and `blast_partners`, so it can register on its own.
 `getPresaleDeployment(network)` returns the complete Blast release's presale
 once one is registered, and the standalone release
-(`BLAST_PRESALE_DEPLOYMENTS`) until then. Neither holds one yet: the package
-at `0x76cb…8400` administers itself with an `AdminRegistry`, so these builders
-cannot drive it.
+(`BLAST_PRESALE_DEPLOYMENTS`) until then. Mainnet currently registers the
+2026-10-09 ACL publication. The earlier package at `0x76cb…8400` administers
+itself with an `AdminRegistry`, so these builders cannot drive it.
+
+The reserve and holder Meme routing APIs below require a new, verified presale
+publication. They are absent from the registered October 9 lineage, whose
+dependency-only upgrade policy cannot change Move logic. Existing deployment
+IDs and funded legacy rounds remain unchanged. These source bindings authorize
+no live publication, payment, sweep, or activation.
 
 ```ts
 import { getPresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
@@ -69,11 +75,13 @@ stage; `newCetusPresale` and `newBluefinPresale` build all three.
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee, from gas unless `useGasCoin: false`. Pass the sale's `partner` when it names one, and the same PTB pays it. |
 | Pay Blast and its partner | `payProtocolFeesWithPartner` | Anyone may call, once, after a partnered sale migrates; use it on its own for a sale another migrator migrated. See [Partners](#partners). |
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. Under participant vesting, each claim locks the participant's tokens in a new schedule starting at that claim. |
-| Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, or holds it on a partnered vault, then every fee recipient. The holder-reward share stays in the vault. Pass the vault's `partner` when it names one, and the same PTB pays what the vault held. |
+| Fees | `collectCetusFees`, `collectBluefinFees` | Pays Blast its share, or holds it on a partnered vault, then every fee recipient. On the new routing lineage, holder Quote stays in the vault and only the holder Meme remainder goes to the governed treasury; legacy collection retains both. Pass the vault's `partner` when it names one, and the same PTB pays what the vault held. |
 | Pay Blast's LP fees and the partner | `payProtocolLpFeesWithPartner` | Anyone may call, on a partnered vault; holding nothing pays nothing. See [Partners](#partners). |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
 | Own position | `newCetusVault`, `newBluefinVault` | Anyone, for their own position: locks it in a new `Vault` with zero presale IDs, the given fee split, and an optional accepted partner (contracts ADR 0109). |
 | Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication signs in as `RewardsAdmin` (`adminCapId`). |
+| Reserve-backed holder rewards | `publishHolderRewardReserveRound`, `claimHolderRewardReserves`, `settleHolderRewardGasReserve`, `closeHolderRewardReserveRound` | New lineage only. Publication and terminal settlement sign in as `RewardsAdmin`; claims and actual close are permissionless. |
+| Legacy unallocated Meme | `reconcileUnallocatedHolderMeme` | New safe lineage/migration only, after obligation reconciliation. `RewardsAdmin`, exact `expectedMemeAmount`, governed recipient; funded leaves stay untouched. |
 | Cap | `destroyCap` | After cancellation only. |
 | Blast's rates | `setProtocolFees` | Signs in as `FeeAdmin`. Applies to presales created afterward. |
 | Blast's rates on one sale | `setPresaleProtocolFees` | Signs in as `FeeAdmin`. Only before the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
@@ -98,7 +106,7 @@ must hold that role:
 | `TreasuryAdmin` | `setProtocolDestination` |
 | `ListingAdmin` | `setQuoteAllowed` |
 | `AdapterAdmin` | `setMigrationWitnessAllowed` |
-| `RewardsAdmin` | `publishHolderRewardRound` |
+| `RewardsAdmin` | `publishHolderRewardRound`, `publishHolderRewardReserveRound`, `settleHolderRewardGasReserve`, `reconcileUnallocatedHolderMeme` |
 | `UpgradeAdmin` | none: upgrade custody stays with the CLI publish tooling |
 
 `PresaleCalls.roleType(role)` names a role's Move type for
@@ -279,12 +287,41 @@ const manifest = buildRewardManifest({ ...round, leafDomain: PRESALE_REWARD_LEAF
 
 `publishHolderRewardRound` rejects a manifest from any other domain or vault.
 
+Presale publication permits `previous published end <= start < end`; a
+confirmed skipped day creates no funded object or published number. The
+holding interval and claim deadline are independent. Mainnet daily publication
+prepares the full seven-day deadline from current publication preparation
+time, including when recovering an older holding period.
+
+`publishHolderRewardReserveRound` takes the same manifest, an exact
+`gasReserveAmount` in Quote atoms, and `claimDeadlineMs`. Its distinct
+`BlastRewardRound` holds the immutable leaf balances separately from gas.
+The bound treasury is read from the deployment's governed `FeePolicy`; no
+publication or settlement caller chooses a recipient. The SDK applies no USD
+conversion or eligibility policy.
+
+`settleHolderRewardGasReserve` pays `reimbursementAmount` Quote atoms to that
+bound treasury once and returns the unused reserve to the matching vault.
+The contract rejects over-reserve, duplicate, unauthorized, and wrong-vault
+settlement. `closeHolderRewardReserveRound` returns unclaimed holder balances
+and any unsettled reserve to the bound vault after the independent deadline.
+Elapsed time alone returns nothing; authority loss cannot prevent actual close.
+
+New collection retains all existing per-asset protocol, partner, and creator
+rounding, sends only the holder Meme remainder to the current governed
+destination, and leaves Quote for rewards. It does not transfer legacy
+unallocated Meme. `reconcileUnallocatedHolderMeme` is a separate restricted
+call bound to the exact current unallocated balance. Existing funded Meme
+leaves and unresolved commitments require preservation and reconciliation
+before activation; old callable routing bypasses block activation.
+
 ## Reads and replay
 
 `PresaleClient` (`blastPresale()` extension) reads a `Presale`, a wallet's
-`Commitment` dynamic field, a `Vault`, a reward `Round`, the
+`Commitment` dynamic field, a `Vault`, a reward `Round`, the distinct
+`BlastRewardRound` (`getHolderRewardReserveRound`), the
 `FeePolicy`, and the `CreationPolicy`.
-`decodePresaleEvent` decodes the 20
+`decodePresaleEvent` decodes the 26
 events generic over `<SaleToken, Quote>`. `VaultCreated` and
 `PoolTierReserved` add a `Venue` type argument; the reducer keeps each
 `PoolTierReserved` in `poolTiers`, keyed by sale token, since it precedes the
@@ -299,6 +336,14 @@ uncapped start from it, and `participants` counts the wallets still holding a
 commitment, which `Claimed.remaining_participants` reports after each claim;
 the claim that leaves one takes the rounding remainder.
 
+Legacy `rounds` and new `reserveRounds` are separate projections. New round
+reads expose exact holder custody, bound treasury, and
+`gasReserveRemaining`: `null` means terminal settlement; `0n` can mean an
+unsettled zero reserve. Replay retains the original reserve, actual reimbursed
+and returned atoms, and actual close. `BlastHolderMemePaid` and
+`BlastUnallocatedMemeReconciled` update the vault's authoritative unallocated
+Meme balance, so transferred Meme is never reported as retained custody.
+
 ## ABI coverage
 
 `abi/production-presale-v1.json` freezes the package at contracts `84e9ada`,
@@ -309,7 +354,9 @@ with the approved amendments it lists. Every public function is classified:
   `set_migration_witness_allowed`, `add_partner`, and `remove_partner`; `cetus` and `bluefin` `new`, `migrate`, and
   `collect_fees`; `presale_vault` `claim_migration_residuals` and
   `set_protocol_lp_fees`; and
-  `holder_rewards` `publish_round`, `claim`, and `close_round`.
+  `holder_rewards` `publish_round`, `claim`, `close_round`,
+  `publish_reserve_round`, `claim_reserve_round`, `settle_gas_reserve`, and
+  `close_reserve_round`; and `presale_vault::reconcile_unallocated_meme`.
 - **Compositional:** `bps::new`, which every rate argument passes through.
 - **Move composition:** `blast_presale::new` and `migrate`, which a migrator's
   own module calls with its sealed witness; no transaction can construct one.

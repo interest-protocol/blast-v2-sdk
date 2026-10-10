@@ -9,6 +9,7 @@ import {
   decodePresaleCreationPolicyObject,
   decodePresaleFeePolicyObject,
   decodePresaleObject,
+  decodePresaleRewardReserveRoundObject,
   decodePresaleRewardRoundObject,
   decodePresaleVaultObject,
   eligibilityPolicyBcs,
@@ -401,6 +402,64 @@ test("decodes a holder-reward Round and its claim bitmap", () => {
   assert.equal(presaleRewardIsClaimed(round, 256n), true);
   assert.equal(presaleRewardIsClaimed(round, 4n), false);
   assert.throws(() => presaleRewardIsClaimed(round, 300n), /out of bounds/);
+});
+
+test("reads separate reserve custody in Move field order and rejects legacy type substitution", () => {
+  const type = `${pkg}::holder_rewards::BlastRewardRound<0xa::meme::MEME, 0x2::sui::SUI>`;
+  const fields = [
+    ...addr("0xd1"),
+    ...addr("0xba"),
+    ...u64(2n),
+    ...u64(5_000n),
+    ...bytes(root),
+    ...u64(300n),
+    ...vec([le(1n << 5n, 32), le(1n, 32)]),
+    ...u64(40n),
+    ...u64(970n),
+    ...addr("0x7ea5"),
+  ];
+  for (const reserve of [30n, 0n, null]) {
+    const value = object(
+      type,
+      Uint8Array.from([
+        ...fields,
+        ...(reserve === null ? [0] : [1, ...u64(reserve)]),
+      ]),
+      "0xd1",
+    );
+    const round = decodePresaleRewardReserveRoundObject(value, pkg);
+    assert.equal(round.treasury, normalizeSuiAddress("0x7ea5"));
+    assert.equal(round.gasReserveRemaining, reserve);
+    assert.equal(round.quoteRemaining, 970n);
+    assert.equal(presaleRewardIsClaimed(round, 256n), true);
+    assert.throws(
+      () => decodePresaleRewardRoundObject(value, pkg),
+      /not a presale/,
+    );
+    assert.throws(
+      () =>
+        decodePresaleRewardReserveRoundObject(
+          {
+            ...value,
+            type: type.replace("BlastRewardRound", "Round"),
+          },
+          pkg,
+        ),
+      /not a presale/,
+    );
+    assert.throws(
+      () => decodePresaleRewardReserveRoundObject(value, "0x99"),
+      /not a presale/,
+    );
+    assert.throws(
+      () =>
+        decodePresaleRewardReserveRoundObject(
+          { ...value, objectId: "0xd2" },
+          pkg,
+        ),
+      /mismatched UID/,
+    );
+  }
 });
 
 test("reads a wallet's commitment dynamic field, null when absent", async () => {

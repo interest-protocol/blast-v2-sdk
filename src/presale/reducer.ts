@@ -122,6 +122,8 @@ export type PresaleVaultProjection = {
   /** Holder-reward share not yet reserved by a round. */
   holderRewardsMeme: bigint;
   holderRewardsQuote: bigint;
+  /** Cumulative holder Meme actually paid to governed treasury, outside funded leaves. */
+  holderMemeTreasuryPaid: bigint;
   nextRound: bigint;
   lastCheckpoint: bigint | null;
   /** Cumulative LP fees paid to each fee recipient, aligned with `feeRecipients`. */
@@ -155,6 +157,16 @@ export type PresaleRewardRoundProjection = {
   closed: boolean;
 };
 
+export type PresaleRewardReserveRoundProjection =
+  PresaleRewardRoundProjection & {
+    treasury: string;
+    gasReserveAmount: bigint;
+    gasReserveRemaining: bigint;
+    gasReimbursed: bigint;
+    gasReturned: bigint;
+    gasSettled: boolean;
+  };
+
 /**
  * The pool tier a Cetus or Bluefin sale's venue recorded (contracts ADR 0111),
  * emitted just before its `PresaleCreated`. A sale token has one sale.
@@ -175,6 +187,7 @@ export type PresaleEventProjection = {
   poolTiers: Readonly<Record<string, PresalePoolTierProjection>>;
   vaults: Readonly<Record<string, PresaleVaultProjection>>;
   rounds: Readonly<Record<string, PresaleRewardRoundProjection>>;
+  reserveRounds: Readonly<Record<string, PresaleRewardReserveRoundProjection>>;
 };
 
 export function createPresaleEventProjection(): PresaleEventProjection {
@@ -187,6 +200,7 @@ export function createPresaleEventProjection(): PresaleEventProjection {
     poolTiers: {},
     vaults: {},
     rounds: {},
+    reserveRounds: {},
   };
 }
 
@@ -398,6 +412,7 @@ function applyVaultEvent(
             migrationQuoteResidual: payload.migration_quote_residual,
             holderRewardsMeme: 0n,
             holderRewardsQuote: 0n,
+            holderMemeTreasuryPaid: 0n,
             nextRound: 0n,
             lastCheckpoint: null,
             feeRecipientMemePaid: feeRecipients.map(() => 0n),
@@ -462,6 +477,88 @@ function applyVaultEvent(
         migrationMemeResidual: 0n,
         migrationQuoteResidual: 0n,
       }));
+    case "BlastHolderMemePaid":
+    case "BlastUnallocatedMemeReconciled": {
+      const { payload } = event;
+      return updateVault(state, payload.vault_id, (vault) => ({
+        holderRewardsMeme: payload.unallocated_meme_remaining,
+        holderMemeTreasuryPaid:
+          vault.holderMemeTreasuryPaid + payload.meme_amount,
+      }));
+    }
+    case "BlastRoundPublished": {
+      const { payload } = event;
+      const updated = updateVault(state, payload.vault_id, () => ({
+        holderRewardsMeme: payload.meme_unallocated,
+        holderRewardsQuote: payload.quote_unallocated,
+        nextRound: payload.number + 1n,
+        lastCheckpoint: payload.end_checkpoint,
+      }));
+      return {
+        ...updated,
+        reserveRounds: {
+          ...state.reserveRounds,
+          [payload.round_id]: {
+            roundId: payload.round_id,
+            vaultId: payload.vault_id,
+            number: payload.number,
+            startCheckpoint: payload.start_checkpoint,
+            endCheckpoint: payload.end_checkpoint,
+            claimDeadlineMs: payload.claim_deadline_ms,
+            root: payload.root,
+            manifestDigest: payload.manifest_digest,
+            leafCount: payload.leaf_count,
+            memeRemaining: payload.meme_amount,
+            quoteRemaining: payload.quote_amount,
+            paidIndexes: {},
+            closed: false,
+            treasury: payload.treasury,
+            gasReserveAmount: payload.gas_reserve_amount,
+            gasReserveRemaining: payload.gas_reserve_amount,
+            gasReimbursed: 0n,
+            gasReturned: 0n,
+            gasSettled: false,
+          },
+        },
+      };
+    }
+    case "BlastRewardClaimed": {
+      const { payload } = event;
+      return updateReserveRound(state, payload.round_id, (round) => ({
+        memeRemaining: payload.meme_remaining,
+        quoteRemaining: payload.quote_remaining,
+        paidIndexes: { ...round.paidIndexes, [payload.index.toString()]: true },
+      }));
+    }
+    case "GasReserveSettled": {
+      const { payload } = event;
+      const returned = updateVault(state, payload.vault_id, () => ({
+        holderRewardsQuote: payload.quote_unallocated,
+      }));
+      return updateReserveRound(returned, payload.round_id, () => ({
+        gasReserveRemaining: 0n,
+        gasReimbursed: payload.reimbursement_amount,
+        gasReturned: payload.reserve_returned,
+        gasSettled: true,
+      }));
+    }
+    case "BlastRoundClosed": {
+      const { payload } = event;
+      const returned = updateVault(state, payload.vault_id, (vault) => ({
+        holderRewardsMeme: vault.holderRewardsMeme + payload.meme_returned,
+        holderRewardsQuote:
+          vault.holderRewardsQuote +
+          payload.quote_returned +
+          payload.gas_reserve_returned,
+      }));
+      return updateReserveRound(returned, payload.round_id, (round) => ({
+        memeRemaining: 0n,
+        quoteRemaining: 0n,
+        gasReserveRemaining: 0n,
+        gasReturned: round.gasReturned + payload.gas_reserve_returned,
+        closed: true,
+      }));
+    }
     case "RoundPublished": {
       const { payload } = event;
       const updated = updateVault(state, payload.vault_id, () => ({
@@ -676,5 +773,23 @@ function updateRound(
   return {
     ...state,
     rounds: { ...state.rounds, [roundId]: { ...round, ...update(round) } },
+  };
+}
+
+function updateReserveRound(
+  state: PresaleEventProjection,
+  roundId: string,
+  update: (
+    round: PresaleRewardReserveRoundProjection,
+  ) => Partial<PresaleRewardReserveRoundProjection>,
+): PresaleEventProjection {
+  const round = state.reserveRounds[roundId];
+  if (!round) return state;
+  return {
+    ...state,
+    reserveRounds: {
+      ...state.reserveRounds,
+      [roundId]: { ...round, ...update(round) },
+    },
   };
 }

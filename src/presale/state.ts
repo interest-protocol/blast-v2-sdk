@@ -387,6 +387,21 @@ export const presaleRewardRoundBcs = bcs.struct("Round", {
   quote: suiBalanceBcs,
 });
 
+/** Separate custody type; legacy `Round` calls cannot consume its gas reserve. */
+export const presaleRewardReserveRoundBcs = bcs.struct("BlastRewardRound", {
+  id: suiUidBcs,
+  vault_id: suiIdBcs,
+  number: u64,
+  claim_deadline_ms: u64,
+  root: digest,
+  leaf_count: u64,
+  claimed_bitmap: bcs.vector(bcs.u256()),
+  meme: suiBalanceBcs,
+  quote: suiBalanceBcs,
+  treasury: address,
+  gas_reserve: bcs.option(suiBalanceBcs),
+});
+
 // === Decoded objects ===
 
 export type PresaleObject = {
@@ -516,6 +531,12 @@ export type PresaleRewardRoundState = SharedObjectReference<true> & {
   claimedBitmap: bigint[];
   memeRemaining: bigint;
   quoteRemaining: bigint;
+};
+
+export type PresaleRewardReserveRoundState = PresaleRewardRoundState & {
+  treasury: string;
+  /** Quote atoms still reserved; null after terminal settlement, including settlement of zero. */
+  gasReserveRemaining: bigint | null;
 };
 
 /**
@@ -676,6 +697,35 @@ export function decodePresaleRewardRoundObject(
   };
 }
 
+export function decodePresaleRewardReserveRoundObject(
+  object: PresaleObject,
+  originalPackageId: string,
+): PresaleRewardReserveRoundState {
+  const [memeType, quoteType] = pairTypes(
+    object,
+    "holder_rewards",
+    "BlastRewardRound",
+    originalPackageId,
+  );
+  const parsed = presaleRewardReserveRoundBcs.parse(object.content);
+  return {
+    ...sharedIdentity(object, parsed.id.id.bytes),
+    memeType,
+    quoteType,
+    vaultId: normalizeSuiObjectId(parsed.vault_id.bytes),
+    number: parsed.number,
+    claimDeadlineMs: parsed.claim_deadline_ms,
+    root: parsed.root,
+    leafCount: parsed.leaf_count,
+    claimedBitmap: parsed.claimed_bitmap.map(BigInt),
+    memeRemaining: BigInt(parsed.meme.value),
+    quoteRemaining: BigInt(parsed.quote.value),
+    treasury: parsed.treasury,
+    gasReserveRemaining:
+      parsed.gas_reserve === null ? null : BigInt(parsed.gas_reserve.value),
+  };
+}
+
 export function decodePresaleFeePolicyObject(
   object: PresaleObject,
   originalPackageId?: string,
@@ -747,6 +797,17 @@ export async function getPresaleRewardRound(
   originalPackageId: string,
 ): Promise<PresaleRewardRoundState> {
   return decodePresaleRewardRoundObject(
+    await getSharedObject(client, objectId),
+    originalPackageId,
+  );
+}
+
+export async function getPresaleRewardReserveRound(
+  client: ClientWithCoreApi,
+  objectId: string,
+  originalPackageId: string,
+): Promise<PresaleRewardReserveRoundState> {
+  return decodePresaleRewardReserveRoundObject(
     await getSharedObject(client, objectId),
     originalPackageId,
   );
