@@ -593,7 +593,7 @@ unused, so every publish verifies.
 
 `@interest-protocol/blast-sdk/presale` builds every product route of the
 `blast_presale` package (published on mainnet on 2026-10-11 from contracts
-`acad02e`) and of the Aftermath DAO-pool vendor package that links it. It
+`4b170eef`) and of the Aftermath DAO-pool vendor package that links it. It
 previews creation, commitments, and
 claims exactly as the contract enforces them, and it decodes and replays the
 package's objects and events. See [docs/presale.md](docs/presale.md).
