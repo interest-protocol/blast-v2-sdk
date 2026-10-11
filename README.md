@@ -236,7 +236,7 @@ config of another lineage is a `BluefinPoolCreationFeeError`; there is no
 default.
 
 Presale publishes on its own, so `BLAST_PRESALE_DEPLOYMENTS` registers its
-standalone mainnet release (the 2026-10-09 publication, administered through
+standalone mainnet release (the fresh 2026-10-11 publication, administered through
 the `blast_admin` ACL, with the Aftermath DAO-pool vendor under `aftermath`),
 and `getPresaleDeployment(network)` prefers the complete release's presale
 once `BLAST_DEPLOYMENTS` has one.
@@ -592,7 +592,7 @@ unused, so every publish verifies.
 ## Presale
 
 `@interest-protocol/blast-sdk/presale` builds every product route of the
-`blast_presale` package (published on mainnet on 2026-10-09 from contracts
+`blast_presale` package (published on mainnet on 2026-10-11 from contracts
 `acad02e`) and of the Aftermath DAO-pool vendor package that links it. It
 previews creation, commitments, and
 claims exactly as the contract enforces them, and it decodes and replays the

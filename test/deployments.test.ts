@@ -267,16 +267,16 @@ test("rejects placeholder package IDs", () => {
   );
 });
 
-test("registers the 2026-10-09 mainnet presale, administered through the ACL", () => {
+test("registers the 2026-10-11 mainnet presale, administered through the ACL", () => {
   const presale = getPresaleDeployment("mainnet");
   assert.equal(presale, BLAST_PRESALE_DEPLOYMENTS.mainnet);
   assert.equal(
     presale.originalPackageId,
-    "0x2d300f3d8819c6e09fd1558e518c2ffab97b324479843d4f94b561b10a441fd0",
+    "0xf9c404c0368cf014b44cac79dc5037da2aa34e16952673433d1c87ae3d2f8ca4",
   );
   assert.equal(
     presale.packageId,
-    "0x33897a946e231652f00d712834665831ada3e3ffb3cd3ef11f4a449058ab43c6",
+    "0xf9c404c0368cf014b44cac79dc5037da2aa34e16952673433d1c87ae3d2f8ca4",
   );
   assert.equal(
     presale.admin.acl.objectId,

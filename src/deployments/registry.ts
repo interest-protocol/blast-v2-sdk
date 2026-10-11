@@ -126,35 +126,31 @@ export function definePresaleDeployment(
 }
 
 /**
- * Canonical standalone presale releases. Mainnet is the 2026-10-09
- * publication from contracts `d2a5bf6` (contracts
- * `deployments/sui/mainnet/2026-10-09-blast-presale.json`), administered
- * through the `blast_admin` ACL published with it; `packageId` is its
- * version 2, a dependency-only upgrade with identical modules. The earlier package at
- * `0x76cb…8400` administers itself with an `AdminRegistry`, which these
- * builders cannot drive.
+ * Canonical standalone presale releases. Mainnet is the fresh 2026-10-11
+ * version-one publication from contracts `4b170eef`, using the shared
+ * immutable blast_admin ACL and the freshly published Aftermath vendor.
  */
 export const BLAST_PRESALE_DEPLOYMENTS: Readonly<
   Partial<Record<BlastNetwork, PresaleDeployment>>
 > = Object.freeze({
   mainnet: definePresaleDeployment({
     packageId:
-      "0x33897a946e231652f00d712834665831ada3e3ffb3cd3ef11f4a449058ab43c6",
+      "0xf9c404c0368cf014b44cac79dc5037da2aa34e16952673433d1c87ae3d2f8ca4",
     originalPackageId:
-      "0x2d300f3d8819c6e09fd1558e518c2ffab97b324479843d4f94b561b10a441fd0",
+      "0xf9c404c0368cf014b44cac79dc5037da2aa34e16952673433d1c87ae3d2f8ca4",
     venueConfig: {
       objectId:
-        "0x5399abde7eeb48fec9d38d048d9faebe2a51a82df03f35ae8feb52e7d9ef32dc",
+        "0xebfd4e31f8fddf1b8d5b4a45835c7397156f6f62eeefef46b7b1b42aa29c6d39",
       initialSharedVersion: "1",
     },
     creationPolicy: {
       objectId:
-        "0xe5a202e29aa436e75d64af0eb286572bf32e35e0ce0f39ddf3ac4154d47d93a5",
+        "0x4ce001c53e9da536fc7d04a87383e90ca76e27492b3cad92cf9e167af0dc83d8",
       initialSharedVersion: "1",
     },
     feePolicy: {
       objectId:
-        "0xe9eccc8b1281998240372a113b494ecfc7f57f47d3545880988ae3c05624c348",
+        "0x3da5bfd3275991b70a445a2022e07925ce9a927dd47d7c3fd583563089a9afae",
       initialSharedVersion: "1",
     },
     admin: {
@@ -169,7 +165,7 @@ export const BLAST_PRESALE_DEPLOYMENTS: Readonly<
     // The immutable Aftermath DAO-pool vendor published with it.
     aftermath: defineAftermathPresaleDeployment({
       packageId:
-        "0xac58d338925ac96304ca573a4dab80d442df6f2427291bcddbea7fc65279678e",
+        "0x2fe674f6c42f49b7647be760a10f89f843396b9294af8fab5bfbc929fb7aab01",
     }),
   }),
 });
