@@ -24,9 +24,7 @@ publication and a safe financial cutover. See [presale rounds](presale.md#allowl
 that starts where the previous round ended for migrators, or at/after it for
 the new presale daily publication logic, a 32-byte root and manifest digest,
 1 to 65,536 leaves, and a nonzero budget within the vault's unreserved rewards.
-It reserves that budget into the `Round`, which keeps the vault, number, root,
-leaf count, claim bitmap, and funds; the checkpoints and manifest digest are in
-its `RoundPublished` event. The leaf is the Blake2b-256 hash of
+It reserves that budget into the `Round`. The leaf is the Blake2b-256 hash of
 `0x00 || "blast-holder-rewards-v1" || bcs(vault ID, round, index, beneficiary,
 meme, quote)`, internal nodes hash `0x01 || left || right`, and a lone last node
 pairs with itself. `buildRewardManifest` reproduces the contracts' vector
@@ -39,7 +37,6 @@ const manifest = buildRewardManifest({
   startCheckpoint,
   endCheckpoint,
   allocations,
-  leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN, // presale rounds: PRESALE_REWARD_LEAF_DOMAIN
 });
 const publish = client.blastMigrators.tx.publishHolderRewardRound({
   memeType,
@@ -52,13 +49,41 @@ const relay = client.blastMigrators.tx.claimHolderRewards({
   memeType,
   quoteType,
   round, // the shared Round, mutable
-  allocations: pendingRewardAllocations(
-    roundState,
-    manifest,
-    MIGRATOR_REWARD_LEAF_DOMAIN,
-  ),
+  allocations: pendingRewardAllocations(roundState, manifest),
 });
 ```
+
+## Paged construction
+
+For large daily presale allocations, `allocateHolderRewardPage` divides every
+wallet's weight by the same frozen global weight. Supply distinct qualifying
+wallets in canonical address order and carry each result's `lastAddress` into
+the next page. Count qualifying wallets before atomic-unit flooring, sum
+`pageWeight` to check complete global coverage, and sum `quoteAllocated` to
+calculate holder-owned dust. This helper applies no pricing or eligibility policy.
+
+`buildRewardManifestPages` consumes a `RewardManifestPageStore` with bounded
+allocation, Merkle-hash and proof reads/writes. It preserves the existing BCS
+digest, leaf domains, positional indices and odd-node pairing byte for byte.
+The caller selects a positive bounded `pageSize`; the 65,536 positive-leaf limit
+still applies. Every output page is read back, every proof is checked against
+the root, and the function returns a `RewardManifestSummary` only after all
+pages complete. Working memory grows with the selected page size and proof
+depth rather than all beneficiaries.
+
+The store must bind one immutable allocation snapshot and output namespace,
+reject overwrites with different content, and resolve writes only after
+durability. Repeating construction after a crash replays identical writes.
+Snapshot identity, hashes, durable progress, locks and readiness evidence belong
+to the caller's persistence layer. Keep proofs publicly available through a
+paged endpoint; a summary alone cannot recover them.
+
+`PresaleTransactions.publishHolderRewardRound` accepts the completed
+summary without loading all proofs. Its summary checks cover canonical fields,
+the presale leaf domain, bounded leaf count, positive funding and full digest
+lengths. They cannot prove allocations or eligibility from a summary alone:
+the caller must require complete durable construction evidence before signing.
+`verifyRewardSummaryProof` checks an individual proof against that commitment.
 
 ## Operator configuration
 
@@ -67,7 +92,7 @@ Create a JSON config outside the public artifacts:
 ```json
 {
   "grpcUrl": "https://YOUR-ARCHIVAL-SUI-GRPC-ENDPOINT",
-  "network": "mainnet",
+  "network": "testnet",
   "chainId": "EXPECTED-GENESIS-DIGEST",
   "deployment": {
     "packageId": "0xCALLABLE_MIGRATORS_PACKAGE",
@@ -75,22 +100,20 @@ Create a JSON config outside the public artifacts:
     "launchpad": {
       "packageId": "0xCALLABLE_LAUNCHPAD_PACKAGE",
       "originalPackageId": "0xORIGINAL_LAUNCHPAD_PACKAGE",
-      "admin": {
-        "packageId": "0xBLAST_ADMIN_PACKAGE",
-        "acl": { "objectId": "0x...", "initialSharedVersion": "1" }
-      },
+      "adminPackageId": "0xBLAST_ADMIN_PACKAGE",
       "partnersPackageId": "0xBLAST_PARTNERS_PACKAGE",
       "timelockPackageId": "0xBLAST_FUN_TIMELOCK_PACKAGE",
-      "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1" },
-      "launchConfig": { "objectId": "0x...", "initialSharedVersion": "1" },
-      "runtimeConfig": { "objectId": "0x...", "initialSharedVersion": "1" }
+      "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
+      "launchConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
+      "runtimeConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
+      "acl": { "objectId": "0xBLAST_ACL", "initialSharedVersion": "1", "mutable": false }
     },
-    "migratorsVersion": { "objectId": "0x...", "initialSharedVersion": "1" },
-    "lpFeePolicy": { "objectId": "0x...", "initialSharedVersion": "1" },
-    "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1" }
+    "migratorsVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
+    "lpFeePolicy": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
+    "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false }
   },
   "vaultId": "0xVERIFIED_LP_VAULT",
-  "adminCapId": "0xBLAST_ADMIN_CAP",
+  "adminCapId": "0xBLAST_ADMIN_CAP_WITH_REWARDS_ADMIN",
   "sender": "0xADMIN_MULTISIG",
   "excludedAddresses": []
 }
@@ -100,7 +123,9 @@ For a presale vault, set `"product": "presale"`, pass the call-ready
 `PresaleDeployment` (`getPresaleDeployment("mainnet")`) as `deployment`, the
 `Vault` ID as `vaultId`, and a Blast `AdminCap` holding the presale's
 `blast_presale_domain::RewardsAdmin` role as `adminCapId`; `publish-tx` signs it
-in. Presale rounds also need `claimWindowMs`: `publish-tx` sets the
+in. Presale publication also requires `expectedTreasury` and an explicit
+`gasReserveAmount` (zero disables reimbursement). A changed governed treasury
+aborts publication before funds move. Presale rounds need `claimWindowMs`: `publish-tx` sets the
 round's claim deadline that far after it builds the transaction. Presale
 manifests use `PRESALE_REWARD_LEAF_DOMAIN`, and `relay` reads the presale
 `holder_rewards::Round`; the commands are otherwise the same.
@@ -115,6 +140,8 @@ manifests use `PRESALE_REWARD_LEAF_DOMAIN`, and `relay` reads the presale
   "vaultId": "0xVERIFIED_PRESALE_VAULT",
   "adminCapId": "0xBLAST_ADMIN_CAP",
   "claimWindowMs": "604800000",
+  "gasReserveAmount": "0",
+  "expectedTreasury": "0xVERIFIED_BLAST_TREASURY",
   "sender": "0xADMIN_MULTISIG",
   "excludedAddresses": []
 }
@@ -175,9 +202,8 @@ beneficial owners of exchange or LP custody. Rounds are limited to 65,536
 payable addresses; exceeding this limit stops preparation rather than silently
 dropping holders.
 
-`advance` checks the confirmed round against the manifest (vault, number, root,
-and leaf count) and the vault's last checkpoint against the manifest's end,
-resets holding weights at the same checkpoint, and allows the next interval. Old manifests and
+`advance` checks the confirmed round against the full manifest, resets holding
+weights at the same checkpoint, and allows the next interval. Old manifests and
 rounds remain usable. `relay` reads the on-chain bitmap and emits unsigned
 batches of up to ten unpaid claims. Anyone can run it using a public manifest
 and round ID. To execute payouts with a gas-only key, provide
@@ -203,8 +229,8 @@ round and its original manifest in order; then resume indexing. Never invent a
 new holder snapshot to skip missing history.
 
 Publish each round's manifest, accounting policy, exclusions, and checkpoint
-journal through durable public storage before signing. The contract emits the
-manifest digest in `RoundPublished`, not its bytes or URL. Availability is necessary for
+journal through durable public storage before signing. The contract stores the
+manifest digest, not its bytes or URL. Availability is necessary for
 independent claims.
 
 Publication is trusted allocation: a Blast administrator can allocate rewards

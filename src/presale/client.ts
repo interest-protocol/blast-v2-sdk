@@ -2,12 +2,14 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
+
 import type { CoinSourceOptions } from "../lib/coins.ts";
+import type { AftermathPoolCreation } from "./aftermath.ts";
+import { findAftermathPoolCreation } from "./aftermath.ts";
 import type {
   PresaleCommitment,
   PresaleCreationPolicyState,
   PresaleFeePolicyState,
-  PresaleRewardReserveRoundState,
   PresaleRewardRoundState,
   PresaleState,
   PresaleVaultState,
@@ -17,7 +19,6 @@ import {
   getPresaleCommitment,
   getPresaleCreationPolicy,
   getPresaleFeePolicy,
-  getPresaleRewardReserveRound,
   getPresaleRewardRound,
   getPresaleVault,
 } from "./state.ts";
@@ -78,20 +79,32 @@ export class PresaleClient {
     );
   }
 
+  /**
+   * `presaleId`'s Aftermath binding: its `PoolCreation` (null once migrated)
+   * and `Lp` type, from the `PoolCreationReserved` event. Pass the sale's
+   * creation digest to read one transaction instead of scanning the vendor's
+   * events. Null for a sale the vendor did not create. Needs
+   * `deployment.aftermath`.
+   */
+  async getAftermathPoolCreation(
+    presaleId: string,
+    options: { creationDigest?: string } = {},
+  ): Promise<AftermathPoolCreation | null> {
+    const { aftermath } = this.call.deployment;
+    if (!aftermath) {
+      throw new TypeError("deployment.aftermath is required for Aftermath");
+    }
+    return findAftermathPoolCreation(this.#client, {
+      presaleId,
+      packageId: aftermath.packageId,
+      ...options,
+    });
+  }
+
   async getHolderRewardRound(
     objectId: string,
   ): Promise<PresaleRewardRoundState> {
     return getPresaleRewardRound(
-      this.#client,
-      objectId,
-      this.#originalPackageId,
-    );
-  }
-
-  async getHolderRewardReserveRound(
-    objectId: string,
-  ): Promise<PresaleRewardReserveRoundState> {
-    return getPresaleRewardReserveRound(
       this.#client,
       objectId,
       this.#originalPackageId,

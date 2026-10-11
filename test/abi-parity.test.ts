@@ -18,7 +18,7 @@ const expectedEvents = {
   launchpad: 28,
   migrators: 14,
   blastSui: 13,
-  presale: 32,
+  presale: 28,
   admin: 15,
   partners: 2,
   aftermathDaoPresale: 2,
@@ -185,6 +185,26 @@ test("rejects unknown blast_admin function classifications", () => {
   assert.match(
     result.stderr,
     /unclassified function blast_admin::blast_acl::future_operation/,
+  );
+});
+
+test("rejects unknown blast_aftermath_dao_presale function classifications", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "scripts/check-contract-abi.mjs",
+      "--classify-function",
+      "blast_aftermath_dao_presale",
+      "blast_aftermath_dao_presale",
+      "future_operation",
+    ],
+    { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /unclassified function blast_aftermath_dao_presale::blast_aftermath_dao_presale::future_operation/,
   );
 });
 

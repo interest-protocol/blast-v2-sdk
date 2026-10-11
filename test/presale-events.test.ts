@@ -18,7 +18,12 @@ import {
   presaleEventSpecs,
   presalePolicyEventSpecs,
 } from "../src/presale/events.ts";
-import { openEligibility, previewClaim } from "../src/presale/math.ts";
+import {
+  canClosePresaleEarly,
+  openEligibility,
+  previewClaim,
+  previewSettlement,
+} from "../src/presale/math.ts";
 import {
   createPresaleEventProjection,
   reducePresaleEvent,
@@ -87,7 +92,7 @@ test("event specs match every event frozen in the presale ABI", () => {
     }),
     orderedModuleEventFields(readFrozenPresaleEventSpecs()),
   );
-  assert.equal(Object.keys(presaleEventModules).length, 26);
+  assert.equal(Object.keys(presaleEventModules).length, 22);
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
@@ -352,6 +357,8 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       quote_amount: 3n,
       meme_unallocated: 0n,
       quote_unallocated: 0n,
+      treasury: TREASURY,
+      gas_reserve_amount: 0n,
     }),
     decode("RewardClaimed", {
       round_id: ROUND,
@@ -368,6 +375,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       number: 0n,
       meme_returned: 10n,
       quote_returned: 1n,
+      gas_reserve_returned: 0n,
     }),
   ];
   for (const event of vaultEvents) {
@@ -402,12 +410,8 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     "PresaleCancelled",
     "ProtocolFeesChanged",
     "ProtocolLpFeesPaid",
-    "BlastHolderMemePaid",
-    "BlastUnallocatedMemeReconciled",
-    "BlastRoundPublished",
-    "BlastRewardClaimed",
+    "HolderMemePaid",
     "GasReserveSettled",
-    "BlastRoundClosed",
   ];
   for (const kind of Object.keys(presaleEventModules) as PresaleEventKind[]) {
     const expected = twice.includes(kind) ? 2 : never.includes(kind) ? 0 : 1;
@@ -431,6 +435,8 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       quote_amount: 1n,
       meme_unallocated: 10n,
       quote_unallocated: 0n,
+      treasury: TREASURY,
+      gas_reserve_amount: 0n,
     }),
     decode("RewardClaimed", {
       round_id: gapRound,
@@ -447,6 +453,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       number: 1n,
       meme_returned: 0n,
       quote_returned: 0n,
+      gas_reserve_returned: 0n,
     }),
   ];
   for (const event of dailyEvents) state = reducePresaleEvent(state, event);
@@ -525,23 +532,13 @@ for (const settle of [false, true]) {
       }),
     );
     apply(
-      decode("RoundPublished", {
+      decode("HolderMemePaid", {
         vault_id: VAULT,
-        round_id: ROUND,
-        number: 0n,
-        start_checkpoint: 0n,
-        end_checkpoint: 10n,
-        claim_deadline_ms: 1_000n,
-        root: "11".repeat(32),
-        manifest_digest: "22".repeat(32),
-        leaf_count: 1n,
-        meme_amount: 10n,
-        quote_amount: 0n,
-        meme_unallocated: 30n,
-        quote_unallocated: 1_000n,
+        treasury: TREASURY,
+        meme_amount: 40n,
+        unallocated_meme_remaining: 0n,
       }),
     );
-    const legacy = structuredClone(required(state.rounds[ROUND]));
     apply(
       decode("FeesCollected", {
         vault_id: VAULT,
@@ -557,28 +554,20 @@ for (const settle of [false, true]) {
       }),
     );
     apply(
-      decode("BlastHolderMemePaid", {
+      decode("HolderMemePaid", {
         vault_id: VAULT,
         treasury: TREASURY,
         meme_amount: 5n,
-        unallocated_meme_remaining: 30n,
-      }),
-    );
-    assert.equal(required(state.vaults[VAULT]).holderRewardsMeme, 30n);
-    apply(
-      decode("BlastUnallocatedMemeReconciled", {
-        vault_id: VAULT,
-        treasury: TREASURY,
-        meme_amount: 30n,
         unallocated_meme_remaining: 0n,
       }),
     );
+    assert.equal(required(state.vaults[VAULT]).holderRewardsMeme, 0n);
     const roundId = id("0xd1");
     apply(
-      decode("BlastRoundPublished", {
+      decode("RoundPublished", {
         vault_id: VAULT,
         round_id: roundId,
-        number: 1n,
+        number: 0n,
         start_checkpoint: 21n,
         end_checkpoint: 30n,
         claim_deadline_ms: 605_800_000n,
@@ -593,13 +582,18 @@ for (const settle of [false, true]) {
         gas_reserve_amount: 30n,
       }),
     );
-    const funded = required(state.reserveRounds[roundId]);
+    const funded = required(state.rounds[roundId]);
+    assert.equal(
+      funded.gasSettled,
+      false,
+      "publication does not fabricate a settlement receipt",
+    );
     assert.deepEqual(
       [funded.quoteRemaining, funded.gasReserveRemaining, funded.treasury],
       [970n, 30n, TREASURY],
     );
     apply(
-      decode("BlastRewardClaimed", {
+      decode("RewardClaimed", {
         round_id: roundId,
         index: 0n,
         beneficiary: ALICE,
@@ -609,35 +603,32 @@ for (const settle of [false, true]) {
         quote_remaining: 770n,
       }),
     );
-    assert.equal(
-      required(state.reserveRounds[roundId]).gasReserveRemaining,
-      30n,
-    );
+    assert.equal(required(state.rounds[roundId]).gasReserveRemaining, 30n);
     if (settle) {
       apply(
         decode("GasReserveSettled", {
           vault_id: VAULT,
           round_id: roundId,
-          number: 1n,
+          number: 0n,
           treasury: TREASURY,
           reimbursement_amount: 24n,
           reserve_returned: 6n,
           quote_unallocated: 6n,
         }),
       );
-      assert.equal(required(state.reserveRounds[roundId]).quoteRemaining, 770n);
+      assert.equal(required(state.rounds[roundId]).quoteRemaining, 770n);
     }
     apply(
-      decode("BlastRoundClosed", {
+      decode("RoundClosed", {
         vault_id: VAULT,
         round_id: roundId,
-        number: 1n,
+        number: 0n,
         meme_returned: 0n,
         quote_returned: 770n,
         gas_reserve_returned: settle ? 0n : 30n,
       }),
     );
-    const closed = required(state.reserveRounds[roundId]);
+    const closed = required(state.rounds[roundId]);
     const vault = required(state.vaults[VAULT]);
     assert.deepEqual(
       [closed.quoteRemaining, closed.gasReserveRemaining, closed.closed],
@@ -653,12 +644,7 @@ for (const settle of [false, true]) {
     );
     assert.deepEqual(
       [vault.holderRewardsMeme, vault.holderMemeTreasuryPaid],
-      [0n, 35n],
-    );
-    assert.deepEqual(
-      state.rounds[ROUND],
-      legacy,
-      "funded legacy leaves and roots stay untouched",
+      [0n, 45n],
     );
   });
 }
@@ -1183,6 +1169,33 @@ test("carries vesting terms from creation and schedule IDs from migration and cl
   assert.deepEqual(presale.raiseVestingIds, { [id("0x5a1e")]: RAISE_SCHEDULE });
 });
 
+test("a vault without a presale links no presale and is projected on its own", () => {
+  const ZERO = id("0x0");
+  let state = createPresaleEventProjection();
+  state = reducePresaleEvent(
+    state,
+    decode("VaultCreated", {
+      vault_id: VAULT,
+      presale_id: ZERO,
+      pool_id: id("0x90"),
+      position_id: id("0x91"),
+      liquidity: 77n,
+      fee_recipients: [id("0xc0ffee")],
+      fee_recipient_bps: [10_000n],
+      holder_rewards_bps: 0n,
+      protocol_lp_fee_meme_bps: 500n,
+      protocol_lp_fee_quote_bps: 500n,
+      migration_meme_residual: 0n,
+      migration_quote_residual: 0n,
+    }),
+  );
+  assert.deepEqual(state.presales, {});
+  const vault = required(state.vaults[VAULT]);
+  assert.equal(vault.presaleId, ZERO);
+  assert.equal(vault.venueType, normalizeStructTag(`${pkg}::cetus::Venue`));
+  assert.equal(vault.liquidity, 77n);
+});
+
 test("rejects the retired blast_presale_admin events: Blast's ACL administers the presale", () => {
   const event: SuiClientTypes.EventEntry = {
     packageId: pkg,
@@ -1425,6 +1438,185 @@ test("records a venue's pool tier by sale token, apart from the sale", () => {
         eventType: `${pkg}::venue_config::PoolTierReserved<${meme}, ${quote}>`,
       },
       { originalPackageId: pkg },
+    ),
+  );
+});
+
+/** A `PresaleCreated` for `PRESALE` with the given hard cap and witness. */
+function createdPayload(
+  overrides: Partial<PresaleEventPayloads["PresaleCreated"]> = {},
+): PresaleEventPayloads["PresaleCreated"] {
+  return {
+    presale_id: PRESALE,
+    presale_cap_id: id("0xca"),
+    treasury_cap_id: id("0x7c"),
+    token_supply: 20_001n,
+    token_allocation_bps: 5_000n,
+    participant_vesting: null,
+    liquidity_token_allocation_bps: 1_000n,
+    recipients: [id("0xa110c")],
+    recipient_bps: [4_000n],
+    recipient_vesting: [null],
+    burnable: false,
+    raise_target: 1_000n,
+    raise_recipients: [],
+    raise_recipient_bps: [],
+    raise_recipient_vesting: [],
+    duration_ms: 100n,
+    liquidity_window_ms: 50n,
+    eligibility: openEligibility(5_000n, 2n, 500n),
+    uncapped: null,
+    hard_cap: null,
+    migration_witness: `${pkg}::cetus::Witness`,
+    fee_recipients: [id("0xc0ffee")],
+    fee_recipient_bps: [7_000n],
+    holder_rewards_bps: 3_000n,
+    ...NO_FEES,
+    protocol_quote: 0n,
+    protocol_tokens: 0n,
+    ...overrides,
+  };
+}
+
+test("an early close: PresaleFunded moves the end and LP deadline PresaleOpened scheduled", () => {
+  const hardCap = { startsAfterMs: 20n, closesWhenFilled: true };
+  let state = createPresaleEventProjection();
+  for (const event of [
+    decode("PresaleCreated", createdPayload({ hard_cap: hardCap })),
+    decode("PresaleOpened", {
+      presale_id: PRESALE,
+      start_ms: 1_000n,
+      end_ms: 1_100n,
+      liquidity_deadline_ms: 1_150n,
+      uncapped_from_ms: 1_100n,
+      hard_cap_from_ms: 1_020n,
+      partner_id: null,
+    }),
+    decode("Committed", {
+      presale_id: PRESALE,
+      quote: 1_000n,
+      wallet_commitment: 1_000n,
+      total_commitments: 1_000n,
+      participants: 1n,
+    }),
+  ]) {
+    state = reducePresaleEvent(state, event);
+  }
+  const open = required(state.presales[PRESALE]);
+  assert.deepEqual(open.hardCap, {
+    startsAfterMs: 20n,
+    closesWhenFilled: true,
+  });
+  assert.equal(open.hardCapFromMs, 1_020n);
+  assert.deepEqual([open.endMs, open.liquidityDeadlineMs], [1_100n, 1_150n]);
+  // The raise is full under a hard cap that closes when filled: settle at 1_040.
+  assert.equal(canClosePresaleEarly(open, 1_019n), false);
+  assert.equal(canClosePresaleEarly(open, 1_040n), true);
+  const settlement = previewSettlement(open, 1_040n);
+  assert.ok(settlement.outcome === "Funded");
+  assert.deepEqual(
+    [settlement.endMs, settlement.liquidityDeadlineMs],
+    [1_040n, 1_090n],
+  );
+
+  state = reducePresaleEvent(
+    state,
+    decode("PresaleFunded", {
+      presale_id: PRESALE,
+      total_commitments: 1_000n,
+      accepted_quote: 1_000n,
+      refundable_quote: 0n,
+      token_allocation: 10_001n,
+      end_ms: settlement.endMs,
+      liquidity_deadline_ms: settlement.liquidityDeadlineMs,
+    }),
+  );
+  const funded = required(state.presales[PRESALE]);
+  assert.equal(funded.lifecycle, "Funded");
+  // The event's actual values replace the scheduled ones.
+  assert.deepEqual(
+    [funded.endMs, funded.liquidityDeadlineMs],
+    [1_040n, 1_090n],
+  );
+  // The LP deadline that gates `cancel_unlaunched` is the early one.
+  assert.equal(funded.liquidityDeadlineMs < open.liquidityDeadlineMs, true);
+});
+
+test("keys pool tiers by sale token in either coin order; an Aftermath sale has none", () => {
+  const vendor = id("0xaf7e");
+  const lp = normalizeStructTag(`${vendor}::lp_coin::LP_COIN`);
+  // 0x1 sorts before SUI's 0x2, 0xa after it: both pool coin orders.
+  const memeFirst = normalizeStructTag("0x1::meme::MEME");
+  const memeSecond = normalizeStructTag("0xa::meme::MEME");
+  const typed = (
+    event: SuiClientTypes.EventEntry,
+    module: string,
+    kind: string,
+    types: string,
+  ): DecodedPresaleEvent =>
+    decodePresaleEvent(
+      { ...event, eventType: `${pkg}::${module}::${kind}<${types}>` },
+      { originalPackageId: pkg },
+    );
+  const tier = (saleToken: string, tickSpacing: number) =>
+    typed(
+      suiEvent("PoolTierReserved", {
+        tick_spacing: tickSpacing,
+        pool_fee_rate: 2_500n,
+      }),
+      "venue_config",
+      "PoolTierReserved",
+      `${saleToken}, ${quote}, ${pkg}::cetus::Venue`,
+    );
+  const aftermathCreated = (saleToken: string, presaleId: string) =>
+    typed(
+      suiEvent(
+        "PresaleCreated",
+        createdPayload({
+          presale_id: presaleId,
+          migration_witness: `${vendor}::blast_aftermath_dao_presale::Witness`,
+          fee_recipients: [id("0x7ea5")],
+          fee_recipient_bps: [10_000n],
+          holder_rewards_bps: 0n,
+        }),
+      ),
+      "blast_presale",
+      "PresaleCreated",
+      `${saleToken}, ${quote}`,
+    );
+
+  let state = createPresaleEventProjection();
+  state = reducePresaleEvent(state, tier(memeFirst, 60));
+  state = reducePresaleEvent(state, tier(memeSecond, 200));
+  // The tier event's first type argument is the sale token, whatever the pool's order.
+  assert.equal(state.poolTiers[memeFirst]?.tickSpacing, 60);
+  assert.equal(state.poolTiers[memeSecond]?.tickSpacing, 200);
+  assert.equal(state.poolTiers[quote], undefined);
+
+  const aftermathFirst = normalizeStructTag("0x1::other::OTHER");
+  const aftermathSecond = normalizeStructTag("0xb::other::OTHER");
+  for (const [saleToken, presaleId] of [
+    [aftermathFirst, id("0xaf1")],
+    [aftermathSecond, id("0xaf2")],
+  ] as const) {
+    state = reducePresaleEvent(state, aftermathCreated(saleToken, presaleId));
+    const sale = required(state.presales[presaleId]);
+    assert.equal(sale.memeType, saleToken);
+    assert.equal(sale.quoteType, quote);
+    // The vendor's pool has no CLMM tier, and no PoolTierReserved precedes it.
+    assert.equal(state.poolTiers[sale.memeType], undefined);
+    assert.deepEqual(sale.feeRecipients, [
+      { recipient: id("0x7ea5"), bps: 10_000n, vesting: null },
+    ]);
+  }
+  assert.equal(Object.keys(state.poolTiers).length, 2);
+  // Its vendor events are typed <Lp, SaleToken, Quote>, never a presale event.
+  assert.throws(() =>
+    typed(
+      suiEvent("PresaleCreated", createdPayload()),
+      "blast_aftermath_dao_presale",
+      "PoolCreationReserved",
+      `${lp}, ${aftermathFirst}, ${quote}`,
     ),
   );
 });

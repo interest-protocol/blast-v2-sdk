@@ -54,21 +54,21 @@ export class LaunchpadClient {
     return previewOpeningRoundSettlement(launch, launch.openingRoundQuote);
   }
 
-  /** The creation fee, trade fees, and Blast allocation a new launch snapshots. */
-  async getLaunchConfig(): Promise<LaunchConfigState> {
-    return getLaunchConfig(
-      this.#client,
-      this.call.deployment.launchConfig.objectId,
-      this.call.deployment.originalPackageId,
-    );
-  }
-
   /** `bidder`'s undelivered opening-round Quote; zero without a bid. */
   async getOpeningRoundBid(launchId: string, bidder: string): Promise<bigint> {
     return getOpeningRoundBid(
       this.#client,
       launchId,
       bidder,
+      this.call.deployment.originalPackageId,
+    );
+  }
+
+  /** The admission policy new launches snapshot, including the exact creation fee. */
+  async getLaunchConfig(): Promise<LaunchConfigState> {
+    return getLaunchConfig(
+      this.#client,
+      this.call.deployment.launchConfig.objectId,
       this.call.deployment.originalPackageId,
     );
   }

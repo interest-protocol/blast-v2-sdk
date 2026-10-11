@@ -375,20 +375,9 @@ export const creationPolicyBcs = bcs.struct("CreationPolicy", {
 });
 
 /** BCS layout of `holder_rewards::Round<Meme, Quote>`. */
-export const presaleRewardRoundBcs = bcs.struct("Round", {
-  id: suiUidBcs,
-  vault_id: suiIdBcs,
-  number: u64,
-  claim_deadline_ms: u64,
-  root: digest,
-  leaf_count: u64,
-  claimed_bitmap: bcs.vector(bcs.u256()),
-  meme: suiBalanceBcs,
-  quote: suiBalanceBcs,
-});
 
-/** Separate custody type; legacy `Round` calls cannot consume its gas reserve. */
-export const presaleRewardReserveRoundBcs = bcs.struct("BlastRewardRound", {
+/** The canonical round keeps optional gas custody separate from holder balances. */
+export const presaleRewardRoundBcs = bcs.struct("Round", {
   id: suiUidBcs,
   vault_id: suiIdBcs,
   number: u64,
@@ -494,17 +483,30 @@ export type PresaleState = SharedObjectReference<true> & {
   unpaidProtocolQuote: bigint | null;
 };
 
+/**
+ * `presale_vault::Vault<Meme, Quote>`: a presale's position after migration,
+ * or an owner's own position locked directly by `cetus::new_vault` or
+ * `bluefin::new_vault` (contracts ADR 0109).
+ */
 export type PresaleVaultState = SharedObjectReference<true> & {
   memeType: string;
   quoteType: string;
+  /** The zero ID for a vault without a presale; see `isVaultWithoutPresale`. */
   presaleId: string;
+  /** The zero ID for a vault without a presale, so no `PresaleCap` matches it. */
   presaleCapId: string;
   poolId: string;
   feeRecipients: BpsShare[];
   holderRewardsBps: bigint;
-  /** The presale's snapshotted rates; only the LP-fee shares apply to the vault. */
+  /**
+   * The presale's snapshotted rates, or the `FeePolicy`'s at creation for a
+   * vault without a presale; only the LP-fee shares apply to the vault.
+   */
   protocolFees: ProtocolFees;
-  /** The partner the sale named, paid its cut of Blast's LP fees; null for none. */
+  /**
+   * The partner the sale, or the owner of a vault without a presale, named,
+   * paid its cut of Blast's LP fees; null for none.
+   */
   partnerId: string | null;
   /** Blast's LP fees a partnered vault holds until `payProtocolLpFeesWithPartner`. */
   unpaidProtocolMeme: bigint;
@@ -531,11 +533,8 @@ export type PresaleRewardRoundState = SharedObjectReference<true> & {
   claimedBitmap: bigint[];
   memeRemaining: bigint;
   quoteRemaining: bigint;
-};
-
-export type PresaleRewardReserveRoundState = PresaleRewardRoundState & {
   treasury: string;
-  /** Quote atoms still reserved; null after terminal settlement, including settlement of zero. */
+  /** Quote atoms still reserved; null when reimbursement was disabled or after terminal settlement. */
   gasReserveRemaining: bigint | null;
 };
 
@@ -638,6 +637,14 @@ function presaleWindowsOf(
   );
 }
 
+/**
+ * Whether `presaleId`, a vault's `presaleId` or a `VaultCreated` event's
+ * `presale_id`, is the zero ID of a vault an owner created without a presale.
+ */
+export function isVaultWithoutPresale(presaleId: string): boolean {
+  return BigInt(normalizeSuiObjectId(presaleId)) === 0n;
+}
+
 export function decodePresaleVaultObject(
   object: PresaleObject,
   originalPackageId: string,
@@ -682,32 +689,6 @@ export function decodePresaleRewardRoundObject(
     originalPackageId,
   );
   const parsed = presaleRewardRoundBcs.parse(object.content);
-  return {
-    ...sharedIdentity(object, parsed.id.id.bytes),
-    memeType,
-    quoteType,
-    vaultId: normalizeSuiObjectId(parsed.vault_id.bytes),
-    number: parsed.number,
-    claimDeadlineMs: parsed.claim_deadline_ms,
-    root: parsed.root,
-    leafCount: parsed.leaf_count,
-    claimedBitmap: parsed.claimed_bitmap.map(BigInt),
-    memeRemaining: BigInt(parsed.meme.value),
-    quoteRemaining: BigInt(parsed.quote.value),
-  };
-}
-
-export function decodePresaleRewardReserveRoundObject(
-  object: PresaleObject,
-  originalPackageId: string,
-): PresaleRewardReserveRoundState {
-  const [memeType, quoteType] = pairTypes(
-    object,
-    "holder_rewards",
-    "BlastRewardRound",
-    originalPackageId,
-  );
-  const parsed = presaleRewardReserveRoundBcs.parse(object.content);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
     memeType,
@@ -797,17 +778,6 @@ export async function getPresaleRewardRound(
   originalPackageId: string,
 ): Promise<PresaleRewardRoundState> {
   return decodePresaleRewardRoundObject(
-    await getSharedObject(client, objectId),
-    originalPackageId,
-  );
-}
-
-export async function getPresaleRewardReserveRound(
-  client: ClientWithCoreApi,
-  objectId: string,
-  originalPackageId: string,
-): Promise<PresaleRewardReserveRoundState> {
-  return decodePresaleRewardReserveRoundObject(
     await getSharedObject(client, objectId),
     originalPackageId,
   );

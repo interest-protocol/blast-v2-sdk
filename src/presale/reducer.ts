@@ -102,6 +102,7 @@ export type PresaleProjection = {
 
 export type PresaleVaultProjection = {
   vaultId: string;
+  /** The zero ID for a vault an owner created without a presale (contracts ADR 0109). */
   presaleId: string;
   poolId: string;
   positionId: string;
@@ -155,17 +156,13 @@ export type PresaleRewardRoundProjection = {
   paidIndexes: Readonly<Record<string, true>>;
   /** Set by `RoundClosed`, which deletes the round and returns its balances. */
   closed: boolean;
+  treasury: string;
+  gasReserveAmount: bigint;
+  gasReserveRemaining: bigint;
+  gasReimbursed: bigint;
+  gasReturned: bigint;
+  gasSettled: boolean;
 };
-
-export type PresaleRewardReserveRoundProjection =
-  PresaleRewardRoundProjection & {
-    treasury: string;
-    gasReserveAmount: bigint;
-    gasReserveRemaining: bigint;
-    gasReimbursed: bigint;
-    gasReturned: bigint;
-    gasSettled: boolean;
-  };
 
 /**
  * The pool tier a Cetus or Bluefin sale's venue recorded (contracts ADR 0111),
@@ -187,7 +184,6 @@ export type PresaleEventProjection = {
   poolTiers: Readonly<Record<string, PresalePoolTierProjection>>;
   vaults: Readonly<Record<string, PresaleVaultProjection>>;
   rounds: Readonly<Record<string, PresaleRewardRoundProjection>>;
-  reserveRounds: Readonly<Record<string, PresaleRewardReserveRoundProjection>>;
 };
 
 export function createPresaleEventProjection(): PresaleEventProjection {
@@ -200,7 +196,6 @@ export function createPresaleEventProjection(): PresaleEventProjection {
     poolTiers: {},
     vaults: {},
     rounds: {},
-    reserveRounds: {},
   };
 }
 
@@ -381,6 +376,7 @@ function applyVaultEvent(
           },
         },
       };
+    // A vault without a presale carries the zero `presale_id`, which links no presale.
     case "VaultCreated": {
       const { payload } = event;
       const feeRecipients = payload.fee_recipients.map((recipient, i) => ({
@@ -477,86 +473,12 @@ function applyVaultEvent(
         migrationMemeResidual: 0n,
         migrationQuoteResidual: 0n,
       }));
-    case "BlastHolderMemePaid":
-    case "BlastUnallocatedMemeReconciled": {
+    case "HolderMemePaid": {
       const { payload } = event;
       return updateVault(state, payload.vault_id, (vault) => ({
         holderRewardsMeme: payload.unallocated_meme_remaining,
         holderMemeTreasuryPaid:
           vault.holderMemeTreasuryPaid + payload.meme_amount,
-      }));
-    }
-    case "BlastRoundPublished": {
-      const { payload } = event;
-      const updated = updateVault(state, payload.vault_id, () => ({
-        holderRewardsMeme: payload.meme_unallocated,
-        holderRewardsQuote: payload.quote_unallocated,
-        nextRound: payload.number + 1n,
-        lastCheckpoint: payload.end_checkpoint,
-      }));
-      return {
-        ...updated,
-        reserveRounds: {
-          ...state.reserveRounds,
-          [payload.round_id]: {
-            roundId: payload.round_id,
-            vaultId: payload.vault_id,
-            number: payload.number,
-            startCheckpoint: payload.start_checkpoint,
-            endCheckpoint: payload.end_checkpoint,
-            claimDeadlineMs: payload.claim_deadline_ms,
-            root: payload.root,
-            manifestDigest: payload.manifest_digest,
-            leafCount: payload.leaf_count,
-            memeRemaining: payload.meme_amount,
-            quoteRemaining: payload.quote_amount,
-            paidIndexes: {},
-            closed: false,
-            treasury: payload.treasury,
-            gasReserveAmount: payload.gas_reserve_amount,
-            gasReserveRemaining: payload.gas_reserve_amount,
-            gasReimbursed: 0n,
-            gasReturned: 0n,
-            gasSettled: false,
-          },
-        },
-      };
-    }
-    case "BlastRewardClaimed": {
-      const { payload } = event;
-      return updateReserveRound(state, payload.round_id, (round) => ({
-        memeRemaining: payload.meme_remaining,
-        quoteRemaining: payload.quote_remaining,
-        paidIndexes: { ...round.paidIndexes, [payload.index.toString()]: true },
-      }));
-    }
-    case "GasReserveSettled": {
-      const { payload } = event;
-      const returned = updateVault(state, payload.vault_id, () => ({
-        holderRewardsQuote: payload.quote_unallocated,
-      }));
-      return updateReserveRound(returned, payload.round_id, () => ({
-        gasReserveRemaining: 0n,
-        gasReimbursed: payload.reimbursement_amount,
-        gasReturned: payload.reserve_returned,
-        gasSettled: true,
-      }));
-    }
-    case "BlastRoundClosed": {
-      const { payload } = event;
-      const returned = updateVault(state, payload.vault_id, (vault) => ({
-        holderRewardsMeme: vault.holderRewardsMeme + payload.meme_returned,
-        holderRewardsQuote:
-          vault.holderRewardsQuote +
-          payload.quote_returned +
-          payload.gas_reserve_returned,
-      }));
-      return updateReserveRound(returned, payload.round_id, (round) => ({
-        memeRemaining: 0n,
-        quoteRemaining: 0n,
-        gasReserveRemaining: 0n,
-        gasReturned: round.gasReturned + payload.gas_reserve_returned,
-        closed: true,
       }));
     }
     case "RoundPublished": {
@@ -585,6 +507,12 @@ function applyVaultEvent(
             quoteRemaining: payload.quote_amount,
             paidIndexes: {},
             closed: false,
+            treasury: payload.treasury,
+            gasReserveAmount: payload.gas_reserve_amount,
+            gasReserveRemaining: payload.gas_reserve_amount,
+            gasReimbursed: 0n,
+            gasReturned: 0n,
+            gasSettled: false,
           },
         },
       };
@@ -597,15 +525,32 @@ function applyVaultEvent(
         paidIndexes: { ...round.paidIndexes, [payload.index.toString()]: true },
       }));
     }
+    case "GasReserveSettled": {
+      const { payload } = event;
+      const returned = updateVault(state, payload.vault_id, () => ({
+        holderRewardsQuote: payload.quote_unallocated,
+      }));
+      return updateRound(returned, payload.round_id, () => ({
+        gasReserveRemaining: 0n,
+        gasReimbursed: payload.reimbursement_amount,
+        gasReturned: payload.reserve_returned,
+        gasSettled: true,
+      }));
+    }
     case "RoundClosed": {
       const { payload } = event;
       const returned = updateVault(state, payload.vault_id, (vault) => ({
         holderRewardsMeme: vault.holderRewardsMeme + payload.meme_returned,
-        holderRewardsQuote: vault.holderRewardsQuote + payload.quote_returned,
+        holderRewardsQuote:
+          vault.holderRewardsQuote +
+          payload.quote_returned +
+          payload.gas_reserve_returned,
       }));
-      return updateRound(returned, payload.round_id, () => ({
+      return updateRound(returned, payload.round_id, (round) => ({
         memeRemaining: 0n,
         quoteRemaining: 0n,
+        gasReserveRemaining: 0n,
+        gasReturned: round.gasReturned + payload.gas_reserve_returned,
         closed: true,
       }));
     }
@@ -773,23 +718,5 @@ function updateRound(
   return {
     ...state,
     rounds: { ...state.rounds, [roundId]: { ...round, ...update(round) } },
-  };
-}
-
-function updateReserveRound(
-  state: PresaleEventProjection,
-  roundId: string,
-  update: (
-    round: PresaleRewardReserveRoundProjection,
-  ) => Partial<PresaleRewardReserveRoundProjection>,
-): PresaleEventProjection {
-  const round = state.reserveRounds[roundId];
-  if (!round) return state;
-  return {
-    ...state,
-    reserveRounds: {
-      ...state.reserveRounds,
-      [roundId]: { ...round, ...update(round) },
-    },
   };
 }

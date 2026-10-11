@@ -3,19 +3,22 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { bcs } from "@mysten/sui/bcs";
-import type { Transaction } from "@mysten/sui/transactions";
+import { Transaction } from "@mysten/sui/transactions";
 import {
   fromBase64,
   normalizeStructTag,
+  normalizeSuiAddress,
   SUI_CLOCK_OBJECT_ID,
 } from "@mysten/sui/utils";
 
+import type { RewardManifestSummary } from "../src/holder-rewards/allocations.ts";
 import {
   buildRewardManifest,
   MIGRATOR_REWARD_LEAF_DOMAIN,
   PRESALE_REWARD_LEAF_DOMAIN,
 } from "../src/holder-rewards/allocations.ts";
 import { itemAt } from "../src/lib/arrays.ts";
+import { moveResults } from "../src/lib/ptb.ts";
 import type { SharedObjectReference } from "../src/lib/sui.ts";
 import { buildAllowlist } from "../src/presale/allowlist.ts";
 import { openEligibility, uncappedForAnyone } from "../src/presale/math.ts";
@@ -519,10 +522,18 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         vault,
         adminCapId: "0xadc",
         manifest,
+        gasReserveAmount: 0n,
+        expectedTreasury: "0xc0",
         claimDeadlineMs: 9_000n,
       }),
       "holder_rewards::publish_round",
-      ["shared-mut:0xba", ...ADMIN, ...Array(9).fill("pure"), CLOCK],
+      [
+        "shared-mut:0xba",
+        ...ADMIN,
+        "shared:0x61",
+        ...Array(11).fill("pure"),
+        CLOCK,
+      ],
     ],
     [
       tx.claimHolderRewards({
@@ -626,6 +637,47 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       ["shared-mut:0xba", "shared:0x61", "shared:0x9a27", CLOCK],
     ],
     [
+      tx.newCetusVault({
+        ...types,
+        position: "0x905",
+        feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
+        holderRewardsBps: 3_000n,
+        pool: shared("0x90", false),
+        burnManager: shared("0x72", true),
+      }),
+      "cetus::new_vault",
+      [
+        "object:0x905",
+        "Result:4",
+        "pure",
+        "shared:0x62",
+        "shared:0x61",
+        "shared:0x90",
+        "shared-mut:0x72",
+        CLOCK,
+      ],
+    ],
+    [
+      tx.newBluefinVault({
+        ...types,
+        position: "0x905",
+        feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
+        holderRewardsBps: 3_000n,
+        partnerId: "0x9a27",
+        pool: shared("0x90", false),
+      }),
+      "bluefin::new_vault",
+      [
+        "object:0x905",
+        "Result:4",
+        "pure",
+        "shared:0x62",
+        "shared:0x61",
+        "shared:0x90",
+        CLOCK,
+      ],
+    ],
+    [
       tx.addPartner({ adminCapId: "0xadc", partner }),
       "creation_policy::add_partner",
       ["shared-mut:0x62", ...ADMIN, "shared:0x9a27"],
@@ -643,6 +695,103 @@ test("builds every lifecycle call with the ABI's argument count", () => {
     assert.equal(call.arguments.length, abiArity(module, fn), name);
     assert.equal(call.typeArguments.length, abiTypeArity(module, fn), name);
   }
+});
+
+test("locks an owner's own position in a vault without a presale", () => {
+  const options = {
+    position: "0x905",
+    feeRecipients: [{ recipient: "0xc0ffee", bps: 10_000n }],
+    holderRewardsBps: 0n,
+    pool: shared("0x90", false),
+  };
+  // Cetus takes the pool's coin order, either way round.
+  for (const [memeType, coins] of [
+    [memeA, [memeA, sui]],
+    [memeB, [sui, memeB]],
+  ] as const) {
+    const ptb = tx.newCetusVault({
+      memeType,
+      quoteType: sui,
+      ...options,
+      burnManager: shared("0x72", true),
+    });
+    const call = moveCall(ptb, "cetus::new_vault");
+    assert.deepEqual(call.typeArguments, [memeType, sui, ...coins]);
+    assert.equal(optionalId(ptb, call.arguments[2]), null);
+  }
+  // Bluefin's pool is `Pool<Meme, Quote>`; the partner is an `Option<ID>`.
+  const ptb = tx.newBluefinVault({
+    ...types,
+    ...options,
+    partnerId: "0x9a27",
+  });
+  const call = moveCall(ptb, "bluefin::new_vault");
+  assert.deepEqual(call.typeArguments, [memeA, sui]);
+  assert.equal(
+    optionalId(ptb, call.arguments[2]),
+    normalizeSuiAddress("0x9a27"),
+  );
+  assert.deepEqual(moveFunctions(ptb), [
+    "bps::new",
+    "blast_presale::recipient_share",
+    "bps::new",
+    "blast_presale::fee_split",
+    "bluefin::new_vault",
+  ]);
+  assert.throws(
+    () =>
+      tx.newBluefinVault({
+        ...types,
+        ...options,
+        feeRecipients: [
+          {
+            recipient: "0xc0ffee",
+            bps: 10_000n,
+            vesting: { cliffMs: 0n, periodMs: 1n, periods: 1n },
+          },
+        ],
+      }),
+    /fee recipients cannot vest/,
+  );
+});
+
+test("replaces a sale's Blast rates in its creation PTB, before share", () => {
+  const ptb = new Transaction();
+  const [sale] = moveResults(
+    ptb.add(
+      tx.call.newBluefinPresale({
+        ...terms,
+        tickSpacing: 60,
+        feeRate: 3_000n,
+      }),
+    ),
+    2,
+  );
+  const adminWitness = ptb.add(
+    tx.call.signIn({ adminCap: "0xadc", role: "FeeAdmin" }),
+  );
+  ptb.add(
+    tx.call.setPresaleProtocolFees({
+      ...types,
+      presale: sale,
+      adminWitness,
+      fees: {
+        raiseBps: 100n,
+        tokenBps: 100n,
+        lpFeeMemeBps: 0n,
+        lpFeeQuoteBps: 0n,
+      },
+    }),
+  );
+  const call = moveCall(ptb, "blast_presale::set_protocol_fees");
+  assert.deepEqual(argumentKinds(ptb, call).slice(0, 2), [
+    `NestedResult:${commandIndex(ptb, "blast_presale::finalize")}:0`,
+    `Result:${commandIndex(ptb, "blast_acl::sign_in")}`,
+  ]);
+  assert.equal(
+    call.arguments.length,
+    abiArity("blast_presale", "set_protocol_fees"),
+  );
 });
 
 test("signs each administrator call in to blast_acl with its own presale role", () => {
@@ -917,6 +1066,8 @@ test("rejects a manifest from the migrators' leaf domain or another vault", () =
       vault: shared(vault, true),
       adminWitness: "0xadc",
       manifest,
+      gasReserveAmount: 0n,
+      expectedTreasury: "0xc0",
       claimDeadlineMs: 1n,
     });
   assert.throws(
@@ -947,32 +1098,95 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     allocations: [{ beneficiary: "0xb0b", memeAmount: 0n, quoteAmount: 970n }],
     leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
   });
-  const publication = tx.publishHolderRewardReserveRound({
+  const publication = tx.publishHolderRewardRound({
     ...types,
     vault,
     adminCapId: "0xadc",
     manifest,
     gasReserveAmount: 30n,
+    expectedTreasury: "0xc0",
     claimDeadlineMs: 605_800_000n,
   });
-  const publishCall = moveCall(
-    publication,
-    "holder_rewards::publish_reserve_round",
-  );
+  const publishCall = moveCall(publication, "holder_rewards::publish_round");
   assert.deepEqual(argumentKinds(publication, publishCall), [
     "shared-mut:0xba",
     ...ADMIN,
     "shared:0x61",
-    ...Array.from({ length: 10 }, () => "pure"),
+    ...Array.from({ length: 11 }, () => "pure"),
     CLOCK,
   ]);
   assert.deepEqual(
-    [3, 4, 5, 9, 10, 11, 12].map((i) =>
+    [4, 5, 6, 10, 11, 12, 13].map((i) =>
       pureU64(publication, publishCall.arguments[i]),
     ),
     [2n, 21n, 30n, 0n, 970n, 30n, 605_800_000n],
   );
-  const claim = tx.claimHolderRewardReserves({
+  const treasuryArgument = publishCall.arguments[3];
+  assert.ok(treasuryArgument?.$kind === "Input");
+  const treasuryInput = publication.getData().inputs[treasuryArgument.Input];
+  assert.ok(treasuryInput?.$kind === "Pure");
+  assert.equal(
+    bcs.Address.parse(fromBase64(treasuryInput.Pure.bytes)),
+    normalizeSuiAddress("0xc0"),
+  );
+  const options = {
+    ...types,
+    vault,
+    adminCapId: "0xadc",
+    manifest,
+    gasReserveAmount: 30n,
+    expectedTreasury: "0xc0",
+    claimDeadlineMs: 605_800_000n,
+  };
+  assert.throws(() =>
+    tx.publishHolderRewardRound({ ...options, expectedTreasury: "invalid" }),
+  );
+  Reflect.deleteProperty(options, "expectedTreasury");
+  assert.throws(
+    () => tx.publishHolderRewardRound(options),
+    "treasury has no implicit fallback",
+  );
+  const { allocations: proofs, ...header } = manifest;
+  const summary: RewardManifestSummary = {
+    ...header,
+    leafCount: proofs.length,
+    leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
+  };
+  const publishSummary = (input: typeof summary) =>
+    tx.publishHolderRewardRound({
+      ...types,
+      vault,
+      adminCapId: "0xadc",
+      manifest: input,
+      gasReserveAmount: 30n,
+      expectedTreasury: "0xc0",
+      claimDeadlineMs: 605_800_000n,
+    });
+  assert.deepEqual(publishSummary(summary).getData(), publication.getData());
+  for (const invalid of [
+    { ...summary, leafCount: 0 },
+    { ...summary, leafCount: 65_537 },
+    { ...summary, root: "00" },
+    { ...summary, manifestDigest: "00" },
+    { ...summary, quoteAmount: "0970" },
+    { ...summary, memeAmount: "0", quoteAmount: "0" },
+    { ...summary, startCheckpoint: summary.endCheckpoint },
+  ])
+    assert.throws(() => publishSummary(invalid));
+  assert.throws(
+    () =>
+      tx.publishHolderRewardRound({
+        ...types,
+        vault,
+        adminCapId: "0xadc",
+        manifest: { ...summary, leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN },
+        gasReserveAmount: 30n,
+        expectedTreasury: "0xc0",
+        claimDeadlineMs: 1n,
+      }),
+    /leaf domain mismatch/,
+  );
+  const claim = tx.claimHolderRewards({
     ...types,
     round,
     allocations: manifest.allocations,
@@ -984,22 +1198,16 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     adminCapId: "0xadc",
     reimbursementAmount: 24n,
   });
-  const close = tx.closeHolderRewardReserveRound({ ...types, vault, round });
-  const reconcile = tx.reconcileUnallocatedHolderMeme({
-    ...types,
-    vault,
-    adminCapId: "0xadc",
-    expectedMemeAmount: 100n,
-  });
+  const close = tx.closeHolderRewardRound({ ...types, vault, round });
   const cases: [Transaction, string, string[]][] = [
     [
       publication,
-      "holder_rewards::publish_reserve_round",
+      "holder_rewards::publish_round",
       argumentKinds(publication, publishCall),
     ],
     [
       claim,
-      "holder_rewards::claim_reserve_round",
+      "holder_rewards::claim",
       ["shared-mut:0xd1", ...Array.from({ length: 5 }, () => "pure")],
     ],
     [
@@ -1009,13 +1217,8 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     ],
     [
       close,
-      "holder_rewards::close_reserve_round",
+      "holder_rewards::close_round",
       ["shared-mut:0xd1", "shared-mut:0xba", CLOCK],
-    ],
-    [
-      reconcile,
-      "presale_vault::reconcile_unallocated_meme",
-      ["shared-mut:0xba", ...ADMIN, "shared:0x61", "pure"],
     ],
   ];
   for (const [ptb, name, kinds] of cases) {
@@ -1025,7 +1228,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     assert.equal(call.arguments.length, abiArity(module, fn), name);
     assert.equal(call.typeArguments.length, abiTypeArity(module, fn), name);
   }
-  for (const ptb of [publication, settle, reconcile]) {
+  for (const ptb of [publication, settle]) {
     assert.deepEqual(moveCall(ptb, "blast_acl::sign_in").typeArguments, [
       normalizeStructTag("0x5e::blast_presale_domain::RewardsAdmin"),
     ]);
@@ -1040,12 +1243,13 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
   for (const gasReserveAmount of [-1n, 1n << 64n]) {
     assert.throws(
       () =>
-        tx.publishHolderRewardReserveRound({
+        tx.publishHolderRewardRound({
           ...types,
           vault,
           adminCapId: "0xadc",
           manifest,
           gasReserveAmount,
+          expectedTreasury: "0xc0",
           claimDeadlineMs: 1n,
         }),
       /gasReserveAmount/,
@@ -1053,19 +1257,20 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
   }
   assert.throws(
     () =>
-      tx.publishHolderRewardReserveRound({
+      tx.publishHolderRewardRound({
         ...types,
         vault: shared("0xbb", true),
         adminCapId: "0xadc",
         manifest,
         gasReserveAmount: 30n,
+        expectedTreasury: "0xc0",
         claimDeadlineMs: 1n,
       }),
     /another vault/,
   );
   assert.throws(
     () =>
-      tx.publishHolderRewardReserveRound({
+      tx.publishHolderRewardRound({
         ...types,
         vault,
         adminCapId: "0xadc",
@@ -1080,6 +1285,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
           leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
         }),
         gasReserveAmount: 30n,
+        expectedTreasury: "0xc0",
         claimDeadlineMs: 1n,
       }),
     /root mismatch/,
@@ -1170,6 +1376,17 @@ function argumentKinds(
     if (argument.$kind !== "Input") return argument.$kind;
     return describeInput(ptb.getData().inputs[argument.Input]);
   });
+}
+
+/** Decodes the pure `Option<ID>` input `argument` names. */
+function optionalId(
+  ptb: Transaction,
+  argument: ReturnType<typeof moveCall>["arguments"][number] | undefined,
+): string | null {
+  assert.ok(argument?.$kind === "Input");
+  const input = ptb.getData().inputs[argument.Input];
+  assert.ok(input?.$kind === "Pure");
+  return bcs.option(bcs.Address).parse(fromBase64(input.Pure.bytes)) ?? null;
 }
 
 /** Decodes the pure `u64` input `argument` names. */

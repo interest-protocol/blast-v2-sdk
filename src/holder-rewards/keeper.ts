@@ -3,6 +3,10 @@ import { validateRewardManifest } from "./allocations.ts";
 import type { RewardRoundState } from "./state.ts";
 import { rewardIsClaimed } from "./state.ts";
 
+/**
+ * What a `blast_holder_rewards::Round` object commits to. Its checkpoint window
+ * and manifest digest are only in the `RoundPublished` event.
+ */
 type RoundCommitment = Pick<
   RewardRoundState,
   "vaultId" | "number" | "root" | "leafCount"

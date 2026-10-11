@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "442116a0a1b82c6b4a64dc55fa0de430322f4bb7",
+    "contractsCommit": "af86ea4bf34080553a45d961d6db8cec719bb2a0",
     "workingTreeDifferedAtFreeze": false,
     "suiCli": "1.77.2-51d177ad7d65"
   },

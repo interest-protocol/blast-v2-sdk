@@ -201,13 +201,7 @@ export const presaleEventSpecs = {
       protocol_lp_fee_meme_bps: "u64",
       protocol_lp_fee_quote_bps: "u64",
     },
-    BlastHolderMemePaid: {
-      vault_id: "id",
-      treasury: "address",
-      meme_amount: "u64",
-      unallocated_meme_remaining: "u64",
-    },
-    BlastUnallocatedMemeReconciled: {
+    HolderMemePaid: {
       vault_id: "id",
       treasury: "address",
       meme_amount: "u64",
@@ -221,7 +215,7 @@ export const presaleEventSpecs = {
     },
   },
   holder_rewards: {
-    BlastRoundPublished: {
+    RoundPublished: {
       vault_id: "id",
       round_id: "id",
       number: "u64",
@@ -238,7 +232,7 @@ export const presaleEventSpecs = {
       treasury: "address",
       gas_reserve_amount: "u64",
     },
-    BlastRewardClaimed: {
+    RewardClaimed: {
       round_id: "id",
       index: "u64",
       beneficiary: "address",
@@ -256,44 +250,13 @@ export const presaleEventSpecs = {
       reserve_returned: "u64",
       quote_unallocated: "u64",
     },
-    BlastRoundClosed: {
-      vault_id: "id",
-      round_id: "id",
-      number: "u64",
-      meme_returned: "u64",
-      quote_returned: "u64",
-      gas_reserve_returned: "u64",
-    },
-    RoundPublished: {
-      vault_id: "id",
-      round_id: "id",
-      number: "u64",
-      start_checkpoint: "u64",
-      end_checkpoint: "u64",
-      claim_deadline_ms: "u64",
-      root: "bytes",
-      manifest_digest: "bytes",
-      leaf_count: "u64",
-      meme_amount: "u64",
-      quote_amount: "u64",
-      meme_unallocated: "u64",
-      quote_unallocated: "u64",
-    },
     RoundClosed: {
       vault_id: "id",
       round_id: "id",
       number: "u64",
       meme_returned: "u64",
       quote_returned: "u64",
-    },
-    RewardClaimed: {
-      round_id: "id",
-      index: "u64",
-      beneficiary: "address",
-      meme_amount: "u64",
-      quote_amount: "u64",
-      meme_remaining: "u64",
-      quote_remaining: "u64",
+      gas_reserve_returned: "u64",
     },
   },
 } as const satisfies Record<
