@@ -146,7 +146,7 @@ test("allocation pages use one global denominator and preserve zero-atom qualifi
   );
 });
 
-test("paged BCS, roots and proofs match legacy bytes across odd leaves, domains, pages and interrupted resume", async () => {
+test("paged BCS, roots and proofs match monolithic bytes across odd leaves, domains, pages and interrupted resume", async () => {
   for (const count of [1, 3, 7, 128, 129]) {
     const rows = allocations(count);
     const domains: readonly RewardLeafDomain[] = [

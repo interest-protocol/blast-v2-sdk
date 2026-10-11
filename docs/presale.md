@@ -10,24 +10,11 @@ token and raise shares, Blast's protocol fees and
 creation allowlists, LP-fee splits, holder-reward rounds, and administration through the shared
 Blast ACL.
 
-This SDK follows the `blast_presale` package published on mainnet on
-2026-10-09 from contracts `acad02e` (see [ABI coverage](#abi-coverage)), which
-Blast administers through the shared `blast_admin` ACL.
-
-The package publishes before the rest of Blast (contracts ADR 0099), after
-`blast_admin` and `blast_partners`, so it registers on its own.
-`getPresaleDeployment(network)` returns the complete Blast release's presale
-once one is registered, and the standalone release
-(`BLAST_PRESALE_DEPLOYMENTS`, which also carries the Aftermath vendor under
-`aftermath`) until then. Mainnet currently registers the
-2026-10-09 ACL publication. The earlier package at `0x76cb…8400` administers
-itself with an `AdminRegistry`, so these builders cannot drive it.
-
-The reserve and holder Meme routing APIs below require a new, verified presale
-publication. They are absent from the registered October 9 lineage, whose
-dependency-only upgrade policy cannot change Move logic. Existing deployment
-The SDK targets the republished canonical reward ABI. Deployment registration
-must identify that publication before these calls can execute.
+The SDK targets the canonical presale ABI frozen at contracts `c36057d` for a
+fresh publication. Register that publication's package, ACL and shared policy
+objects before using these builders. `getPresaleDeployment(network)` resolves
+the registered complete release or standalone presale deployment; the
+registration must match the canonical source ABI.
 
 ```ts
 import { getPresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
@@ -439,9 +426,8 @@ choice. `HolderMemePaid` records the vault's treasury transfer.
 ## ABI coverage
 
 `abi/production-presale-v1.json` freezes the source ABI at contracts `c36057d`,
-including the approved reserve and holder Meme routing amendments. The
-registered 2026-10-09 publication is still contracts `acad02e`; it does not
-contain those later APIs. The Aftermath vendor keeps its independent `af86ea4`
+including the approved reserve and holder Meme routing amendments for the
+fresh publication. The Aftermath vendor keeps its independent `af86ea4`
 source freeze.
 Every public function is classified:
 
@@ -450,9 +436,8 @@ Every public function is classified:
   `set_migration_witness_allowed`, `add_partner`, and `remove_partner`; `cetus` and `bluefin` `new`, `migrate`,
   `collect_fees`, and `new_vault`; `presale_vault` `claim_migration_residuals` and
   `set_protocol_lp_fees`; and
-  `holder_rewards` `publish_round`, `claim`, `close_round`,
-  `publish_reserve_round`, `claim_reserve_round`, `settle_gas_reserve`, and
-  `close_reserve_round`; and `presale_vault::reconcile_unallocated_meme`.
+  `holder_rewards` `publish_round`, `claim`, `settle_gas_reserve`, and
+  `close_round`.
 - **Compositional:** `bps::new`, which every rate argument passes through.
 - **Move composition:** `blast_presale::new` and `migrate`, which a migrator's
   own module calls with its sealed witness; no transaction can construct one.

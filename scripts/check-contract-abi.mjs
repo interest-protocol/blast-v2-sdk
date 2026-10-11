@@ -63,8 +63,7 @@ const artifactDeclarations = [
   },
   {
     path: "production-presale-v1.json",
-    // Source ABI plus approved amendments; the registered Oct09 publication
-    // predates reserve/routing APIs. A new verified lineage is needed to call them.
+    // Canonical source ABI for the fresh presale publication.
     baseline: {
       contractsCommit: "c36057d4eaea8e284e24fda4fd459eb721731b14",
       workingTreeDifferedAtFreeze: false,
@@ -479,11 +478,7 @@ const presaleBuilders = new Set([
   "holder_rewards::publish_round",
   "holder_rewards::claim",
   "holder_rewards::close_round",
-  "holder_rewards::publish_reserve_round",
-  "holder_rewards::claim_reserve_round",
   "holder_rewards::settle_gas_reserve",
-  "holder_rewards::close_reserve_round",
-  "presale_vault::reconcile_unallocated_meme",
 ]);
 const presaleEventNames = new Set([
   "PresaleCreated",
