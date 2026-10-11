@@ -65,7 +65,7 @@ const artifactDeclarations = [
     path: "production-presale-v1.json",
     // Canonical source ABI for the fresh presale publication.
     baseline: {
-      contractsCommit: "c36057d4eaea8e284e24fda4fd459eb721731b14",
+      contractsCommit: "4b170eef84a8f29b3aed91f035bbe23490adb0bd",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
@@ -97,8 +97,13 @@ const artifactDeclarations = [
   },
   {
     path: "production-partners-v1.json",
-    // First covered at contracts 442116a; its ABI is unchanged since.
-    baseline: BASELINE,
+    baseline: {
+      contractsCommit: "4b170eef84a8f29b3aed91f035bbe23490adb0bd",
+      workingTreeDifferedAtFreeze: false,
+    },
+    approvedAbiAmendments: [
+      "contracts ADR 0095 (amended 2026-10-11): pay takes TxContext and transfers the partner's share as a coin",
+    ],
     packages: [["partners", "partners", "blast_partners"]],
   },
   {
