@@ -1,8 +1,11 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "af86ea4bf34080553a45d961d6db8cec719bb2a0",
+    "contractsCommit": "4b170eef84a8f29b3aed91f035bbe23490adb0bd",
     "workingTreeDifferedAtFreeze": false,
+    "approvedAbiAmendments": [
+      "contracts ADR 0095 (amended 2026-10-11): pay takes TxContext and transfers the partner's share as a coin"
+    ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
   "packages": {
@@ -134,6 +137,21 @@
                           "name": "clock"
                         },
                         "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
                         "type_arguments": []
                       }
                     }
