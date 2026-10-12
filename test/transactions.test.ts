@@ -92,14 +92,29 @@ test("completes an adapter-started launch: settings, finalize, and share", () =>
     moveCall(tx, "launch::set_partner").arguments.map(argumentKind(tx)),
     [
       "object:0xe",
+      "shared:0x2",
       "shared:0x3",
       "shared:0x9a",
       `shared:${SUI_CLOCK_OBJECT_ID}`,
     ],
   );
+  for (const name of launchCalls) {
+    assert.equal(
+      moveCall(tx, name).arguments.map(argumentKind(tx))[1],
+      "shared:0x2",
+    );
+  }
+  assert.ok(
+    sharedInputs(tx).some(
+      (input) =>
+        input.objectId === normalizeSuiObjectId("0x2") &&
+        input.mutable === false,
+    ),
+  );
   const finalize = moveCall(tx, "launch::finalize");
   assert.deepEqual(finalize.arguments.map(argumentKind(tx)), [
     "object:0xe",
+    "shared:0x2",
     "shared:0xd",
     "shared:0x3",
     "object:0x5f",
@@ -107,6 +122,7 @@ test("completes an adapter-started launch: settings, finalize, and share", () =>
   const share = moveCall(tx, "launch::share");
   assert.deepEqual(share.arguments.map(argumentKind(tx)), [
     `Result:${commandIndex(tx, "launch::finalize")}`,
+    "shared:0x2",
     `shared:${SUI_CLOCK_OBJECT_ID}`,
   ]);
 });

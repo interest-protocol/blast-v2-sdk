@@ -279,6 +279,7 @@ export class LaunchpadCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           options.initializer,
+          this.#packageVersion(tx),
           sharedObject(tx, "currency", options.currency, true),
           this.#launchConfig(tx),
           tx.object(options.creationFee),
@@ -293,7 +294,11 @@ export class LaunchpadCalls {
       tx.moveCall({
         target: `${this.deployment.packageId}::launch::share`,
         typeArguments: [types.memeType, types.quoteType],
-        arguments: [options.launch, tx.object.clock()],
+        arguments: [
+          options.launch,
+          this.#packageVersion(tx),
+          tx.object.clock(),
+        ],
       });
     };
   }
@@ -814,7 +819,11 @@ export class LaunchpadCalls {
       tx.moveCall({
         target: `${this.deployment.packageId}::launch::${functionName}`,
         typeArguments: [types.memeType, types.quoteType],
-        arguments: [options.initializer, ...extra(tx)],
+        arguments: [
+          options.initializer,
+          this.#packageVersion(tx),
+          ...extra(tx),
+        ],
       });
     };
   }
