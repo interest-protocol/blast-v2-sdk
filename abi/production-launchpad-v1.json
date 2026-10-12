@@ -1,9 +1,11 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "af86ea4bf34080553a45d961d6db8cec719bb2a0",
+    "contractsCommit": "22fe536310a41f31b572e029705854bb8f5cbf02",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
+      "Asymptotic L-1: consume Bootstrap and the fresh matching UpgradeCap to enable launchpad PackageVersion",
+      "Asymptotic L-5: version-first guards on all six initializer setters, finalize and share before first publication",
       "contracts ADR 0011: compact replay-complete event payloads before release",
       "contracts ADR 0027: make protocol ownership explicit in Quote migration fee names",
       "contracts ADR 0067: retire the Full Sail migrator before release",
@@ -675,6 +677,69 @@
                 {
                   "name": "dummy_field",
                   "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "Bootstrap",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "publisher",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "package"
+                      },
+                      "name": "Publisher",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "generation",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "operational_version"
+                      },
+                      "name": "OperationalVersion",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_fun",
+                                "name": "blast_fun"
+                              },
+                              "name": "BLAST_FUN",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
             },
@@ -3315,6 +3380,21 @@
                 },
                 {
                   "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "blast_fun"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
                     true,
                     {
                       "Datatype": {
@@ -4348,6 +4428,21 @@
                   ]
                 },
                 {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "blast_fun"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
                   "Datatype": {
                     "module": {
                       "address": "blast_fun",
@@ -4522,6 +4617,21 @@
                     }
                   ]
                 },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "blast_fun"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
                 "u64"
               ],
               "returns": []
@@ -4684,6 +4794,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "blast_fun"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -4863,6 +4988,21 @@
                     }
                   ]
                 },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "blast_fun"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
                 "u64"
               ],
               "returns": []
@@ -4908,6 +5048,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "blast_fun"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -5001,6 +5156,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "blast_fun"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -5141,6 +5311,21 @@
                       }
                     ]
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_fun",
+                          "name": "blast_fun"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 {
                   "Reference": [
@@ -7243,10 +7428,10 @@
                 {
                   "Datatype": {
                     "module": {
-                      "address": "sui",
-                      "name": "package"
+                      "address": "blast_fun",
+                      "name": "blast_fun"
                     },
-                    "name": "Publisher",
+                    "name": "Bootstrap",
                     "type_arguments": []
                   }
                 },

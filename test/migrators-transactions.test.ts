@@ -117,6 +117,7 @@ test("starts, configures, finalizes, and shares a Cetus launch in one PTB", () =
   // The creation fee is an exact-balance SUI coin intent resolved at build.
   assert.deepEqual(argumentKinds(tx, finalize), [
     `Result:${commandIndex(tx, "cetus::new")}`,
+    "shared:0x2",
     "shared-mut:0xd",
     "shared:0x3",
     "Result:1",

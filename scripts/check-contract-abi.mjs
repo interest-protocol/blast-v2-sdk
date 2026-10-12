@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
  * refreeze at contracts main with `check:abi:write` for an approved change,
  * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
  */
-const BASELINE_COMMIT = "af86ea4bf34080553a45d961d6db8cec719bb2a0";
+const BASELINE_COMMIT = "22fe536310a41f31b572e029705854bb8f5cbf02";
 const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
@@ -37,6 +37,8 @@ const artifactDeclarations = [
       ["migrators", "migrators", "blast_fun_migrators"],
     ],
     approvedAbiAmendments: [
+      "Asymptotic L-1: consume Bootstrap and the fresh matching UpgradeCap to enable launchpad PackageVersion",
+      "Asymptotic L-5: version-first guards on all six initializer setters, finalize and share before first publication",
       "contracts ADR 0011: compact replay-complete event payloads before release",
       "contracts ADR 0027: make protocol ownership explicit in Quote migration fee names",
       "contracts ADR 0067: retire the Full Sail migrator before release",
