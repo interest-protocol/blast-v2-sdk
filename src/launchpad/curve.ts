@@ -61,13 +61,15 @@ export function previewBuy(
   requirePositiveU64("quoteSupplied", quoteSupplied);
   const preview = quoteBuy(state, quoteSupplied);
   requirePositiveOutput("quoteInNet", preview.quoteInNet);
-  requirePositiveOutput("memeOutGross", preview.memeOutGross);
-  requirePositiveOutput("memeOutNet", preview.memeOutNet);
+  if (!preview.crossedThreshold) {
+    requirePositiveOutput("memeOutGross", preview.memeOutGross);
+    requirePositiveOutput("memeOutNet", preview.memeOutNet);
+  }
   return preview;
 }
 
 export type OpeningRoundSettlementPreview = {
-  /** The purchase the pot makes; null when it buys less than one Meme atom. */
+  /** The purchase; null when output is zero and the target is not reached. */
   bought: BuyPreview | null;
   /** Meme held for the bids: the purchase's net output. */
   meme: bigint;
@@ -78,7 +80,8 @@ export type OpeningRoundSettlementPreview = {
 /**
  * Mirrors `launch::settle_opening_round`: the whole pot buys once from the
  * curve, exactly like `previewBuy`, except that a pot too small to buy one
- * Meme atom (or an empty pot) is held whole for refund instead of aborting.
+ * Meme atom (or an empty pot) is held whole for refund instead of aborting,
+ * unless its net Quote reaches the graduation target.
  */
 export function previewOpeningRoundSettlement(
   state: CurveState,
@@ -86,7 +89,7 @@ export function previewOpeningRoundSettlement(
 ): OpeningRoundSettlementPreview {
   requireU64("pot", pot);
   const bought = quoteBuy(state, pot);
-  return bought.memeOutNet === 0n
+  return bought.memeOutNet === 0n && !bought.crossedThreshold
     ? { bought: null, meme: 0n, quote: pot }
     : { bought, meme: bought.memeOutNet, quote: bought.quoteRefund };
 }

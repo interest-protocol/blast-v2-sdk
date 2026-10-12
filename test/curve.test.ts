@@ -174,3 +174,71 @@ test("delivers opening-round shares rounded down, the last bid taking the rest",
   assert.throws(() => previewOpeningRoundDelivery(round, 4n), /exceeds/);
   assert.throws(() => previewOpeningRoundDelivery(round, 0n), /positive/);
 });
+
+for (const { target, grossMeme } of [
+  { target: 1_000_000_000_000_000_000n, grossMeme: 0n },
+  { target: 100_000_000_000_000_000n, grossMeme: 1n },
+]) {
+  test(`terminal dust buy graduates with ${grossMeme} gross Meme atoms`, () => {
+    const initial = {
+      memeReserve: 725_000_000_000_000_000n,
+      realQuoteReserve: 0n,
+      virtualQuote: target,
+      graduationTarget: target,
+      quoteFeeBps: 100n,
+      memeFeeBps: 250n,
+    };
+    const first = previewBuy(
+      initial,
+      ((target - 1n) * 10_000n + 9_899n) / 9_900n,
+    );
+    assert.ok(first.memeOutNet > 0n);
+    assert.equal(first.realQuoteReserveAfter, target - 1n);
+    assert.equal(first.crossedThreshold, false);
+    const state = {
+      ...initial,
+      memeReserve: first.memeReserveAfter,
+      realQuoteReserve: first.realQuoteReserveAfter,
+    };
+    const terminal = previewBuy(state, 100n);
+    assert.deepEqual(terminal, {
+      quoteSupplied: 100n,
+      quoteInGross: 2n,
+      quoteRefund: 98n,
+      quoteFee: 1n,
+      quoteInNet: 1n,
+      memeOutGross: grossMeme,
+      memeFee: grossMeme,
+      memeOutNet: 0n,
+      memeReserveAfter: state.memeReserve - grossMeme,
+      realQuoteReserveAfter: target,
+      crossedThreshold: true,
+    });
+    assert.equal(
+      terminal.quoteSupplied,
+      terminal.quoteInNet + terminal.quoteFee + terminal.quoteRefund,
+    );
+    assert.throws(() => previewBuy(state, 0n), /positive/);
+    assert.throws(() => previewBuy(state, 1n), /quoteInNet rounds to zero/);
+    assert.deepEqual(previewOpeningRoundSettlement(state, 100n), {
+      bought: terminal,
+      meme: 0n,
+      quote: 98n,
+    });
+  });
+}
+
+test("nonterminal zero-output buys still fail and opening rounds refund the whole pot", () => {
+  const state = {
+    ...baseState,
+    memeReserve: 10n,
+    virtualQuote: 100n,
+    graduationTarget: 100n,
+  };
+  assert.throws(() => previewBuy(state, 2n), /memeOutGross rounds to zero/);
+  assert.deepEqual(previewOpeningRoundSettlement(state, 2n), {
+    bought: null,
+    meme: 0n,
+    quote: 2n,
+  });
+});
