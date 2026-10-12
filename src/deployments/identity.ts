@@ -31,12 +31,12 @@ import { SHARED_OBJECT_GROUPS, VENUE_IDENTITY_SETS } from "./types.ts";
  * ABI mismatch.
  */
 export const FROZEN_ABI = Object.freeze({
-  contractsCommit: "22fe536310a41f31b572e029705854bb8f5cbf02",
+  contractsCommit: "416bfa234d821a2fb11ad2d0342337455c2d5d6d",
   artifacts: Object.freeze({
     launchpad:
-      "eae480030d3bc2d2a30f6814dbe31dc21d659af9a396794535f9291885f81f87",
+      "e9b0d1f2bd261a834796189cdc693ca60ed931f96d60bd343160a63b5fa477b0",
     blastSui:
-      "696150c86a1094afc403b9fb585eb2d5afc0ed302d9d4c8457062dbaad8f519c",
+      "d9a79dcd60f7cca728bf41915ab7f611202140b6c81d1863c5e56c142141a8f8",
   }),
 });
 

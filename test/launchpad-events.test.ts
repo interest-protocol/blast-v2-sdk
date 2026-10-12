@@ -432,7 +432,7 @@ test("replays creator claims and signer changes", () => {
       {
         meme: "0xa::meme::MEME",
         curve_fee_cap_id: "0x20",
-        metadata_cap_id: "0x21",
+        blast_metadata_cap_id: "0x21",
       },
       30,
     ),
@@ -461,7 +461,7 @@ test("replays creator claims and signer changes", () => {
       memeType: normalizedType("0xa::meme::MEME"),
       claimant: normalizeSuiObjectId("0xd"),
       curveFeeCapId: normalizeSuiObjectId("0x20"),
-      metadataCapId: normalizeSuiObjectId("0x21"),
+      blastMetadataCapId: normalizeSuiObjectId("0x21"),
     },
   );
   assert.equal(projection.administration.creatorClaimSignerPublicKey, null);
@@ -469,7 +469,11 @@ test("replays creator claims and signer changes", () => {
 
 test("replays creator capability claims, reassignments, and metadata", () => {
   const created = [
-    decoded("LaunchTicketCreated", { ticket_id: "0xb" }, 0),
+    decoded(
+      "LaunchTicketCreated",
+      { ticket_id: "0xb", metadata_cap_id: "0x11" },
+      0,
+    ),
     decoded("LaunchCreated", { launch_id: "0xc", ticket_id: "0xb" }, 1),
   ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
   const launchId = normalizeSuiObjectId("0xc");
@@ -484,7 +488,7 @@ test("replays creator capability claims, reassignments, and metadata", () => {
       {
         meme: "0xa::meme::MEME",
         curve_fee_cap_id: "0x20",
-        metadata_cap_id: "0x21",
+        blast_metadata_cap_id: "0x21",
       },
       2,
     ),
@@ -512,7 +516,7 @@ test("replays creator capability claims, reassignments, and metadata", () => {
       "MetadataCapReassigned",
       {
         launch_id: "0xc",
-        metadata_cap_id: "0x31",
+        blast_metadata_cap_id: "0x31",
         recipient: "0xe",
       },
       4,
@@ -532,6 +536,11 @@ test("replays creator capability claims, reassignments, and metadata", () => {
 
   assert.equal(launch?.curveFeeCapId, normalizeSuiObjectId("0x30"));
   assert.equal(launch?.blastMetadataCapId, normalizeSuiObjectId("0x31"));
+  assert.equal(launch?.metadataCapId, normalizeSuiObjectId("0x11"));
+  assert.equal(
+    projection.tickets[normalizeSuiObjectId("0xb")]?.metadataCapId,
+    normalizeSuiObjectId("0x11"),
+  );
   assert.deepEqual(launch?.memeMetadata, {
     name: "Dog Coin",
     description: "Good dog",

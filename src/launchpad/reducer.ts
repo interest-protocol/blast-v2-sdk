@@ -135,7 +135,7 @@ export type LaunchpadAdministrationProjection = {
         memeType: string;
         claimant: string;
         curveFeeCapId: string;
-        metadataCapId: string;
+        blastMetadataCapId: string;
       }
     >
   >;
@@ -495,7 +495,7 @@ export function reduceLaunchpadEvent(
       const claimed = updateLaunchesByMeme(next, payload.meme, (launch) => ({
         ...launch,
         curveFeeCapId: payload.curve_fee_cap_id,
-        blastMetadataCapId: payload.metadata_cap_id,
+        blastMetadataCapId: payload.blast_metadata_cap_id,
       }));
       return updateAdministration(claimed, {
         ...state.administration,
@@ -505,7 +505,7 @@ export function reduceLaunchpadEvent(
             memeType: payload.meme,
             claimant: event.sender,
             curveFeeCapId: payload.curve_fee_cap_id,
-            metadataCapId: payload.metadata_cap_id,
+            blastMetadataCapId: payload.blast_metadata_cap_id,
           },
         },
       });
@@ -521,7 +521,7 @@ export function reduceLaunchpadEvent(
       const payload = event.payload;
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
-        blastMetadataCapId: payload.metadata_cap_id,
+        blastMetadataCapId: payload.blast_metadata_cap_id,
       }));
     }
     case "MemeMetadataUpdated": {

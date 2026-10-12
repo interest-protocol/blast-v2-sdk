@@ -48,7 +48,7 @@ export const launchpadEventSpecs = {
   CreatorCapsClaimed: {
     meme: "typeName",
     curve_fee_cap_id: "id",
-    metadata_cap_id: "id",
+    blast_metadata_cap_id: "id",
   },
   CurveFeeCapReassigned: {
     launch_id: "id",
@@ -116,7 +116,7 @@ export const launchpadEventSpecs = {
   },
   MetadataCapReassigned: {
     launch_id: "id",
-    metadata_cap_id: "id",
+    blast_metadata_cap_id: "id",
     recipient: "address",
   },
   MigrationWitnessSet: { migration_witness: "typeName", allowed: "bool" },

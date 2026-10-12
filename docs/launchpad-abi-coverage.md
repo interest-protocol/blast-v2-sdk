@@ -20,7 +20,7 @@ artifacts:
 - `abi/production-partners-v1.json` for `blast_partners`.
 
 The shared baseline and CI checkout now use contracts
-`22fe536310a41f31b572e029705854bb8f5cbf02`. Artifacts with a product-specific baseline retain that separate source revision. Each
+`416bfa234d821a2fb11ad2d0342337455c2d5d6d`. Artifacts with a product-specific baseline retain that separate source revision. Each
 artifact records `baseline.contractsCommit`, the commit it was frozen at,
 and `baseline.approvedAbiAmendments`, every reviewed contracts change to its
 ABI since that baseline, and Sui CLI `1.77.2-51d177ad7d65`, which the checker
