@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
  * refreeze at contracts main with `check:abi:write` for an approved change,
  * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
  */
-const BASELINE_COMMIT = "22fe536310a41f31b572e029705854bb8f5cbf02";
+const BASELINE_COMMIT = "416bfa234d821a2fb11ad2d0342337455c2d5d6d";
 const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
@@ -37,6 +37,7 @@ const artifactDeclarations = [
       ["migrators", "migrators", "blast_fun_migrators"],
     ],
     approvedAbiAmendments: [
+      "Asymptotic I-5: distinguish Blast metadata capability event fields from the native Coin Registry capability before publication",
       "Asymptotic L-1: consume Bootstrap and the fresh matching UpgradeCap to enable launchpad PackageVersion",
       "Asymptotic L-5: version-first guards on all six initializer setters, finalize and share before first publication",
       "contracts ADR 0011: compact replay-complete event payloads before release",

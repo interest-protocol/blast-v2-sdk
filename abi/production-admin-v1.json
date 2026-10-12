@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "22fe536310a41f31b572e029705854bb8f5cbf02",
+    "contractsCommit": "416bfa234d821a2fb11ad2d0342337455c2d5d6d",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0097 (amended 2026-10-02, admin package review): upgrade_custody::publisher borrows the sealed Publisher, operational_version::new takes the package's one-time witness, and advance takes the versioned object's UID"
