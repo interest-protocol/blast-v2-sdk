@@ -187,7 +187,6 @@ function vault() {
     protocol_quote_residual: balance,
     unpaid_protocol_meme: balance,
     unpaid_protocol_quote: balance,
-    generation: 0n,
     fee_split: feeSplit,
     creator_meme: balance,
     creator_quote: balance,

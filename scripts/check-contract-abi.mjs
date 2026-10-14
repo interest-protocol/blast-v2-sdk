@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
  * refreeze at contracts main with `check:abi:write` for an approved change,
  * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
  */
-const BASELINE_COMMIT = "416bfa234d821a2fb11ad2d0342337455c2d5d6d";
+const BASELINE_COMMIT = "dfd42a8f65507d17fe34e41adccf37bdd8a34379";
 const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
@@ -62,6 +62,7 @@ const artifactDeclarations = [
       "contracts ADR 0105: anyone claims Blast's launch fees, paid to the partner and to a RuntimeConfig treasury that runtime_config::set_treasury (TreasuryAdmin) rotates; ProtocolFeesClaimed records the treasury and TreasuryChanged records each rotation",
       "contracts ADR 0107: the LpVault inherits launch::partner_id and, when partnered, holds Blast's LP fees until anyone calls vault::claim_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesClaimed records each claim",
       "contracts ADR 0108: meme_template is launch_ticket_template with byte-identical bytecode, and the standalone coin_template, with no public functions, joins the generated-package templates",
+      "contracts ADR 0089 (events review, 2026-10-14): the LpVault drops its fee-split generation; FeesCollected drops generation and FeeSplitChanged drops old_generation and new_generation, since native event order and the old/new split pair already sequence split changes",
     ],
   },
   {

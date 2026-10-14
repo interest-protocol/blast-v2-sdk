@@ -41,7 +41,6 @@ function serializeVault(id = objectId): Uint8Array {
       protocol_quote_residual: balance(6n),
       unpaid_protocol_meme: balance(10n),
       unpaid_protocol_quote: balance(11n),
-      generation: 2n,
       fee_split: feeSplit,
       creator_meme: balance(1n),
       creator_quote: balance(2n),
@@ -56,7 +55,7 @@ function serializeVault(id = objectId): Uint8Array {
     .toBytes();
 }
 
-test("decodes LP-vault custody, split generation, and every balance", () => {
+test("decodes LP-vault custody, fee split, and every balance", () => {
   const vault = decodeLpVaultObject(
     {
       objectId,
@@ -79,7 +78,6 @@ test("decodes LP-vault custody, split generation, and every balance", () => {
       protocolQuoteResidual: vault.protocolQuoteResidual,
       unpaidProtocolMeme: vault.unpaidProtocolMeme,
       unpaidProtocolQuote: vault.unpaidProtocolQuote,
-      generation: vault.generation,
       feeSplit: vault.feeSplit,
       creatorMeme: vault.creatorMeme,
       creatorQuote: vault.creatorQuote,
@@ -97,7 +95,6 @@ test("decodes LP-vault custody, split generation, and every balance", () => {
       protocolQuoteResidual: 6n,
       unpaidProtocolMeme: 10n,
       unpaidProtocolQuote: 11n,
-      generation: 2n,
       feeSplit,
       creatorMeme: 1n,
       creatorQuote: 2n,

@@ -54,14 +54,11 @@ export const migratorEventSpecs = {
   },
   FeeSplitChanged: {
     vault_id: "id",
-    old_generation: "u64",
-    new_generation: "u64",
     old_fee_split: "feeSplit",
     new_fee_split: "feeSplit",
   },
   FeesCollected: {
     vault_id: "id",
-    generation: "u64",
     gross_meme: "u64",
     gross_quote: "u64",
     protocol_destination: "optionAddress",

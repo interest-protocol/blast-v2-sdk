@@ -20,7 +20,7 @@ artifacts:
 - `abi/production-partners-v1.json` for `blast_partners`.
 
 The shared baseline and CI checkout now use contracts
-`416bfa234d821a2fb11ad2d0342337455c2d5d6d`. Artifacts with a product-specific baseline retain that separate source revision. Each
+`dfd42a8f65507d17fe34e41adccf37bdd8a34379`. Artifacts with a product-specific baseline retain that separate source revision. Each
 artifact records `baseline.contractsCommit`, the commit it was frozen at,
 and `baseline.approvedAbiAmendments`, every reviewed contracts change to its
 ABI since that baseline, and Sui CLI `1.77.2-51d177ad7d65`, which the checker
@@ -164,7 +164,7 @@ authoritative, and these helpers do not duplicate mutable admission policy.
 | --- | --- | --- |
 | 28 wrapped launchpad payloads: `Bought`, `CreationFeeChanged`, `CreatorCapsClaimed`, `CreatorClaimSignerSet`, `CreatorFeesClaimed`, `CurveFeeCapReassigned`, `LaunchCreated`, `LaunchShared`, `LaunchTicketCreated`, `LaunchTradeFeesChanged`, `MemeDecimalsSet`, `MemeMetadataUpdated`, `MetadataCapReassigned`, `Migrated`, `MigrationAllocationPaid`, `MigrationWitnessSet`, `OpeningRoundDelivered`, `OpeningRoundJoined`, `OpeningRoundSettled`, `PartnerAdded`, `PartnerRemoved`, `ProtocolAllocationSet`, `ProtocolFeesAccrued`, `ProtocolFeesClaimed`, `ProtocolFeeShareChanged`, `QuoteSet`, `Sold`, `TreasuryChanged` | `launchpadEventSpecs`, `launchpadEventBcs`, `decodeLaunchpadEvent`, `reduceLaunchpadEvent` | `test/launchpad-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
 | Fourteen direct migrator payloads in `blast_events`: `AutoLiquidityAdded`, `AutoLpPositionOpened`, `BuybackBurned`, `CetusPoolReserved`, `CreatorFeesClaimed`, `FeeSplitChanged`, `FeesCollected`, `LpFeeDestinationChanged`, `LpFeePolicyChanged`, `ProtocolFeesClaimed`, `ProtocolLpFeesClaimed`, `RewardPaid`, `RoundPublished`, `VaultCreated` | `migratorEventSpecs`, `migratorEventBcs`, `decodeMigratorEvent`, `reduceMigratorEvent` | `test/migrator-events.test.ts` checks names, ordered fields/types, decoding, and every reducer path. |
-| Ordered launch-to-vault replay | `reduceLaunchpadProductInput` | launchpad and migrator replay tests reconstruct launch lifecycle, the opening round (pot, per-bidder bids, settlement, deliveries), reserves, launch fees (the SUI creation fee and Blast's migration fee included), allocation payouts, migration, vault/pool/position identity, residuals and liquidity (the vault linked to its launch by Meme type on `VaultCreated`), split generations, creator/auto-LP/rewards balances, holder-reward rounds, and LP-fee policy. Actor identities omitted from payloads are reconstructed from native event senders. |
+| Ordered launch-to-vault replay | `reduceLaunchpadProductInput` | launchpad and migrator replay tests reconstruct launch lifecycle, the opening round (pot, per-bidder bids, settlement, deliveries), reserves, launch fees (the SUI creation fee and Blast's migration fee included), allocation payouts, migration, vault/pool/position identity, residuals and liquidity (the vault linked to its launch by Meme type on `VaultCreated`), fee splits, creator/auto-LP/rewards balances, holder-reward rounds, and LP-fee policy. Actor identities omitted from payloads are reconstructed from native event senders. |
 
 Launchpad and migrator decoders authenticate an event by its type, which names
 the original package. Sui records the transaction's called package and module on
