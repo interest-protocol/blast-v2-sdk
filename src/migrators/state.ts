@@ -71,7 +71,6 @@ export const lpVaultBcs = bcs.struct("LpVault", {
   protocol_quote_residual: suiBalanceBcs,
   unpaid_protocol_meme: suiBalanceBcs,
   unpaid_protocol_quote: suiBalanceBcs,
-  generation: bcs.u64(),
   fee_split: feeSplitBcs,
   creator_meme: suiBalanceBcs,
   creator_quote: suiBalanceBcs,
@@ -110,8 +109,6 @@ export type LpVaultState = SharedObjectReference<true> & {
   /** Blast's LP fees a partnered vault holds until `claimProtocolLpFeesWithPartner`. */
   unpaidProtocolMeme: bigint;
   unpaidProtocolQuote: bigint;
-  /** Split generation stamped on every collection; zero at migration. */
-  generation: bigint;
   feeSplit: FeeSplit;
   /** Creator LP fees claimable by the launch's live `CurveFeeCap`. */
   creatorMeme: bigint;
@@ -189,7 +186,6 @@ export function decodeLpVaultObject(
     protocolQuoteResidual: BigInt(parsed.protocol_quote_residual.value),
     unpaidProtocolMeme: BigInt(parsed.unpaid_protocol_meme.value),
     unpaidProtocolQuote: BigInt(parsed.unpaid_protocol_quote.value),
-    generation: BigInt(parsed.generation),
     feeSplit: parsed.fee_split,
     creatorMeme: BigInt(parsed.creator_meme.value),
     creatorQuote: BigInt(parsed.creator_quote.value),

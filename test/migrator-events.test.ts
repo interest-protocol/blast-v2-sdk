@@ -110,7 +110,6 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
       "FeesCollected",
       {
         vault_id: "0x40",
-        generation: 0n,
         gross_meme: 110n,
         gross_quote: 220n,
         protocol_destination: "0xb",
@@ -149,8 +148,6 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
       "FeeSplitChanged",
       {
         vault_id: "0x40",
-        old_generation: 0n,
-        new_generation: 1n,
         old_fee_split: split,
         new_fee_split: nextSplit,
       },
@@ -231,7 +228,6 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
   assert.equal(vault.autoLpPositionId, normalizeSuiObjectId("0x43"));
   assert.equal(vault.autoLpMeme, 2n);
   assert.equal(vault.autoLpQuote, 0n);
-  assert.equal(vault.generation, 1n);
   assert.deepEqual(vault.feeSplit, nextSplit);
   assert.equal(vault.creatorMeme, 0n);
   assert.equal(vault.creatorQuote, 0n);

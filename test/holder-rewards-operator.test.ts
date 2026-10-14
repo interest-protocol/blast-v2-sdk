@@ -297,7 +297,6 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
                 protocol_quote_residual: { value: 0n },
                 unpaid_protocol_meme: { value: 0n },
                 unpaid_protocol_quote: { value: 0n },
-                generation: 0n,
                 fee_split: {
                   creatorBps: 0n,
                   autoLpBps: 0n,

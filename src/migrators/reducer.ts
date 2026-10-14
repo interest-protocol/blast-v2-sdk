@@ -27,7 +27,6 @@ export type LpVaultEventProjection = {
   venueType: string;
   memeType: string;
   quoteType: string;
-  generation: bigint;
   feeSplit: FeeSplit;
   creatorMeme: bigint;
   creatorQuote: bigint;
@@ -219,7 +218,6 @@ export function reduceMigratorEvent(
             venueType: payload.venue,
             memeType: payload.meme,
             quoteType: payload.quote,
-            generation: 0n,
             feeSplit: payload.fee_split,
             creatorMeme: 0n,
             creatorQuote: 0n,
@@ -306,7 +304,6 @@ export function reduceMigratorEvent(
       const payload = event.payload;
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
-        generation: payload.new_generation,
         feeSplit: payload.new_fee_split,
       }));
     }

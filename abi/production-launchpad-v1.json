@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "416bfa234d821a2fb11ad2d0342337455c2d5d6d",
+    "contractsCommit": "dfd42a8f65507d17fe34e41adccf37bdd8a34379",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "Asymptotic I-5: distinguish Blast metadata capability event fields from the native Coin Registry capability before publication",
@@ -28,7 +28,8 @@
       "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
       "contracts ADR 0105: anyone claims Blast's launch fees, paid to the partner and to a RuntimeConfig treasury that runtime_config::set_treasury (TreasuryAdmin) rotates; ProtocolFeesClaimed records the treasury and TreasuryChanged records each rotation",
       "contracts ADR 0107: the LpVault inherits launch::partner_id and, when partnered, holds Blast's LP fees until anyone calls vault::claim_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesClaimed records each claim",
-      "contracts ADR 0108: meme_template is launch_ticket_template with byte-identical bytecode, and the standalone coin_template, with no public functions, joins the generated-package templates"
+      "contracts ADR 0108: meme_template is launch_ticket_template with byte-identical bytecode, and the standalone coin_template, with no public functions, joins the generated-package templates",
+      "contracts ADR 0089 (events review, 2026-10-14): the LpVault drops its fee-split generation; FeesCollected drops generation and FeeSplitChanged drops old_generation and new_generation, since native event order and the old/new split pair already sequence split changes"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -8081,10 +8082,6 @@
                   }
                 },
                 {
-                  "name": "generation",
-                  "type": "u64"
-                },
-                {
                   "name": "gross_meme",
                   "type": "u64"
                 },
@@ -8186,14 +8183,6 @@
                       "type_arguments": []
                     }
                   }
-                },
-                {
-                  "name": "old_generation",
-                  "type": "u64"
-                },
-                {
-                  "name": "new_generation",
-                  "type": "u64"
                 },
                 {
                   "name": "old_fee_split",
@@ -12463,10 +12452,6 @@
                       ]
                     }
                   }
-                },
-                {
-                  "name": "generation",
-                  "type": "u64"
                 },
                 {
                   "name": "fee_split",

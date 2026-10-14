@@ -566,7 +566,7 @@ async function loadProduct(
     leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
     vault: {
       ...state,
-      summary: { generation: state.generation, feeSplit: state.feeSplit },
+      summary: { feeSplit: state.feeSplit },
     },
     readRound: (roundId) => getRewardRound(client, roundId, originalPackageId),
     publish: (manifest, adminCapId) =>

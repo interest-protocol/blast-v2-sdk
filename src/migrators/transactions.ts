@@ -331,7 +331,7 @@ export class MigratorCalls {
 
   /**
    * Settles the fees accrued under the current split, then commits `feeSplit`
-   * as the next generation. Only the launch's live `CurveFeeCap` authorizes it.
+   * as the vault's split. Only the launch's live `CurveFeeCap` authorizes it.
    * `launch` is read immutably by Move.
    */
   settleAndUpdateCetusFeeSplit(
