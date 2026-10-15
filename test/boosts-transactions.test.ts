@@ -7,6 +7,7 @@ import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 import { BoostsClient } from "../src/boosts/client.ts";
 import {
+  AFTERMATH_PERPETUALS_PACKAGES,
   assertBoostsTransactionShape,
   BoostsTransactions,
   buildBoostsIconUpdateTransaction,
@@ -162,8 +163,10 @@ test("builds the exact public mint redeem and rebalance ABI for every Bull produ
       assert.equal(shape.operation, operation);
       assert.equal(shape.sender, normalizeSuiAddress(SENDER));
       assert.equal(shape.transfers, transfers);
+      assertMarketAndCoinResults(transaction, operation, productKey);
       assert.deepEqual(shape.moveTargets, [
         `${BOOSTS_FIXTURE_MANIFEST.adapterPackage.packageId}::operations::${operation}`,
+        `${AFTERMATH_PERPETUALS_PACKAGES.testnet}::clearing_house::share`,
       ]);
       const call = transaction
         .getData()
@@ -290,15 +293,53 @@ test("fails closed on stale identity lifecycle balance deadline and extra-call s
         productKey: "sui-2x-bull",
         sender: SENDER,
       }),
-    /exactly one Move call/,
+    /exactly one Boosts operation/,
   );
+
+  for (const invalid of ["result", "package", "type"] as const) {
+    const data = mint().getData();
+    const share = data.commands[2];
+    assert.equal(share?.$kind, "MoveCall");
+    if (share?.$kind !== "MoveCall") throw new Error("missing market share");
+    if (invalid === "result") {
+      share.MoveCall.arguments = [
+        { $kind: "NestedResult", NestedResult: [1, 0] },
+      ];
+    } else if (invalid === "package") {
+      share.MoveCall.package = normalizeSuiAddress("0xbad");
+    } else {
+      share.MoveCall.typeArguments = ["0x2::sui::SUI"];
+    }
+    assert.throws(
+      () =>
+        assertBoostsTransactionShape(
+          Transaction.from(
+            JSON.stringify(data, (_key, value) =>
+              typeof value === "bigint" ? value.toString() : value,
+            ),
+          ),
+          BOOSTS_FIXTURE_MANIFEST,
+          {
+            operation: "mint",
+            productKey: "sui-2x-bull",
+            sender: SENDER,
+          },
+        ),
+      /returned ClearingHouse must be shared/,
+    );
+  }
 
   const product = BOOSTS_FIXTURE_MANIFEST.products[0];
   const missingArguments = new Transaction();
   missingArguments.setSender(SENDER);
-  missingArguments.moveCall({
+  const missingResult = missingArguments.moveCall({
     target: `${BOOSTS_FIXTURE_MANIFEST.adapterPackage.packageId}::operations::rebalance`,
     typeArguments: [product.productType, product.collateralType],
+  });
+  missingArguments.moveCall({
+    target: `${AFTERMATH_PERPETUALS_PACKAGES.testnet}::clearing_house::share`,
+    typeArguments: [product.collateralType],
+    arguments: [missingResult],
   });
   assert.throws(
     () =>
@@ -366,4 +407,36 @@ function needed(snapshot: BoostsProductSnapshotV1): BoostsProductSnapshotV1 {
     economics: { ...snapshot.economics, health: "rebalance_needed" },
     rebalance: { ...snapshot.rebalance, needed: true },
   };
+}
+
+function assertMarketAndCoinResults(
+  transaction: Transaction,
+  operation: "mint" | "redeem" | "rebalance",
+  productKey: BoostsProductKey,
+): void {
+  const commands = transaction.getData().commands;
+  const operationIndex = operation === "rebalance" ? 0 : 1;
+  const share = commands[operationIndex + 1];
+  assert.equal(share?.$kind, "MoveCall");
+  if (share?.$kind === "MoveCall") {
+    assert.deepEqual(share.MoveCall.arguments, [
+      operation === "rebalance"
+        ? { $kind: "Result", Result: operationIndex }
+        : { $kind: "NestedResult", NestedResult: [operationIndex, 1] },
+    ]);
+    assert.deepEqual(share.MoveCall.typeArguments, [
+      BOOSTS_FIXTURE_MANIFEST.products.find(
+        (product) => product.productKey === productKey,
+      )?.collateralType,
+    ]);
+  }
+  if (operation !== "rebalance") {
+    const transfer = commands[3];
+    assert.equal(transfer?.$kind, "TransferObjects");
+    if (transfer?.$kind === "TransferObjects") {
+      assert.deepEqual(transfer.TransferObjects.objects, [
+        { $kind: "NestedResult", NestedResult: [1, 0] },
+      ]);
+    }
+  }
 }

@@ -22,6 +22,11 @@ import type {
   BoostsProductSnapshotV1,
 } from "./types.ts";
 
+export const AFTERMATH_PERPETUALS_PACKAGES = {
+  mainnet: "0x3ec740df8428aa9c93aaef7f8cc1542ac3194fd014826b51bfe245346d64efc7",
+  testnet: "0xec8103a249c6698174cbbf93e931352eb795bbe5fdbadac5984b856efebba9f7",
+} as const;
+
 const TRANSACTION_FRESH_MS = 15_000;
 const QUOTE_LIFETIME_MS = 60_000;
 const DEFAULT_TOLERANCE_BPS = 100n;
@@ -287,7 +292,7 @@ export class BoostsTransactions {
       type: product.collateralType,
       balance: amount,
     });
-    const shares = transaction.moveCall({
+    const [coin, clearingHouse] = transaction.moveCall({
       target: `${this.manifest.adapterPackage.packageId}::operations::mint`,
       typeArguments: [product.productType, product.collateralType],
       arguments: [
@@ -298,7 +303,14 @@ export class BoostsTransactions {
         transaction.object(product.clock),
       ],
     });
-    transaction.transferObjects([shares], sender);
+    if (!coin || !clearingHouse)
+      throw new Error("Boosts operation results are missing");
+    transaction.moveCall({
+      target: `${AFTERMATH_PERPETUALS_PACKAGES[this.manifest.network]}::clearing_house::share`,
+      typeArguments: [product.collateralType],
+      arguments: [clearingHouse],
+    });
+    transaction.transferObjects([coin], sender);
     assertBoostsTransactionShape(transaction, this.manifest, {
       operation: "mint",
       productKey: input.productKey,
@@ -337,7 +349,7 @@ export class BoostsTransactions {
       type: product.shareType,
       balance: amount,
     });
-    const cash = transaction.moveCall({
+    const [coin, clearingHouse] = transaction.moveCall({
       target: `${this.manifest.adapterPackage.packageId}::operations::redeem`,
       typeArguments: [product.productType, product.collateralType],
       arguments: [
@@ -348,7 +360,14 @@ export class BoostsTransactions {
         transaction.object(product.clock),
       ],
     });
-    transaction.transferObjects([cash], sender);
+    if (!coin || !clearingHouse)
+      throw new Error("Boosts operation results are missing");
+    transaction.moveCall({
+      target: `${AFTERMATH_PERPETUALS_PACKAGES[this.manifest.network]}::clearing_house::share`,
+      typeArguments: [product.collateralType],
+      arguments: [clearingHouse],
+    });
+    transaction.transferObjects([coin], sender);
     assertBoostsTransactionShape(transaction, this.manifest, {
       operation: "redeem",
       productKey: input.productKey,
@@ -367,13 +386,18 @@ export class BoostsTransactions {
     }
     const transaction = new Transaction();
     transaction.setSender(sender);
-    transaction.moveCall({
+    const clearingHouse = transaction.moveCall({
       target: `${this.manifest.adapterPackage.packageId}::operations::rebalance`,
       typeArguments: [product.productType, product.collateralType],
       arguments: [
         ...boundObjects(transaction, product),
         transaction.object(product.clock),
       ],
+    });
+    transaction.moveCall({
+      target: `${AFTERMATH_PERPETUALS_PACKAGES[this.manifest.network]}::clearing_house::share`,
+      typeArguments: [product.collateralType],
+      arguments: [clearingHouse],
     });
     assertBoostsTransactionShape(transaction, this.manifest, {
       operation: "rebalance",
@@ -452,9 +476,9 @@ export function inspectBoostsTransactionShape(
   const moveCalls = data.commands.flatMap((command) =>
     command.$kind === "MoveCall" ? [command.MoveCall] : [],
   );
-  if (moveCalls.length !== 1) {
+  if (moveCalls.length !== 2) {
     throw new TypeError(
-      "Boosts transaction must contain exactly one Move call",
+      "Boosts transaction must contain exactly one Boosts operation and its ClearingHouse share",
     );
   }
   const call = moveCalls[0];
@@ -476,9 +500,10 @@ export function inspectBoostsTransactionShape(
     sender: data.sender,
     productType: normalizeStructTag(productType),
     collateralType: normalizeStructTag(collateralType),
-    moveTargets: [
-      `${normalizeSuiObjectId(call.package)}::${call.module}::${call.function}`,
-    ],
+    moveTargets: moveCalls.map(
+      (moveCall) =>
+        `${normalizeSuiObjectId(moveCall.package)}::${moveCall.module}::${moveCall.function}`,
+    ),
     transfers: data.commands.filter(
       (command) => command.$kind === "TransferObjects",
     ).length,
@@ -525,8 +550,8 @@ export function assertBoostsTransactionShape(
   );
   const expectedCommands =
     expected.operation === "rebalance"
-      ? ["MoveCall"]
-      : ["$Intent", "MoveCall", "TransferObjects"];
+      ? ["MoveCall", "MoveCall"]
+      : ["$Intent", "MoveCall", "MoveCall", "TransferObjects"];
   if (
     data.commands.length !== expectedCommands.length ||
     data.commands.some(
@@ -535,6 +560,7 @@ export function assertBoostsTransactionShape(
   ) {
     throw new TypeError("Boosts transaction contains an unexpected command");
   }
+  assertReturnedMarketShare(transaction, manifest, product, expected.operation);
   if (expected.operation === "rebalance") {
     if (shape.transfers !== 0) {
       throw new TypeError("rebalance must not transfer an object");
@@ -544,6 +570,38 @@ export function assertBoostsTransactionShape(
     assertReturnedCoinTransfer(transaction, sender);
   }
   return shape;
+}
+
+function assertReturnedMarketShare(
+  transaction: Transaction,
+  manifest: BoostsManifest,
+  product: BoostsProductManifest,
+  operation: BoostsOperation,
+): void {
+  const data = transaction.getData();
+  const operationIndex = operation === "rebalance" ? 0 : 1;
+  const share = data.commands[operationIndex + 1];
+  const market =
+    share?.$kind === "MoveCall" ? share.MoveCall.arguments[0] : undefined;
+  const returnedMarket =
+    operation === "rebalance"
+      ? market?.$kind === "Result" && market.Result === operationIndex
+      : market?.$kind === "NestedResult" &&
+        market.NestedResult[0] === operationIndex &&
+        market.NestedResult[1] === 1;
+  if (
+    share?.$kind !== "MoveCall" ||
+    normalizeSuiObjectId(share.MoveCall.package) !==
+      AFTERMATH_PERPETUALS_PACKAGES[manifest.network] ||
+    share.MoveCall.module !== "clearing_house" ||
+    share.MoveCall.function !== "share" ||
+    share.MoveCall.typeArguments.length !== 1 ||
+    share.MoveCall.typeArguments[0] !== product.collateralType ||
+    share.MoveCall.arguments.length !== 1 ||
+    !returnedMarket
+  ) {
+    throw new TypeError("Boosts returned ClearingHouse must be shared");
+  }
 }
 
 function boundObjects(
@@ -764,12 +822,13 @@ function assertReturnedCoinTransfer(
   sender: string,
 ): void {
   const data = transaction.getData();
-  const transfer = data.commands[2];
+  const transfer = data.commands[3];
   if (
     transfer?.$kind !== "TransferObjects" ||
     transfer.TransferObjects.objects.length !== 1 ||
-    transfer.TransferObjects.objects[0]?.$kind !== "Result" ||
-    transfer.TransferObjects.objects[0].Result !== 1 ||
+    transfer.TransferObjects.objects[0]?.$kind !== "NestedResult" ||
+    transfer.TransferObjects.objects[0].NestedResult[0] !== 1 ||
+    transfer.TransferObjects.objects[0].NestedResult[1] !== 0 ||
     transfer.TransferObjects.address.$kind !== "Input"
   ) {
     throw new TypeError(
