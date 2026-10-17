@@ -657,6 +657,73 @@ to its owner and create the vault in a later transaction using its shared pool
 reference. Vault creation permanently locks the position's liquidity and
 requires Blast's `CreationPolicy` to allow Quote and the Bluefin migrator.
 
+### A Cetus vault without a presale
+
+After `publishCoin` completes, Cetus can seed the coin's pool through
+`addCetusPoolWithLiquidity`. Cetus revision 15 shares the pool internally and
+returns only a position and residual coins. Execute pool creation first, then
+read the new shared pool and position from its effects and create the vault in
+the next transaction. The SDK reuses `finalizeCoinRegistration` from the
+Bluefin example; neither route requires a presale.
+
+```ts
+import { Transaction } from "@mysten/sui/transactions";
+import { finalizeCoinRegistration } from "@interest-protocol/blast-sdk/coin";
+import { getPresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
+import { addCetusPoolWithLiquidity } from "@interest-protocol/blast-sdk/migrators";
+import { PresaleTransactions } from "@interest-protocol/blast-sdk/presale";
+
+// memeType and currencyId come from the completed publishCoin transaction.
+// Get the Cetus runtime package, config, Pools and LP Burn manager identities
+// from your deployment (or resolveVenueObjects(access, "cetus")).
+const tx = new Transaction();
+const types = { memeType, quoteType };
+finalizeCoinRegistration(tx, { coinType: memeType, currency: currencyId });
+const created = addCetusPoolWithLiquidity(tx, {
+  ...types,
+  cetusPackageId,
+  cetusConfig, // read-only shared reference
+  cetusPools, // mutable shared reference
+  tickSpacing: 200,
+  sqrtPriceX64: 1n << 64n, // coin B atoms / coin A atom = 1
+  lowerTick: -443_600,
+  upperTick: 443_600,
+  // Supply the exact fixed-side amount and a capped amount on the other side.
+  memeCoin: tx.coin({ type: memeType, balance: 1_000n * 10n ** 9n }),
+  quoteCoin: tx.coin({ type: quoteType, balance: 1_100n * 10n ** 9n }),
+  fixedMeme: true,
+});
+tx.transferObjects([
+  created.position, created.memeResidual, created.quoteResidual,
+], creator);
+// Simulate and execute tx, then read positionId and poolRef from chain state.
+
+const vaultTransaction = new PresaleTransactions(
+  getPresaleDeployment("mainnet"),
+).newCetusVault({
+  ...types,
+  position: positionId,
+  pool: poolRef, // { objectId, initialSharedVersion, mutable: false }
+  burnManager, // mutable shared reference
+  feeRecipients: [{ recipient: creator, bps: 1_000n }],
+  holderRewardsBps: 9_000n,
+});
+// Simulate and execute vaultTransaction.
+```
+
+The helper orders the defining coin types, input coins, fixed side and residuals
+with `cetusMemeSide`. `sqrtPriceX64` and signed tick bounds remain in Cetus's
+coin A/B order: price is B atoms per A atom, adjusted for decimals, and it must
+lie inside the tick range. The fixed side takes its input coin's entire balance;
+the other input caps spending. Consume or transfer all three returned handles,
+including zero residual coins. Cetus derives the fee tier from `tickSpacing`.
+An unreserved pair needs no creation cap; for an already reserved pair/tier,
+pass its matching `poolCreationCap` to select `create_pool_v3_with_creation_cap`.
+Cetus rejects duplicate or disallowed pools. The new pool is shared by Cetus;
+there is no separate SDK share call or fresh pool handle to pass to a vault.
+The vault permanently locks the position through Cetus LP Burn, and Blast's
+`CreationPolicy` must allow Quote and the Cetus migrator.
+
 ## Presale
 
 `@interest-protocol/blast-sdk/presale` builds every product route of the
@@ -674,9 +741,10 @@ simulated. `@mysten/sui` and the fullnode budget only the simulated net cost
 plus 1,000 gas units, about 13 bytes, so a Cetus migration runs out of gas in
 about one execution in four. A presale's Cetus migration did on mainnet.
 
-The presale and migrators `migrateCetus` calls, and the transactions built from
-them, therefore carry the `grossGasBudget()` build plugin. When built without a
-budget, it budgets the simulated computation plus all storage, ignoring the
+The presale and migrators `migrateCetus` calls, `addCetusPoolWithLiquidity`, and
+the transactions built from them carry the `grossGasBudget()` build plugin.
+When built without a budget, it budgets the simulated computation plus all
+storage, ignoring the
 rebate, plus a fifth and 10,000 gas units. The charge is unchanged; only the
 ceiling rises. A payer that cannot cover the gross budget keeps the default
 one. Every other SDK transaction is deterministic and keeps the default budget.
