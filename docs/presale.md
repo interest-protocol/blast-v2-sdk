@@ -86,6 +86,45 @@ stage; `newCetusPresale` and `newBluefinPresale` build all three.
 
 `PresaleCalls` exposes each Move call separately for composition.
 
+## Creator earnings reads and transactions
+
+`createPresaleCreatorClient(client, { presale, venues })` prepares creator actions
+from canonical sale and vault state. `presale` is a `PresaleDeployment`;
+`venues.cetus` supplies `globalConfig` and `burnManager` shared identities, and
+`venues.bluefin` supplies `globalConfig`. Configure only the supported venues.
+No web runtime, database, wallet session or sponsor is required.
+
+```ts
+import { createPresaleCreatorClient } from "@interest-protocol/blast-sdk/presale";
+
+const creator = createPresaleCreatorClient(client, { presale, venues });
+const ownedPresales = await creator.ownedPresales(wallet);
+const action = await creator.transaction(vaultId, wallet, "collect_fees");
+if (action) {
+  const events = await creator.preview(action.kindBytes, wallet);
+  // null: preview unavailable; []: successful simulation emitted no events.
+  // A fee event's recipient arrays follow action.vault.feeRecipients order.
+}
+```
+
+`transaction` accepts `collect_fees` or `claim_residuals`. It reads the sale and
+vault, checks their identity and migration state, resolves the live pool and
+partner, and prepares the venue's SDK builder. Residual claims require the
+signing wallet's live `PresaleCap` and transfer both returned coins to it.
+Collection includes the partner payout when configured. The helper filters to
+wallets in the fee split for portfolio use; this does not restrict the contract's
+permissionless collection primitive. Unsupported venues or unavailable action
+inputs return `null`; RPC failures reject.
+
+`ownedPresales` reads pages of 50 caps, up to 200 IDs. Reads and simulations that
+accept a signal forward optional cancellation. `preview` accepts a successful
+explicit empty event list only when `eventsDigest` is `null`; failed, incomplete
+or unrecognized event results return `null`. `decodePresaleCreatorEvents` also
+decodes completed fee and residual events from the pinned original package and
+module. Amounts are exact decimal atomic-unit strings with no rounding. A preview
+is an estimate; completed events and contract execution remain authoritative.
+The caller owns signing, sponsorship, persistence and collection scheduling.
+
 ## Aftermath DAO pools
 
 `blast_aftermath_dao_presale` (contracts ADR 0104,

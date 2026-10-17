@@ -3,6 +3,8 @@ export * from "./aftermath.ts";
 export * from "./aftermath-dao.ts";
 export * from "./allowlist.ts";
 export * from "./client.ts";
+export * from "./creator.ts";
+export * from "./creator-events.ts";
 export * from "./events.ts";
 export * from "./math.ts";
 export * from "./reducer.ts";
