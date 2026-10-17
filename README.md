@@ -589,6 +589,74 @@ duplicates (one recipient for every capability, a name equal to the symbol,
 two false flags), the builder merges them into one and leaves the freed slot
 unused, so every publish verifies.
 
+### A Bluefin vault without a presale
+
+After executing `publishCoin` above, read the coin type and pending `Currency`
+ID from its effects. The next transaction can finalize registration, create a
+Bluefin `Pool<Meme, Quote>`, seed liquidity, and lock the position in a Blast
+vault. Use Bluefin's runtime package and mutable config reference from your
+deployment identities (or `resolveVenueObjects(access, "bluefin")`). Read the
+current SUI creation fee with `getBluefinPoolCreationFee(client, deployment)`;
+it may be zero, but the builder does not assume that.
+
+```ts
+import { Transaction } from "@mysten/sui/transactions";
+import { finalizeCoinRegistration } from "@interest-protocol/blast-sdk/coin";
+import {
+  addBluefinPoolWithLiquidity,
+  shareBluefinPool,
+} from "@interest-protocol/blast-sdk/migrators";
+import { getPresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
+import { PresaleCalls } from "@interest-protocol/blast-sdk/presale";
+
+// memeType and currencyId come from the completed coin publication.
+// quoteType, bluefinPackageId, bluefinConfig and creationFee come from
+// the selected deployment and current chain state, not token-specific defaults.
+const tx = new Transaction();
+finalizeCoinRegistration(tx, { coinType: memeType, currency: currencyId });
+const types = { memeType, quoteType };
+const pool = addBluefinPoolWithLiquidity(tx, {
+  ...types,
+  bluefinPackageId,
+  bluefinConfig, // { objectId, initialSharedVersion, mutable: true }
+  memeMetadata: { symbol: "DOG", decimals: 9 },
+  quoteMetadata: { symbol: "QUOTE", decimals: 9 },
+  tickSpacing: 200,
+  feeRate: 10_000n, // 1% in Bluefin's millionths
+  sqrtPriceX64: 1n << 64n, // Quote atoms / Meme atom = 1
+  creationFee, // MIST
+  lowerTick: -443_600,
+  upperTick: 443_600,
+  memeCoin: tx.coin({ type: memeType, balance: 1_000n * 10n ** 9n }),
+  quoteCoin: tx.coin({ type: quoteType, balance: 1_100n * 10n ** 9n }),
+  fixedAmount: 1_000n * 10n ** 9n,
+  fixedMeme: true,
+});
+const presale = new PresaleCalls(getPresaleDeployment("mainnet"));
+tx.add(presale.newBluefinVault({
+  ...types,
+  pool: pool.pool,
+  position: pool.position,
+  feeRecipients: [{ recipient: creator, bps: 1_000n }],
+  holderRewardsBps: 9_000n,
+}));
+shareBluefinPool(tx, { ...types, bluefinPackageId, pool: pool.pool });
+tx.transferObjects([pool.memeResidual, pool.quoteResidual], creator);
+// Simulate and execute tx with the wallet/client, as with other SDK builders.
+```
+
+The tick bounds above are the full range aligned inward for spacing 200 at
+Bluefin's -443,636..443,636 limits; select bounds for the current config.
+Prices use atomic units, so equal displayed prices need a decimals adjustment
+when the two coins have different decimals. Input coin balances cap spending;
+Bluefin calculates the non-fixed side and aborts if its balance is too small.
+The returned residuals are `Coin` handles (even when zero), which must be
+consumed or transferred. The returned pool stays owned until `shareBluefinPool`;
+call it after the vault borrows the pool. Alternatively transfer the position
+to its owner and create the vault in a later transaction using its shared pool
+reference. Vault creation permanently locks the position's liquidity and
+requires Blast's `CreationPolicy` to allow Quote and the Bluefin migrator.
+
 ## Presale
 
 `@interest-protocol/blast-sdk/presale` builds every product route of the

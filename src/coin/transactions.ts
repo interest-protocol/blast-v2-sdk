@@ -1,5 +1,10 @@
+import type { TransactionObjectInput } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
-import { normalizeSuiAddress, SUI_FRAMEWORK_ADDRESS } from "@mysten/sui/utils";
+import {
+  normalizeStructTag,
+  normalizeSuiAddress,
+  SUI_FRAMEWORK_ADDRESS,
+} from "@mysten/sui/utils";
 
 import type { CoinTemplateOptions } from "./template.ts";
 import {
@@ -43,4 +48,16 @@ export function publishCoin(options: CoinPublication): Transaction {
     );
   }
   return tx;
+}
+
+/** Shares a published coin's pending Currency from the Coin Registry address. */
+export function finalizeCoinRegistration(
+  tx: Transaction,
+  options: { coinType: string; currency: TransactionObjectInput },
+): void {
+  tx.moveCall({
+    target: `${SUI_FRAMEWORK_ADDRESS}::coin_registry::finalize_registration`,
+    typeArguments: [normalizeStructTag(options.coinType)],
+    arguments: [tx.object("0xc"), tx.object(options.currency)],
+  });
 }

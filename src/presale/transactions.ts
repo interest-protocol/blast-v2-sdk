@@ -1133,6 +1133,7 @@ export class PresaleCalls {
    * `bluefin::new_vault`: seals the caller's own Bluefin `position` in `pool`,
    * whose first coin must be Meme, in a new shared `Vault` splitting its LP
    * fees by the fee split, after Blast's current rates (contracts ADR 0109).
+   * Accepts an existing shared pool or a fresh pool handle in this PTB.
    */
   newBluefinVault(
     options: LaunchTypes & {
@@ -1140,7 +1141,7 @@ export class PresaleCalls {
       feeRecipients: readonly BpsShare[];
       holderRewardsBps: bigint;
       partnerId?: string | null;
-      pool: SharedObjectReference<false>;
+      pool: SharedObjectReference<false> | TransactionObjectArgument;
     },
   ) {
     const partnerId = optionalObjectId(options.partnerId);
@@ -1156,7 +1157,9 @@ export class PresaleCalls {
           tx.pure.option("address", partnerId),
           this.#creationPolicy(tx),
           this.#feePolicy(tx),
-          sharedObject(tx, "pool", options.pool, false),
+          "objectId" in options.pool
+            ? sharedObject(tx, "pool", options.pool, false)
+            : tx.object(options.pool),
           tx.object.clock(),
         ],
         options,
