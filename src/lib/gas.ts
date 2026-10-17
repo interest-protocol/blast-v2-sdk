@@ -31,8 +31,8 @@ const SUI = normalizeStructTag("0x2::sui::SUI");
  * simulation runs out of gas. Cetus seeds a new pool's tick skip list from the
  * clock, so creating a pool writes up to 18 more bytes in about one execution
  * in four: a presale's Cetus migration ran out of gas that way on 2026-10-05.
- * The SDK attaches this plugin to its Cetus migration calls only; every other
- * transaction it builds is deterministic and keeps the default budget.
+ * The SDK attaches this plugin to its Cetus migration and pool-creation calls;
+ * other transactions keep the default budget.
  *
  * The plugin probes once more and budgets the simulated computation plus all
  * storage, ignoring the rebate, plus a fifth and 10,000 gas units. The charge

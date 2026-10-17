@@ -6,6 +6,7 @@ import { Transaction } from "@mysten/sui/transactions";
 
 import { grossGasBudget } from "../src/lib/gas.ts";
 import type { SharedObjectReference } from "../src/lib/sui.ts";
+import { addCetusPoolWithLiquidity } from "../src/migrators/cetus-pool.ts";
 import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
 import { MigratorTransactions } from "../src/migrators/transactions.ts";
 import type { PresaleDeployment } from "../src/presale/transactions.ts";
@@ -210,6 +211,33 @@ test("a presale Cetus migration budgets gross cost", async () => {
     await senderBudget(presale.migrateCetus(presaleMigration)),
     GROSS_BUDGET,
   );
+});
+
+test("standalone Cetus pool creation budgets gross cost", async () => {
+  const tx = new Transaction();
+  const coin = (objectId: string) =>
+    tx.objectRef({
+      objectId,
+      version: "1",
+      digest: "11111111111111111111111111111111",
+    });
+  const result = addCetusPoolWithLiquidity(tx, {
+    ...types,
+    ...cetus,
+    cetusPackageId: "0xcafe",
+    tickSpacing: 200,
+    sqrtPriceX64: 1n << 64n,
+    lowerTick: -443_600,
+    upperTick: 443_600,
+    memeCoin: coin("0xa1"),
+    quoteCoin: coin("0xb1"),
+    fixedMeme: true,
+  });
+  tx.transferObjects(
+    [result.position, result.memeResidual, result.quoteResidual],
+    SENDER,
+  );
+  assert.equal(await senderBudget(tx), GROSS_BUDGET);
 });
 
 test("a keeper PTB composing the Cetus migration call budgets gross cost", async () => {
