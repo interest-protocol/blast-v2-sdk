@@ -55,18 +55,11 @@ and closed the missing eligible-only uncapped-phase construction test.
 - All retained-object digest comparisons passed. No transaction was broadcast.
 - No SDK runtime change was needed.
 
-## Limits
+## Follow-up end-to-end verification
 
-This is not a claim that every economic path was executed on mainnet. Successful
-commit/settle/migration, pool-position vault creation, LP fee collection, partner
-payouts and holder reward publication/claims/settlement still have construction
-and deployed-ABI coverage, but no successful live lifecycle fixtures in this
-new deployment. The retained sales are cancelled and have no commitments or
-vaults. The earlier contracts deployment tests exercised sale creation and
-cancellation on-chain.
-
-Aftermath vendor builders pass their construction tests. This deployment has no
-compatible Aftermath vendor package configured, so they are not live-certified
-against it. The core package's native Aftermath module remains intentionally
-excluded from SDK routes. A matching vendor deployment and funded lifecycle
-fixtures are required before certifying those complete flows.
+The missing economic paths above were subsequently executed with validation
+enabled: 89 signed transactions covering migrations, standalone vaults, fees,
+partner payouts, holder rewards and a compatible Aftermath vendor. See
+[the end-to-end verification](presale-e2e-verification.md) for receipts, cleanup
+and the repeatable checker. The 120-check runner on this page retains its
+original narrower purpose and its explicitly disclosed inspection settings.
