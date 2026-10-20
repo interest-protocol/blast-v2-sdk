@@ -18,7 +18,7 @@ const expectedEvents = {
   launchpad: 28,
   migrators: 14,
   blastSui: 13,
-  presale: 28,
+  presale: 30,
   admin: 15,
   partners: 2,
   aftermathDaoPresale: 2,
@@ -232,20 +232,23 @@ function assertEveryOperationIsClassified(
   artifact: Artifact,
   isAdmin: boolean,
 ) {
-  for (const packageArtifact of Object.values(artifact.packages)) {
-    for (const moduleArtifact of Object.values(packageArtifact.modules)) {
-      for (const operation of moduleArtifact.functions) {
-        assert.ok(operation.sdk.length > 0);
-      }
-      for (const event of moduleArtifact.events) {
-        // Only blast_admin's generic upgrade events are left to publish tooling.
-        assert.equal(
-          event.sdk,
-          isAdmin && event.typeParameters.length > 0
+  const modules = Object.values(artifact.packages).flatMap((packageArtifact) =>
+    Object.entries(packageArtifact.modules),
+  );
+  for (const [moduleName, moduleArtifact] of modules) {
+    for (const operation of moduleArtifact.functions) {
+      assert.ok(operation.sdk.length > 0);
+    }
+    for (const event of moduleArtifact.events) {
+      // Disabled native Aftermath and admin upgrade events have no SDK decoder.
+      assert.equal(
+        event.sdk,
+        moduleName === "aftermath"
+          ? "intentional-disabled-venue-exclusion"
+          : isAdmin && event.typeParameters.length > 0
             ? "intentional-upgrade-exclusion"
             : "decoder-reducer",
-        );
-      }
+      );
     }
   }
 }

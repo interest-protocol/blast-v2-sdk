@@ -169,7 +169,7 @@ export type PresaleTermsSettings = Omit<
 export type PresaleTerms = PresaleSettings & {
   /** The zero-supply `TreasuryCap<Meme>`, consumed. */
   treasuryCap: TransactionObjectInput;
-  /** The Meme's Coin Registry `Currency<Meme>`. */
+  /** Confirmed unregulated `Currency<Meme>`; regulated and legacy Unknown abort at finalize. */
   memeCurrency: SharedObjectReference<true>;
 };
 

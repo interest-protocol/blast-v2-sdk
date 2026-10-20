@@ -67,9 +67,9 @@ const artifactDeclarations = [
   },
   {
     path: "production-presale-v1.json",
-    // Canonical source ABI for the fresh presale publication.
+    // Canonical source ABI for the 2026-10-20 presale publication.
     baseline: {
-      contractsCommit: "4b170eef84a8f29b3aed91f035bbe23490adb0bd",
+      contractsCommit: "85f7361adcfb1d01c545ce2f42b94875a2c08ed2",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
@@ -87,6 +87,7 @@ const artifactDeclarations = [
       "contracts ADR 0099 (amended 2026-10-08): the shared Blast ACL administers the presale; every administrator call takes blast_admin::blast_acl::AdminWitness of one typed blast_presale_domain role (FeeAdmin, TreasuryAdmin, ListingAdmin, AdapterAdmin, RewardsAdmin, UpgradeAdmin) in place of the AdminRegistry and AdminCap, and blast_presale_admin with its SuperAdminCap, AdminCap, AdminRegistry, AdminCapReplaced, and AdminCapRevoked is deleted",
       "contracts ADR 0112: presale holding intervals may follow confirmed skipped days while preserving sequential funded rounds, proof domains and independent claim deadlines",
       "contracts ADR 0113: republished canonical Round reserves optional separate gas custody, zero reserve selects Blast-paid gas, governed one-shot capped settlement and permissionless reserve return; holder Meme collection pays the governed FeePolicy destination; publication atomically rejects a changed expected treasury",
+      "contracts ADR 0099 (amended 2026-10-20): finalize requires confirmed unregulated Currency; native Aftermath is published but disabled and excluded from SDK routes",
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },
@@ -156,15 +157,36 @@ function main() {
   }
 }
 
+/** Each independently released package is checked against its recorded source commit. */
+function frozenSources(commit) {
+  const directory = join(temporaryRoot, commit);
+  if (existsSync(directory)) return directory;
+  mkdirSync(directory);
+  const archive = spawnSync(
+    "git",
+    ["-C", contractsRoot, "archive", commit, "sui"],
+    {
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  );
+  if (archive.status !== 0) throw new Error(String(archive.stderr));
+  const extract = spawnSync("tar", ["-x", "-C", directory], {
+    input: archive.stdout,
+  });
+  if (extract.status !== 0) throw new Error(String(extract.stderr));
+  return directory;
+}
+
 function checkArtifact(declaration) {
   const artifactPath = join(sdkRoot, "abi", declaration.path);
+  const baseline = declaration.baseline ?? BASELINE;
+  const sourceRoot = frozenSources(baseline.contractsCommit);
   const packages = Object.fromEntries(
     declaration.packages.map(([name, directory, packageName]) => [
       name,
-      summarizePackage(join(contractsRoot, "sui", directory), packageName),
+      summarizePackage(join(sourceRoot, "sui", directory), packageName),
     ]),
   );
-  const baseline = declaration.baseline ?? BASELINE;
   const artifact = {
     schemaVersion: 1,
     baseline: {
@@ -283,7 +305,10 @@ function normalizeModule(packageName, moduleName, summary) {
   const normalizedStructs = normalizeStructs(summary.structs);
   const events = normalizedStructs
     .filter(({ name }) => isEventStruct(packageName, moduleName, name))
-    .map((event) => ({ ...event, sdk: classifyEvent(packageName, event) }));
+    .map((event) => ({
+      ...event,
+      sdk: classifyEvent(packageName, moduleName, event),
+    }));
   const structs = normalizedStructs.filter(
     ({ name }) => !isEventStruct(packageName, moduleName, name),
   );
@@ -430,7 +455,10 @@ function classifyAdminFunction(moduleName, functionName) {
  * operational-version events follow package upgrades, which publish tooling
  * drives, so the SDK leaves them out with the upgrade calls.
  */
-function classifyEvent(packageName, event) {
+function classifyEvent(packageName, moduleName, event) {
+  if (packageName === "blast_presale" && moduleName === "aftermath") {
+    return "intentional-disabled-venue-exclusion";
+  }
   if (packageName === "blast_admin" && event.typeParameters.length > 0) {
     return "intentional-upgrade-exclusion";
   }
@@ -490,6 +518,8 @@ const presaleBuilders = new Set([
   "holder_rewards::settle_gas_reserve",
 ]);
 const presaleEventNames = new Set([
+  "PoolCreationReserved",
+  "DaoFeePoolCreated",
   "PresaleCreated",
   "PresaleOpened",
   "ProtocolFeesChanged",
@@ -522,6 +552,14 @@ const presaleEventNames = new Set([
 
 function classifyPresaleFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
+  if (
+    moduleName === "aftermath" &&
+    ["new", "finalize", "share", "migrate", "collect_fees"].includes(
+      functionName,
+    )
+  ) {
+    return "intentional-disabled-venue-exclusion";
+  }
   if (presaleBuilders.has(key)) return "builder";
   // Every rate argument is a `bps::Bps` built in the PTB.
   if (key === "bps::new") return "compositional";
