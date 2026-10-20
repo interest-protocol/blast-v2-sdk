@@ -21,7 +21,11 @@ import { itemAt } from "../src/lib/arrays.ts";
 import { moveResults } from "../src/lib/ptb.ts";
 import type { SharedObjectReference } from "../src/lib/sui.ts";
 import { buildAllowlist } from "../src/presale/allowlist.ts";
-import { openEligibility, uncappedForAnyone } from "../src/presale/math.ts";
+import {
+  openEligibility,
+  uncappedForAnyone,
+  uncappedForEligible,
+} from "../src/presale/math.ts";
 import type {
   PresaleDeployment,
   PresaleTerms,
@@ -1495,4 +1499,22 @@ test("locks an owner's own position in a vault through either venue", () => {
     "shared:0x90",
     CLOCK,
   ]);
+});
+
+test("eligible-only uncapped phase preserves its start delay", () => {
+  const ptb = tx.createBluefinPresale({
+    ...terms,
+    uncapped: uncappedForEligible(42n),
+    tickSpacing: 10,
+    feeRate: 1000n,
+    startMs: 0n,
+    capRecipient: "0xc0",
+  });
+  const phase = moveCall(ptb, "blast_presale::uncapped_for_eligible");
+  assert.equal(pureU64(ptb, phase.arguments[0]), 42n);
+  const setter = moveCall(ptb, "blast_presale::set_uncapped_phase");
+  assert.equal(
+    argumentKinds(ptb, setter)[2],
+    `Result:${commandIndex(ptb, "blast_presale::uncapped_for_eligible")}`,
+  );
 });
