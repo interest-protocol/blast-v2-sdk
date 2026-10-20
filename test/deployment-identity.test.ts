@@ -116,6 +116,7 @@ test("names every recorded shared object by its owner-qualified path", () => {
       "migrators.packageVersion",
       "migrators.lpFeePolicy",
       "migrators.venueConfig",
+      "presale.packageVersion",
       "presale.venueConfig",
       "presale.creationPolicy",
       "presale.feePolicy",

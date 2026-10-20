@@ -267,39 +267,9 @@ test("rejects placeholder package IDs", () => {
   );
 });
 
-test("registers the 2026-10-20 mainnet presale, administered through the ACL", () => {
-  const presale = getPresaleDeployment("mainnet");
-  assert.equal(presale, BLAST_PRESALE_DEPLOYMENTS.mainnet);
-  assert.equal(
-    presale.originalPackageId,
-    "0x2c0ce340b5652d3ce8b813f47f728f335835a1aacd9ecac4a6e23c260404844d",
-  );
-  assert.equal(
-    presale.packageId,
-    "0x2c0ce340b5652d3ce8b813f47f728f335835a1aacd9ecac4a6e23c260404844d",
-  );
-  assert.equal(
-    presale.admin.acl.objectId,
-    "0xc9fbcfc4eda38626d7daad17902cc145b4008beb20470135438298aa7a005a6d",
-  );
-  assert.equal(presale.aftermath, undefined);
-  assert.deepEqual(presale.venueConfig, {
-    objectId:
-      "0xdf7117db2a9c671b1f26b835e6c484d3138d3952c0c16b67eef4a0a400b81250",
-    initialSharedVersion: "1052779268",
-  });
-  assert.deepEqual(presale.creationPolicy, {
-    objectId:
-      "0xb9a2d76062e9b94f49e96553a75986957b8c8d8394bd717a30f03e3404ba84c4",
-    initialSharedVersion: "1052779268",
-  });
-  assert.deepEqual(presale.feePolicy, {
-    objectId:
-      "0x42b118bd8a264052f3173b6325d0cf1881a9de163e3555e1a0a3faf4b3e612e4",
-    initialSharedVersion: "1052779268",
-  });
-  assert.equal(Object.isFrozen(presale.admin), true);
-  new PresaleCalls(presale);
+test("requires a fresh activated release for the versioned presale ABI", () => {
+  assert.deepEqual(BLAST_PRESALE_DEPLOYMENTS, {});
+  assert.throws(() => getPresaleDeployment("mainnet"), /not deployed/);
 });
 
 test("normalizes a standalone presale manifest and requires every singleton", () => {
@@ -311,6 +281,7 @@ test("normalizes a standalone presale manifest and requires every singleton", ()
   assert.equal(Object.isFrozen(presale.admin), true);
   new PresaleCalls(presale);
   for (const name of [
+    "packageVersion",
     "venueConfig",
     "creationPolicy",
     "feePolicy",

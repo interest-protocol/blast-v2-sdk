@@ -28,6 +28,7 @@ function shared<const Mutable extends boolean>(
 const presaleDeployment: PresaleDeployment = {
   packageId: "0x5f",
   originalPackageId: "0x5e",
+  packageVersion: shared("0x64", false),
   venueConfig: shared("0x60", false),
   feePolicy: shared("0x61", false),
   creationPolicy: shared("0x62", false),
@@ -159,7 +160,13 @@ test("creates a vendor sale in one PTB: new, every term but the fee split, final
   assert.deepEqual(started.typeArguments, [meme, quote]);
   assert.deepEqual(
     argumentKinds(ptb, started),
-    ["object:0xadc", "object:0x7c", "shared:0x62", "shared:0x61"].map((kind) =>
+    [
+      "object:0xadc",
+      "shared:0x64",
+      "object:0x7c",
+      "shared:0x62",
+      "shared:0x61",
+    ].map((kind) =>
       kind.replace(/0x[0-9a-f]+/, (id) => normalizeSuiAddress(id)),
     ),
   );
@@ -169,6 +176,7 @@ test("creates a vendor sale in one PTB: new, every term but the fee split, final
   assert.deepEqual(finalized.typeArguments, [lp, meme, quote]);
   assert.deepEqual(argumentKinds(ptb, finalized), [
     `object:${normalizeSuiAddress("0xadc")}`,
+    `shared:${normalizeSuiAddress("0x64")}`,
     "Result:0",
     `shared-mut:${normalizeSuiAddress("0xcc")}`,
     `object:${normalizeSuiAddress("0xcf")}`,
@@ -207,6 +215,7 @@ test("migrates through the sale's pool creation and pays a partnered sale's fees
   assert.deepEqual(migrated.typeArguments, [lp, meme, quote]);
   assert.deepEqual(argumentKinds(ptb, migrated), [
     `shared-mut:${normalizeSuiAddress("0xab")}`,
+    `shared:${normalizeSuiAddress("0x64")}`,
     `shared-mut:${normalizeSuiAddress("0xdc")}`,
     `shared:${normalizeSuiAddress("0x61")}`,
     `shared-mut:${normalizeSuiAddress("0xfc")}`,

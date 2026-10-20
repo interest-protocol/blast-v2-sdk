@@ -41,7 +41,7 @@ const SHARED_OBJECT_KEYS = {
   admin: ["acl"],
   launchpad: ["packageVersion", "launchConfig", "runtimeConfig"],
   migrators: ["packageVersion", "lpFeePolicy", "venueConfig"],
-  presale: ["venueConfig", "creationPolicy", "feePolicy"],
+  presale: ["packageVersion", "venueConfig", "creationPolicy", "feePolicy"],
   blastSui: ["packageVersion", "vault"],
   cetus: ["config", "pools", "burnManager"],
   bluefin: ["config"],
@@ -126,44 +126,12 @@ export function definePresaleDeployment(
 }
 
 /**
- * Canonical standalone presale releases. Mainnet is the fresh 2026-10-20
- * version-one publication requiring confirmed unregulated sale currencies.
- * It reuses the immutable blast_admin ACL; Aftermath is not enabled.
+ * Versioned presale releases require a fresh publication and activation. The
+ * earlier unversioned mainnet package cannot accept this SDK's version argument.
  */
 export const BLAST_PRESALE_DEPLOYMENTS: Readonly<
   Partial<Record<BlastNetwork, PresaleDeployment>>
-> = Object.freeze({
-  mainnet: definePresaleDeployment({
-    packageId:
-      "0x2c0ce340b5652d3ce8b813f47f728f335835a1aacd9ecac4a6e23c260404844d",
-    originalPackageId:
-      "0x2c0ce340b5652d3ce8b813f47f728f335835a1aacd9ecac4a6e23c260404844d",
-    venueConfig: {
-      objectId:
-        "0xdf7117db2a9c671b1f26b835e6c484d3138d3952c0c16b67eef4a0a400b81250",
-      initialSharedVersion: "1052779268",
-    },
-    creationPolicy: {
-      objectId:
-        "0xb9a2d76062e9b94f49e96553a75986957b8c8d8394bd717a30f03e3404ba84c4",
-      initialSharedVersion: "1052779268",
-    },
-    feePolicy: {
-      objectId:
-        "0x42b118bd8a264052f3173b6325d0cf1881a9de163e3555e1a0a3faf4b3e612e4",
-      initialSharedVersion: "1052779268",
-    },
-    admin: {
-      packageId:
-        "0x726fb49b880faa89719b95c6ef3a91be794f771ed3560fe5894d0a605c8469f9",
-      acl: {
-        objectId:
-          "0xc9fbcfc4eda38626d7daad17902cc145b4008beb20470135438298aa7a005a6d",
-        initialSharedVersion: "1",
-      },
-    },
-  }),
-});
+> = Object.freeze({});
 
 /**
  * The released presale deployment on `network`: the complete Blast release's

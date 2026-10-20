@@ -142,7 +142,7 @@ own package from the coin template's.
 Each shared object therefore has one owner-qualified path: `admin.acl`;
 `launchpad.packageVersion`, `launchConfig`, `runtimeConfig`;
 `migrators.packageVersion`, `lpFeePolicy`, `venueConfig`;
-`presale.venueConfig`, `creationPolicy`, `feePolicy`, `adminRegistry`;
+`presale.packageVersion`, `venueConfig`, `creationPolicy`, `feePolicy`;
 `blastSui.packageVersion`, `vault`; and each venue's own group (`cetus.config`,
 `cetus.pools`, `cetus.burnManager`, `bluefin.config`). A group is recorded
 exactly when the package that owns it is, and every key in a recorded group is
@@ -156,8 +156,9 @@ paths. `adminDeployment`, `partnersDeployment`, `launchpadDeployment`,
 `migratorsDeployment`, `presaleDeployment` and `blastSuiDeployment` derive each
 product's call-ready deployment, and each refuses a package the manifest does
 not record. The presale publishes on its own (contracts ADR 0099), so
-`BLAST_PRESALE_DEPLOYMENTS` and `getPresaleDeployment` register the standalone
-mainnet presale release before a complete `BlastDeployment` exists.
+`BLAST_PRESALE_DEPLOYMENTS` and `getPresaleDeployment` can register a standalone
+release before a complete `BlastDeployment` exists. The versioned ABI currently
+requires an explicit fresh deployment with PackageVersion from activation.
 
 Every consumer calls `evaluateProtocolAccess` before building or signing a
 protocol transaction:
@@ -235,11 +236,10 @@ entry for SUI. A missing config, field, or entry, an unexpected type, or a
 config of another lineage is a `BluefinPoolCreationFeeError`; there is no
 default.
 
-Presale publishes on its own, so `BLAST_PRESALE_DEPLOYMENTS` registers its
-standalone mainnet release (the 2026-10-20 publication, administered through
-the `blast_admin` ACL, with Bluefin and Cetus enabled and Aftermath disabled),
-and `getPresaleDeployment(network)` prefers the complete release's presale
-once `BLAST_DEPLOYMENTS` has one.
+Presale publishes independently. Its versioned ABI requires a fresh package and
+activation before a preset can be registered. Pass an explicit deployment with
+`packageVersion` from activation effects. The existing unversioned mainnet
+package remains available through the preceding SDK revision.
 
 ## Launch creation
 
@@ -606,7 +606,7 @@ import {
   addBluefinPoolWithLiquidity,
   shareBluefinPool,
 } from "@interest-protocol/blast-sdk/migrators";
-import { getPresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
+import { definePresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
 import { PresaleCalls } from "@interest-protocol/blast-sdk/presale";
 
 // memeType and currencyId come from the completed coin publication.
@@ -632,7 +632,8 @@ const pool = addBluefinPoolWithLiquidity(tx, {
   fixedAmount: 1_000n * 10n ** 9n,
   fixedMeme: true,
 });
-const presale = new PresaleCalls(getPresaleDeployment("mainnet"));
+// activatedPresaleManifest includes PackageVersion from fresh activation effects.
+const presale = new PresaleCalls(definePresaleDeployment(activatedPresaleManifest));
 tx.add(presale.newBluefinVault({
   ...types,
   pool: pool.pool,
@@ -669,7 +670,7 @@ Bluefin example; neither route requires a presale.
 ```ts
 import { Transaction } from "@mysten/sui/transactions";
 import { finalizeCoinRegistration } from "@interest-protocol/blast-sdk/coin";
-import { getPresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
+import { definePresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
 import { addCetusPoolWithLiquidity } from "@interest-protocol/blast-sdk/migrators";
 import { PresaleTransactions } from "@interest-protocol/blast-sdk/presale";
 
@@ -699,7 +700,7 @@ tx.transferObjects([
 // Simulate and execute tx, then read positionId and poolRef from chain state.
 
 const vaultTransaction = new PresaleTransactions(
-  getPresaleDeployment("mainnet"),
+  definePresaleDeployment(activatedPresaleManifest),
 ).newCetusVault({
   ...types,
   position: positionId,
@@ -727,8 +728,8 @@ The vault permanently locks the position through Cetus LP Burn, and Blast's
 ## Presale
 
 `@interest-protocol/blast-sdk/presale` builds every product route of the
-`blast_presale` package (published on mainnet on 2026-10-20) for Bluefin and
-Cetus. Aftermath vendor builders require an explicitly configured matching
+`blast_presale` versioned package for Bluefin and Cetus. It requires fresh
+publication and activation; supply `packageVersion` from activation effects. Aftermath vendor builders require an explicitly configured matching
 deployment. The contract requires confirmed unregulated sale currencies; the SDK
 decodes rejection code 35 as `ESaleTokenNotUnregulated`. It
 previews creation economics, commitments, and claims, and it decodes and replays the

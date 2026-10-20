@@ -10,17 +10,11 @@ token and raise shares, Blast's protocol fees and
 creation allowlists, LP-fee splits, holder-reward rounds, and administration through the shared
 Blast ACL.
 
-The SDK targets the canonical presale ABI frozen at contracts `85f7361` for the
-2026-10-20 mainnet publication. Its package, ACL and shared policy objects are
-registered by default. Bluefin and Cetus are enabled; Aftermath is not enabled. `getPresaleDeployment(network)` resolves
-the registered complete release or standalone presale deployment; the
-registration must match the canonical source ABI.
-
-```ts
-import { getPresaleDeployment } from "@interest-protocol/blast-sdk/deployments";
-
-const presale = new PresaleTransactions(getPresaleDeployment("mainnet"));
-```
+The SDK targets the versioned presale ABI (contracts ADR 0117). It requires a
+fresh publication and activation; no mainnet preset is registered for this ABI.
+The earlier unversioned mainnet package cannot accept the new argument. Supply
+an explicit deployment after `package_admin::wrap(Bootstrap, UpgradeCap)` shares
+its `PackageVersion`. Publication alone cannot start presales, even for partners.
 
 When a sponsor pays gas, pass `{ useGasCoin: false }` as the second argument
 (or on a single `commit` or `migrateBluefin` call) so a SUI quote or fee comes
@@ -34,6 +28,7 @@ effects, validated with `definePresaleDeployment`:
 const presale = new PresaleTransactions(definePresaleDeployment({
   packageId, // current package
   originalPackageId, // first publication; names every type
+  packageVersion: { objectId, initialSharedVersion }, // from activation effects
   venueConfig: { objectId, initialSharedVersion },
   // Shared by publication; creation checks it once.
   creationPolicy: { objectId, initialSharedVersion },
@@ -471,11 +466,11 @@ choice. `HolderMemePaid` records the vault's treasury transfer.
 
 ## ABI coverage
 
-`abi/production-presale-v1.json` freezes the source ABI at contracts `85f7361`,
-including the approved reserve and holder Meme routing amendments for the
-fresh publication. The Aftermath vendor keeps its independent `dfd42a8`
-source freeze. The native `aftermath` module is recorded but its functions and
-events are classified as `intentional-disabled-venue-exclusion`; its route is not enabled.
+`abi/production-presale-v1.json` and the Aftermath vendor artifact freeze the
+versioned source ABI together. Every mutation builder passes the deployment's
+read-only shared `PackageVersion` immediately after its primary object. Pure
+constructors and `destroy_cap` remain unchanged. Native Aftermath remains an
+intentional disabled venue exclusion; the vendor is configured explicitly.
 Every public function is classified:
 
 - **Builders:** all 19 `blast_presale` functions; `fee_policy` `set_fees` and
@@ -492,4 +487,8 @@ Every public function is classified:
   (`allowlist.ts`);
   `bps::value` and `apply_up` (`math.ts`).
 - **Excluded:** `package_admin::wrap` (deployment), and `authorize_upgrade` and
-  `commit_upgrade` (upgrade custody, which CLI publish tooling drives).
+  `commit_upgrade_and_advance` (upgrade custody, which CLI publish tooling drives).
+
+Version mismatches abort in the shared `blast_admin::operational_version` module,
+not a presale-local error namespace. Compatible upgrades atomically commit the
+native receipt and advance this object, making old-generation calls fail.

@@ -466,6 +466,7 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
     deployment: {
       packageId,
       originalPackageId,
+      packageVersion: shared("0x95"),
       venueConfig: shared("0x90"),
       creationPolicy: shared("0x91"),
       feePolicy: shared("0x92"),
@@ -662,7 +663,7 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
   );
   assert.equal(call?.package, packageId);
   assert.equal(call?.module, "holder_rewards");
-  const deadlineArgument = call?.arguments[13];
+  const deadlineArgument = call?.arguments[14];
   assert.ok(deadlineArgument?.$kind === "Input");
   const deadlineInput = publishTx.getData().inputs[deadlineArgument.Input];
   assert.ok(deadlineInput?.$kind === "Pure");

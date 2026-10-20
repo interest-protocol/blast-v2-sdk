@@ -66,6 +66,7 @@ export type BlastSharedObjects = Readonly<{
     venueConfig: SharedObjectIdentity;
   }>;
   presale?: Readonly<{
+    packageVersion: SharedObjectIdentity;
     venueConfig: SharedObjectIdentity;
     creationPolicy: SharedObjectIdentity;
     feePolicy: SharedObjectIdentity;

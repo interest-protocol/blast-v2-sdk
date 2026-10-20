@@ -79,6 +79,7 @@ export class AftermathDaoPresaleCalls {
         typeArguments: this.#saleTypes(options),
         arguments: [
           tx.object(options.adminCap),
+          deploymentObject(tx, this.presale.deployment.packageVersion, false),
           tx.object(options.treasuryCap),
           deploymentObject(tx, this.presale.deployment.creationPolicy, false),
           deploymentObject(tx, this.presale.deployment.feePolicy, false),
@@ -108,6 +109,7 @@ export class AftermathDaoPresaleCalls {
         typeArguments: this.#lpTypes(options),
         arguments: [
           tx.object(options.adminCap),
+          deploymentObject(tx, this.presale.deployment.packageVersion, false),
           options.initializer,
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           tx.object(options.createPoolCap),
@@ -137,6 +139,7 @@ export class AftermathDaoPresaleCalls {
         typeArguments: this.#lpTypes(options),
         arguments: [
           sharedObject(tx, "presale", options.presale, true),
+          deploymentObject(tx, this.presale.deployment.packageVersion, false),
           sharedObject(tx, "poolCreation", options.poolCreation, true),
           deploymentObject(tx, this.presale.deployment.feePolicy, false),
           sharedObject(tx, "poolRegistry", options.poolRegistry, true),

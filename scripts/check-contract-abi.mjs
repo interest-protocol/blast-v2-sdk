@@ -67,9 +67,9 @@ const artifactDeclarations = [
   },
   {
     path: "production-presale-v1.json",
-    // Canonical source ABI for the 2026-10-20 presale publication.
+    // Versioned presale source; fresh publication and activation pending.
     baseline: {
-      contractsCommit: "85f7361adcfb1d01c545ce2f42b94875a2c08ed2",
+      contractsCommit: "7d94a5397120cfc38c90d628c49eff4ea06eee0f",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
@@ -87,6 +87,7 @@ const artifactDeclarations = [
       "contracts ADR 0099 (amended 2026-10-08): the shared Blast ACL administers the presale; every administrator call takes blast_admin::blast_acl::AdminWitness of one typed blast_presale_domain role (FeeAdmin, TreasuryAdmin, ListingAdmin, AdapterAdmin, RewardsAdmin, UpgradeAdmin) in place of the AdminRegistry and AdminCap, and blast_presale_admin with its SuperAdminCap, AdminCap, AdminRegistry, AdminCapReplaced, and AdminCapRevoked is deleted",
       "contracts ADR 0112: presale holding intervals may follow confirmed skipped days while preserving sequential funded rounds, proof domains and independent claim deadlines",
       "contracts ADR 0113: republished canonical Round reserves optional separate gas custody, zero reserve selects Blast-paid gas, governed one-shot capped settlement and permissionless reserve return; holder Meme collection pays the governed FeePolicy destination; publication atomically rejects a changed expected treasury",
+      "contracts ADR 0117: compatible upgrades and custody-gated PackageVersion on every mutation",
       "contracts ADR 0099 (amended 2026-10-20): finalize requires confirmed unregulated Currency; native Aftermath is published but disabled and excluded from SDK routes",
     ],
     packages: [["presale", "presale", "blast_presale"]],
@@ -115,7 +116,10 @@ const artifactDeclarations = [
     path: "production-aftermath-dao-presale-v1.json",
     // The Aftermath DAO-pool vendor (contracts ADR 0104), at its
     // initializer split (ADR 0110) and venue-owned tiers (ADR 0111).
-    baseline: BASELINE,
+    baseline: {
+      contractsCommit: "7d94a5397120cfc38c90d628c49eff4ea06eee0f",
+      workingTreeDifferedAtFreeze: false,
+    },
     packages: [
       [
         "aftermathDaoPresale",

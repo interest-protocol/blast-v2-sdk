@@ -149,6 +149,7 @@ export function runtimeFor(
     "migrators.packageVersion": `${original("migrators")}::package_version::PackageVersion`,
     "migrators.lpFeePolicy": `${original("migrators")}::lp_fee_policy::LpFeePolicy`,
     "migrators.venueConfig": `${original("migrators")}::venue_config::VenueConfig`,
+    "presale.packageVersion": `${original("presale")}::blast_presale_package::PackageVersion`,
     "presale.venueConfig": `${original("presale")}::venue_config::VenueConfig`,
     "presale.creationPolicy": `${original("presale")}::creation_policy::CreationPolicy`,
     "presale.feePolicy": `${original("presale")}::fee_policy::FeePolicy`,

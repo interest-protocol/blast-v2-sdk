@@ -42,6 +42,7 @@ function shared<const Mutable extends boolean>(
 const deployment: PresaleDeployment = {
   packageId: "0x5f",
   originalPackageId: "0x5e",
+  packageVersion: shared("0x64", false),
   venueConfig: shared("0x60", false),
   feePolicy: shared("0x61", false),
   creationPolicy: shared("0x62", false),
@@ -162,6 +163,7 @@ test("starts, configures, finalizes, shares, and keeps the cap of a Cetus presal
   assert.deepEqual(created.typeArguments, [memeA, sui]);
   assert.deepEqual(argumentKinds(ptb, created), [
     "object:0x7c",
+    "shared:0x64",
     "shared:0x62",
     "shared:0x61",
     "shared-mut:0x60",
@@ -189,12 +191,13 @@ test("starts, configures, finalizes, shares, and keeps the cap of a Cetus presal
   const allocations = moveCall(ptb, "blast_presale::set_token_allocations");
   assert.deepEqual(argumentKinds(ptb, allocations), [
     initializer,
+    "shared:0x64",
     `Result:${commandIndex(ptb, "bps::new")}`,
     `Result:${commandIndex(ptb, "bps::new") + 1}`,
     `Result:${commandIndexOf(ptb, "MakeMoveVec", 0)}`,
   ]);
   const hardCap = moveCall(ptb, "blast_presale::set_hard_cap");
-  assert.equal(pureU64(ptb, hardCap.arguments[1]), 50n);
+  assert.equal(pureU64(ptb, hardCap.arguments[2]), 50n);
   const feeSplit = moveCall(ptb, "blast_presale::fee_split");
   assert.deepEqual(argumentKinds(ptb, feeSplit), [
     `Result:${commandIndexOf(ptb, "MakeMoveVec", 2)}`,
@@ -203,6 +206,7 @@ test("starts, configures, finalizes, shares, and keeps the cap of a Cetus presal
   const finalize = moveCall(ptb, "blast_presale::finalize");
   assert.deepEqual(argumentKinds(ptb, finalize), [
     initializer,
+    "shared:0x64",
     "shared-mut:0xcc",
   ]);
   assert.equal(
@@ -212,10 +216,11 @@ test("starts, configures, finalizes, shares, and keeps the cap of a Cetus presal
   const share = moveCall(ptb, "blast_presale::share");
   assert.deepEqual(argumentKinds(ptb, share), [
     `NestedResult:${commandIndex(ptb, "blast_presale::finalize")}:0`,
+    "shared:0x64",
     "pure",
     CLOCK,
   ]);
-  assert.equal(pureU64(ptb, share.arguments[1]), 1_000n);
+  assert.equal(pureU64(ptb, share.arguments[2]), 1_000n);
   assert.equal(ptb.getData().commands.at(-1)?.$kind, "TransferObjects");
   const vectors = ptb
     .getData()
@@ -247,6 +252,7 @@ test("names a partner on the initializer before finalize, and pays it in the mig
   assert.deepEqual(setPartner.typeArguments, [memeA, sui]);
   assert.deepEqual(argumentKinds(ptb, setPartner), [
     `Result:${commandIndex(ptb, "cetus::new")}`,
+    "shared:0x64",
     "shared:0x62",
     "shared:0x9a27",
     CLOCK,
@@ -359,6 +365,7 @@ test("creates a Bluefin presale without optional settings", () => {
   // The currency goes in mutably: the same PTB's `finalize` takes it so.
   assert.deepEqual(argumentKinds(ptb, created), [
     "object:0x7c",
+    "shared:0x64",
     "shared-mut:0xcc",
     "shared:0x62",
     "shared:0x61",
@@ -417,17 +424,17 @@ test("builds every lifecycle call with the ABI's argument count", () => {
     [
       tx.settle({ ...types, presale }),
       "blast_presale::settle",
-      ["shared-mut:0xab", CLOCK],
+      ["shared-mut:0xab", "shared:0x64", CLOCK],
     ],
     [
       tx.cancelUnlaunched({ ...types, presale }),
       "blast_presale::cancel_unlaunched",
-      ["shared-mut:0xab", CLOCK],
+      ["shared-mut:0xab", "shared:0x64", CLOCK],
     ],
     [
       tx.claim({ ...types, presale, participants: ["0xa11ce"] }),
       "blast_presale::claim",
-      ["shared-mut:0xab", "pure", CLOCK],
+      ["shared-mut:0xab", "shared:0x64", "pure", CLOCK],
     ],
     [
       tx.destroyCap({ ...types, presale, presaleCapId: "0xca" }),
@@ -444,6 +451,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "cetus::migrate",
       [
         "shared-mut:0xab",
+        "shared:0x64",
         "shared:0x61",
         "shared:0x60",
         "shared:0x70",
@@ -464,6 +472,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "bluefin::migrate",
       [
         "shared-mut:0xab",
+        "shared:0x64",
         "shared:0x61",
         "shared:0x60",
         "shared:0xcc",
@@ -484,6 +493,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "cetus::collect_fees",
       [
         "shared-mut:0xba",
+        "shared:0x64",
         "shared:0x61",
         "shared:0x70",
         "shared:0x72",
@@ -500,6 +510,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "bluefin::collect_fees",
       [
         "shared-mut:0xba",
+        "shared:0x64",
         "shared:0x61",
         "shared:0x80",
         "shared-mut:0x90",
@@ -514,7 +525,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         recipient: "0xc0",
       }),
       "presale_vault::claim_migration_residuals",
-      ["shared-mut:0xba", "object:0xca"],
+      ["shared-mut:0xba", "shared:0x64", "object:0xca"],
     ],
     [
       tx.publishHolderRewardRound({
@@ -529,6 +540,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "holder_rewards::publish_round",
       [
         "shared-mut:0xba",
+        "shared:0x64",
         ...ADMIN,
         "shared:0x61",
         ...Array(11).fill("pure"),
@@ -542,12 +554,12 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         allocations: manifest.allocations,
       }),
       "holder_rewards::claim",
-      ["shared-mut:0xd0", ...Array(5).fill("pure")],
+      ["shared-mut:0xd0", "shared:0x64", ...Array(5).fill("pure")],
     ],
     [
       tx.closeHolderRewardRound({ ...types, round, vault }),
       "holder_rewards::close_round",
-      ["shared-mut:0xd0", "shared-mut:0xba", CLOCK],
+      ["shared-mut:0xd0", "shared:0x64", "shared-mut:0xba", CLOCK],
     ],
     [
       tx.setProtocolFees({
@@ -562,6 +574,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "fee_policy::set_fees",
       [
         "shared-mut:0x61",
+        "shared:0x64",
         ...ADMIN,
         "Result:1",
         "Result:2",
@@ -584,6 +597,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "blast_presale::set_protocol_fees",
       [
         "shared-mut:0xab",
+        "shared:0x64",
         ...ADMIN,
         "Result:1",
         "Result:2",
@@ -601,7 +615,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         lpFeeQuoteBps: 0n,
       }),
       "presale_vault::set_protocol_lp_fees",
-      ["shared-mut:0xba", ...ADMIN, "Result:1", "Result:2"],
+      ["shared-mut:0xba", "shared:0x64", ...ADMIN, "Result:1", "Result:2"],
     ],
     [
       tx.setQuoteAllowed({
@@ -610,7 +624,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         allowed: true,
       }),
       "creation_policy::set_quote_allowed",
-      ["shared-mut:0x62", ...ADMIN, "pure"],
+      ["shared-mut:0x62", "shared:0x64", ...ADMIN, "pure"],
     ],
     [
       tx.setMigrationWitnessAllowed({
@@ -619,22 +633,22 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         allowed: false,
       }),
       "creation_policy::set_migration_witness_allowed",
-      ["shared-mut:0x62", ...ADMIN, "pure"],
+      ["shared-mut:0x62", "shared:0x64", ...ADMIN, "pure"],
     ],
     [
       tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
       "fee_policy::set_destination",
-      ["shared-mut:0x61", ...ADMIN, "pure"],
+      ["shared-mut:0x61", "shared:0x64", ...ADMIN, "pure"],
     ],
     [
       tx.payProtocolFeesWithPartner({ ...types, presale, partner }),
       "blast_presale::pay_protocol_fees_with_partner",
-      ["shared-mut:0xab", "shared:0x61", "shared:0x9a27", CLOCK],
+      ["shared-mut:0xab", "shared:0x64", "shared:0x61", "shared:0x9a27", CLOCK],
     ],
     [
       tx.payProtocolLpFeesWithPartner({ ...types, vault, partner }),
       "presale_vault::pay_protocol_lp_fees_with_partner",
-      ["shared-mut:0xba", "shared:0x61", "shared:0x9a27", CLOCK],
+      ["shared-mut:0xba", "shared:0x64", "shared:0x61", "shared:0x9a27", CLOCK],
     ],
     [
       tx.newCetusVault({
@@ -648,6 +662,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "cetus::new_vault",
       [
         "object:0x905",
+        "shared:0x64",
         "Result:4",
         "pure",
         "shared:0x62",
@@ -669,6 +684,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       "bluefin::new_vault",
       [
         "object:0x905",
+        "shared:0x64",
         "Result:4",
         "pure",
         "shared:0x62",
@@ -680,12 +696,12 @@ test("builds every lifecycle call with the ABI's argument count", () => {
     [
       tx.addPartner({ adminCapId: "0xadc", partner }),
       "creation_policy::add_partner",
-      ["shared-mut:0x62", ...ADMIN, "shared:0x9a27"],
+      ["shared-mut:0x62", "shared:0x64", ...ADMIN, "shared:0x9a27"],
     ],
     [
       tx.removePartner({ adminCapId: "0xadc", partner }),
       "creation_policy::remove_partner",
-      ["shared-mut:0x62", ...ADMIN, "shared:0x9a27", CLOCK],
+      ["shared-mut:0x62", "shared:0x64", ...ADMIN, "shared:0x9a27", CLOCK],
     ],
   ];
   for (const [ptb, name, kinds] of cases) {
@@ -717,7 +733,7 @@ test("locks an owner's own position in a vault without a presale", () => {
     });
     const call = moveCall(ptb, "cetus::new_vault");
     assert.deepEqual(call.typeArguments, [memeType, sui, ...coins]);
-    assert.equal(optionalId(ptb, call.arguments[2]), null);
+    assert.equal(optionalId(ptb, call.arguments[3]), null);
   }
   // Bluefin's pool is `Pool<Meme, Quote>`; the partner is an `Option<ID>`.
   const ptb = tx.newBluefinVault({
@@ -728,7 +744,7 @@ test("locks an owner's own position in a vault without a presale", () => {
   const call = moveCall(ptb, "bluefin::new_vault");
   assert.deepEqual(call.typeArguments, [memeA, sui]);
   assert.equal(
-    optionalId(ptb, call.arguments[2]),
+    optionalId(ptb, call.arguments[3]),
     normalizeSuiAddress("0x9a27"),
   );
   assert.deepEqual(moveFunctions(ptb), [
@@ -784,8 +800,9 @@ test("replaces a sale's Blast rates in its creation PTB, before share", () => {
     }),
   );
   const call = moveCall(ptb, "blast_presale::set_protocol_fees");
-  assert.deepEqual(argumentKinds(ptb, call).slice(0, 2), [
+  assert.deepEqual(argumentKinds(ptb, call).slice(0, 3), [
     `NestedResult:${commandIndex(ptb, "blast_presale::finalize")}:0`,
+    "shared:0x64",
     `Result:${commandIndex(ptb, "blast_acl::sign_in")}`,
   ]);
   assert.equal(
@@ -899,6 +916,7 @@ test("allows an external migrator's witness and rejects types anyone can constru
   assert.deepEqual(call.typeArguments, [normalizeStructTag(witness)]);
   assert.deepEqual(argumentKinds(allowExternal, call), [
     "shared-mut:0x62",
+    "shared:0x64",
     ...ADMIN,
     "pure",
   ]);
@@ -1027,6 +1045,7 @@ test("participant vesting builds vesting_terms for set_participant_vesting after
   const setVesting = moveCall(ptb, "blast_presale::set_participant_vesting");
   assert.deepEqual(argumentKinds(ptb, setVesting), [
     `Result:${commandIndex(ptb, "cetus::new")}`,
+    "shared:0x64",
     `Result:${commandIndex(ptb, "blast_presale::vesting_terms")}`,
   ]);
   assert.equal(
@@ -1110,18 +1129,19 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
   const publishCall = moveCall(publication, "holder_rewards::publish_round");
   assert.deepEqual(argumentKinds(publication, publishCall), [
     "shared-mut:0xba",
+    "shared:0x64",
     ...ADMIN,
     "shared:0x61",
     ...Array.from({ length: 11 }, () => "pure"),
     CLOCK,
   ]);
   assert.deepEqual(
-    [4, 5, 6, 10, 11, 12, 13].map((i) =>
+    [5, 6, 7, 11, 12, 13, 14].map((i) =>
       pureU64(publication, publishCall.arguments[i]),
     ),
     [2n, 21n, 30n, 0n, 970n, 30n, 605_800_000n],
   );
-  const treasuryArgument = publishCall.arguments[3];
+  const treasuryArgument = publishCall.arguments[4];
   assert.ok(treasuryArgument?.$kind === "Input");
   const treasuryInput = publication.getData().inputs[treasuryArgument.Input];
   assert.ok(treasuryInput?.$kind === "Pure");
@@ -1208,17 +1228,21 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     [
       claim,
       "holder_rewards::claim",
-      ["shared-mut:0xd1", ...Array.from({ length: 5 }, () => "pure")],
+      [
+        "shared-mut:0xd1",
+        "shared:0x64",
+        ...Array.from({ length: 5 }, () => "pure"),
+      ],
     ],
     [
       settle,
       "holder_rewards::settle_gas_reserve",
-      ["shared-mut:0xd1", ...ADMIN, "shared-mut:0xba", "pure"],
+      ["shared-mut:0xd1", "shared:0x64", ...ADMIN, "shared-mut:0xba", "pure"],
     ],
     [
       close,
       "holder_rewards::close_round",
-      ["shared-mut:0xd1", "shared-mut:0xba", CLOCK],
+      ["shared-mut:0xd1", "shared:0x64", "shared-mut:0xba", CLOCK],
     ],
   ];
   for (const [ptb, name, kinds] of cases) {
@@ -1236,7 +1260,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
   assert.equal(
     pureU64(
       settle,
-      moveCall(settle, "holder_rewards::settle_gas_reserve").arguments[3],
+      moveCall(settle, "holder_rewards::settle_gas_reserve").arguments[4],
     ),
     24n,
   );
@@ -1361,7 +1385,24 @@ function commandIndexOf(ptb: Transaction, kind: string, nth: number): number {
 function moveCall(ptb: Transaction, name: string) {
   const command = ptb.getData().commands[commandIndex(ptb, name)];
   assert.ok(command?.$kind === "MoveCall", `missing ${name}`);
-  return command.MoveCall;
+  const call = command.MoveCall;
+  if (call.module !== "blast_acl") {
+    const parameter = abiFunction(call.module, call.function).parameters[1];
+    if (JSON.stringify(parameter)?.includes('"PackageVersion"')) {
+      const argument = call.arguments[1];
+      assert.ok(argument?.$kind === "Input", `${name} borrows the version`);
+      const input = ptb.getData().inputs[argument.Input];
+      assert.ok(
+        input?.$kind === "Object" && input.Object.$kind === "SharedObject",
+      );
+      assert.deepEqual(input.Object.SharedObject, {
+        objectId: normalizeSuiAddress("0x64"),
+        initialSharedVersion: "3",
+        mutable: false,
+      });
+    }
+  }
+  return call;
 }
 
 function argumentKinds(
@@ -1434,6 +1475,7 @@ test("locks an owner's own position in a vault through either venue", () => {
   assert.equal(cetusCall.arguments.length, abiArity("cetus", "new_vault"));
   assert.deepEqual(argumentKinds(cetusVault, cetusCall), [
     "object:0x9051",
+    "shared:0x64",
     `Result:${commandIndex(cetusVault, "blast_presale::fee_split")}`,
     "pure",
     "shared:0x62",
