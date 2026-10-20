@@ -1,0 +1,78 @@
+{
+  "network": "mainnet",
+  "deployment": {
+    "feePolicy": {
+      "objectId": "0xda3f9c034fd394180c7cf4c526d9629591fc85badf5cabafe7afa69a8063fd2f",
+      "initialSharedVersion": "1055093520"
+    },
+    "creationPolicy": {
+      "objectId": "0x23c7b007cee7f1f3e483bb26d81e2fe93b7139d308ede5642cc4d77442541da8",
+      "initialSharedVersion": "1055093520"
+    },
+    "venueConfig": {
+      "objectId": "0x205350751013c266c9a4033df186bc26569f8ecbaf0f246c148bc948a31f6093",
+      "initialSharedVersion": "1055093520"
+    },
+    "packageVersion": {
+      "objectId": "0xe7634c9e47c0ad15c02e52e73cf7b261f064cb00aaedbf6393683ca31ddee7f0",
+      "initialSharedVersion": "1056244915"
+    },
+    "packageId": "0xafc415fa1187577c60205ccff10151fca540b088a3b84f798b90ae0642fa83f8",
+    "originalPackageId": "0xafc415fa1187577c60205ccff10151fca540b088a3b84f798b90ae0642fa83f8",
+    "admin": {
+      "packageId": "0x726fb49b880faa89719b95c6ef3a91be794f771ed3560fe5894d0a605c8469f9",
+      "acl": {
+        "objectId": "0xc9fbcfc4eda38626d7daad17902cc145b4008beb20470135438298aa7a005a6d",
+        "initialSharedVersion": "1"
+      }
+    }
+  },
+  "sender": "0x52ecee5e58e2f3a7461cc604f4efcc3b68031e4715456d821e3a2719b0593600",
+  "adminSender": "0x612fa27ba229021c5a1c32022fd6341ffbd58a87ac928a0dc32d8d6d1dba9fed",
+  "adminCap": "0xf9b3674eb89193afa58e096868fa9623217c1a8bb2bb9981c48be1741d33146c",
+  "superAdminCap": "0x6187ad51c17dee9f288ebbf7f7655b0a7185d7697a5aa23e96f8c66169aa2b2c",
+  "fixturePackage": "0x2ed8405d70de84fe07cc7bd7a18424644a890815efcbbb0c3cd272b462873a1f",
+  "cancelledSales": {
+    "Fixed": "0x4cf70986256da2356b5ac41deb321ca2300b626104f2bdde09f49104a689fd7f",
+    "BurnOnly": "0x6941d329849da95b04d8991cb61a32e757739beb4e889674a9bbacdd5b827c4c"
+  },
+  "addresses": {
+    "std": "0x1",
+    "sui": "0x2",
+    "blast_presale": "0xafc415fa1187577c60205ccff10151fca540b088a3b84f798b90ae0642fa83f8",
+    "blast_admin": "0x726fb49b880faa89719b95c6ef3a91be794f771ed3560fe5894d0a605c8469f9",
+    "blast_partners": "0x50c4a1b68af8c4fa0438ad8b02e49d484d46ab38e85ac4d001ea13449aa20dbd",
+    "bluefin_spot": "0x3492c874c1e3b3e2984e8c41b589e642d4d0a5d6459e5a9cfc2d52fd7c89c267",
+    "cetus_clmm": "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb",
+    "lp_burn": "0x12d73de9a6bc3cb658ec9dc0fe7de2662be1cea5c76c092fcc3606048cdbac27"
+  },
+  "unregulatedToken": {
+    "memeType": "0x48a6ea6ea76533e34f3fc5ba3f3e8f074212d2879821752c97ef14c393f3bb46::sale_tokens::SALE_B",
+    "treasuryCap": "0x3380d4711c8a60b44646cb13d6e9031215cc2b132fc3f75a8b753aeb95877d7f",
+    "currency": {
+      "objectId": "0x34c7d4229abacbf18821df82f1585a56f183bc3afab6f15c41046186584d2e87",
+      "initialSharedVersion": "1052668100",
+      "mutable": true
+    }
+  },
+  "regulatedTokens": {
+    "Regulated": {
+      "memeType": "0x2ed8405d70de84fe07cc7bd7a18424644a890815efcbbb0c3cd272b462873a1f::admission_tokens::Regulated",
+      "treasuryCap": "0x54044433fb8c796bd75bd62b96f924e7197a8de62166996e173553d61cba21d4",
+      "currency": {
+        "objectId": "0x4483e90f072046655decd5d6dded32585761bcc412c1aa15d50eafa396a257ba",
+        "initialSharedVersion": "1056244914",
+        "mutable": true
+      }
+    },
+    "Pausable": {
+      "memeType": "0x2ed8405d70de84fe07cc7bd7a18424644a890815efcbbb0c3cd272b462873a1f::admission_tokens::Pausable",
+      "treasuryCap": "0x42535a11b0421d50e7641dc44563be9871a78fbf52b09efcd71e28b42af78495",
+      "currency": {
+        "objectId": "0x8a810696d33a555f7b3f5773855192b0f7e228f63f6a87558da36ea26f9e4447",
+        "initialSharedVersion": "1056244914",
+        "mutable": true
+      }
+    }
+  }
+}

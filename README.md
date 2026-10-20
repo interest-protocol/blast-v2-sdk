@@ -241,6 +241,10 @@ activation before a preset can be registered. Pass an explicit deployment with
 `packageVersion` from activation effects. The existing unversioned mainnet
 package remains available through the preceding SDK revision.
 
+The opt-in [live presale verification](docs/presale-live-verification.md) checks
+all builders against the versioned test deployment and distinguishes validated
+simulation, Move inspection and construction-only coverage.
+
 ## Launch creation
 
 A launch starts in its migration adapter (contracts ADR 0089) after three
