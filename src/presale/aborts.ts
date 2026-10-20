@@ -42,6 +42,15 @@ export const PRESALE_ABORTS = {
     "ENoPartnerPayout",
     "EInvalidHardCap",
     "EMissingSetting",
+    "ESaleTokenNotUnregulated",
+  ],
+  aftermath: [
+    "EPoolMismatch",
+    "EDaoFeePoolMismatch",
+    "EWrongPresale",
+    "EInvalidDaoFee",
+    "EWrongMigrator",
+    "EWrongVault",
   ],
   holder_rewards: [
     "EWrongRound",

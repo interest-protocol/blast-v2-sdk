@@ -1337,6 +1337,7 @@ function readFrozenPresaleEventSpecs(): Record<
           string,
           {
             events: Array<{
+              sdk: string;
               name: string;
               fields: Array<{ name: string; type: unknown }>;
             }>;
@@ -1346,9 +1347,12 @@ function readFrozenPresaleEventSpecs(): Record<
     };
   };
   const specs: Record<string, Record<string, Record<string, string>>> = {};
-  for (const [module, { events }] of Object.entries(
+  for (const [module, definition] of Object.entries(
     artifact.packages.presale.modules,
   )) {
+    const events = definition.events.filter(
+      (event) => event.sdk === "decoder-reducer",
+    );
     if (events.length === 0) continue;
     specs[module] = Object.fromEntries(
       events.map((event) => [

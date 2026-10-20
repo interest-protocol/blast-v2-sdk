@@ -10,9 +10,9 @@ token and raise shares, Blast's protocol fees and
 creation allowlists, LP-fee splits, holder-reward rounds, and administration through the shared
 Blast ACL.
 
-The SDK targets the canonical presale ABI frozen at contracts `c36057d` for a
-fresh publication. Register that publication's package, ACL and shared policy
-objects before using these builders. `getPresaleDeployment(network)` resolves
+The SDK targets the canonical presale ABI frozen at contracts `85f7361` for the
+2026-10-20 mainnet publication. Its package, ACL and shared policy objects are
+registered by default. Bluefin and Cetus are enabled; Aftermath is not enabled. `getPresaleDeployment(network)` resolves
 the registered complete release or standalone presale deployment; the
 registration must match the canonical source ABI.
 
@@ -59,6 +59,12 @@ A sale is created in one PTB in three stages (contracts ADR 0110): the venue's
 `Presale`, which `share` publishes. `startCetusPresale` or
 `startBluefinPresale`, `configurePresale`, and `finalizePresale` build each
 stage; `newCetusPresale` and `newBluefinPresale` build all three.
+
+The sale token must have a zero-supply treasury cap and a Coin Registry currency
+explicitly marked `Unregulated`. `finalize` rejects regulated currencies and
+legacy `Unknown` currencies with `ESaleTokenNotUnregulated` (35).
+`is_regulated() == false` is insufficient: it also includes legacy `Unknown`.
+The contract enforces this admission check; SDK previews do not certify currency eligibility.
 
 | Step | Builder | Notes |
 | --- | --- | --- |
@@ -132,10 +138,11 @@ The caller owns signing, sponsorship, persistence and collection scheduling.
 creates `blast_presale` sales with its own `AdminCap` and migrates each funded
 sale into a 50/50 Aftermath weighted pool wrapped in Aftermath's DAO-fee pool,
 paying a 2% DAO fee to its compiled treasury and locking the LP at `0x0`. It
-links only the next `blast_presale` generation, so it needs that generation
-published first.
+is linked to one specific `blast_presale` generation. The existing vendor
+targets the October 11 package and cannot be paired with the October 20 default.
+A new vendor publication and allowlisting are required before enabling that route.
 
-Configure it on the presale deployment:
+For a matching vendor and presale generation, configure:
 
 ```ts
 const presale = new PresaleTransactions({
@@ -203,7 +210,7 @@ builder throws and `venueOf` never returns `"aftermath"`.
 `AftermathDaoPresaleTransactions` ([below](#aftermath-dao-pool-vendor)) builds
 the same calls from the vendor's package IDs alone, taking Aftermath's objects
 per call. `abi/production-aftermath-dao-presale-v1.json` freezes the vendor
-package at the presale ABI's commit; `new`, `finalize` and `migrate` are
+package at its independent source commit; `new`, `finalize` and `migrate` are
 builders.
 
 ## Administration
@@ -375,8 +382,8 @@ abort location's module and its clever error code (`errorCode`) index
 commit. Check first that the abort's package is the presale package: other
 packages reuse module names such as `cetus` and `bluefin`.
 
-- `previewPresaleCreation` runs every check `blast_presale::finalize` makes in
-  order, after those of the PTB's constructors in setter order (`bps::new`
+- `previewPresaleCreation` mirrors the settings and allocation checks in
+  `blast_presale::finalize`, after those of the PTB's constructors in setter order (`bps::new`
   throws `EInvalidBps` first),
   and returns the exact apportionment:
   `apportionSupply` and `apportionRaise` use largest remainder, with Blast's
@@ -464,10 +471,11 @@ choice. `HolderMemePaid` records the vault's treasury transfer.
 
 ## ABI coverage
 
-`abi/production-presale-v1.json` freezes the source ABI at contracts `c36057d`,
+`abi/production-presale-v1.json` freezes the source ABI at contracts `85f7361`,
 including the approved reserve and holder Meme routing amendments for the
-fresh publication. The Aftermath vendor keeps its independent `af86ea4`
-source freeze.
+fresh publication. The Aftermath vendor keeps its independent `dfd42a8`
+source freeze. The native `aftermath` module is recorded but its functions and
+events are classified as `intentional-disabled-venue-exclusion`; its route is not enabled.
 Every public function is classified:
 
 - **Builders:** all 19 `blast_presale` functions; `fee_policy` `set_fees` and

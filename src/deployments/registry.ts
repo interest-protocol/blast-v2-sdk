@@ -126,32 +126,32 @@ export function definePresaleDeployment(
 }
 
 /**
- * Canonical standalone presale releases. Mainnet is the fresh 2026-10-11
- * version-one publication from contracts `4b170eef`, using the shared
- * immutable blast_admin ACL and the freshly published Aftermath vendor.
+ * Canonical standalone presale releases. Mainnet is the fresh 2026-10-20
+ * version-one publication requiring confirmed unregulated sale currencies.
+ * It reuses the immutable blast_admin ACL; Aftermath is not enabled.
  */
 export const BLAST_PRESALE_DEPLOYMENTS: Readonly<
   Partial<Record<BlastNetwork, PresaleDeployment>>
 > = Object.freeze({
   mainnet: definePresaleDeployment({
     packageId:
-      "0xf9c404c0368cf014b44cac79dc5037da2aa34e16952673433d1c87ae3d2f8ca4",
+      "0x2c0ce340b5652d3ce8b813f47f728f335835a1aacd9ecac4a6e23c260404844d",
     originalPackageId:
-      "0xf9c404c0368cf014b44cac79dc5037da2aa34e16952673433d1c87ae3d2f8ca4",
+      "0x2c0ce340b5652d3ce8b813f47f728f335835a1aacd9ecac4a6e23c260404844d",
     venueConfig: {
       objectId:
-        "0xebfd4e31f8fddf1b8d5b4a45835c7397156f6f62eeefef46b7b1b42aa29c6d39",
-      initialSharedVersion: "1",
+        "0xdf7117db2a9c671b1f26b835e6c484d3138d3952c0c16b67eef4a0a400b81250",
+      initialSharedVersion: "1052779268",
     },
     creationPolicy: {
       objectId:
-        "0x4ce001c53e9da536fc7d04a87383e90ca76e27492b3cad92cf9e167af0dc83d8",
-      initialSharedVersion: "1",
+        "0xb9a2d76062e9b94f49e96553a75986957b8c8d8394bd717a30f03e3404ba84c4",
+      initialSharedVersion: "1052779268",
     },
     feePolicy: {
       objectId:
-        "0x3da5bfd3275991b70a445a2022e07925ce9a927dd47d7c3fd583563089a9afae",
-      initialSharedVersion: "1",
+        "0x42b118bd8a264052f3173b6325d0cf1881a9de163e3555e1a0a3faf4b3e612e4",
+      initialSharedVersion: "1052779268",
     },
     admin: {
       packageId:
@@ -162,11 +162,6 @@ export const BLAST_PRESALE_DEPLOYMENTS: Readonly<
         initialSharedVersion: "1",
       },
     },
-    // The immutable Aftermath DAO-pool vendor published with it.
-    aftermath: defineAftermathPresaleDeployment({
-      packageId:
-        "0x2fe674f6c42f49b7647be760a10f89f843396b9294af8fab5bfbc929fb7aab01",
-    }),
   }),
 });
 

@@ -236,8 +236,8 @@ config of another lineage is a `BluefinPoolCreationFeeError`; there is no
 default.
 
 Presale publishes on its own, so `BLAST_PRESALE_DEPLOYMENTS` registers its
-standalone mainnet release (the fresh 2026-10-11 publication, administered through
-the `blast_admin` ACL, with the Aftermath DAO-pool vendor under `aftermath`),
+standalone mainnet release (the 2026-10-20 publication, administered through
+the `blast_admin` ACL, with Bluefin and Cetus enabled and Aftermath disabled),
 and `getPresaleDeployment(network)` prefers the complete release's presale
 once `BLAST_DEPLOYMENTS` has one.
 
@@ -727,10 +727,11 @@ The vault permanently locks the position through Cetus LP Burn, and Blast's
 ## Presale
 
 `@interest-protocol/blast-sdk/presale` builds every product route of the
-`blast_presale` package (published on mainnet on 2026-10-11 from contracts
-`4b170eef`) and of the Aftermath DAO-pool vendor package that links it. It
-previews creation, commitments, and
-claims exactly as the contract enforces them, and it decodes and replays the
+`blast_presale` package (published on mainnet on 2026-10-20) for Bluefin and
+Cetus. Aftermath vendor builders require an explicitly configured matching
+deployment. The contract requires confirmed unregulated sale currencies; the SDK
+decodes rejection code 35 as `ESaleTokenNotUnregulated`. It
+previews creation economics, commitments, and claims, and it decodes and replays the
 package's objects and events. See [docs/presale.md](docs/presale.md).
 
 ## Gas budgets
