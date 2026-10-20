@@ -12,13 +12,17 @@ import {
 } from "@mysten/sui/utils";
 
 import { finalizeCoinRegistration } from "../src/coin/index.ts";
-import { getPresaleDeployment } from "../src/deployments/index.ts";
+import {
+  defineBlastDeployment,
+  presaleDeployment,
+} from "../src/deployments/index.ts";
 import type { BluefinPoolCreation } from "../src/migrators/index.ts";
 import {
   addBluefinPoolWithLiquidity,
   shareBluefinPool,
 } from "../src/migrators/index.ts";
 import { PresaleCalls } from "../src/presale/index.ts";
+import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
 
 const options: BluefinPoolCreation = {
   memeType: "0xa::meme::MEME",
@@ -51,7 +55,9 @@ test("composes registry finalization, Bluefin pool/liquidity and a vault before 
   });
   const result = addBluefinPoolWithLiquidity(tx, options);
   tx.add(
-    new PresaleCalls(getPresaleDeployment("mainnet")).newBluefinVault({
+    new PresaleCalls(
+      presaleDeployment(defineBlastDeployment(NON_PRODUCTION_MANIFEST)),
+    ).newBluefinVault({
       ...options,
       pool: result.pool,
       position: result.position,
@@ -120,7 +126,7 @@ test("composes registry finalization, Bluefin pool/liquidity and a vault before 
   assert.equal(bcs.bool().parse(pure(add.arguments[7])), true);
   const vault = find("new_vault");
   assert.deepEqual(vault.arguments[0], add.arguments[3]);
-  assert.deepEqual(vault.arguments[5], open.arguments[1]);
+  assert.deepEqual(vault.arguments[6], open.arguments[1]);
   const share = find("share_pool_object");
   assert.deepEqual(share.arguments, [open.arguments[1]]);
   assert.ok(calls.indexOf(vault) < calls.indexOf(share));

@@ -95,6 +95,11 @@ export const NON_PRODUCTION_MANIFEST = {
       },
     },
     presale: {
+      packageVersion: {
+        objectId:
+          "0xd576a03b3d1edb7db3b5ad106a8b0986c9ee582089920a9fc37b0900fd9d0679",
+        initialSharedVersion: "3",
+      },
       venueConfig: {
         objectId:
           "0xfb235af5bc5d6d766809e4e976848637de6eee126454cf52b75402ad461eaa46",

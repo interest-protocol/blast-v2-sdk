@@ -69,7 +69,7 @@ import type {
 
 /**
  * `getPresaleDeployment(network)` returns a registered release. For another
- * deployment, pass the IDs the publish and `package_admin::wrap` effects
+ * deployment, pass the IDs the publish and `package_admin::wrap` activation effects
  * return. Publication shares `VenueConfig`,
  * `CreationPolicy`, and `FeePolicy`. Blast administers the package through the
  * shared `blast_admin` ACL with the `blast_presale_domain` roles (contracts
@@ -78,6 +78,8 @@ import type {
 export type PresaleDeployment = {
   packageId: string;
   originalPackageId: string;
+  /** Shared by activation: `blast_presale_package::PackageVersion`. */
+  packageVersion: SharedObjectIdentity;
   /** `venue_config::VenueConfig`, holding each Meme's Cetus `PoolCreationCap`. */
   venueConfig: SharedObjectIdentity;
   /** `creation_policy::CreationPolicy`: the Quote types, migrators, and partners creation admits. */
@@ -279,6 +281,10 @@ export class PresaleCalls {
   constructor(deployment: PresaleDeployment) {
     this.deployment = {
       ...normalizeSuiPackageReference("presale", deployment),
+      packageVersion: normalizeSharedObjectIdentity(
+        "packageVersion",
+        deployment.packageVersion,
+      ),
       venueConfig: normalizeSharedObjectIdentity(
         "venueConfig",
         deployment.venueConfig,
@@ -473,6 +479,7 @@ export class PresaleCalls {
         "new",
         [
           tx.object(options.treasuryCap),
+          this.#version(tx),
           this.#creationPolicy(tx),
           this.#feePolicy(tx),
           deploymentObject(tx, this.deployment.venueConfig, true),
@@ -505,6 +512,7 @@ export class PresaleCalls {
         "new",
         [
           tx.object(options.treasuryCap),
+          this.#version(tx),
           // The same PTB's `finalize` takes the currency mutably.
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           this.#creationPolicy(tx),
@@ -564,7 +572,12 @@ export class PresaleCalls {
     if (hardCap) requireU64("hardCap.startsAfterMs", hardCap.startsAfterMs);
     return (tx: Transaction): void => {
       const set = (name: string, args: TransactionArgument[]) =>
-        this.#presaleCall(tx, name, [options.initializer, ...args], options);
+        this.#presaleCall(
+          tx,
+          name,
+          [options.initializer, this.#version(tx), ...args],
+          options,
+        );
 
       set("set_supply", [
         tx.pure.u64(tokenSupply),
@@ -631,6 +644,7 @@ export class PresaleCalls {
         "finalize",
         [
           options.initializer,
+          this.#version(tx),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
         ],
         options,
@@ -675,6 +689,7 @@ export class PresaleCalls {
         typeArguments: this.#saleTypes(options),
         arguments: [
           tx.object(options.adminCap),
+          this.#version(tx),
           tx.object(options.treasuryCap),
           this.#creationPolicy(tx),
           this.#feePolicy(tx),
@@ -705,6 +720,7 @@ export class PresaleCalls {
         typeArguments: this.#aftermathTypes(options),
         arguments: [
           tx.object(options.adminCap),
+          this.#version(tx),
           options.initializer,
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           tx.object(options.createPoolCap),
@@ -742,6 +758,7 @@ export class PresaleCalls {
         typeArguments,
         arguments: [
           this.#presale(tx, options),
+          this.#version(tx),
           sharedObject(tx, "poolCreation", options.poolCreation, true),
           this.#feePolicy(tx),
           deploymentObject(tx, aftermath.poolRegistry, true),
@@ -766,7 +783,12 @@ export class PresaleCalls {
       this.#presaleCall(
         tx,
         "share",
-        [options.presale, tx.pure.u64(startMs), tx.object.clock()],
+        [
+          options.presale,
+          this.#version(tx),
+          tx.pure.u64(startMs),
+          tx.object.clock(),
+        ],
         options,
       );
     };
@@ -783,7 +805,12 @@ export class PresaleCalls {
       this.#presaleCall(
         tx,
         "commit_open",
-        [this.#presale(tx, options), options.quote, tx.object.clock()],
+        [
+          this.#presale(tx, options),
+          this.#version(tx),
+          options.quote,
+          tx.object.clock(),
+        ],
         options,
       );
   }
@@ -806,6 +833,7 @@ export class PresaleCalls {
         "commit_allowlisted",
         [
           this.#presale(tx, options),
+          this.#version(tx),
           options.quote,
           tx.pure.u64(index),
           tx.pure.u64(walletCap),
@@ -827,7 +855,12 @@ export class PresaleCalls {
       this.#presaleCall(
         tx,
         "commit_uncapped",
-        [this.#presale(tx, options), options.quote, tx.object.clock()],
+        [
+          this.#presale(tx, options),
+          this.#version(tx),
+          options.quote,
+          tx.object.clock(),
+        ],
         options,
       );
   }
@@ -838,7 +871,7 @@ export class PresaleCalls {
       this.#presaleCall(
         tx,
         "settle",
-        [this.#presale(tx, options), tx.object.clock()],
+        [this.#presale(tx, options), this.#version(tx), tx.object.clock()],
         options,
       );
     };
@@ -852,7 +885,7 @@ export class PresaleCalls {
       this.#presaleCall(
         tx,
         "cancel_unlaunched",
-        [this.#presale(tx, options), tx.object.clock()],
+        [this.#presale(tx, options), this.#version(tx), tx.object.clock()],
         options,
       );
     };
@@ -876,6 +909,7 @@ export class PresaleCalls {
         "claim",
         [
           this.#presale(tx, options),
+          this.#version(tx),
           tx.pure.address(participant),
           tx.object.clock(),
         ],
@@ -934,6 +968,7 @@ export class PresaleCalls {
         typeArguments: cetusTypeArguments(types),
         arguments: [
           this.#presale(tx, options),
+          this.#version(tx),
           this.#feePolicy(tx),
           deploymentObject(tx, this.deployment.venueConfig, false),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
@@ -965,6 +1000,7 @@ export class PresaleCalls {
         "migrate",
         [
           this.#presale(tx, options),
+          this.#version(tx),
           this.#feePolicy(tx),
           deploymentObject(tx, this.deployment.venueConfig, false),
           sharedObject(tx, "memeCurrency", options.memeCurrency, false),
@@ -996,6 +1032,7 @@ export class PresaleCalls {
         "pay_protocol_fees_with_partner",
         [
           this.#presale(tx, options),
+          this.#version(tx),
           this.#feePolicy(tx),
           sharedObject(tx, "partner", options.partner, false),
           tx.object.clock(),
@@ -1023,6 +1060,7 @@ export class PresaleCalls {
         "pay_protocol_lp_fees_with_partner",
         [
           sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
           this.#feePolicy(tx),
           sharedObject(tx, "partner", options.partner, false),
           tx.object.clock(),
@@ -1052,6 +1090,7 @@ export class PresaleCalls {
         typeArguments: cetusTypeArguments(types),
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
           this.#feePolicy(tx),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "burnManager", options.burnManager, false),
@@ -1078,6 +1117,7 @@ export class PresaleCalls {
         "collect_fees",
         [
           sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
           this.#feePolicy(tx),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
           sharedObject(tx, "pool", options.pool, true),
@@ -1115,6 +1155,7 @@ export class PresaleCalls {
         typeArguments: cetusTypeArguments(types),
         arguments: [
           tx.object(options.position),
+          this.#version(tx),
           tx.add(
             this.feeSplit(options.feeRecipients, options.holderRewardsBps),
           ),
@@ -1151,6 +1192,7 @@ export class PresaleCalls {
         "new_vault",
         [
           tx.object(options.position),
+          this.#version(tx),
           tx.add(
             this.feeSplit(options.feeRecipients, options.holderRewardsBps),
           ),
@@ -1181,6 +1223,7 @@ export class PresaleCalls {
         "claim_migration_residuals",
         [
           sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
           tx.object(options.presaleCap),
         ],
         options,
@@ -1207,6 +1250,7 @@ export class PresaleCalls {
         "set_fees",
         [
           this.#feePolicy(tx, true),
+          this.#version(tx),
           tx.object(options.adminWitness),
           ...rates.map((rate) => tx.add(rate)),
         ],
@@ -1243,6 +1287,7 @@ export class PresaleCalls {
         "set_protocol_fees",
         [
           "objectId" in presale ? this.#presale(tx, { presale }) : presale,
+          this.#version(tx),
           tx.object(options.adminWitness),
           ...rates.map((rate) => tx.add(rate)),
           tx.object.clock(),
@@ -1274,6 +1319,7 @@ export class PresaleCalls {
         "set_protocol_lp_fees",
         [
           sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
           tx.object(options.adminWitness),
           ...rates.map((rate) => tx.add(rate)),
         ],
@@ -1349,6 +1395,7 @@ export class PresaleCalls {
         "set_destination",
         [
           this.#feePolicy(tx, true),
+          this.#version(tx),
           tx.object(options.adminWitness),
           tx.pure.address(destination),
         ],
@@ -1407,6 +1454,7 @@ export class PresaleCalls {
         "publish_round",
         [
           sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
           tx.object(options.adminWitness),
           this.#feePolicy(tx),
           tx.pure.address(expectedTreasury),
@@ -1462,6 +1510,7 @@ export class PresaleCalls {
         functionName,
         [
           sharedObject(tx, "round", options.round, true),
+          this.#version(tx),
           tx.pure.u64(index),
           tx.pure.address(beneficiary),
           tx.pure.u64(memeAmount),
@@ -1490,6 +1539,7 @@ export class PresaleCalls {
         "close_round",
         [
           sharedObject(tx, "round", options.round, true),
+          this.#version(tx),
           sharedObject(tx, "vault", options.vault, true),
           tx.object.clock(),
         ],
@@ -1518,6 +1568,7 @@ export class PresaleCalls {
         "settle_gas_reserve",
         [
           sharedObject(tx, "round", options.round, true),
+          this.#version(tx),
           tx.object(options.adminWitness),
           sharedObject(tx, "vault", options.vault, true),
           tx.pure.u64(reimbursement),
@@ -1571,6 +1622,7 @@ export class PresaleCalls {
       typeArguments: [typeArgument],
       arguments: [
         this.#creationPolicy(tx, true),
+        this.#version(tx),
         tx.object(options.adminWitness),
         tx.pure.bool(options.allowed),
       ],
@@ -1590,6 +1642,7 @@ export class PresaleCalls {
       target: `${this.deployment.packageId}::creation_policy::${functionName}`,
       arguments: [
         this.#creationPolicy(tx, true),
+        this.#version(tx),
         tx.object(options.adminWitness),
         sharedObject(tx, "partner", options.partner, false),
         ...trailing,
@@ -1628,6 +1681,10 @@ export class PresaleCalls {
     options: { presale: SharedObjectReference<true> },
   ): TransactionObjectArgument {
     return sharedObject(tx, "presale", options.presale, true);
+  }
+
+  #version(tx: Transaction): TransactionObjectArgument {
+    return deploymentObject(tx, this.deployment.packageVersion, false);
   }
 
   #feePolicy(tx: Transaction, mutable = false): TransactionObjectArgument {

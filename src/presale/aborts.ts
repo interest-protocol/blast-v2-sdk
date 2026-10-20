@@ -88,7 +88,6 @@ export const PRESALE_ABORTS = {
     "EInvalidMigrationWitness",
     "EPartnerNotAccepted",
   ],
-  package_admin: ["EInvalidUpgradeCap"],
   bps: ["EInvalidBps"],
 } as const;
 

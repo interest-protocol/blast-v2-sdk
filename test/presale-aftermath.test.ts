@@ -70,6 +70,7 @@ const aftermath = defineAftermathPresaleDeployment({
 const deployment: PresaleDeployment = {
   packageId: "0x5f",
   originalPackageId: PRESALE_PKG,
+  packageVersion: shared("0x64", false),
   venueConfig: shared("0x60", false),
   feePolicy: shared("0x61", false),
   creationPolicy: shared("0x62", false),
@@ -269,13 +270,14 @@ test("creates an Aftermath sale through the initializer: vendor new, setters, ve
   assert.deepEqual(calls[0]?.typeArguments, [memeA, sui]);
   assert.deepEqual(moveCallArguments(ptb, 0), [
     "object:0xad",
+    "shared:0x64",
     "object:0x7c",
     "shared:0x62",
     "shared:0x61",
   ]);
   const hardCap = calls[names.indexOf("blast_presale::set_hard_cap")];
   assert.deepEqual(
-    hardCap?.arguments.slice(1).map((argument) => {
+    hardCap?.arguments.slice(2).map((argument) => {
       assert.ok(argument.$kind === "Input");
       return ptb.getData().inputs[argument.Input]?.Pure?.bytes;
     }),
@@ -289,8 +291,9 @@ test("creates an Aftermath sale through the initializer: vendor new, setters, ve
   assert.deepEqual(calls[finalizeIndex]?.typeArguments, [LP, memeA, sui]);
   const finalizeArgs = moveCallArguments(ptb, finalizeIndex);
   assert.equal(finalizeArgs[0], "object:0xad");
-  assert.equal(finalizeArgs[1], "result:0");
-  assert.deepEqual(finalizeArgs.slice(2), ["shared-mut:0xcc", "object:0xcc9"]);
+  assert.equal(finalizeArgs[1], "shared:0x64");
+  assert.equal(finalizeArgs[2], "result:0");
+  assert.deepEqual(finalizeArgs.slice(3), ["shared-mut:0xcc", "object:0xcc9"]);
   assert.equal(
     moveCallArguments(ptb, names.length - 1)[0],
     `result:${ptb
@@ -331,6 +334,7 @@ test("migrates an Aftermath sale with its PoolCreation and Aftermath's objects",
   ]);
   assert.deepEqual(moveCallArguments(ptb, 0), [
     "shared-mut:0xab",
+    "shared:0x64",
     `shared-mut:${POOL_CREATION.replace(/^0x0+/, "0x")}`,
     "shared:0x61",
     "shared-mut:0xa1",
@@ -362,7 +366,11 @@ test("settles and migrates in one PTB, then pays the partner", () => {
   ]);
   assertBuildersMatchAbi(ptb, presaleAbi, "0x5f");
   assertBuildersMatchAbi(ptb, vendorAbi, VENDOR);
-  assert.deepEqual(moveCallArguments(ptb, 0), ["shared-mut:0xab", CLOCK]);
+  assert.deepEqual(moveCallArguments(ptb, 0), [
+    "shared-mut:0xab",
+    "shared:0x64",
+    CLOCK,
+  ]);
   // Without a partner, only settle and migrate.
   const alone = tx.settleAndMigrateAftermath(options);
   assert.equal(

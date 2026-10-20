@@ -183,6 +183,7 @@ function shared<const Mutable extends boolean>(
 const presaleDeployment: PresaleDeployment = {
   packageId: "0x5f",
   originalPackageId: "0x5e",
+  packageVersion: shared("0x64", false),
   venueConfig: shared("0x60", false),
   feePolicy: shared("0x61", false),
   creationPolicy: shared("0x62", false),

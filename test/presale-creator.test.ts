@@ -26,6 +26,7 @@ const identity = {
   presale: {
     packageId: id("a1"),
     originalPackageId: id("a1"),
+    packageVersion: { ...shared(id("a5")), mutable: false as const },
     venueConfig: { ...shared(id("a2")), mutable: false as const },
     feePolicy: { ...shared(id("a3")), mutable: false as const },
     creationPolicy: { ...shared(id("a4")), mutable: false as const },

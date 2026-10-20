@@ -11,10 +11,14 @@ import {
 } from "@mysten/sui/utils";
 
 import { finalizeCoinRegistration } from "../src/coin/index.ts";
-import { getPresaleDeployment } from "../src/deployments/index.ts";
+import {
+  defineBlastDeployment,
+  presaleDeployment,
+} from "../src/deployments/index.ts";
 import type { CetusPoolCreation } from "../src/migrators/index.ts";
 import { addCetusPoolWithLiquidity } from "../src/migrators/index.ts";
 import { PresaleTransactions } from "../src/presale/index.ts";
+import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
 
 const options: CetusPoolCreation = {
   memeType: "0xa::meme::MEME",
@@ -146,7 +150,7 @@ test("composes Currency finalization and leaves vault creation to the next PTB",
   );
   assert.equal("pool" in result, false);
   const vault = new PresaleTransactions(
-    getPresaleDeployment("mainnet"),
+    presaleDeployment(defineBlastDeployment(NON_PRODUCTION_MANIFEST)),
   ).newCetusVault({
     memeType: options.memeType,
     quoteType: options.quoteType,

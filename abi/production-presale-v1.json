@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "85f7361adcfb1d01c545ce2f42b94875a2c08ed2",
+    "contractsCommit": "7d94a5397120cfc38c90d628c49eff4ea06eee0f",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
@@ -18,6 +18,7 @@
       "contracts ADR 0099 (amended 2026-10-08): the shared Blast ACL administers the presale; every administrator call takes blast_admin::blast_acl::AdminWitness of one typed blast_presale_domain role (FeeAdmin, TreasuryAdmin, ListingAdmin, AdapterAdmin, RewardsAdmin, UpgradeAdmin) in place of the AdminRegistry and AdminCap, and blast_presale_admin with its SuperAdminCap, AdminCap, AdminRegistry, AdminCapReplaced, and AdminCapRevoked is deleted",
       "contracts ADR 0112: presale holding intervals may follow confirmed skipped days while preserving sequential funded rounds, proof domains and independent claim deadlines",
       "contracts ADR 0113: republished canonical Round reserves optional separate gas custody, zero reserve selects Blast-paid gas, governed one-shot capped settlement and permissionless reserve return; holder Meme collection pays the governed FeePolicy destination; publication atomically rejects a changed expected treasury",
+      "contracts ADR 0117: compatible upgrades and custody-gated PackageVersion on every mutation",
       "contracts ADR 0099 (amended 2026-10-20): finalize requires confirmed unregulated Currency; native Aftermath is published but disabled and excluded from SDK routes"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
@@ -69,6 +70,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -216,6 +232,21 @@
                       }
                     ]
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 {
                   "Reference": [
@@ -376,6 +407,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -543,6 +589,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
                           "name": "creation_policy"
                         },
                         "name": "CreationPolicy",
@@ -659,6 +720,21 @@
                       }
                     ]
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 }
               ],
               "returns": []
@@ -1000,6 +1076,21 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "sui",
                           "name": "clock"
                         },
@@ -1053,6 +1144,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -1132,6 +1238,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -1257,6 +1378,21 @@
                   ]
                 },
                 {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
                   "Datatype": {
                     "module": {
                       "address": "sui",
@@ -1365,6 +1501,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -1579,6 +1730,21 @@
                 },
                 {
                   "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
                     true,
                     {
                       "Datatype": {
@@ -1699,6 +1865,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -1890,6 +2071,21 @@
                   }
                 },
                 {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
                   "NamedTypeParameter": "MigrationWitness"
                 },
                 {
@@ -2013,6 +2209,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -2157,6 +2368,21 @@
                   ]
                 },
                 {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
                   "Datatype": {
                     "module": {
                       "address": "blast_presale",
@@ -2210,6 +2436,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -2272,6 +2513,21 @@
                     }
                   ]
                 },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
                 "u64",
                 "bool"
               ],
@@ -2318,6 +2574,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -2376,6 +2647,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -2469,6 +2755,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -2605,6 +2906,21 @@
                     }
                   ]
                 },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
                 "u64",
                 {
                   "vector": {
@@ -2666,6 +2982,21 @@
                     }
                   ]
                 },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
                 "u64",
                 "bool"
               ],
@@ -2712,6 +3043,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -2797,6 +3143,21 @@
                   ]
                 },
                 {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
                   "Datatype": {
                     "module": {
                       "address": "blast_presale",
@@ -2854,6 +3215,21 @@
                     }
                   ]
                 },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
                 "u64",
                 "u64"
               ],
@@ -2900,6 +3276,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -2961,6 +3352,21 @@
                       }
                     ]
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 "u64",
                 {
@@ -5260,6 +5666,140 @@
           "enums": [],
           "events": []
         },
+        "blast_presale_package": {
+          "functions": [],
+          "structs": [
+            {
+              "name": "BLAST_PRESALE_PACKAGE",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "Bootstrap",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "publisher",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "package"
+                      },
+                      "name": "Publisher",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "generation",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "operational_version"
+                      },
+                      "name": "OperationalVersion",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_presale",
+                                "name": "blast_presale_package"
+                              },
+                              "name": "BLAST_PRESALE_PACKAGE",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PackageVersion",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "generation",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "operational_version"
+                      },
+                      "name": "OperationalVersion",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_presale",
+                                "name": "blast_presale_package"
+                              },
+                              "name": "BLAST_PRESALE_PACKAGE",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
         "bluefin": {
           "functions": [
             {
@@ -5303,6 +5843,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -5439,6 +5994,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -5629,6 +6199,21 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "sui",
                           "name": "coin_registry"
                         },
@@ -5745,6 +6330,21 @@
                     "name": "Position",
                     "type_arguments": []
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 {
                   "Datatype": {
@@ -6057,6 +6657,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
                           "name": "fee_policy"
                         },
                         "name": "FeePolicy",
@@ -6203,6 +6818,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
                           "name": "fee_policy"
                         },
                         "name": "FeePolicy",
@@ -6337,6 +6967,21 @@
                       }
                     ]
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 {
                   "Reference": [
@@ -6492,6 +7137,21 @@
                     "name": "Position",
                     "type_arguments": []
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 {
                   "Datatype": {
@@ -6734,6 +7394,21 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "blast_admin",
                           "name": "blast_acl"
                         },
@@ -6791,6 +7466,21 @@
                           "name": "creation_policy"
                         },
                         "name": "CreationPolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
                         "type_arguments": []
                       }
                     }
@@ -6893,6 +7583,21 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "blast_admin",
                           "name": "blast_acl"
                         },
@@ -6942,6 +7647,21 @@
                           "name": "creation_policy"
                         },
                         "name": "CreationPolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
                         "type_arguments": []
                       }
                     }
@@ -7230,6 +7950,21 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "blast_admin",
                           "name": "blast_acl"
                         },
@@ -7273,6 +8008,21 @@
                           "name": "fee_policy"
                         },
                         "name": "FeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
                         "type_arguments": []
                       }
                     }
@@ -7552,6 +8302,21 @@
                     }
                   ]
                 },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
                 "u64",
                 "address",
                 "u64",
@@ -7618,6 +8383,21 @@
                       }
                     ]
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 {
                   "Reference": [
@@ -7706,6 +8486,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -7843,6 +8638,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -8419,6 +9229,21 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "blast_admin",
                           "name": "blast_acl"
                         },
@@ -8460,7 +9285,7 @@
               ]
             },
             {
-              "name": "commit_upgrade",
+              "name": "commit_upgrade_and_advance",
               "sdk": "intentional-upgrade-exclusion",
               "entry": false,
               "typeParameters": [],
@@ -8475,6 +9300,21 @@
                           "name": "package_admin"
                         },
                         "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
                         "type_arguments": []
                       }
                     }
@@ -8531,6 +9371,16 @@
                 {
                   "Datatype": {
                     "module": {
+                      "address": "blast_presale",
+                      "name": "blast_presale_package"
+                    },
+                    "name": "Bootstrap",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
                       "address": "sui",
                       "name": "package"
                     },
@@ -8580,15 +9430,29 @@
                   }
                 },
                 {
-                  "name": "upgrade_cap",
+                  "name": "custody",
                   "type": {
                     "Datatype": {
                       "module": {
-                        "address": "sui",
-                        "name": "package"
+                        "address": "blast_admin",
+                        "name": "upgrade_custody"
                       },
-                      "name": "UpgradeCap",
-                      "type_arguments": []
+                      "name": "UpgradeCustody",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_presale",
+                                "name": "blast_presale_package"
+                              },
+                              "name": "BLAST_PRESALE_PACKAGE",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": true
+                        }
+                      ]
                     }
                   }
                 }
@@ -8641,6 +9505,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -8765,6 +9644,21 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
                           "name": "fee_policy"
                         },
                         "name": "FeePolicy",
@@ -8862,6 +9756,21 @@
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
                       }
                     }
                   ]

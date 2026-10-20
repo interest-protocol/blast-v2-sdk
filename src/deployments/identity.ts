@@ -368,6 +368,11 @@ function expectedObjectTypes(
     };
   }
   if (presale) {
+    types["presale.packageVersion"] = {
+      packageId: presale,
+      module: "blast_presale_package",
+      name: "PackageVersion",
+    };
     types["presale.venueConfig"] = {
       packageId: presale,
       module: "venue_config",
@@ -642,11 +647,11 @@ function typeReasons(
 /**
  * The IDs of this repository's non-production test manifest
  * (`test/fixtures/non-production-deployment.ts`): sha256("blast-sdk-nonprod-<n>")
- * for n below 17.
+ * for n below 18.
  */
 const SDK_FIXTURE_IDS: ReadonlySet<string> = new Set(
   Array.from(
-    { length: 17 },
+    { length: 18 },
     (_, n) => `0x${bytesToHex(sha256(utf8ToBytes(`blast-sdk-nonprod-${n}`)))}`,
   ),
 );

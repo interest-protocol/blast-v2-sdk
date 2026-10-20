@@ -60,6 +60,21 @@ export function assertBuildersMatchAbi(
       ).length,
       name,
     );
+    if (
+      JSON.stringify(frozen.parameters[1])?.includes('"blast_presale_package"')
+    ) {
+      const argument = call.arguments[1];
+      assert.ok(argument?.$kind === "Input", `${name} borrows PackageVersion`);
+      const input = tx.getData().inputs[argument.Input];
+      assert.ok(
+        input?.$kind === "Object" && input.Object.$kind === "SharedObject",
+      );
+      assert.equal(
+        input.Object.SharedObject.mutable,
+        false,
+        `${name} reads PackageVersion`,
+      );
+    }
     return [name];
   });
 }

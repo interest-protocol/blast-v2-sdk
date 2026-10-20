@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "dfd42a8f65507d17fe34e41adccf37bdd8a34379",
+    "contractsCommit": "7d94a5397120cfc38c90d628c49eff4ea06eee0f",
     "workingTreeDifferedAtFreeze": false,
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -43,6 +43,21 @@
                           "name": "blast_aftermath_dao_presale"
                         },
                         "name": "AdminCap",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
                         "type_arguments": []
                       }
                     }
@@ -196,6 +211,21 @@
                   ]
                 },
                 {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
                   "Datatype": {
                     "module": {
                       "address": "blast_aftermath_dao_presale",
@@ -317,6 +347,21 @@
                           "name": "blast_aftermath_dao_presale"
                         },
                         "name": "AdminCap",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_presale",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
                         "type_arguments": []
                       }
                     }
