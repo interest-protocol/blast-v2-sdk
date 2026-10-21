@@ -312,7 +312,7 @@ async function allow(state: State): Promise<void> {
         }),
       );
   }
-  if (roles.getData().commands.length)
+  if (hasReceipt("E2E-042 grant-roles") || roles.getData().commands.length)
     await step(state, "grant-roles", admin, roles, sponsor);
 }
 
@@ -556,7 +556,9 @@ async function fund(
   participant: Ed25519Keypair,
   sale: Sale,
 ): Promise<void> {
-  if (state.migration) return;
+  // A migration receipt can precede the phase state after an interrupted run.
+  // Resume it before requiring the earlier Funded lifecycle again.
+  if (state.migration || hasReceipt("E2E-042 migrate")) return;
   const launch = {
     memeType: sale.memeType,
     quoteType: sale.quoteType,

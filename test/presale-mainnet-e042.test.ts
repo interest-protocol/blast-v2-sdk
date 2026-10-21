@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import type { TransactionArgument } from "@mysten/sui/transactions";
@@ -13,6 +14,23 @@ import {
 import { verifiedLpCoin } from "./aftermath-lp.ts";
 
 const id = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
+test("scenario recovery reconciles role grants and migrations after an interrupted submission", () => {
+  const output = execFileSync(
+    process.execPath,
+    [
+      "--experimental-test-module-mocks",
+      "--test",
+      "--test-reporter=tap",
+      new URL("./fixtures/e042-recovery.ts", import.meta.url).pathname,
+    ],
+    {
+      encoding: "utf8",
+      timeout: 30_000,
+      env: { ...process.env, NODE_TEST_CONTEXT: undefined },
+    },
+  );
+  assert.match(output, /# pass 2\b/);
+});
 const shared = (n: number) => ({ objectId: id(n), initialSharedVersion: "1" });
 const deployment = {
   packageId: id(100),
