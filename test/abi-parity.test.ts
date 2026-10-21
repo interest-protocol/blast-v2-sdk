@@ -240,11 +240,11 @@ function assertEveryOperationIsClassified(
       assert.ok(operation.sdk.length > 0);
     }
     for (const event of moduleArtifact.events) {
-      // Disabled native Aftermath and admin upgrade events have no SDK decoder.
+      // Native adapter events have their own decoder; admin upgrade events are excluded.
       assert.equal(
         event.sdk,
         moduleName === "aftermath"
-          ? "intentional-disabled-venue-exclusion"
+          ? "decoder"
           : isAdmin && event.typeParameters.length > 0
             ? "intentional-upgrade-exclusion"
             : "decoder-reducer",

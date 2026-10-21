@@ -86,7 +86,7 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "test": "node --test test/*.test.ts",
-    "typecheck": "tsc && tsc -p tsconfig.build.json --noEmit",
+    "typecheck": "tsc && tsc -p tsconfig.build.json --noEmit && tsc -p e2e/presale-mainnet/tsconfig.json --noEmit",
     "holder-rewards": "node scripts/holder-rewards.mjs",
     "prepack": "npm run build"
   },

@@ -732,7 +732,9 @@ The vault permanently locks the position through Cetus LP Burn, and Blast's
 ## Presale
 
 `@interest-protocol/blast-sdk/presale` builds every product route of the
-`blast_presale` versioned package for Bluefin and Cetus. It requires fresh
+`blast_presale` versioned package for Bluefin, Cetus and native Aftermath. Native
+Aftermath creation consumes the final `FinalizeTicket`, shares the pool reservation,
+and migrates into a locked DAO-fee pool; see the [native lifecycle](docs/presale.md#native-aftermath-pools). It requires fresh
 publication and activation; supply `packageVersion` from activation effects. Aftermath vendor builders require an explicitly configured matching
 deployment. The contract requires confirmed unregulated sale currencies; the SDK
 decodes rejection code 35 as `ESaleTokenNotUnregulated`. It

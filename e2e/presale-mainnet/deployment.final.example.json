@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "contractsCommit": "SET_EXACT_PUBLISHED_CONTRACTS_COMMIT",
+  "publicationDigest": "SET_FINAL_PRESALE_PUBLICATION_DIGEST",
+  "deployment": {
+    "packageId": "SET_FINAL_PRESALE_PACKAGE_ID",
+    "originalPackageId": "SET_SAME_FINAL_PRESALE_PACKAGE_ID",
+    "packageVersion": {
+      "objectId": "SET_FINAL_PACKAGE_VERSION_ID",
+      "initialSharedVersion": "SET_VERSION"
+    },
+    "venueConfig": {
+      "objectId": "SET_FINAL_VENUE_CONFIG_ID",
+      "initialSharedVersion": "SET_VERSION"
+    },
+    "creationPolicy": {
+      "objectId": "SET_FINAL_CREATION_POLICY_ID",
+      "initialSharedVersion": "SET_VERSION"
+    },
+    "feePolicy": {
+      "objectId": "SET_FINAL_FEE_POLICY_ID",
+      "initialSharedVersion": "SET_VERSION"
+    },
+    "admin": {
+      "packageId": "0x726fb49b880faa89719b95c6ef3a91be794f771ed3560fe5894d0a605c8469f9",
+      "acl": {
+        "objectId": "0xc9fbcfc4eda38626d7daad17902cc145b4008beb20470135438298aa7a005a6d",
+        "initialSharedVersion": "1"
+      }
+    }
+  },
+  "superAdminCap": "0x6187ad51c17dee9f288ebbf7f7655b0a7185d7697a5aa23e96f8c66169aa2b2c",
+  "testkit": "0x38a57732b36bac98a9c0bc533d02ecf8442cb5181d605bde8bfc2da80e06e331",
+  "saleTokenLetter": "F",
+  "operators": {
+    "deployer": "0x52ecee5e58e2f3a7461cc604f4efcc3b68031e4715456d821e3a2719b0593600",
+    "administrator": "0x612fa27ba229021c5a1c32022fd6341ffbd58a87ac928a0dc32d8d6d1dba9fed"
+  },
+  "feeRecipient": "0x73753b46c752581e37ac949808e3695e2439934fe19737cb0bde3f0e64bbb960"
+}

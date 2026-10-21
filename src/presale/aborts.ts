@@ -49,7 +49,6 @@ export const PRESALE_ABORTS = {
     "EDaoFeePoolMismatch",
     "EWrongPresale",
     "EInvalidDaoFee",
-    "EWrongMigrator",
     "EWrongVault",
   ],
   holder_rewards: [

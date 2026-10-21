@@ -4,13 +4,14 @@
 package (contracts ADRs 0099 through 0102, 0104, 0106, 0107, and 0109 through 0111): presales with
 capped commitments that overflow at one common fill rate or fill first come up
 to a hard cap, an early close once a hard-capped raise is full, migration-gated
-claims, full refunds when a sale does not migrate, permissionless Cetus or
-Bluefin migration into a `Vault`, vaults for an owner's own position, vesting
+claims, full refunds when a sale does not migrate, permissionless Cetus, Bluefin or native Aftermath migration into a `Vault`, vaults for an owner's own position, vesting
 token and raise shares, Blast's protocol fees and
 creation allowlists, LP-fee splits, holder-reward rounds, and administration through the shared
 Blast ACL.
 
-The SDK targets the versioned presale ABI (contracts ADR 0117). It requires a
+The SDK targets the versioned presale ABI (contracts ADR 0117), including the
+native Aftermath `FinalizeTicket` change at contracts commit
+`0fa909c871c7c879f85f881c4ec699c57364b00e`. It requires a
 fresh publication and activation; no mainnet preset is registered for this ABI.
 The earlier unversioned mainnet package cannot accept the new argument. Supply
 an explicit deployment after `package_admin::wrap(Bootstrap, UpgradeCap)` shares
@@ -66,8 +67,11 @@ The contract enforces this admission check; SDK previews do not certify currency
 | Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: the venue's `new`, then `set_supply`, `set_token_allocations` (every rate through `bps::new`, the `RecipientShare` vector through `recipient_share`, or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), `set_participant_vesting` when given, `set_raise`, `set_windows`, `set_eligibility`, `set_uncapped_phase` and `set_hard_cap` when given, `set_fee_split` through `fee_split`, `set_partner` when `partner` is given, `finalize`, `share` from `startMs`, and the `PresaleCap` transfer. The pool tier belongs to the venue (contracts ADR 0111): Cetus reserves the pair's pool creation and records `tickSpacing` (Cetus derives the fee rate) in `VenueConfig`, and Bluefin records `tickSpacing` and `feeRate` there too; the sale itself carries no tier. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
 | Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except under a hard cap. |
 | Settle | `settle`, `cancelUnlaunched` | Anyone may call. `settle` works from `endMs`, or earlier once the raise is full under a hard cap with `closesWhenFilled` (`canClosePresaleEarly`); an early close ends the window at the settle, and `PresaleFunded` carries the actual `end_ms` and `liquidity_deadline_ms`. |
-| Create an Aftermath sale | `createAftermathPresale` | The vendor's `AdminCap` holder only, with an `AftermathLpCoin` from `verifyAftermathLpCoin`; see [Aftermath DAO pools](#aftermath-dao-pools). |
-| Migrate to Aftermath | `migrateAftermath`, `settleAndMigrateAftermath` | Anyone may call, with the sale's `PoolCreation` and `Lp` type (`getAftermathPoolCreation`). |
+| Create a native Aftermath sale | `createNativeAftermathPresale` | Consumes the verified LP capability and mandatory ticket, shares sale and reservation, and sends the cap to `capRecipient`; see [native pools](#native-aftermath-pools). |
+| Migrate to native Aftermath | `migrateNativeAftermath`, `settleAndMigrateNativeAftermath` | Uses `getNativeAftermathPoolCreation`; creates the pool and DAO-fee pool and locks liquidity. |
+| Collect native Aftermath fees | `collectNativeAftermathFees` | Receives the vault-owned fee coins, splits fees and optionally pays its partner. |
+| Create an Aftermath vendor sale | `createAftermathPresale` | The vendor's `AdminCap` holder only, with an `AftermathLpCoin` from `verifyAftermathLpCoin`; see [Aftermath DAO pools](#aftermath-dao-pools). |
+| Migrate through the Aftermath vendor | `migrateAftermath`, `settleAndMigrateAftermath` | Anyone may call, with the sale's `PoolCreation` and `Lp` type (`getAftermathPoolCreation`). |
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee, from gas unless `useGasCoin: false`. Pass the sale's `partner` when it names one, and the same PTB pays it. |
 | Pay Blast and its partner | `payProtocolFeesWithPartner` | Anyone may call, once, after a partnered sale migrates; use it on its own for a sale another migrator migrated. See [Partners](#partners). |
 | Claim | `claim` | Relays claims for any participants. The last claim takes the rounding remainder. Under participant vesting, each claim locks the participant's tokens in a new schedule starting at that claim. |
@@ -125,6 +129,89 @@ decodes completed fee and residual events from the pinned original package and
 module. Amounts are exact decimal atomic-unit strings with no rounding. A preview
 is an estimate; completed events and contract execution remain authoritative.
 The caller owns signing, sponsorship, persistence and collection scheduling.
+
+## Native Aftermath pools
+
+Use `createNativeAftermathPresale` and `settleAndMigrateNativeAftermath` for the
+`aftermath` module in the final presale package. Its deployment uses the core
+package and singletons above. `migrationWitnessType("aftermath-native")` names
+`<originalPackageId>::aftermath::Witness`; Blast must allow that witness and Quote
+in `CreationPolicy` before creation. The creator needs no vendor AdminCap.
+
+The LP coin must be fresh and verified. Publish one with `publishAftermathLpCoin`,
+then read its confirmed transaction with `verifyAftermathLpCoinPublication`.
+Native creation consumes that capability and the sale token's zero-supply
+TreasuryCap; `memeCurrency` must be a confirmed unregulated Coin Registry currency.
+The SDK sends `new`'s initializer and mandatory ticket through all settings and
+native `finalize`, shares both the sale and its `PoolCreation<Lp, Meme, Quote>`,
+and transfers the `PresaleCap` to `capRecipient`. Use the low-level
+`startNativeAftermathPresale`, `finalizeNativeAftermathPresale`, and
+`shareNativeAftermathPoolCreation` to compose these operations in another PTB.
+The ticket cannot survive the creation transaction.
+
+```ts
+import { PresaleClient, publishAftermathLpCoin,
+  verifyAftermathLpCoinPublication } from "@interest-protocol/blast-sdk/presale";
+
+const presale = new PresaleClient(client, deployment);
+// execute signs, submits and waits for success/checkpoint in the caller's app.
+const published = await execute(publishAftermathLpCoin({
+  symbol: "MEMELP", name: "Meme / SUI LP", description: "Presale LP",
+  upgradeCapRecipient: creator,
+}));
+const lpCoin = await verifyAftermathLpCoinPublication(client, published.digest, {
+  owner: creator,
+});
+const created = await execute(presale.tx.createNativeAftermathPresale({
+  ...terms, // PresaleTerms: registered Meme, SUI Quote, allocations and windows
+  lpCoin, daoFeeBps: 200, startMs: 0n, capRecipient: creator,
+}));
+// presaleId comes from the core PresaleCreated event in created.events.
+const reservation = await presale.getNativeAftermathPoolCreation(presaleId, {
+  creationDigest: created.digest,
+});
+if (!reservation?.poolCreation) throw new Error("No active pool reservation");
+await execute(presale.tx.commit({
+  memeType, quoteType, presale: saleRef, route: "open", amount, recipient: investor,
+}));
+// Once fully funded (and allowed to close), anyone can settle and migrate.
+await execute(presale.tx.settleAndMigrateNativeAftermath({
+  ...reservation, poolCreation: reservation.poolCreation, presale: saleRef,
+}));
+await execute(presale.tx.claim({
+  memeType, quoteType, presale: saleRef, participants: [investor],
+}));
+```
+
+For sales without an early-closing hard cap, wait until the commitment window
+ends. Settle underfunded sales separately so cancellation/refund can complete;
+migrating a cancelled sale aborts the whole PTB. `migrateNativeAftermath` handles
+an already funded sale. Both migration helpers accept `partner` to pay the
+partner and Blast in the same transaction. External pool objects default to
+`AFTERMATH_MAINNET_OBJECTS`; pass `aftermathObjects: { poolRegistry,
+daoFeeVersion }` for other networks or updated identities.
+
+Migration creates the weighted pool and DAO-fee pool, orders the coins on chain,
+sends all LP to `0x0`, and seals the owner capability in the new vault under
+`aftermath::Venue`. `aftermathPoolCoinTypes` mirrors either coin order. The
+`PoolCreation` is consumed. The reader preserves its event binding with a null
+shared input after migration, and verifies the sale, three coin types and
+capability UID against a live reservation before returning an input.
+
+`decodeNativeAftermathEvent` decodes `PoolCreationReserved` and
+`DaoFeePoolCreated` using original defining package IDs. Core sale and vault
+events still use `decodePresaleEvent`. After swaps, query both types of coins
+owned by the vault address and call `collectNativeAftermathFees({ memeType,
+quoteType, vault, memeFees, quoteFees })`, passing exact object ID/version/digest
+references. It creates typed `Receiving<Coin<T>>` vectors, including empty ones,
+and splits the collected fees under the vault's terms. Holder Meme goes to the
+FeePolicy treasury; holder Quote stays in the vault for rewards. Supply `partner`
+for its protocol LP-fee payout. Native aborts use `presaleAbortName("aftermath", code)`.
+
+The [E2E-042 runbook](../e2e/presale-mainnet/README.md) exercises these public
+builders against an explicitly configured final publication. Older native and
+vendor receipts remain separate prior evidence; they do not prove a signed run
+of the final ticket ABI.
 
 ## Aftermath DAO pools
 
@@ -513,8 +600,9 @@ choice. `HolderMemePaid` records the vault's treasury transfer.
 `abi/production-presale-v1.json` and the Aftermath vendor artifact freeze the
 versioned source ABI together. Every mutation builder passes the deployment's
 read-only shared `PackageVersion` immediately after its primary object. Pure
-constructors and `destroy_cap` remain unchanged. Native Aftermath remains an
-intentional disabled venue exclusion; the vendor is configured explicitly.
+constructors and `destroy_cap` remain unchanged. Native Aftermath creation,
+reservation sharing, migration and fee collection are covered builders, with
+separate native event decoders. The vendor is configured explicitly.
 Every public function is classified:
 
 - **Builders:** all 19 `blast_presale` functions; `fee_policy` `set_fees` and
