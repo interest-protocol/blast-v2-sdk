@@ -15,8 +15,10 @@ import {
   AftermathDaoPresaleTransactions,
   decodeAftermathDaoPresaleEvent,
 } from "../src/presale/aftermath-dao.ts";
+import type { AftermathLpCoin } from "../src/presale/aftermath-lp.ts";
 import { openEligibility } from "../src/presale/math.ts";
 import type { PresaleDeployment } from "../src/presale/transactions.ts";
+import { verifiedLpCoin } from "./aftermath-lp.ts";
 
 function shared<const Mutable extends boolean>(
   objectId: string,
@@ -44,6 +46,7 @@ const quote = normalizeStructTag("0x2::sui::SUI");
 const lp = normalizeStructTag("0xb::lp::LP");
 const types = { memeType: meme, quoteType: quote, lpType: lp };
 const CLOCK = `shared:${normalizeSuiAddress(SUI_CLOCK_OBJECT_ID)}`;
+const lpCoin = await verifiedLpCoin(lp, "0xcf");
 
 const abi = JSON.parse(
   readFileSync(
@@ -126,7 +129,7 @@ test("creates a vendor sale in one PTB: new, every term but the fee split, final
     adminCap: "0xadc",
     treasuryCap: "0x7c",
     memeCurrency: shared("0xcc", true),
-    createPoolCap: "0xcf",
+    lpCoin,
     tokenSupply: 1_000_000_000n,
     tokenAllocationBps: 5_000n,
     participantVesting: null,
@@ -199,6 +202,40 @@ test("creates a vendor sale in one PTB: new, every term but the fee split, final
     moveCall.function.startsWith("set_"),
   )) {
     assert.equal(argumentKinds(ptb, setter)[0], "Result:0");
+  }
+});
+
+test("refuses to create a vendor sale with anything but the verified LP coin", () => {
+  for (const value of [
+    { ...lpCoin },
+    JSON.parse(JSON.stringify(lpCoin)),
+    "0xcf",
+  ] as unknown as AftermathLpCoin[]) {
+    assert.throws(
+      () =>
+        tx.createSale({
+          ...types,
+          adminCap: "0xadc",
+          treasuryCap: "0x7c",
+          memeCurrency: shared("0xcc", true),
+          lpCoin: value,
+          tokenSupply: 1_000_000_000n,
+          tokenAllocationBps: 5_000n,
+          participantVesting: null,
+          liquidityTokenAllocationBps: 5_000n,
+          recipientAllocations: [],
+          burnable: false,
+          raiseTarget: 1_000_000n,
+          raiseAllocations: [],
+          durationMs: 100n,
+          liquidityWindowMs: 7n * 24n * 60n * 60n * 1_000n,
+          eligibility: openEligibility(1_000_000n, 1n, 1_000_000n),
+          uncapped: null,
+          hardCap: null,
+          startMs: 1_000n,
+        }),
+      /lpCoin must be the AftermathLpCoin that verifyAftermathLpCoin returned/,
+    );
   }
 });
 

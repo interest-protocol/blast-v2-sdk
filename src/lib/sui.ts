@@ -82,7 +82,10 @@ export function normalizeSuiPackageReference(
   };
 }
 
-function normalizeNonzeroSuiObjectId(name: string, value: string): string {
+export function normalizeNonzeroSuiObjectId(
+  name: string,
+  value: string,
+): string {
   if (typeof value !== "string") {
     throw new TypeError(`${name} must be a valid Sui object ID`);
   }
