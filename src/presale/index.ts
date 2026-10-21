@@ -1,6 +1,7 @@
 export * from "./aborts.ts";
 export * from "./aftermath.ts";
 export * from "./aftermath-dao.ts";
+export * from "./aftermath-lp.ts";
 export * from "./allowlist.ts";
 export * from "./client.ts";
 export * from "./creator.ts";

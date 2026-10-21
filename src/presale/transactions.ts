@@ -50,6 +50,8 @@ import {
   aftermathWitnessType,
   defineAftermathPresaleDeployment,
 } from "./aftermath.ts";
+import type { AftermathLpCoin } from "./aftermath-lp.ts";
+import { assertAftermathLpCoin } from "./aftermath-lp.ts";
 import type { AllowlistProof } from "./allowlist.ts";
 import {
   allowlistedEligibility,
@@ -186,8 +188,9 @@ export type CetusPresaleObjects = {
  * An Aftermath DAO-pool vendor sale's terms (contracts ADRs 0104 and 0110):
  * every setting but the LP-fee split, which the vendor's `finalize` fixes (its
  * treasury takes every LP fee), the coin objects creation consumes, and the
- * fresh LP coin's pool-creation capability. The sale has no pool tier: its
- * pool's weights and fees are the vendor's constants (ADR 0111).
+ * verified LP coin whose pool-creation capability the sale binds. The sale
+ * has no pool tier: its pool's weights and fees are the vendor's constants
+ * (ADR 0111).
  */
 export type AftermathPresaleTerms = PresaleTermsSettings & {
   /** The zero-supply `TreasuryCap<SaleToken>`, consumed. */
@@ -196,10 +199,14 @@ export type AftermathPresaleTerms = PresaleTermsSettings & {
   memeCurrency: SharedObjectReference<true>;
   /** The vendor package's `AdminCap`. */
   adminCap: TransactionObjectInput;
-  /** The fresh LP coin `Lp`, published for this sale alone. */
-  lpType: string;
-  /** Aftermath's `CreatePoolCapV2` that `Lp`'s publication minted, consumed. */
-  createPoolCap: TransactionObjectInput;
+  /**
+   * The fresh LP coin `Lp` and its `CreatePoolCapV2`, consumed: only the
+   * `AftermathLpCoin` that `verifyAftermathLpCoin` returned after reading the
+   * capability from the chain. A capability ID or a look-alike is refused,
+   * because a capability for another coin would leave the sale unable to
+   * migrate.
+   */
+  lpCoin: AftermathLpCoin;
 };
 
 /** A sale's Aftermath binding, which `migrate` consumes. */
@@ -701,29 +708,32 @@ export class PresaleCalls {
    * `blast_aftermath_dao_presale::finalize<Lp, SaleToken, Quote>` with the
    * vendor's `AdminCap`: names the vendor's treasury as the sale's only LP-fee
    * recipient, finalizes it, sends its `PresaleCap` to the treasury, shares
-   * the `PoolCreation<Lp>` binding `createPoolCap` to it, and returns the
-   * `Presale`, which the same PTB must `share`.
+   * the `PoolCreation<Lp>` binding the verified LP coin's `CreatePoolCapV2`
+   * to it, and returns the `Presale`, which the same PTB must `share`. Throws
+   * unless `lpCoin` is the `AftermathLpCoin` `verifyAftermathLpCoin`
+   * returned.
    */
   finalizeAftermathPresale(
     options: LaunchTypes & {
       adminCap: TransactionObjectInput;
       initializer: TransactionArgument;
       memeCurrency: SharedObjectReference<true>;
-      lpType: string;
-      createPoolCap: TransactionObjectInput;
+      lpCoin: AftermathLpCoin;
     },
   ) {
     const { packageId } = this.#aftermath();
+    const lpCoin = assertAftermathLpCoin(options.lpCoin);
+    const typeArguments = [lpCoin.lpType, ...this.#saleTypes(options)];
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
         target: `${packageId}::${AFTERMATH_PRESALE_MODULE}::finalize`,
-        typeArguments: this.#aftermathTypes(options),
+        typeArguments,
         arguments: [
           tx.object(options.adminCap),
           this.#version(tx),
           options.initializer,
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          tx.object(options.createPoolCap),
+          tx.object(lpCoin.createPoolCapId),
         ],
       });
   }
@@ -1606,7 +1616,7 @@ export class PresaleCalls {
     return [memeType, quoteType];
   }
 
-  /** `<Lp, SaleToken, Quote>`, the vendor's `finalize` and `migrate` type arguments. */
+  /** `<Lp, SaleToken, Quote>`, the vendor's `migrate` type arguments. */
   #aftermathTypes(options: LaunchTypes & { lpType: string }): string[] {
     return [normalizeStructTag(options.lpType), ...this.#saleTypes(options)];
   }

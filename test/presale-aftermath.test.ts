@@ -26,6 +26,7 @@ import {
   defineAftermathPresaleDeployment,
   findAftermathPoolCreation,
 } from "../src/presale/aftermath.ts";
+import type { AftermathLpCoin } from "../src/presale/aftermath-lp.ts";
 import { PresaleClient } from "../src/presale/client.ts";
 import { openEligibility } from "../src/presale/math.ts";
 import type {
@@ -43,6 +44,7 @@ import {
   orderedEventFields,
   readAbi,
 } from "./abi.ts";
+import { verifiedLpCoin } from "./aftermath-lp.ts";
 
 const id = (value: string) => normalizeSuiAddress(value);
 const VENDOR = id("0xaf7e");
@@ -89,6 +91,8 @@ const presaleAbi = readAbi("production-presale-v1.json", "presale");
 const presale = shared(PRESALE, true);
 const poolCreation = shared(POOL_CREATION, true);
 const partner = shared("0x9a27", false);
+// The fresh LP coin, verified against a fake chain holding its capability.
+const lpCoin = await verifiedLpCoin(LP, "0xcc9");
 
 // === Configuration and venue ===
 
@@ -210,8 +214,7 @@ const terms: AftermathPresaleTerms = {
   memeType: memeA,
   quoteType: sui,
   adminCap: "0xad",
-  lpType: LP,
-  createPoolCap: "0xcc9",
+  lpCoin,
   treasuryCap: "0x7c",
   memeCurrency: shared("0xcc", true),
   tokenSupply: 20_001n,
@@ -319,6 +322,31 @@ test("creates an Aftermath sale through the initializer: vendor new, setters, ve
   assert.ok(!plain.includes("set_hard_cap"));
   assert.ok(!plain.includes("set_partner"));
   assert.ok(!plain.includes("set_fee_split"));
+});
+
+test("refuses to create a sale with anything but the verified LP coin", () => {
+  const lookalikes = [
+    { ...lpCoin },
+    JSON.parse(JSON.stringify(lpCoin)),
+    { lpType: LP, createPoolCapId: "0xcc9" },
+    "0xcc9",
+  ] as unknown as AftermathLpCoin[];
+  for (const value of lookalikes) {
+    assert.throws(
+      () => tx.createAftermathPresale({ ...terms, startMs: 0n, lpCoin: value }),
+      /lpCoin must be the AftermathLpCoin that verifyAftermathLpCoin returned/,
+    );
+    assert.throws(() =>
+      tx.call.finalizeAftermathPresale({
+        memeType: memeA,
+        quoteType: sui,
+        adminCap: "0xad",
+        initializer: { $kind: "Result", Result: 0 },
+        memeCurrency: shared("0xcc", true),
+        lpCoin: value,
+      }),
+    );
+  }
 });
 
 test("migrates an Aftermath sale with its PoolCreation and Aftermath's objects", () => {

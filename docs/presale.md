@@ -66,7 +66,7 @@ The contract enforces this admission check; SDK previews do not certify currency
 | Create and share | `createCetusPresale`, `createBluefinPresale` | One PTB: the venue's `new`, then `set_supply`, `set_token_allocations` (every rate through `bps::new`, the `RecipientShare` vector through `recipient_share`, or `vesting_terms` and `vested_recipient_share` for a share with `vesting`), `set_participant_vesting` when given, `set_raise`, `set_windows`, `set_eligibility`, `set_uncapped_phase` and `set_hard_cap` when given, `set_fee_split` through `fee_split`, `set_partner` when `partner` is given, `finalize`, `share` from `startMs`, and the `PresaleCap` transfer. The pool tier belongs to the venue (contracts ADR 0111): Cetus reserves the pair's pool creation and records `tickSpacing` (Cetus derives the fee rate) in `VenueConfig`, and Bluefin records `tickSpacing` and `feeRate` there too; the sale itself carries no tier. The windows count from `startMs`, or from execution once it has passed (`0n` opens at once), so a sale can be created a day ahead; commitments abort with `EPresaleNotStarted` until then. |
 | Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin`, and transfers the returned change to `recipient`. The change is zero except under a hard cap. |
 | Settle | `settle`, `cancelUnlaunched` | Anyone may call. `settle` works from `endMs`, or earlier once the raise is full under a hard cap with `closesWhenFilled` (`canClosePresaleEarly`); an early close ends the window at the settle, and `PresaleFunded` carries the actual `end_ms` and `liquidity_deadline_ms`. |
-| Create an Aftermath sale | `createAftermathPresale` | The vendor's `AdminCap` holder only; see [Aftermath DAO pools](#aftermath-dao-pools). |
+| Create an Aftermath sale | `createAftermathPresale` | The vendor's `AdminCap` holder only, with an `AftermathLpCoin` from `verifyAftermathLpCoin`; see [Aftermath DAO pools](#aftermath-dao-pools). |
 | Migrate to Aftermath | `migrateAftermath`, `settleAndMigrateAftermath` | Anyone may call, with the sale's `PoolCreation` and `Lp` type (`getAftermathPoolCreation`). |
 | Migrate | `migrateCetus`, `migrateBluefin` | Anyone may call. Cetus type arguments are `[Meme, Quote, CoinA, CoinB]` in Cetus order (`cetusMemeSide`). Bluefin takes both `Currency` objects read-only and pays its SUI creation fee, from gas unless `useGasCoin: false`. Pass the sale's `partner` when it names one, and the same PTB pays it. |
 | Pay Blast and its partner | `payProtocolFeesWithPartner` | Anyone may call, once, after a partnered sale migrates; use it on its own for a sale another migrator migrated. See [Partners](#partners). |
@@ -164,14 +164,39 @@ builder throws and `venueOf` never returns `"aftermath"`.
   every term except the LP-fee split, with `set_hard_cap` when `hardCap` is
   given and `set_partner` when `partner` is; the vendor's
   `finalize<Lp, SaleToken, Quote>` takes the `AdminCap` again and the
-  `CreatePoolCapV2` of a freshly published LP coin `Lp`, names its treasury as
-  the only LP-fee recipient, sends it the `PresaleCap`, and shares a
-  `PoolCreation<Lp>` bound to the sale, emitting `PoolCreationReserved`; then
-  `share`. `startAftermathPresale`, `finalizeAftermathPresale` and
-  `newAftermathPresale` on `PresaleCalls` are the steps. The vendor's
-  `finalize` refuses another migrator's initializer (`EWrongMigrator`), and a
-  sale the vendor started but `blast_presale::finalize` finalized has no
-  `PoolCreation`, so it cannot migrate and refunds after its LP deadline.
+  `CreatePoolCapV2` of the sale's verified LP coin (`lpCoin`, next), names
+  its treasury as the only LP-fee recipient, sends it the `PresaleCap`, and
+  shares a `PoolCreation<Lp>` bound to the sale, emitting
+  `PoolCreationReserved`; then `share`. `startAftermathPresale`,
+  `finalizeAftermathPresale` and `newAftermathPresale` on `PresaleCalls` are
+  the steps. The vendor's `finalize` refuses another migrator's initializer
+  (`EWrongMigrator`), and a sale the vendor started but
+  `blast_presale::finalize` finalized has no `PoolCreation`, so it cannot
+  migrate and refunds after its LP deadline.
+- **LP coin.** The capability is the one creation input the chain cannot
+  check. Aftermath keeps the LP coin's `TreasuryCap` and `CoinMetadata` inside
+  the `CreatePoolCapV2` under keys only its `pool` module can construct, so
+  the vendor's `finalize` accepts any capability, and one minted for another
+  coin, or for a coin with other than nine decimals, binds the sale to a pool
+  `migrate` can never create: every migration aborts, participants wait for
+  the liquidity deadline to be refunded, and the sale token's whole supply
+  stays locked. The SDK therefore owns the LP coin end to end.
+  `publishAftermathLpCoin` publishes one from the pinned mainnet template
+  (`buildAftermathLpCoinBytecode`: module `af_lp`, witness `AF_LP`, nine
+  decimals, 50/50 weights, the `CreatePoolCapV2` sent to the publisher, the
+  package immutable unless an `upgradeCapRecipient` is named).
+  `verifyAftermathLpCoinPublication` reads the publication back
+  (`findAftermathLpCoinPublication`, then `verifyAftermathLpCoin`) and checks
+  on chain that the capability is Aftermath's `CreatePoolCapV2`, owned by an
+  address (the creator, when `owner` is given), and holds exactly a
+  `TreasuryCap<Lp>` with nothing minted and a `CoinMetadata<Lp>` with nine
+  decimals for one `Lp`. It returns an `AftermathLpCoin`, the only value
+  `createAftermathPresale`, `finalizeAftermathPresale`, and the vendor's
+  `createSale` and `finalize` accept as `lpCoin`: a capability ID, a
+  look-alike object, or a persisted copy throws (`assertAftermathLpCoin`,
+  `AftermathLpCoin.isVerified`). A UI therefore never takes a capability from
+  the user; it publishes, verifies, then creates, and verifies again before
+  creating if it persisted the result in between.
 - **No pool tier.** The pool's weights and fees are the vendor's constants, so
   the sale carries no tier and no `PoolTierReserved` precedes its
   `PresaleCreated` (contracts ADR 0111): `poolTiers` has no entry for its
@@ -201,6 +226,24 @@ builder throws and `venueOf` never returns `"aftermath"`.
   `aftermathPresaleAbortName` names the vendor's aborts (`EPoolMismatch`,
   `EDaoFeePoolMismatch`, `EWrongPresale`, `EWrongMigrator`); its `migrate` also aborts inside
   `blast_presale` (`presaleAbortName`) and Aftermath's packages.
+
+```ts
+// 1. Publish a fresh LP coin; the sender receives its CreatePoolCapV2.
+const published = await signAndExecute(
+  publishAftermathLpCoin({
+    symbol: "MEME-SUI LP",
+    name: "Meme / SUI Aftermath LP",
+    description: "LP coin of Meme's Blast presale",
+    upgradeCapRecipient: null,
+  }),
+);
+// 2. Read the capability back from the chain; throws unless the pool can be created.
+const lpCoin = await verifyAftermathLpCoinPublication(client, published.digest, {
+  owner: creator,
+});
+// 3. Create the sale with the verified coin; any other `lpCoin` is refused.
+const creation = presale.createAftermathPresale({ ...terms, lpCoin, startMs });
+```
 
 `AftermathDaoPresaleTransactions` ([below](#aftermath-dao-pool-vendor)) builds
 the same calls from the vendor's package IDs alone, taking Aftermath's objects
@@ -337,8 +380,9 @@ tier.
   2. `configurePresaleTerms` sets every term except the LP-fee split, with
      `set_partner` when `partner` is given;
   3. the vendor's `finalize` names the treasury as the only LP-fee recipient,
-     sends it the `PresaleCap`, and binds the fresh LP coin's `CreatePoolCapV2`
-     in a shared `PoolCreation<Lp>`;
+     sends it the `PresaleCap`, and binds the verified LP coin's
+     (`lpCoin`, an `AftermathLpCoin`) `CreatePoolCapV2` in a shared
+     `PoolCreation<Lp>`;
   4. `share` opens the sale from `startMs`.
 - `migrate` (anyone, while `Funded`) consumes the sale's `PoolCreation<Lp>`,
   whose ID `PoolCreationReserved` carries, with Aftermath's `PoolRegistry` and

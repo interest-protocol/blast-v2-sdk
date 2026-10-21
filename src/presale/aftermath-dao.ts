@@ -24,6 +24,8 @@ import {
   normalizeSharedObjectReference,
   normalizeSuiPackageReference,
 } from "../lib/sui.ts";
+import type { AftermathLpCoin } from "./aftermath-lp.ts";
+import { assertAftermathLpCoin } from "./aftermath-lp.ts";
 import type {
   PresaleCreation,
   PresaleDeployment,
@@ -90,29 +92,33 @@ export class AftermathDaoPresaleCalls {
   /**
    * `finalize` (vendor `AdminCap`): names the treasury as the sale's only
    * LP-fee recipient, finalizes it, sends its `PresaleCap` to the treasury,
-   * shares a `PoolCreation<Lp>` binding `createPoolCap` to it, and returns the
-   * pending `Presale`, which the same PTB must `share`. It aborts with
-   * `EWrongMigrator` for an initializer another migrator started.
+   * shares a `PoolCreation<Lp>` binding the verified LP coin's
+   * `CreatePoolCapV2` to it, and returns the pending `Presale`, which the
+   * same PTB must `share`. It aborts with `EWrongMigrator` for an initializer
+   * another migrator started. Throws unless `lpCoin` is the
+   * `AftermathLpCoin` `verifyAftermathLpCoin` returned.
    */
   finalize(
-    options: AftermathDaoTypes & {
+    options: LaunchTypes & {
       adminCap: TransactionObjectInput;
       initializer: TransactionArgument;
       memeCurrency: SharedObjectReference<true>;
-      /** The `CreatePoolCapV2` the fresh LP coin's publication produced. */
-      createPoolCap: TransactionObjectInput;
+      /** The verified fresh LP coin whose `CreatePoolCapV2` the sale binds. */
+      lpCoin: AftermathLpCoin;
     },
   ) {
+    const lpCoin = assertAftermathLpCoin(options.lpCoin);
+    const typeArguments = [lpCoin.lpType, ...this.#saleTypes(options)];
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
         target: this.#target("finalize"),
-        typeArguments: this.#lpTypes(options),
+        typeArguments,
         arguments: [
           tx.object(options.adminCap),
           deploymentObject(tx, this.presale.deployment.packageVersion, false),
           options.initializer,
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          tx.object(options.createPoolCap),
+          tx.object(lpCoin.createPoolCapId),
         ],
       });
   }
@@ -181,13 +187,13 @@ export class AftermathDaoPresaleTransactions {
    * treasury inside `finalize`, so nothing is returned to the sender.
    */
   createSale(
-    options: AftermathDaoTypes &
+    options: LaunchTypes &
       PresaleTermsSettings &
       Pick<PresaleCreation, "startMs"> & {
         adminCap: TransactionObjectInput;
         treasuryCap: TransactionObjectInput;
         memeCurrency: SharedObjectReference<true>;
-        createPoolCap: TransactionObjectInput;
+        lpCoin: AftermathLpCoin;
       },
   ): Transaction {
     const tx = new Transaction();
