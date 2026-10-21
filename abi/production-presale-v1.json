@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "7d94a5397120cfc38c90d628c49eff4ea06eee0f",
+    "contractsCommit": "0fa909c871c7c879f85f881c4ec699c57364b00e",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
@@ -19,7 +19,8 @@
       "contracts ADR 0112: presale holding intervals may follow confirmed skipped days while preserving sequential funded rounds, proof domains and independent claim deadlines",
       "contracts ADR 0113: republished canonical Round reserves optional separate gas custody, zero reserve selects Blast-paid gas, governed one-shot capped settlement and permissionless reserve return; holder Meme collection pays the governed FeePolicy destination; publication atomically rejects a changed expected treasury",
       "contracts ADR 0117: compatible upgrades and custody-gated PackageVersion on every mutation",
-      "contracts ADR 0099 (amended 2026-10-20): finalize requires confirmed unregulated Currency; native Aftermath is published but disabled and excluded from SDK routes"
+      "contracts ADR 0099 (amended 2026-10-20): finalize requires confirmed unregulated Currency; native Aftermath is published but disabled on that deployment",
+      "contracts PR 108: native Aftermath new returns a mandatory FinalizeTicket consumed by native finalize; expose native creation, reservation sharing, migration, fee collection and event readers in the SDK"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -31,7 +32,7 @@
           "functions": [
             {
               "name": "collect_fees",
-              "sdk": "intentional-disabled-venue-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -190,7 +191,7 @@
             },
             {
               "name": "finalize",
-              "sdk": "intentional-disabled-venue-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -247,6 +248,29 @@
                       }
                     }
                   ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "aftermath"
+                    },
+                    "name": "FinalizeTicket",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
                 },
                 {
                   "Reference": [
@@ -363,7 +387,7 @@
             },
             {
               "name": "migrate",
-              "sdk": "intentional-disabled-venue-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -550,7 +574,7 @@
             },
             {
               "name": "new",
-              "sdk": "intentional-disabled-venue-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -667,12 +691,35 @@
                       }
                     ]
                   }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_presale",
+                      "name": "aftermath"
+                    },
+                    "name": "FinalizeTicket",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
                 }
               ]
             },
             {
               "name": "share",
-              "sdk": "intentional-disabled-venue-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -741,6 +788,29 @@
             }
           ],
           "structs": [
+            {
+              "name": "FinalizeTicket",
+              "abilities": [],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
             {
               "name": "PoolCreation",
               "abilities": [
@@ -928,7 +998,7 @@
                   }
                 }
               ],
-              "sdk": "intentional-disabled-venue-exclusion"
+              "sdk": "decoder"
             },
             {
               "name": "PoolCreationReserved",
@@ -995,7 +1065,7 @@
                   }
                 }
               ],
-              "sdk": "intentional-disabled-venue-exclusion"
+              "sdk": "decoder"
             }
           ]
         },

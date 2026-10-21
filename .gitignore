@@ -1,3 +1,7 @@
 node_modules/
 npm-debug.log*
 dist/
+
+# Mainnet operator inputs, signed transactions and local evidence
+e2e/presale-mainnet/*.local.json*
+e2e/presale-mainnet/runs/

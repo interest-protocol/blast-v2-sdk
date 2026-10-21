@@ -46,6 +46,7 @@ import {
 import type { CetusMemeSide } from "../migrators/transactions.ts";
 import type { AftermathPresaleDeployment } from "./aftermath.ts";
 import {
+  AFTERMATH_MAINNET_OBJECTS,
   AFTERMATH_PRESALE_MODULE,
   aftermathWitnessType,
   defineAftermathPresaleDeployment,
@@ -93,7 +94,7 @@ export type PresaleDeployment = {
   /**
    * The Aftermath DAO-pool vendor package and the Aftermath objects its
    * migration takes (`defineAftermathPresaleDeployment`); absent until it is
-   * published. Every `aftermath` builder throws without it.
+   * published. Vendor builders require it; native builders use the core package.
    */
   aftermath?: AftermathPresaleDeployment;
 };
@@ -111,11 +112,15 @@ export type PresaleAdminRole =
   | "RewardsAdmin";
 
 /**
- * Venues the SDK migrates to: this package's `cetus` and `bluefin`, and
+ * Venues include this package's `cetus`, `bluefin`, and `aftermath-native`, and
  * `aftermath`, the vendor package `blast_aftermath_dao_presale`, whose witness
  * is `<vendor>::blast_aftermath_dao_presale::Witness` (contracts ADR 0104).
  */
-export type PresaleVenue = "cetus" | "bluefin" | "aftermath";
+export type PresaleVenue =
+  | "cetus"
+  | "bluefin"
+  | "aftermath"
+  | "aftermath-native";
 
 /**
  * A migrator the `CreationPolicy` can allow: one of this package's venues, or
@@ -207,6 +212,24 @@ export type AftermathPresaleTerms = PresaleTermsSettings & {
    * migrate.
    */
   lpCoin: AftermathLpCoin;
+};
+
+/** Native `blast_presale::aftermath` terms; the creator chooses the vault's fee split. */
+export type NativeAftermathPresaleTerms = PresaleTerms & {
+  lpCoin: AftermathLpCoin;
+  /** Integer basis points, 1..10,000, charged by the DAO-fee pool to the vault. */
+  daoFeeBps: number;
+};
+
+/** External Aftermath shared objects. Pass network-specific objects outside mainnet. */
+export type AftermathPoolObjects = Pick<
+  AftermathPresaleDeployment,
+  "poolRegistry" | "daoFeeVersion"
+>;
+
+export type NativeAftermathMigration = AftermathMigration & {
+  /** Defaults to the documented `AFTERMATH_MAINNET_OBJECTS`. */
+  aftermathObjects?: AftermathPoolObjects;
 };
 
 /** A sale's Aftermath binding, which `migrate` consumes. */
@@ -338,7 +361,9 @@ export class PresaleCalls {
     if (venue === "aftermath") {
       return aftermathWitnessType(this.#aftermath().packageId);
     }
-    return this.#type(`${venue}::Witness`);
+    return this.#type(
+      `${venue === "aftermath-native" ? "aftermath" : venue}::Witness`,
+    );
   }
 
   /**
@@ -347,7 +372,7 @@ export class PresaleCalls {
    */
   venueOf(migrationWitness: string): PresaleVenue | null {
     const witness = normalizeStructTag(migrationWitness);
-    const venues: PresaleVenue[] = ["cetus", "bluefin"];
+    const venues: PresaleVenue[] = ["cetus", "bluefin", "aftermath-native"];
     if (this.deployment.aftermath) venues.push("aftermath");
     return (
       venues.find((venue) => this.migrationWitnessType(venue) === witness) ??
@@ -673,6 +698,162 @@ export class PresaleCalls {
     options: PresaleTerms & { tickSpacing: number; feeRate: bigint },
   ) {
     return this.#newPresale(this.startBluefinPresale(options), options);
+  }
+
+  /** Returns `(initializer, ticket)`. Both must be consumed by native finalize in this PTB. */
+  startNativeAftermathPresale(
+    options: LaunchTypes & {
+      treasuryCap: TransactionObjectInput;
+      daoFeeBps: number;
+    },
+  ) {
+    if (
+      !Number.isInteger(options.daoFeeBps) ||
+      options.daoFeeBps < 1 ||
+      options.daoFeeBps > 10_000
+    ) {
+      throw new RangeError("daoFeeBps must be an integer from 1 to 10,000");
+    }
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::aftermath::new`,
+        typeArguments: this.#saleTypes(options),
+        arguments: [
+          tx.object(options.treasuryCap),
+          this.#version(tx),
+          this.#creationPolicy(tx),
+          this.#feePolicy(tx),
+          deploymentObject(tx, this.deployment.venueConfig, true),
+          tx.pure.u16(options.daoFeeBps),
+        ],
+      });
+  }
+
+  /** Consumes the matching ticket; returns `(Presale, PresaleCap, PoolCreation<Lp, Meme, Quote>)`. */
+  finalizeNativeAftermathPresale(
+    options: LaunchTypes & {
+      initializer: TransactionArgument;
+      ticket: TransactionArgument;
+      memeCurrency: SharedObjectReference<true>;
+      lpCoin: AftermathLpCoin;
+    },
+  ) {
+    const lpCoin = assertAftermathLpCoin(options.lpCoin);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: `${this.deployment.packageId}::aftermath::finalize`,
+        typeArguments: this.#aftermathTypes({
+          ...options,
+          lpType: lpCoin.lpType,
+        }),
+        arguments: [
+          options.initializer,
+          this.#version(tx),
+          options.ticket,
+          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          tx.object(lpCoin.createPoolCapId),
+        ],
+      });
+  }
+
+  /** Shares the reservation returned by native finalize in its creation PTB. */
+  shareNativeAftermathPoolCreation(
+    options: LaunchTypes & {
+      lpType: string;
+      poolCreation: TransactionArgument;
+    },
+  ) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::aftermath::share`,
+        typeArguments: this.#aftermathTypes(options),
+        arguments: [options.poolCreation, this.#version(tx)],
+      });
+    };
+  }
+
+  /** Configures and finalizes a native sale; returns all three objects for the caller to share/transfer. */
+  newNativeAftermathPresale(options: NativeAftermathPresaleTerms) {
+    // Verify the brand before constructing any commands.
+    assertAftermathLpCoin(options.lpCoin);
+    const start = this.startNativeAftermathPresale(options);
+    return (tx: Transaction): TransactionResult => {
+      const [initializer, ticket] = moveResults(tx.add(start), 2);
+      tx.add(this.configurePresale({ ...options, initializer }));
+      return tx.add(
+        this.finalizeNativeAftermathPresale({
+          ...options,
+          initializer,
+          ticket,
+        }),
+      );
+    };
+  }
+
+  /** Creates the native 50/50 DAO-fee pool, consumes its reservation and locks LP/owner capability. */
+  migrateNativeAftermath(options: NativeAftermathMigration) {
+    const objects = options.aftermathObjects ?? AFTERMATH_MAINNET_OBJECTS;
+    const poolRegistry = normalizeSharedObjectIdentity(
+      "aftermath.poolRegistry",
+      objects.poolRegistry,
+    );
+    const daoFeeVersion = normalizeSharedObjectIdentity(
+      "aftermath.daoFeeVersion",
+      objects.daoFeeVersion,
+    );
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::aftermath::migrate`,
+        typeArguments: this.#aftermathTypes(options),
+        arguments: [
+          this.#presale(tx, options),
+          this.#version(tx),
+          sharedObject(tx, "poolCreation", options.poolCreation, true),
+          this.#feePolicy(tx),
+          deploymentObject(tx, this.deployment.venueConfig, false),
+          deploymentObject(tx, poolRegistry, true),
+          deploymentObject(tx, daoFeeVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /** Receives DAO-fee coins owned by the vault and splits them under its fee terms. */
+  collectNativeAftermathFees(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      memeFees: readonly {
+        objectId: string;
+        version: string;
+        digest: string;
+      }[];
+      quoteFees: readonly {
+        objectId: string;
+        version: string;
+        digest: string;
+      }[];
+    },
+  ) {
+    const { memeType, quoteType } = normalizeLaunchTypes(options);
+    return (tx: Transaction): void => {
+      const receiving = (type: string, coins: typeof options.memeFees) =>
+        tx.makeMoveVec({
+          type: `0x2::transfer::Receiving<0x2::coin::Coin<${type}>>`,
+          elements: coins.map((coin) => tx.receivingRef(coin)),
+        });
+      tx.moveCall({
+        target: `${this.deployment.packageId}::aftermath::collect_fees`,
+        typeArguments: [memeType, quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
+          this.#feePolicy(tx),
+          receiving(memeType, options.memeFees),
+          receiving(quoteType, options.quoteFees),
+        ],
+      });
+    };
   }
 
   /**
@@ -1745,6 +1926,25 @@ export class PresaleTransactions {
     return this.#shareAndKeepCap(tx, created, options);
   }
 
+  /** Creates a native sale, shares sale and reservation, and transfers the creator's PresaleCap. */
+  createNativeAftermathPresale(
+    options: NativeAftermathPresaleTerms & PresaleCreation,
+  ): Transaction {
+    const tx = new Transaction();
+    const created = tx.add(this.call.newNativeAftermathPresale(options));
+    const [presale, cap, poolCreation] = moveResults(created, 3);
+    tx.add(this.call.share({ ...options, presale }));
+    tx.add(
+      this.call.shareNativeAftermathPoolCreation({
+        ...options,
+        lpType: options.lpCoin.lpType,
+        poolCreation,
+      }),
+    );
+    tx.transferObjects([cap], normalizeSuiAddress(options.capRecipient));
+    return tx;
+  }
+
   /**
    * With the vendor's `AdminCap`: the vendor's `new`, every setter but the
    * LP-fee split (with `set_partner` when `partner` is given), the vendor's
@@ -1859,6 +2059,30 @@ export class PresaleTransactions {
     });
     tx.add(this.call.migrateBluefin({ ...options, creationFee }));
     return this.#payProtocolFeesWithPartnerAfter(tx, options);
+  }
+
+  migrateNativeAftermath(
+    options: NativeAftermathMigration & PresalePayout,
+  ): Transaction {
+    const tx = single(this.call.migrateNativeAftermath(options));
+    return this.#payProtocolFeesWithPartnerAfter(tx, options);
+  }
+
+  /** Settle a fully funded sale, migrate, then pay its partner when supplied. Underfunding aborts the PTB. */
+  settleAndMigrateNativeAftermath(
+    options: NativeAftermathMigration & PresalePayout,
+  ): Transaction {
+    const tx = single(this.call.settle(options));
+    tx.add(this.call.migrateNativeAftermath(options));
+    return this.#payProtocolFeesWithPartnerAfter(tx, options);
+  }
+
+  collectNativeAftermathFees(
+    options: Parameters<PresaleCalls["collectNativeAftermathFees"]>[0] &
+      PresalePayout,
+  ): Transaction {
+    const tx = single(this.call.collectNativeAftermathFees(options));
+    return this.#payProtocolLpFeesWithPartnerAfter(tx, options);
   }
 
   /**

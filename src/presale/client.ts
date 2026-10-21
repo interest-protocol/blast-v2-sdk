@@ -6,6 +6,7 @@ import type {
 import type { CoinSourceOptions } from "../lib/coins.ts";
 import type { AftermathPoolCreation } from "./aftermath.ts";
 import { findAftermathPoolCreation } from "./aftermath.ts";
+import { findNativeAftermathPoolCreation } from "./aftermath-native.ts";
 import type {
   PresaleCommitment,
   PresaleCreationPolicyState,
@@ -77,6 +78,18 @@ export class PresaleClient {
       this.call.deployment.creationPolicy.objectId,
       this.#originalPackageId,
     );
+  }
+
+  /** Native reservation and verified shared input; the input is null once migration consumes it. */
+  async getNativeAftermathPoolCreation(
+    presaleId: string,
+    options: { creationDigest?: string; pageLimit?: number } = {},
+  ) {
+    return findNativeAftermathPoolCreation(this.#client, {
+      presaleId,
+      originalPackageId: this.#originalPackageId,
+      ...options,
+    });
   }
 
   /**

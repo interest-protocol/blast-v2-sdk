@@ -69,7 +69,7 @@ const artifactDeclarations = [
     path: "production-presale-v1.json",
     // Versioned presale source; fresh publication and activation pending.
     baseline: {
-      contractsCommit: "7d94a5397120cfc38c90d628c49eff4ea06eee0f",
+      contractsCommit: "0fa909c871c7c879f85f881c4ec699c57364b00e",
       workingTreeDifferedAtFreeze: false,
     },
     approvedAbiAmendments: [
@@ -88,7 +88,8 @@ const artifactDeclarations = [
       "contracts ADR 0112: presale holding intervals may follow confirmed skipped days while preserving sequential funded rounds, proof domains and independent claim deadlines",
       "contracts ADR 0113: republished canonical Round reserves optional separate gas custody, zero reserve selects Blast-paid gas, governed one-shot capped settlement and permissionless reserve return; holder Meme collection pays the governed FeePolicy destination; publication atomically rejects a changed expected treasury",
       "contracts ADR 0117: compatible upgrades and custody-gated PackageVersion on every mutation",
-      "contracts ADR 0099 (amended 2026-10-20): finalize requires confirmed unregulated Currency; native Aftermath is published but disabled and excluded from SDK routes",
+      "contracts ADR 0099 (amended 2026-10-20): finalize requires confirmed unregulated Currency; native Aftermath is published but disabled on that deployment",
+      "contracts PR 108: native Aftermath new returns a mandatory FinalizeTicket consumed by native finalize; expose native creation, reservation sharing, migration, fee collection and event readers in the SDK",
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },
@@ -461,7 +462,7 @@ function classifyAdminFunction(moduleName, functionName) {
  */
 function classifyEvent(packageName, moduleName, event) {
   if (packageName === "blast_presale" && moduleName === "aftermath") {
-    return "intentional-disabled-venue-exclusion";
+    return "decoder";
   }
   if (packageName === "blast_admin" && event.typeParameters.length > 0) {
     return "intentional-upgrade-exclusion";
@@ -470,6 +471,11 @@ function classifyEvent(packageName, moduleName, event) {
 }
 
 const presaleBuilders = new Set([
+  "aftermath::new",
+  "aftermath::finalize",
+  "aftermath::share",
+  "aftermath::migrate",
+  "aftermath::collect_fees",
   "blast_presale::open_eligibility",
   "blast_presale::allowlisted_eligibility",
   "blast_presale::uncapped_for_eligible",
@@ -556,14 +562,6 @@ const presaleEventNames = new Set([
 
 function classifyPresaleFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
-  if (
-    moduleName === "aftermath" &&
-    ["new", "finalize", "share", "migrate", "collect_fees"].includes(
-      functionName,
-    )
-  ) {
-    return "intentional-disabled-venue-exclusion";
-  }
   if (presaleBuilders.has(key)) return "builder";
   // Every rate argument is a `bps::Bps` built in the PTB.
   if (key === "bps::new") return "compositional";
