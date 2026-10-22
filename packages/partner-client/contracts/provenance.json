@@ -1,0 +1,18 @@
+{
+  "openapiUrl": "https://docs.blast.fun/openapi/partner-api-v1.json",
+  "openapiSha256": "98ef0c52fdb6a9eafcbc1994be30005caddde85c5e346c1a4d808975b80a8e23",
+  "releaseGateSourceCommit": "1767a1685ef07b19f58a1eb71591843120d26d46",
+  "sdkBaseCommit": "11b8129ebbb83a5379dfde918a43f278a210581c",
+  "backendCheckoutCommit": "858a70cc57868ef84f8c16af9c3ae3cce1b301ee",
+  "backendCheckoutDirty": true,
+  "docsCanonicalCommit": "268040a1e34ec2bc5b65f8c57fb896cc051fd5d6",
+  "docsReferenceCommit": "352bac64b59c30d541ca04a109c03fb8ee6499f5",
+  "routeRegistrySha256": "eb88f33c077f1b7b89f53e0d58c6ea32144085123b136c7f1e0e55d05ca05baa",
+  "releaseGateSha256": "6896e8220797cdf40b81e543a950aa353412fdbac1955dcedc6ef4ee72487bf1",
+  "checkedAt": "2026-10-23 Europe/Lisbon",
+  "wireDifferences": [],
+  "documentationSchemaSources": {
+    "web": "8480d05ed41dd5fe377a21abc917907ac87c3a4d",
+    "infra": "e02cbdfbc136940bc284f6f527ad536dc5643b75"
+  }
+}
