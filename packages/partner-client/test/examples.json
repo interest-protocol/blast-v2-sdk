@@ -1,0 +1,296 @@
+{
+  "presales": {
+    "presales": [
+      {
+        "presale_id": "0x00000000000000000000000000000000000000000000000000000000000000a1",
+        "name": "Meridian",
+        "symbol": "MRDN",
+        "icon_url": "https://example.com/meridian.png",
+        "phase": "open",
+        "venue": "cetus",
+        "start_ms": 1792411200000,
+        "end_ms": 1792670400000,
+        "ended_ms": null,
+        "launched_ms": null,
+        "target_usd": "250000.00",
+        "raised_usd": "184221.00",
+        "quote_symbol": "USDC",
+        "quote_type": "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+        "quote_decimals": 6,
+        "sale_decimals": 9,
+        "target_atoms": "250000000000",
+        "raised_atoms": "184221000000",
+        "fill_bps": 7368,
+        "participants": 68,
+        "allowlisted": false,
+        "interested": 128,
+        "presale_price_usd": null,
+        "presale_price_quote": null,
+        "price_usd": null,
+        "multiple": null,
+        "verified_team": true,
+        "audited": false,
+        "metadata": null
+      }
+    ],
+    "next_cursor": "WyIxNzkyNjcwNDAwMDAwIiwiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIl0",
+    "as_of": {
+      "checkpoint": 326274009,
+      "timestamp_ms": 1792584000000,
+      "lag_ms": 412
+    }
+  },
+  "featured": {
+    "presales": [
+      {
+        "presale_id": "0x00000000000000000000000000000000000000000000000000000000000000a1",
+        "name": "Meridian",
+        "symbol": "MRDN",
+        "icon_url": "https://example.com/meridian.png",
+        "phase": "open",
+        "venue": "cetus",
+        "start_ms": 1792411200000,
+        "end_ms": 1792670400000,
+        "ended_ms": null,
+        "launched_ms": null,
+        "target_usd": "250000.00",
+        "raised_usd": "184221.00",
+        "quote_symbol": "USDC",
+        "quote_type": "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+        "quote_decimals": 6,
+        "sale_decimals": 9,
+        "target_atoms": "250000000000",
+        "raised_atoms": "184221000000",
+        "fill_bps": 7368,
+        "participants": 68,
+        "allowlisted": false,
+        "interested": 128,
+        "presale_price_usd": null,
+        "presale_price_quote": null,
+        "price_usd": null,
+        "multiple": null,
+        "verified_team": true,
+        "audited": false,
+        "metadata": null
+      }
+    ]
+  },
+  "presale": {
+    "presale": {
+      "presale_id": "0x00000000000000000000000000000000000000000000000000000000000000a1",
+      "name": "Meridian",
+      "symbol": "MRDN",
+      "icon_url": "https://example.com/meridian.png",
+      "phase": "open",
+      "venue": "cetus",
+      "start_ms": 1792411200000,
+      "end_ms": 1792670400000,
+      "ended_ms": null,
+      "launched_ms": null,
+      "target_usd": "250000.00",
+      "raised_usd": "184221.00",
+      "quote_symbol": "USDC",
+      "quote_type": "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+      "quote_decimals": 6,
+      "sale_decimals": 9,
+      "target_atoms": "250000000000",
+      "raised_atoms": "184221000000",
+      "fill_bps": 7368,
+      "participants": 68,
+      "allowlisted": false,
+      "interested": 128,
+      "presale_price_usd": null,
+      "presale_price_quote": null,
+      "price_usd": null,
+      "multiple": null,
+      "verified_team": true,
+      "audited": false,
+      "metadata": null,
+      "sale_token": "0x00000000000000000000000000000000000000000000000000000000000000a1::meridian::MRDN",
+      "min_commitment_usd": "10.00",
+      "wallet_cap_usd": "25000.00",
+      "min_commitment_atoms": "10000000",
+      "wallet_cap_atoms": "25000000000",
+      "opened_ms": 1792411200000
+    },
+    "creator": null,
+    "quote_price": null,
+    "momentum": {
+      "5m": {
+        "commits": 0,
+        "total_usd": "0.00",
+        "total_atoms": "0",
+        "backers": 0,
+        "average_usd": null,
+        "median_usd": null,
+        "average_atoms": null,
+        "median_atoms": null,
+        "big_bps": 0
+      },
+      "1h": {
+        "commits": 0,
+        "total_usd": "0.00",
+        "total_atoms": "0",
+        "backers": 0,
+        "average_usd": null,
+        "median_usd": null,
+        "average_atoms": null,
+        "median_atoms": null,
+        "big_bps": 0
+      },
+      "4h": {
+        "commits": 0,
+        "total_usd": "0.00",
+        "total_atoms": "0",
+        "backers": 0,
+        "average_usd": null,
+        "median_usd": null,
+        "average_atoms": null,
+        "median_atoms": null,
+        "big_bps": 0
+      },
+      "1d": {
+        "commits": 0,
+        "total_usd": "0.00",
+        "total_atoms": "0",
+        "backers": 0,
+        "average_usd": null,
+        "median_usd": null,
+        "average_atoms": null,
+        "median_atoms": null,
+        "big_bps": 0
+      }
+    },
+    "backers": {
+      "top": [
+        {
+          "wallet": "0x1111111111111111111111111111111111111111111111111111111111111111",
+          "account": null,
+          "commitment_usd": "15000.00",
+          "commitment_atoms": "15000000000",
+          "share_bps": 814,
+          "last_commit_ms": 1792494000000,
+          "why": null
+        }
+      ],
+      "top10_bps": 5000
+    },
+    "theses": [],
+    "activity": [],
+    "raise": {
+      "points": [[1792494000000, "184221.00", "184221000000"]],
+      "markers": []
+    },
+    "vesting": null,
+    "team_vesting": null,
+    "buyer_vesting": {
+      "schedules": 0,
+      "total": "0",
+      "claimed": "0",
+      "remaining": "0"
+    },
+    "terms": null,
+    "as_of": {
+      "checkpoint": 326274009,
+      "timestamp_ms": 1792584000000,
+      "lag_ms": 412
+    }
+  },
+  "prices": {
+    "window": "24h",
+    "clock_ms": 1792584000000,
+    "prices": [
+      {
+        "presale_id": null,
+        "coin_type": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+        "tier": "5m",
+        "from_ms": 1792497600000,
+        "points": [[1792497600000, "3.2"], [1792584000000, "3.42"]],
+        "price_usd": "3.42",
+        "price_24h_usd": "3.2",
+        "change_24h_bps": 688,
+        "day_open_usd": "3.3",
+        "day_open_ms": 1792540800000
+      }
+    ],
+    "as_of": {
+      "checkpoint": 326274009,
+      "timestamp_ms": 1792584000000,
+      "lag_ms": 412
+    }
+  },
+  "search": {
+    "groups": [
+      {
+        "group": "coins",
+        "section": {
+          "state": "available",
+          "data": {
+            "items": [
+              {
+                "match": "name",
+                "launch": {
+                  "launchId": "0x00000000000000000000000000000000000000000000000000000000000000a1",
+                  "coinType": "0x00000000000000000000000000000000000000000000000000000000000000a1::meridian::MRDN",
+                  "name": "Meridian",
+                  "symbol": "MRDN",
+                  "iconUrl": null,
+                  "lifecycle": "live",
+                  "creator": null,
+                  "createdAtMs": 1792497600000
+                },
+                "pool": null
+              }
+            ],
+            "nextCursor": null
+          },
+          "provenance": {
+            "source": "blast-infra",
+            "network": "mainnet",
+            "deployment": "example-deployment",
+            "checkpoint": 326274009,
+            "timestampMs": 1792584000000,
+            "observedAt": 1792584000412,
+            "lagMs": 412
+          }
+        }
+      },
+      {
+        "group": "theses",
+        "section": {
+          "state": "empty",
+          "provenance": {
+            "source": "blast-infra",
+            "network": "mainnet",
+            "deployment": "example-deployment",
+            "checkpoint": 326274009,
+            "timestampMs": 1792584000000,
+            "observedAt": 1792584000412,
+            "lagMs": 412
+          }
+        }
+      },
+      {
+        "group": "profiles",
+        "section": {
+          "state": "unavailable",
+          "reason": "no-source"
+        }
+      }
+    ]
+  },
+  "status": {
+    "checkpoint": 326274009,
+    "timestamp_ms": 1792584000000,
+    "lag_ms": 412,
+    "cursor": "326274009:3:4294967295:0",
+    "provenance": {
+      "network": "mainnet",
+      "deployment_fingerprint": "5d2f2a4be1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+      "checkpoint": 326274009,
+      "timestamp_ms": 1792584000000,
+      "observed_ms": 1792584000412,
+      "lag_ms": 412
+    }
+  }
+}

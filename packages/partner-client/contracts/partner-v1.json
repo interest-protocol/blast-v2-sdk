@@ -1,0 +1,3945 @@
+{
+  "source": "https://docs.blast.fun/openapi/partner-api-v1.json",
+  "sourceCommit": "1767a1685ef07b19f58a1eb71591843120d26d46",
+  "operations": {
+    "presales": {
+      "path": "/api/v1/presales",
+      "schema": {
+        "$ref": "#/components/schemas/PresaleListPage"
+      },
+      "parameters": [
+        {
+          "name": "status",
+          "in": "query",
+          "required": false,
+          "description": "Which lifecycle group to list.",
+          "schema": {
+            "type": "string",
+            "enum": [
+              "live",
+              "upcoming",
+              "ended"
+            ],
+            "default": "live"
+          }
+        },
+        {
+          "name": "sort",
+          "in": "query",
+          "required": false,
+          "description": "Depends on status. Live: ending (default), fastest, backed. Upcoming: opening (default), interest. Ended: recent (default), best, backed.",
+          "schema": {
+            "type": "string",
+            "enum": [
+              "ending",
+              "fastest",
+              "backed",
+              "opening",
+              "interest",
+              "recent",
+              "best"
+            ]
+          }
+        },
+        {
+          "name": "partner_id",
+          "in": "query",
+          "required": false,
+          "description": "Only presales associated with this on-chain partner object ID. This is not an API-key account name or wallet address. Omit to include all partners.",
+          "schema": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$",
+            "description": "Canonical on-chain object ID: 0x followed by 64 lowercase hexadecimal characters."
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "description": "Maximum results per page; between 1 and 50.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "required": false,
+          "description": "The non-null continuation token from the previous response. Keep all filters unchanged.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "verified_team",
+          "in": "query",
+          "required": false,
+          "description": "Set true to require a verified team. Omit to include both.",
+          "schema": {
+            "type": "string",
+            "enum": [
+              "true"
+            ]
+          }
+        },
+        {
+          "name": "audited",
+          "in": "query",
+          "required": false,
+          "description": "Set true to require an audit. Omit to include both.",
+          "schema": {
+            "type": "string",
+            "enum": [
+              "true"
+            ]
+          }
+        }
+      ]
+    },
+    "featured": {
+      "path": "/api/v1/presales/featured",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "presales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PresaleSummary"
+            }
+          }
+        },
+        "required": [
+          "presales"
+        ],
+        "additionalProperties": false
+      },
+      "parameters": []
+    },
+    "presale": {
+      "path": "/api/v1/presales/{presaleId}",
+      "schema": {
+        "$ref": "#/components/schemas/PresaleDetail"
+      },
+      "parameters": [
+        {
+          "name": "presaleId",
+          "in": "path",
+          "required": true,
+          "description": "Canonical on-chain object ID. Example IDs may not exist on mainnet.",
+          "schema": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$",
+            "description": "Canonical on-chain object ID: 0x followed by 64 lowercase hexadecimal characters."
+          },
+          "example": "0x00000000000000000000000000000000000000000000000000000000000000a1"
+        }
+      ]
+    },
+    "prices": {
+      "path": "/api/v1/prices",
+      "schema": {
+        "$ref": "#/components/schemas/PricesResponse"
+      },
+      "parameters": [
+        {
+          "name": "presale",
+          "in": "query",
+          "required": false,
+          "description": "Repeat for up to 50 unique presale IDs. Provide at least one presale or coin.",
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{64}$",
+              "description": "Canonical on-chain object ID: 0x followed by 64 lowercase hexadecimal characters."
+            },
+            "maxItems": 50
+          },
+          "style": "form",
+          "explode": true
+        },
+        {
+          "name": "coin",
+          "in": "query",
+          "required": false,
+          "description": "Repeat for up to four unique coin types. Only supported with window=24h.",
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]*::[A-Za-z_][A-Za-z0-9_]*$",
+              "description": "Canonical Move coin type. URL-encode when used in a path."
+            },
+            "maxItems": 4
+          },
+          "example": [
+            "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI"
+          ],
+          "style": "form",
+          "explode": true
+        },
+        {
+          "name": "window",
+          "in": "query",
+          "required": false,
+          "description": "24 hours, or since launch (presales only).",
+          "schema": {
+            "type": "string",
+            "enum": [
+              "24h",
+              "launch"
+            ],
+            "default": "24h"
+          }
+        },
+        {
+          "name": "points",
+          "in": "query",
+          "required": false,
+          "description": "Sampling density. Boundary observations may add points; output length is not fixed.",
+          "schema": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 288,
+            "default": 60
+          }
+        }
+      ]
+    },
+    "search": {
+      "path": "/api/v1/search",
+      "schema": {
+        "$ref": "#/components/schemas/SearchResponse"
+      },
+      "parameters": [
+        {
+          "name": "q",
+          "in": "query",
+          "required": true,
+          "description": "Searchable text or a canonical identifier.",
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "example": "Meridian"
+        },
+        {
+          "name": "group",
+          "in": "query",
+          "required": false,
+          "description": "Omit to search applicable groups. Identifier queries can include onchain and wallets. Must be applicable to q.",
+          "schema": {
+            "type": "string",
+            "enum": [
+              "onchain",
+              "wallets",
+              "coins",
+              "theses"
+            ]
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "description": "Maximum results per page; between 1 and 25.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25,
+            "default": 5
+          }
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "required": false,
+          "description": "Continue section.data.nextCursor for one group. Requires group; preserve q.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "status": {
+      "path": "/api/v1/market/status",
+      "schema": {
+        "$ref": "#/components/schemas/MarketStatus"
+      },
+      "parameters": []
+    }
+  },
+  "components": {
+    "schemas": {
+      "PresaleListPage": {
+        "type": "object",
+        "properties": {
+          "presales": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/PresaleSummary"
+            }
+          },
+          "next_cursor": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              }
+            ]
+          },
+          "as_of": {
+            "$ref": "#/components/schemas/AsOf"
+          }
+        },
+        "required": [
+          "presales",
+          "next_cursor",
+          "as_of"
+        ],
+        "additionalProperties": false
+      },
+      "PresaleSummary": {
+        "type": "object",
+        "properties": {
+          "presale_id": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "icon_url": {
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "pending",
+              "open",
+              "closed",
+              "funded",
+              "trading",
+              "cancelled"
+            ]
+          },
+          "venue": {
+            "type": "string"
+          },
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ended_ms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          },
+          "launched_ms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          },
+          "target_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          },
+          "raised_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          },
+          "quote_symbol": {
+            "type": "string",
+            "minLength": 1
+          },
+          "quote_decimals": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "target_atoms": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "raised_atoms": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "fill_bps": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "participants": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "interested": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "presale_price_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              }
+            ]
+          },
+          "presale_price_quote": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              }
+            ]
+          },
+          "price_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              }
+            ]
+          },
+          "multiple": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              }
+            ]
+          },
+          "verified_team": {
+            "type": "boolean"
+          },
+          "audited": {
+            "type": "boolean"
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SaleMetadata"
+              }
+            ]
+          },
+          "quote_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sale_decimals": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "allowlisted": {
+            "type": "boolean"
+          },
+          "hard_cap": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "presale_id",
+          "name",
+          "symbol",
+          "icon_url",
+          "phase",
+          "venue",
+          "start_ms",
+          "end_ms",
+          "ended_ms",
+          "launched_ms",
+          "target_usd",
+          "raised_usd",
+          "quote_symbol",
+          "quote_decimals",
+          "target_atoms",
+          "raised_atoms",
+          "fill_bps",
+          "participants",
+          "interested",
+          "presale_price_usd",
+          "presale_price_quote",
+          "price_usd",
+          "multiple",
+          "verified_team",
+          "audited",
+          "metadata",
+          "quote_type"
+        ],
+        "additionalProperties": false
+      },
+      "SaleMetadata": {
+        "type": "object",
+        "properties": {
+          "tagline": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            ]
+          },
+          "site": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 512,
+                "pattern": "^https://[^\\s/?#@:]+(/[^\\s#]*)?$"
+              }
+            ]
+          },
+          "x_handle": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]{1,15}$"
+              }
+            ]
+          },
+          "telegram": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]{5,32}$"
+              }
+            ]
+          },
+          "docs_url": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 512,
+                "pattern": "^https://[^\\s/?#@:]+(/[^\\s#]*)?$"
+              }
+            ]
+          },
+          "audit_url": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 512,
+                "pattern": "^https://[^\\s/?#@:]+(/[^\\s#]*)?$"
+              }
+            ]
+          },
+          "cover": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "pattern": "^https://[^\\s]+$",
+                    "maxLength": 2048
+                  },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "url",
+                  "width",
+                  "height"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "launch_at_ms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 1
+              }
+            ]
+          }
+        },
+        "required": [
+          "tagline",
+          "site",
+          "x_handle",
+          "telegram",
+          "docs_url",
+          "audit_url",
+          "cover",
+          "launch_at_ms"
+        ],
+        "additionalProperties": false
+      },
+      "AsOf": {
+        "type": "object",
+        "properties": {
+          "checkpoint": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "timestamp_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lag_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "checkpoint",
+          "timestamp_ms",
+          "lag_ms"
+        ],
+        "additionalProperties": false
+      },
+      "PresaleDetail": {
+        "type": "object",
+        "properties": {
+          "presale": {
+            "type": "object",
+            "properties": {
+              "presale_id": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "symbol": {
+                "type": "string"
+              },
+              "icon_url": {
+                "type": "string"
+              },
+              "phase": {
+                "enum": [
+                  "pending",
+                  "open",
+                  "closed",
+                  "funded",
+                  "trading",
+                  "cancelled"
+                ]
+              },
+              "venue": {
+                "type": "string"
+              },
+              "start_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ended_ms": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              },
+              "launched_ms": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              },
+              "target_usd": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                  }
+                ]
+              },
+              "raised_usd": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                  }
+                ]
+              },
+              "quote_symbol": {
+                "type": "string",
+                "minLength": 1
+              },
+              "quote_decimals": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "target_atoms": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "raised_atoms": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "fill_bps": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "participants": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "interested": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "presale_price_usd": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                  }
+                ]
+              },
+              "presale_price_quote": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                  }
+                ]
+              },
+              "price_usd": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                  }
+                ]
+              },
+              "multiple": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                  }
+                ]
+              },
+              "sale_token": {
+                "type": "string"
+              },
+              "sale_decimals": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "allowlisted": {
+                "type": "boolean"
+              },
+              "min_commitment_usd": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                  }
+                ]
+              },
+              "wallet_cap_usd": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                  }
+                ]
+              },
+              "min_commitment_atoms": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  }
+                ]
+              },
+              "wallet_cap_atoms": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  }
+                ]
+              },
+              "opened_ms": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              },
+              "verified_team": {
+                "type": "boolean"
+              },
+              "audited": {
+                "type": "boolean"
+              },
+              "metadata": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SaleMetadata"
+                  }
+                ]
+              },
+              "quote_type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "hard_cap": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "presale_id",
+              "name",
+              "symbol",
+              "icon_url",
+              "phase",
+              "venue",
+              "start_ms",
+              "end_ms",
+              "ended_ms",
+              "launched_ms",
+              "target_usd",
+              "raised_usd",
+              "quote_symbol",
+              "quote_decimals",
+              "target_atoms",
+              "raised_atoms",
+              "fill_bps",
+              "participants",
+              "interested",
+              "presale_price_usd",
+              "presale_price_quote",
+              "price_usd",
+              "multiple",
+              "sale_token",
+              "sale_decimals",
+              "allowlisted",
+              "min_commitment_usd",
+              "wallet_cap_usd",
+              "min_commitment_atoms",
+              "wallet_cap_atoms",
+              "opened_ms",
+              "verified_team",
+              "audited",
+              "metadata",
+              "quote_type"
+            ],
+            "additionalProperties": false
+          },
+          "quote_price": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "usd_price": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                  },
+                  "as_of_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "usd_price",
+                  "as_of_ms"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "momentum": {
+            "type": "object",
+            "properties": {
+              "5m": {
+                "type": "object",
+                "properties": {
+                  "commits": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "total_usd": {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                  },
+                  "total_atoms": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "backers": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "average_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                      }
+                    ]
+                  },
+                  "median_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                      }
+                    ]
+                  },
+                  "average_atoms": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    ]
+                  },
+                  "median_atoms": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    ]
+                  },
+                  "big_bps": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "commits",
+                  "total_usd",
+                  "total_atoms",
+                  "backers",
+                  "average_usd",
+                  "median_usd",
+                  "average_atoms",
+                  "median_atoms",
+                  "big_bps"
+                ],
+                "additionalProperties": false
+              },
+              "1h": {
+                "type": "object",
+                "properties": {
+                  "commits": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "total_usd": {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                  },
+                  "total_atoms": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "backers": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "average_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                      }
+                    ]
+                  },
+                  "median_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                      }
+                    ]
+                  },
+                  "average_atoms": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    ]
+                  },
+                  "median_atoms": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    ]
+                  },
+                  "big_bps": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "commits",
+                  "total_usd",
+                  "total_atoms",
+                  "backers",
+                  "average_usd",
+                  "median_usd",
+                  "average_atoms",
+                  "median_atoms",
+                  "big_bps"
+                ],
+                "additionalProperties": false
+              },
+              "4h": {
+                "type": "object",
+                "properties": {
+                  "commits": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "total_usd": {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                  },
+                  "total_atoms": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "backers": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "average_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                      }
+                    ]
+                  },
+                  "median_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                      }
+                    ]
+                  },
+                  "average_atoms": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    ]
+                  },
+                  "median_atoms": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    ]
+                  },
+                  "big_bps": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "commits",
+                  "total_usd",
+                  "total_atoms",
+                  "backers",
+                  "average_usd",
+                  "median_usd",
+                  "average_atoms",
+                  "median_atoms",
+                  "big_bps"
+                ],
+                "additionalProperties": false
+              },
+              "1d": {
+                "type": "object",
+                "properties": {
+                  "commits": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "total_usd": {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                  },
+                  "total_atoms": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "backers": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "average_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                      }
+                    ]
+                  },
+                  "median_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                      }
+                    ]
+                  },
+                  "average_atoms": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    ]
+                  },
+                  "median_atoms": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    ]
+                  },
+                  "big_bps": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "commits",
+                  "total_usd",
+                  "total_atoms",
+                  "backers",
+                  "average_usd",
+                  "median_usd",
+                  "average_atoms",
+                  "median_atoms",
+                  "big_bps"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "5m",
+              "1h",
+              "4h",
+              "1d"
+            ],
+            "additionalProperties": false
+          },
+          "backers": {
+            "type": "object",
+            "properties": {
+              "top": {
+                "type": "array",
+                "maxItems": 25,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "wallet": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-f]{64}$"
+                    },
+                    "account": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "callsign": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+                            },
+                            "display_name": {
+                              "oneOf": [
+                                {
+                                  "type": "null"
+                                },
+                                {
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "avatar_url": {
+                              "oneOf": [
+                                {
+                                  "type": "null"
+                                },
+                                {
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "verified": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "callsign",
+                            "display_name",
+                            "avatar_url",
+                            "verified"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "commitment_usd": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                        }
+                      ]
+                    },
+                    "commitment_atoms": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    },
+                    "share_bps": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "last_commit_ms": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      ]
+                    },
+                    "why": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "wallet",
+                    "account",
+                    "commitment_usd",
+                    "commitment_atoms",
+                    "share_bps",
+                    "last_commit_ms",
+                    "why"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "top10_bps": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "top",
+              "top10_bps"
+            ],
+            "additionalProperties": false
+          },
+          "theses": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "properties": {
+                "why_id": {
+                  "type": "string"
+                },
+                "entry_id": {
+                  "type": "string"
+                },
+                "account": {
+                  "type": "object",
+                  "properties": {
+                    "callsign": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+                    },
+                    "display_name": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "avatar_url": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "verified": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "callsign",
+                    "display_name",
+                    "avatar_url",
+                    "verified"
+                  ],
+                  "additionalProperties": false
+                },
+                "text": {
+                  "type": "string"
+                },
+                "commit_usd": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                    }
+                  ]
+                },
+                "commit_atoms": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "rockets": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "occurred_at_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "why_id",
+                "entry_id",
+                "account",
+                "text",
+                "commit_usd",
+                "commit_atoms",
+                "rockets",
+                "occurred_at_ms"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "activity": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/FeedItem"
+            }
+          },
+          "raise": {
+            "type": "object",
+            "properties": {
+              "points": {
+                "type": "array",
+                "maxItems": 160,
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    }
+                  ],
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": false
+                }
+              },
+              "markers": {
+                "type": "array",
+                "maxItems": 60,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "t": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "raised_usd": {
+                      "type": "string",
+                      "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                    },
+                    "commit_usd": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                        }
+                      ]
+                    },
+                    "raised_atoms": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    },
+                    "commit_atoms": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    },
+                    "wallet": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-f]{64}$"
+                    },
+                    "account": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "callsign": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+                            },
+                            "display_name": {
+                              "oneOf": [
+                                {
+                                  "type": "null"
+                                },
+                                {
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "avatar_url": {
+                              "oneOf": [
+                                {
+                                  "type": "null"
+                                },
+                                {
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "verified": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "callsign",
+                            "display_name",
+                            "avatar_url",
+                            "verified"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "why": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "t",
+                    "raised_usd",
+                    "commit_usd",
+                    "raised_atoms",
+                    "commit_atoms",
+                    "wallet",
+                    "account",
+                    "why"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "points",
+              "markers"
+            ],
+            "additionalProperties": false
+          },
+          "vesting": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "start_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "cliff_end_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start_ms",
+                  "cliff_end_ms",
+                  "end_ms"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "team_vesting": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "start_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "cliff_end_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start_ms",
+                  "cliff_end_ms",
+                  "end_ms"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "terms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "supply": {
+                    "type": "object",
+                    "properties": {
+                      "total": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      },
+                      "participants": {
+                        "type": "object",
+                        "properties": {
+                          "bps": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "amount": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$"
+                          }
+                        },
+                        "required": [
+                          "bps",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "liquidity": {
+                        "type": "object",
+                        "properties": {
+                          "bps": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "amount": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$"
+                          }
+                        },
+                        "required": [
+                          "bps",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "recipients": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "address": {
+                              "type": "string",
+                              "pattern": "^0x[0-9a-f]{64}$"
+                            },
+                            "bps": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "amount": {
+                              "type": "string",
+                              "pattern": "^(0|[1-9][0-9]*)$"
+                            },
+                            "vesting": {
+                              "oneOf": [
+                                {
+                                  "type": "null"
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "start_ms": {
+                                      "type": "integer",
+                                      "minimum": 0
+                                    },
+                                    "cliff_end_ms": {
+                                      "type": "integer",
+                                      "minimum": 0
+                                    },
+                                    "end_ms": {
+                                      "type": "integer",
+                                      "minimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "start_ms",
+                                    "cliff_end_ms",
+                                    "end_ms"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "address",
+                            "bps",
+                            "amount",
+                            "vesting"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "protocol": {
+                        "type": "object",
+                        "properties": {
+                          "bps": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "amount": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$"
+                          }
+                        },
+                        "required": [
+                          "bps",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "total",
+                      "participants",
+                      "liquidity",
+                      "recipients",
+                      "protocol"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "raise": {
+                    "type": "object",
+                    "properties": {
+                      "pool_bps": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "recipients": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "address": {
+                              "type": "string",
+                              "pattern": "^0x[0-9a-f]{64}$"
+                            },
+                            "bps": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "amount": {
+                              "type": "string",
+                              "pattern": "^(0|[1-9][0-9]*)$"
+                            },
+                            "vesting": {
+                              "oneOf": [
+                                {
+                                  "type": "null"
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "start_ms": {
+                                      "type": "integer",
+                                      "minimum": 0
+                                    },
+                                    "cliff_end_ms": {
+                                      "type": "integer",
+                                      "minimum": 0
+                                    },
+                                    "end_ms": {
+                                      "type": "integer",
+                                      "minimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "start_ms",
+                                    "cliff_end_ms",
+                                    "end_ms"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "address",
+                            "bps",
+                            "amount",
+                            "vesting"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "protocol": {
+                        "type": "object",
+                        "properties": {
+                          "bps": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "amount": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$"
+                          }
+                        },
+                        "required": [
+                          "bps",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "pool_bps",
+                      "recipients",
+                      "protocol"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "eligibility": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "const": "open"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "const": "allowlisted"
+                          },
+                          "wallets": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "wallets"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "presale_price_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                      }
+                    ]
+                  },
+                  "launch_price_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                      }
+                    ]
+                  },
+                  "presale_price_quote": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                      }
+                    ]
+                  },
+                  "launch_price_quote": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                      }
+                    ]
+                  },
+                  "burnable": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "hard_cap": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "buyer_vesting": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "cliff_ms": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$"
+                          },
+                          "duration_ms": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$"
+                          }
+                        },
+                        "required": [
+                          "cliff_ms",
+                          "duration_ms"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "supply",
+                  "raise",
+                  "eligibility",
+                  "presale_price_usd",
+                  "launch_price_usd",
+                  "presale_price_quote",
+                  "launch_price_quote",
+                  "burnable",
+                  "hard_cap"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "as_of": {
+            "$ref": "#/components/schemas/AsOf"
+          },
+          "creator": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "wallet": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "account": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "callsign": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+                      },
+                      "display_name": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "avatar_url": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "verified": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "callsign",
+                      "display_name",
+                      "avatar_url",
+                      "verified"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "wallet",
+              "account"
+            ],
+            "additionalProperties": false
+          },
+          "buyer_vesting": {
+            "type": "object",
+            "properties": {
+              "schedules": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "total": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "claimed": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "remaining": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              }
+            },
+            "required": [
+              "schedules",
+              "total",
+              "claimed",
+              "remaining"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "presale",
+          "quote_price",
+          "momentum",
+          "backers",
+          "theses",
+          "activity",
+          "raise",
+          "vesting",
+          "team_vesting",
+          "terms",
+          "as_of",
+          "creator"
+        ],
+        "additionalProperties": false
+      },
+      "FeedItem": {
+        "type": "object",
+        "properties": {
+          "pinned": {
+            "type": "boolean"
+          },
+          "entry_id": {
+            "type": "string",
+            "pattern": "^[alm]:",
+            "maxLength": 512
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FeedItemKind"
+          },
+          "occurred_at_ms": {
+            "$ref": "#/components/schemas/FeedItemMillis"
+          },
+          "presale": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemPresale"
+              }
+            ]
+          },
+          "actor": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemAccountActor"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemAddressActor"
+              }
+            ]
+          },
+          "amounts": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemAmounts"
+              }
+            ]
+          },
+          "digest": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          },
+          "milestone_value": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              }
+            ]
+          },
+          "presale_post": {
+            "type": "boolean"
+          },
+          "big": {
+            "type": "boolean"
+          },
+          "why": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemWhy"
+              }
+            ]
+          },
+          "reactions": {
+            "$ref": "#/components/schemas/FeedItemReactions"
+          },
+          "through": {
+            "$ref": "#/components/schemas/FeedItemThrough"
+          },
+          "do_the_same": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemDoTheSame"
+              }
+            ]
+          },
+          "call": {
+            "type": "boolean"
+          },
+          "backers": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "maxItems": 12,
+                "items": {
+                  "$ref": "#/components/schemas/FeedItemBacker"
+                }
+              }
+            ]
+          }
+        },
+        "required": [
+          "entry_id",
+          "kind",
+          "occurred_at_ms",
+          "presale",
+          "actor",
+          "amounts",
+          "digest",
+          "milestone_value",
+          "presale_post",
+          "big",
+          "why",
+          "reactions",
+          "through",
+          "do_the_same",
+          "call",
+          "backers"
+        ],
+        "additionalProperties": false
+      },
+      "FeedItemKind": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "FeedItemMillis": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "FeedItemPresale": {
+        "type": "object",
+        "properties": {
+          "presale_id": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon_url": {
+            "type": "string"
+          },
+          "lifecycle": {
+            "type": "string",
+            "minLength": 1
+          },
+          "decimals": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "venue": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start_ms": {
+            "$ref": "#/components/schemas/FeedItemMillis"
+          },
+          "end_ms": {
+            "$ref": "#/components/schemas/FeedItemMillis"
+          },
+          "raise_target": {
+            "$ref": "#/components/schemas/FeedItemAtoms"
+          },
+          "raised": {
+            "$ref": "#/components/schemas/FeedItemAtoms"
+          },
+          "participants": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "quote_symbol": {
+            "type": "string",
+            "minLength": 1
+          },
+          "quote_decimals": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "quote_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemDecimal"
+              }
+            ]
+          },
+          "market": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemMarket"
+              }
+            ]
+          }
+        },
+        "required": [
+          "presale_id",
+          "symbol",
+          "name",
+          "icon_url",
+          "lifecycle",
+          "decimals",
+          "venue",
+          "start_ms",
+          "end_ms",
+          "raise_target",
+          "raised",
+          "participants",
+          "quote_symbol",
+          "quote_decimals",
+          "quote_usd",
+          "market"
+        ],
+        "additionalProperties": false
+      },
+      "FeedItemAtoms": {
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*)$"
+      },
+      "FeedItemDecimal": {
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,12})?$"
+      },
+      "FeedItemMarket": {
+        "type": "object",
+        "properties": {
+          "presale_price_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemDecimal"
+              }
+            ]
+          },
+          "price_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemDecimal"
+              }
+            ]
+          },
+          "price_as_of_ms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemMillis"
+              }
+            ]
+          },
+          "multiple": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{4}$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "presale_price_usd",
+          "price_usd",
+          "price_as_of_ms",
+          "multiple"
+        ],
+        "additionalProperties": false
+      },
+      "FeedItemAccountActor": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "account"
+          },
+          "callsign": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+          },
+          "display_name": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          },
+          "avatar_url": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          },
+          "x_handle": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^/@[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+          },
+          "verified": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "type",
+          "callsign",
+          "display_name",
+          "avatar_url",
+          "x_handle",
+          "verified",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "FeedItemAddressActor": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "address"
+          },
+          "address": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "short": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{4}\u2026[0-9a-f]{4}$"
+          }
+        },
+        "required": [
+          "type",
+          "address",
+          "short"
+        ],
+        "additionalProperties": false
+      },
+      "FeedItemAmounts": {
+        "type": "object",
+        "properties": {
+          "quote": {
+            "$ref": "#/components/schemas/FeedItemAtoms"
+          },
+          "quote_symbol": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          },
+          "quote_decimals": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              }
+            ]
+          },
+          "usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemUsd"
+              }
+            ]
+          },
+          "tokens": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemAtoms"
+              }
+            ]
+          },
+          "quote_refund": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemAtoms"
+              }
+            ]
+          }
+        },
+        "required": [
+          "quote",
+          "quote_symbol",
+          "quote_decimals",
+          "usd",
+          "tokens",
+          "quote_refund"
+        ],
+        "additionalProperties": false
+      },
+      "FeedItemUsd": {
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+      },
+      "FeedItemWhy": {
+        "type": "object",
+        "properties": {
+          "why_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "why_id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "FeedItemReactions": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$"
+        },
+        "additionalProperties": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxProperties": 8
+      },
+      "FeedItemThrough": {
+        "type": "object",
+        "properties": {
+          "people": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "volume_usd": {
+            "$ref": "#/components/schemas/FeedItemUsd"
+          }
+        },
+        "required": [
+          "people",
+          "volume_usd"
+        ],
+        "additionalProperties": false
+      },
+      "FeedItemDoTheSame": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "href": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^/"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "enabled",
+          "label",
+          "href"
+        ],
+        "additionalProperties": false
+      },
+      "FeedItemBacker": {
+        "type": "object",
+        "properties": {
+          "callsign": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+          },
+          "display_name": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          },
+          "avatar_url": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^/@[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+          },
+          "usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedItemUsd"
+              }
+            ]
+          }
+        },
+        "required": [
+          "callsign",
+          "display_name",
+          "avatar_url",
+          "verified",
+          "path",
+          "usd"
+        ],
+        "additionalProperties": false
+      },
+      "PricesResponse": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "enum": [
+              "24h",
+              "launch"
+            ]
+          },
+          "clock_ms": {
+            "$ref": "#/components/schemas/FeedItemMillis"
+          },
+          "prices": {
+            "type": "array",
+            "maxItems": 54,
+            "items": {
+              "$ref": "#/components/schemas/PricesResponseHistory"
+            }
+          },
+          "as_of": {
+            "$ref": "#/components/schemas/AsOf"
+          }
+        },
+        "required": [
+          "window",
+          "clock_ms",
+          "prices",
+          "as_of"
+        ],
+        "additionalProperties": false
+      },
+      "PricesResponseHistory": {
+        "type": "object",
+        "properties": {
+          "presale_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "coin_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tier": {
+            "enum": [
+              "5m",
+              "1h",
+              "1d"
+            ]
+          },
+          "from_ms": {
+            "$ref": "#/components/schemas/FeedItemMillis"
+          },
+          "points": {
+            "type": "array",
+            "maxItems": 292,
+            "items": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "$ref": "#/components/schemas/FeedItemMillis"
+                },
+                {
+                  "$ref": "#/components/schemas/PricesResponsePrice"
+                }
+              ],
+              "items": false,
+              "minItems": 2
+            }
+          },
+          "price_usd": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PricesResponsePrice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_24h_usd": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PricesResponsePrice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "change_24h_bps": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "day_open_usd": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PricesResponsePrice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "day_open_ms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedItemMillis"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quote": {
+            "type": "object",
+            "properties": {
+              "coin_type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "symbol": {
+                "type": "string",
+                "minLength": 1
+              },
+              "price": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$"
+              },
+              "as_of_ms": {
+                "$ref": "#/components/schemas/FeedItemMillis"
+              },
+              "points": {
+                "type": "array",
+                "maxItems": 292,
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "$ref": "#/components/schemas/FeedItemMillis"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PricesResponsePrice"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 2
+                }
+              },
+              "change_24h_bps": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "coin_type",
+              "symbol",
+              "price",
+              "as_of_ms",
+              "points",
+              "change_24h_bps"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "presale_id",
+          "coin_type",
+          "tier",
+          "from_ms",
+          "points",
+          "price_usd",
+          "price_24h_usd",
+          "change_24h_bps",
+          "day_open_usd",
+          "day_open_ms"
+        ],
+        "additionalProperties": false
+      },
+      "PricesResponsePrice": {
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$"
+      },
+      "SearchResponse": {
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "group": {
+                      "type": "string",
+                      "enum": [
+                        "onchain",
+                        "wallets",
+                        "coins"
+                      ]
+                    },
+                    "section": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "const": "available"
+                            },
+                            "data": {
+                              "type": "object",
+                              "properties": {
+                                "items": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "match": {
+                                        "type": "string",
+                                        "enum": [
+                                          "launch_id",
+                                          "pool_id",
+                                          "creator",
+                                          "coin_type",
+                                          "ticker",
+                                          "name",
+                                          "words"
+                                        ]
+                                      },
+                                      "launch": {
+                                        "$ref": "#/components/schemas/SearchLaunch"
+                                      },
+                                      "pool": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "venue": {
+                                                "type": "string"
+                                              },
+                                              "poolId": {
+                                                "type": "string",
+                                                "pattern": "^0x[0-9a-f]{64}$"
+                                              }
+                                            },
+                                            "required": [
+                                              "venue",
+                                              "poolId"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "match",
+                                      "launch",
+                                      "pool"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "nextCursor": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "items",
+                                "nextCursor"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "provenance": {
+                              "$ref": "#/components/schemas/SectionProvenance"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "data",
+                            "provenance"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "const": "stale"
+                            },
+                            "data": {
+                              "type": "object",
+                              "properties": {
+                                "items": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "match": {
+                                        "type": "string",
+                                        "enum": [
+                                          "launch_id",
+                                          "pool_id",
+                                          "creator",
+                                          "coin_type",
+                                          "ticker",
+                                          "name",
+                                          "words"
+                                        ]
+                                      },
+                                      "launch": {
+                                        "$ref": "#/components/schemas/SearchLaunch"
+                                      },
+                                      "pool": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "venue": {
+                                                "type": "string"
+                                              },
+                                              "poolId": {
+                                                "type": "string",
+                                                "pattern": "^0x[0-9a-f]{64}$"
+                                              }
+                                            },
+                                            "required": [
+                                              "venue",
+                                              "poolId"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "match",
+                                      "launch",
+                                      "pool"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "nextCursor": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "items",
+                                "nextCursor"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "provenance": {
+                              "$ref": "#/components/schemas/SectionProvenance"
+                            },
+                            "reason": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "data",
+                            "provenance",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "const": "empty"
+                            },
+                            "provenance": {
+                              "$ref": "#/components/schemas/SectionProvenance"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "provenance"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "const": "unavailable"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "retryAfterSeconds": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "provenance": {
+                              "$ref": "#/components/schemas/SectionProvenance"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ],
+                      "discriminator": {
+                        "propertyName": "state"
+                      }
+                    }
+                  },
+                  "required": [
+                    "group",
+                    "section"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "group": {
+                      "const": "theses"
+                    },
+                    "section": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "const": "available"
+                            },
+                            "data": {
+                              "type": "object",
+                              "properties": {
+                                "items": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "match": {
+                                        "const": "words"
+                                      },
+                                      "launch": {
+                                        "$ref": "#/components/schemas/SearchLaunch"
+                                      },
+                                      "thesis": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "thesisId": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": [
+                                              "creator_thesis",
+                                              "creator_update",
+                                              "community_thesis"
+                                            ]
+                                          },
+                                          "stance": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "enum": [
+                                                  "bullish",
+                                                  "bearish",
+                                                  "neutral"
+                                                ]
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "body": {
+                                            "type": "string"
+                                          },
+                                          "authorLabels": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string",
+                                              "enum": [
+                                                "creator",
+                                                "wallet"
+                                              ]
+                                            }
+                                          },
+                                          "postedAt": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                          },
+                                          "createdAt": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "thesisId",
+                                          "kind",
+                                          "stance",
+                                          "body",
+                                          "authorLabels",
+                                          "postedAt",
+                                          "createdAt"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "match",
+                                      "launch",
+                                      "thesis"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "nextCursor": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "items",
+                                "nextCursor"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "provenance": {
+                              "$ref": "#/components/schemas/SectionProvenance"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "data",
+                            "provenance"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "const": "stale"
+                            },
+                            "data": {
+                              "type": "object",
+                              "properties": {
+                                "items": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "match": {
+                                        "const": "words"
+                                      },
+                                      "launch": {
+                                        "$ref": "#/components/schemas/SearchLaunch"
+                                      },
+                                      "thesis": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "thesisId": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": [
+                                              "creator_thesis",
+                                              "creator_update",
+                                              "community_thesis"
+                                            ]
+                                          },
+                                          "stance": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "enum": [
+                                                  "bullish",
+                                                  "bearish",
+                                                  "neutral"
+                                                ]
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "body": {
+                                            "type": "string"
+                                          },
+                                          "authorLabels": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string",
+                                              "enum": [
+                                                "creator",
+                                                "wallet"
+                                              ]
+                                            }
+                                          },
+                                          "postedAt": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                          },
+                                          "createdAt": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "thesisId",
+                                          "kind",
+                                          "stance",
+                                          "body",
+                                          "authorLabels",
+                                          "postedAt",
+                                          "createdAt"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "match",
+                                      "launch",
+                                      "thesis"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "nextCursor": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "items",
+                                "nextCursor"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "provenance": {
+                              "$ref": "#/components/schemas/SectionProvenance"
+                            },
+                            "reason": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "data",
+                            "provenance",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "const": "empty"
+                            },
+                            "provenance": {
+                              "$ref": "#/components/schemas/SectionProvenance"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "provenance"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "const": "unavailable"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "retryAfterSeconds": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "provenance": {
+                              "$ref": "#/components/schemas/SectionProvenance"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ],
+                      "discriminator": {
+                        "propertyName": "state"
+                      }
+                    }
+                  },
+                  "required": [
+                    "group",
+                    "section"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "group": {
+                      "const": "profiles"
+                    },
+                    "section": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "const": "unavailable"
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "reason"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "group",
+                    "section"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "required": [
+          "groups"
+        ],
+        "additionalProperties": false
+      },
+      "SearchLaunch": {
+        "type": "object",
+        "properties": {
+          "launchId": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "coinType": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]*::[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "iconUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "opening_round",
+              "live",
+              "migration_ready",
+              "migrated"
+            ]
+          },
+          "creator": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAtMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "launchId",
+          "coinType",
+          "name",
+          "symbol",
+          "iconUrl",
+          "lifecycle",
+          "creator",
+          "createdAtMs"
+        ],
+        "additionalProperties": false
+      },
+      "SectionProvenance": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "replica",
+              "primary",
+              "blast-infra"
+            ]
+          },
+          "network": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "mainnet",
+                  "testnet",
+                  "devnet",
+                  "localnet"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deployment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checkpoint": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timestampMs": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lagMs": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "network",
+          "deployment",
+          "checkpoint",
+          "timestampMs",
+          "observedAt",
+          "lagMs"
+        ],
+        "additionalProperties": false
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "parameter": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": true
+      },
+      "MarketStatus": {
+        "type": "object",
+        "properties": {
+          "checkpoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketCommonCount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timestamp_ms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketCommonTimestampMs"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lag_ms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketCommonCount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketCommonCursor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/MarketCommonProvenance"
+          }
+        },
+        "required": [
+          "checkpoint",
+          "timestamp_ms",
+          "lag_ms",
+          "cursor",
+          "provenance"
+        ],
+        "additionalProperties": false
+      },
+      "MarketCommonCount": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "MarketCommonTimestampMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "MarketCommonCursor": {
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*):(0|[1-9][0-9]*):(0|[1-9][0-9]*):(0|[1-9][0-9]*)$"
+      },
+      "MarketCommonProvenance": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "$ref": "#/components/schemas/MarketCommonNetwork"
+          },
+          "deployment_fingerprint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketCommonDeploymentFingerprint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checkpoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketCommonCount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timestamp_ms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketCommonTimestampMs"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observed_ms": {
+            "$ref": "#/components/schemas/MarketCommonTimestampMs"
+          },
+          "lag_ms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketCommonCount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "network",
+          "deployment_fingerprint",
+          "checkpoint",
+          "timestamp_ms",
+          "observed_ms",
+          "lag_ms"
+        ],
+        "additionalProperties": false
+      },
+      "MarketCommonNetwork": {
+        "enum": [
+          "mainnet",
+          "testnet",
+          "devnet",
+          "localnet"
+        ]
+      },
+      "MarketCommonDeploymentFingerprint": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    }
+  }
+}
