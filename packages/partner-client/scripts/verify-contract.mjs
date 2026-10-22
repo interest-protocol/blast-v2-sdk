@@ -15,9 +15,9 @@ const provenance = JSON.parse(
 );
 const annotations = new Set(["description", "title", "example", "examples", "$schema", "$id"]);
 
-function wire(value, preserveKeys = false) {
+function withoutSchemaAnnotations(value, preserveKeys = false) {
   if (Array.isArray(value)) {
-    return value.map((child) => wire(child));
+    return value.map((child) => withoutSchemaAnnotations(child));
   }
   if (value && typeof value === "object") {
     return Object.fromEntries(
@@ -25,7 +25,10 @@ function wire(value, preserveKeys = false) {
         .filter(([key]) => preserveKeys || !annotations.has(key))
         .map(([key, child]) => [
           key,
-          wire(child, ["properties", "patternProperties", "$defs", "definitions"].includes(key)),
+          withoutSchemaAnnotations(
+            child,
+            ["properties", "patternProperties", "$defs", "definitions"].includes(key),
+          ),
         ]),
     );
   }
@@ -36,13 +39,13 @@ for (const [name, operation] of Object.entries(pinned.operations)) {
   const live = api.paths[operation.path]?.get;
   assert(live, `Missing documented operation: ${name}`);
   assert.deepEqual(
-    wire(live.responses[200].content["application/json"].schema),
-    wire(operation.schema),
+    withoutSchemaAnnotations(live.responses[200].content["application/json"].schema),
+    withoutSchemaAnnotations(operation.schema),
     `Response contract drift: ${name}`,
   );
   assert.deepEqual(
-    wire(live.parameters ?? []),
-    wire(operation.parameters),
+    withoutSchemaAnnotations(live.parameters ?? []),
+    withoutSchemaAnnotations(operation.parameters),
     `Query/path contract drift: ${name}`,
   );
   assert.deepEqual(
@@ -53,8 +56,8 @@ for (const [name, operation] of Object.entries(pinned.operations)) {
 }
 for (const [name, schema] of Object.entries(pinned.components.schemas)) {
   assert.deepEqual(
-    wire(api.components.schemas[name]),
-    wire(schema),
+    withoutSchemaAnnotations(api.components.schemas[name]),
+    withoutSchemaAnnotations(schema),
     `Deployed schema drift: ${name}`,
   );
   assert.deepEqual(gate.components.schemas[name], schema, `Release gate schema drift: ${name}`);

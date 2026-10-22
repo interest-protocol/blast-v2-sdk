@@ -10,7 +10,8 @@ import type {
   SearchQuery,
   SearchReadResponse,
 } from "./generated.ts";
-import { matches } from "./schema.ts";
+import { matchesSchema } from "./schema.ts";
+import type { Schema } from "./schema.ts";
 
 export type * from "./generated.ts";
 
@@ -85,9 +86,13 @@ export function createBlastPartnerClient(options: PartnerClientOptions): BlastPa
   if (!/^blast_pk_[A-Za-z0-9_-]{43}$/.test(options.partnerKey)) {
     throw new BlastPartnerError("invalid_configuration");
   }
-  const origin = checkedOrigin(options.origin ?? "https://www.blast.fun");
-  const timeoutMs = checkedBound(options.timeoutMs ?? 10_000, 60_000);
-  const maxBytes = checkedBound(options.maxResponseBytes ?? 2 * 1024 * 1024, 8 * 1024 * 1024);
+  const origin = requireOrigin(options.origin ?? "https://www.blast.fun");
+  const timeoutMs = requireBoundedInteger(options.timeoutMs ?? 10_000, 60_000);
+  const maxResponseBytes = requireBoundedInteger(
+    options.maxResponseBytes ?? 2 * 1024 * 1024,
+    8 * 1024 * 1024,
+  );
+
   // Copy all configuration once; mutation of the caller's options cannot redirect credentials.
   const partnerKey = options.partnerKey;
   const fetcher = options.fetch ?? globalThis.fetch;
@@ -103,10 +108,11 @@ export function createBlastPartnerClient(options: PartnerClientOptions): BlastPa
   ): Promise<T> {
     const definition = operations[operation];
     const querySchema = querySchemas[operation];
-    if (!definition || !querySchema || !matches(query, querySchema, schemas)) {
+    if (!definition || !querySchema || !matchesSchema(query, querySchema, schemas)) {
       throw new BlastPartnerError("invalid_query");
     }
-    checkQueryRelations(operation, query);
+    validateQueryCombination(operation, query);
+
     let path = definition.path;
     if (operation === "presale") {
       if (typeof presaleId !== "string" || !/^0x[0-9a-f]{64}$/.test(presaleId)) {
@@ -123,6 +129,7 @@ export function createBlastPartnerClient(options: PartnerClientOptions): BlastPa
     if (url.toString().includes(partnerKey)) {
       throw new BlastPartnerError("invalid_query");
     }
+
     return await withDeadline(request.signal, timeoutMs, async (signal) => {
       let response: Response;
       try {
@@ -139,6 +146,7 @@ export function createBlastPartnerClient(options: PartnerClientOptions): BlastPa
         // Adapters may throw our exported error class with unsafe fields attached.
         throw new BlastPartnerError("network");
       }
+
       if (signal.aborted) {
         discardBody(response);
         throw new BlastPartnerError("aborted");
@@ -152,25 +160,10 @@ export function createBlastPartnerClient(options: PartnerClientOptions): BlastPa
         discardBody(response);
         throw new BlastPartnerError("redirect", response.status);
       }
+
       const retryAfter = safeRetryAfter(response.headers.get("retry-after"));
-      const text = await readBody(response, maxBytes, signal, retryAfter);
-      if (!response.ok) {
-        throw new BlastPartnerError("http", response.status, safeErrorCode(text), retryAfter);
-      }
-      const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
-      if (contentType !== "application/json") {
-        throw new BlastPartnerError("invalid_response", response.status, null, retryAfter);
-      }
-      let body: unknown;
-      try {
-        body = JSON.parse(text);
-      } catch {
-        throw new BlastPartnerError("invalid_response", response.status, null, retryAfter);
-      }
-      if (!matches(body, definition.schema, schemas)) {
-        throw new BlastPartnerError("invalid_response", response.status, null, retryAfter);
-      }
-      return body as T;
+      const text = await readBody(response, maxResponseBytes, signal, retryAfter);
+      return parseResponse<T>(response, text, definition.schema, retryAfter);
     });
   }
 
@@ -184,7 +177,7 @@ export function createBlastPartnerClient(options: PartnerClientOptions): BlastPa
   });
 }
 
-function checkedOrigin(value: string): string {
+function requireOrigin(value: string): string {
   try {
     const url = new URL(value);
     const loopback =
@@ -208,17 +201,14 @@ function checkedOrigin(value: string): string {
   }
 }
 
-function checkedBound(value: number, maximum: number): number {
+function requireBoundedInteger(value: number, maximum: number): number {
   if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
     throw new BlastPartnerError("invalid_configuration");
   }
   return value;
 }
 
-function checkQueryRelations(operation: string, query: object): void {
-  const invalid = () => {
-    throw new BlastPartnerError("invalid_query");
-  };
+function validateQueryCombination(operation: string, query: object): void {
   if (operation === "presales") {
     const { status = "live", sort } = query as PresalesQuery;
     const sorts = {
@@ -227,21 +217,52 @@ function checkQueryRelations(operation: string, query: object): void {
       ended: ["recent", "best", "backed"],
     };
     if (sort !== undefined && !sorts[status].includes(sort)) {
-      invalid();
+      throw new BlastPartnerError("invalid_query");
     }
   }
+
   if (operation === "prices") {
     const { presale = [], coin = [], window } = query as PricesQuery;
     if (presale.length + coin.length === 0 || (window === "launch" && coin.length > 0)) {
-      invalid();
+      throw new BlastPartnerError("invalid_query");
     }
   }
+
   if (operation === "search") {
     const { cursor, group } = query as SearchQuery;
     if (cursor !== undefined && group === undefined) {
-      invalid();
+      throw new BlastPartnerError("invalid_query");
     }
   }
+}
+
+function parseResponse<T>(
+  response: Response,
+  text: string,
+  schema: Schema,
+  retryAfter: string | null,
+): T {
+  if (!response.ok) {
+    throw new BlastPartnerError("http", response.status, safeErrorCode(text), retryAfter);
+  }
+
+  const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+  if (contentType !== "application/json") {
+    throw new BlastPartnerError("invalid_response", response.status, null, retryAfter);
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new BlastPartnerError("invalid_response", response.status, null, retryAfter);
+  }
+
+  if (!matchesSchema(body, schema, schemas)) {
+    throw new BlastPartnerError("invalid_response", response.status, null, retryAfter);
+  }
+
+  return body as T;
 }
 
 async function withDeadline<T>(
