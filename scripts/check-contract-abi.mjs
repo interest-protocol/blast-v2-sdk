@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
  * refreeze at contracts main with `check:abi:write` for an approved change,
  * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
  */
-const BASELINE_COMMIT = "dfd42a8f65507d17fe34e41adccf37bdd8a34379";
+const BASELINE_COMMIT = "01d7659617abcd552cece6d05b9db409ec4ff2c0";
 const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
@@ -68,10 +68,6 @@ const artifactDeclarations = [
   {
     path: "production-presale-v1.json",
     // Versioned presale source; fresh publication and activation pending.
-    baseline: {
-      contractsCommit: "0fa909c871c7c879f85f881c4ec699c57364b00e",
-      workingTreeDifferedAtFreeze: false,
-    },
     approvedAbiAmendments: [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
       "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness",
@@ -95,8 +91,6 @@ const artifactDeclarations = [
   },
   {
     path: "production-admin-v1.json",
-    // First covered at contracts 442116a; its ABI is unchanged since.
-    baseline: BASELINE,
     approvedAbiAmendments: [
       "contracts ADR 0097 (amended 2026-10-02, admin package review): upgrade_custody::publisher borrows the sealed Publisher, operational_version::new takes the package's one-time witness, and advance takes the versioned object's UID",
     ],
@@ -104,10 +98,6 @@ const artifactDeclarations = [
   },
   {
     path: "production-partners-v1.json",
-    baseline: {
-      contractsCommit: "4b170eef84a8f29b3aed91f035bbe23490adb0bd",
-      workingTreeDifferedAtFreeze: false,
-    },
     approvedAbiAmendments: [
       "contracts ADR 0095 (amended 2026-10-11): pay takes TxContext and transfers the partner's share as a coin",
     ],
@@ -115,12 +105,6 @@ const artifactDeclarations = [
   },
   {
     path: "production-aftermath-dao-presale-v1.json",
-    // The Aftermath DAO-pool vendor (contracts ADR 0104), at its
-    // initializer split (ADR 0110) and venue-owned tiers (ADR 0111).
-    baseline: {
-      contractsCommit: "7d94a5397120cfc38c90d628c49eff4ea06eee0f",
-      workingTreeDifferedAtFreeze: false,
-    },
     packages: [
       [
         "aftermathDaoPresale",
@@ -142,11 +126,20 @@ const artifactDeclarations = [
       "contracts ADR 0097 (amended 2026-10-02): PackageVersion lives in the one-time-witness module as blast_sui_package::PackageVersion, seeded from that witness",
     ],
   },
+  {
+    path: "production-boosts-v1.json",
+    packages: [
+      ["boostsCore", "boosts/core", "blast_boosts_core"],
+      ["boostsProducts", "boosts/products", "blast_boosts_products"],
+      ["boostsAftermath", "boosts/aftermath_adapter", "blast_boosts_aftermath"],
+    ],
+  },
 ];
 const contractsRoot = resolve(
   sdkRoot,
   process.argv.slice(2).find((argument) => !argument.startsWith("--")) ??
-    "../contracts",
+    process.env.BLAST_CONTRACTS_DIR ??
+    "../blast-v2-contracts",
 );
 const write = process.argv.includes("--write");
 const temporaryRoot = mkdtempSync(join(tmpdir(), "blast-production-abi-"));
@@ -295,7 +288,14 @@ function summarizePackage(packagePath, packageName) {
 
 function normalizeModule(packageName, moduleName, summary) {
   const functions = Object.entries(summary.functions)
-    .filter(([, definition]) => definition.visibility === "Public")
+    // The private Boosts observation is called only with simulation checks disabled.
+    .filter(
+      ([name, definition]) =>
+        definition.visibility === "Public" ||
+        (packageName === "blast_boosts_aftermath" &&
+          moduleName === "operations" &&
+          name === "observe"),
+    )
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, definition]) => ({
       name,
@@ -389,7 +389,59 @@ const functionClassifiers = {
   blast_admin: classifyAdminFunction,
   blast_partners: classifyPartnersFunction,
   blast_aftermath_dao_presale: classifyAftermathDaoPresaleFunction,
+  blast_boosts_core: () => "move-composition",
+  blast_boosts_products: (moduleName, functionName) =>
+    rejectTemplateFunction("blast_boosts_products", moduleName, functionName),
+  blast_boosts_aftermath: classifyBoostsFunction,
 };
+
+/** The consumer SDK builds active trades, maintenance and issuer metadata updates. */
+const boostsBuilders = new Set([
+  "operations::mint",
+  "operations::redeem",
+  "operations::rebalance",
+  "vault::update_metadata",
+]);
+const boostsOperatorFunctions = new Set([
+  "operations::initialize",
+  "operations::add_partner",
+  "operations::remove_partner",
+  "operations::mint_with_partner",
+  "operations::redeem_with_partner",
+  "operations::donate",
+  "operations::sync_health",
+  "operations::unwind",
+  "operations::finalize_shutdown",
+  "vault::issue",
+  "vault::share",
+  "vault::begin_shutdown",
+  "vault::redeem_shutdown",
+  "vault::set_fees",
+  "vault::set_nav_cap",
+  "vault::set_max_order_notional",
+  "vault::withdraw_admin_fees",
+]);
+
+function classifyBoostsFunction(moduleName, functionName) {
+  const key = `${moduleName}::${functionName}`;
+  if (boostsBuilders.has(key)) return "builder";
+  if (key === "operations::needs_rebalance" || key === "operations::observe") {
+    return "read";
+  }
+  // Issuance, partner trades, risk administration and shutdown remain operator PTBs.
+  if (boostsOperatorFunctions.has(key)) return "intentional-operator-exclusion";
+  if (
+    moduleName === "package_admin" &&
+    functionName === "restrict_to_dependency_only"
+  ) {
+    return "intentional-upgrade-exclusion";
+  }
+  return classifyPackageAdmin(
+    "blast_boosts_aftermath",
+    moduleName,
+    functionName,
+  );
+}
 
 const partnersBuilders = new Set([
   "new_cap",
@@ -461,6 +513,11 @@ function classifyAdminFunction(moduleName, functionName) {
  * drives, so the SDK leaves them out with the upgrade calls.
  */
 function classifyEvent(packageName, moduleName, event) {
+  if (packageName === "blast_boosts_aftermath") {
+    return ["Minted", "Redeemed", "Rebalanced"].includes(event.name)
+      ? "decoder"
+      : "intentional-operator-exclusion";
+  }
   if (packageName === "blast_presale" && moduleName === "aftermath") {
     return "decoder";
   }
@@ -774,6 +831,9 @@ const blastSuiEventNames = new Set([
 ]);
 
 function isEventStruct(packageName, moduleName, structName) {
+  if (packageName === "blast_boosts_aftermath") {
+    return moduleName === "events";
+  }
   if (packageName === "blast_aftermath_dao_presale") {
     return structName === "PoolCreationReserved" || structName === "Migrated";
   }

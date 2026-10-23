@@ -3,7 +3,7 @@
 ## Baseline
 
 `scripts/check-contract-abi.mjs` summarizes each package of a contracts
-checkout (`npm run check:abi` reads `../contracts`; CI checks out the commit
+checkout (`npm run check:abi` reads `../blast-v2-contracts` (or `BLAST_CONTRACTS_DIR`); CI checks out the commit
 pinned in `.github/workflows/check.yml`) and compares it with the frozen
 artifacts:
 
@@ -17,10 +17,12 @@ artifacts:
   [presale](presale.md));
 - `abi/production-admin-v1.json` for `blast_admin`, the ACL every package
   signs in to; and
-- `abi/production-partners-v1.json` for `blast_partners`.
+- `abi/production-partners-v1.json` for `blast_partners`;
+- `abi/production-aftermath-dao-presale-v1.json` for the standalone Aftermath DAO presale vendor; and
+- `abi/production-boosts-v1.json` for Boosts core, products, and its Aftermath adapter.
 
 The shared baseline and CI checkout now use contracts
-`dfd42a8f65507d17fe34e41adccf37bdd8a34379`. Artifacts with a product-specific baseline retain that separate source revision. Each
+`01d7659617abcd552cece6d05b9db409ec4ff2c0`. Every artifact uses this same source revision. Each
 artifact records `baseline.contractsCommit`, the commit it was frozen at,
 and `baseline.approvedAbiAmendments`, every reviewed contracts change to its
 ABI since that baseline, and Sui CLI `1.77.2-51d177ad7d65`, which the checker
@@ -49,6 +51,28 @@ them cover layouts that have not changed since.
 Move calls use the current package ID. Type names, event types, object schemas,
 migration witnesses, venue markers, and venue-tier dynamic-field keys use the
 original package ID. The deployment model stores both IDs.
+
+Blast deployment registries stay empty: package IDs and singleton objects come
+from caller-supplied deployment manifests. External venue and framework IDs stay
+pinned. Refreshing source ABIs does not register a Blast deployment.
+
+Boosts snapshots cover all three packages, the private `operations::observe`
+simulation hook, and its active mint/redeem/rebalance tuple results. The consumer
+SDK builds these active operations and issuer metadata updates; issuance,
+partner-specific trades, risk administration and shutdown remain explicit
+operator PTBs. Only Minted, Redeemed and Rebalanced have consumer event decoders.
+`test/boosts-abi.test.ts`, `test/boosts-transactions.test.ts` and
+`test/boosts-grpc.test.ts` compare decoded layouts and generated calls against
+the snapshot. The vault's `Binding` holds only account object/number, registry
+and clearing-house identities; oracle storage inputs come from the caller's
+manifest and the contract validates them against current market parameters.
+Obsolete feed-origin fields are absent from SDK bindings and manifests.
+Metadata updates sign in through
+`blast_admin::blast_acl::sign_in<blast_boosts_core::VaultIssuer>`.
+
+The timestamp naming cleanup changed parameter and local names while preserving
+serialized fields. SDK BCS field names therefore remain identical to Move storage
+and event declarations.
 
 ## Function coverage
 

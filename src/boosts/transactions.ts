@@ -85,7 +85,9 @@ export type BoostsIconUpdateInput = Readonly<{
   productKey: BoostsProductKey;
   sender: string;
   adminPackageId: string;
+  /** Original core package ID defining the VaultIssuer role. */
   corePackageId: string;
+  /** The shared blast_admin::blast_acl::ACL object. */
   authorityId: string;
   adminCapId: string;
   currencyId: string;
@@ -442,9 +444,9 @@ export function buildBoostsIconUpdateTransaction(
   const transaction = new Transaction();
   transaction.setSender(normalizeSuiAddress(input.sender));
   const adminWitness = transaction.moveCall({
-    target: `${normalizeSuiObjectId(input.adminPackageId)}::acl::sign_in`,
+    target: `${normalizeSuiObjectId(input.adminPackageId)}::blast_acl::sign_in`,
     typeArguments: [
-      `${normalizeSuiObjectId(input.corePackageId)}::blast_boosts_core::BLAST_BOOSTS_CORE`,
+      `${normalizeSuiObjectId(input.corePackageId)}::blast_boosts_core::VaultIssuer`,
     ],
     arguments: [
       transaction.object(normalizeSuiObjectId(input.authorityId)),

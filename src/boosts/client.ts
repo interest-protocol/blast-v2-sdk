@@ -389,10 +389,6 @@ function validateManifestBinding(
     accountObjectId: product.venueAccount,
     registryId: product.registry,
     clearingHouseId: product.clearingHouse,
-    baseOracleId: product.baseOracleStorage,
-    collateralOracleId: product.collateralOracleStorage,
-    baseFeedId: product.baseFeedOrigin,
-    collateralFeedId: product.collateralFeedOrigin,
   } as const;
   for (const [field, objectId] of Object.entries(expected) as Array<
     [keyof typeof expected, string]

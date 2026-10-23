@@ -105,10 +105,6 @@ export const boostsBindingBcs = bcs.struct("Binding", {
   account_number: bcs.u64(),
   registry_id: suiIdBcs,
   clearing_house_id: suiIdBcs,
-  base_oracle_id: suiIdBcs,
-  collateral_oracle_id: suiIdBcs,
-  base_feed_id: suiIdBcs,
-  collateral_feed_id: suiIdBcs,
 });
 const authorityCapBcs = bcs.struct("AuthorityCap", {
   id: suiUidBcs,
@@ -120,7 +116,7 @@ const venueAccountBcs = bcs.struct("VenueAccount", {
   admin_cap: authorityCapBcs,
 });
 
-/** Candidate BCS layout of the reviewed `blast_boosts_aftermath::vault::Vault`. */
+/** BCS layout of the current `blast_boosts_aftermath::vault::Vault`. */
 export const boostsVaultBcs = bcs.struct("Vault", {
   id: suiUidBcs,
   state: stateBcs,
@@ -314,10 +310,6 @@ export function decodeBoostsBinding(
     accountNumber: u64("binding.accountNumber", input.account_number),
     registryId: normalizeSuiObjectId(input.registry_id.bytes),
     clearingHouseId: normalizeSuiObjectId(input.clearing_house_id.bytes),
-    baseOracleId: normalizeSuiObjectId(input.base_oracle_id.bytes),
-    collateralOracleId: normalizeSuiObjectId(input.collateral_oracle_id.bytes),
-    baseFeedId: normalizeSuiObjectId(input.base_feed_id.bytes),
-    collateralFeedId: normalizeSuiObjectId(input.collateral_feed_id.bytes),
   };
 }
 

@@ -12,7 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-const contractsDirectory = process.env.BLAST_CONTRACTS_DIR ?? "../contracts";
+const contractsDirectory =
+  process.env.BLAST_CONTRACTS_DIR ?? "../blast-v2-contracts";
 const contractsManifest = join(contractsDirectory, "sui/launchpad/Move.toml");
 const expectedEvents = {
   launchpad: 28,
@@ -22,6 +23,7 @@ const expectedEvents = {
   admin: 15,
   partners: 2,
   aftermathDaoPresale: 2,
+  boostsAftermath: 21,
 };
 
 type Artifact = {
@@ -96,6 +98,7 @@ test("rejects a Sui CLI version that differs from the frozen artifacts", () => {
 });
 
 test("freezes every production package and event", () => {
+  const boosts = readArtifact("production-boosts-v1.json");
   const launchpad = readArtifact("production-launchpad-v1.json");
   const blastSui = readArtifact("production-blast-sui-v1.json");
   const presale = readArtifact("production-presale-v1.json");
@@ -111,6 +114,34 @@ test("freezes every production package and event", () => {
     "launchpad",
     "migrators",
   ]);
+  assert.deepEqual(Object.keys(boosts.packages), [
+    "boostsCore",
+    "boostsProducts",
+    "boostsAftermath",
+  ]);
+  assert.equal(
+    countEvents(boosts, "boostsAftermath"),
+    expectedEvents.boostsAftermath,
+  );
+  const boostsCore = boosts.packages.boostsCore;
+  const boostsProducts = boosts.packages.boostsProducts;
+  const boostsAftermathEvents = boosts.packages.boostsAftermath?.modules.events;
+  assert.ok(boostsCore);
+  assert.ok(boostsProducts);
+  assert.ok(boostsAftermathEvents);
+  assert.deepEqual(
+    Object.values(boostsCore.modules).flatMap((module) => module.events),
+    [],
+  );
+  assert.deepEqual(
+    Object.values(boostsProducts.modules).flatMap((module) => module.events),
+    [],
+  );
+  for (const event of boostsAftermathEvents.events) {
+    assert.ok(
+      ["decoder", "intentional-operator-exclusion"].includes(event.sdk),
+    );
+  }
   assert.deepEqual(Object.keys(blastSui.packages), ["blastSui"]);
   assert.deepEqual(Object.keys(presale.packages), ["presale"]);
   assert.deepEqual(Object.keys(admin.packages), ["admin"]);
@@ -142,6 +173,25 @@ test("freezes every production package and event", () => {
   ]) {
     assertEveryOperationIsClassified(artifact, artifact === admin);
   }
+});
+
+test("rejects unknown Boosts adapter functions", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "scripts/check-contract-abi.mjs",
+      "--classify-function",
+      "blast_boosts_aftermath",
+      "operations",
+      "future_operation",
+    ],
+    { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /unclassified function blast_boosts_aftermath::operations::future_operation/,
+  );
 });
 
 test("rejects unknown blast_sui function classifications", () => {

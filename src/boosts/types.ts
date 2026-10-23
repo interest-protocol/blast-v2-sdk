@@ -26,8 +26,6 @@ export type BoostsProductManifest = Readonly<{
   clearingHouse: string;
   baseOracleStorage: string;
   collateralOracleStorage: string;
-  baseFeedOrigin: string;
-  collateralFeedOrigin: string;
   protocol: string;
   clock: string;
   collateralDecimals: 6;
@@ -69,10 +67,6 @@ export type BoostsBinding = Readonly<{
   accountNumber: bigint;
   registryId: string;
   clearingHouseId: string;
-  baseOracleId: string;
-  collateralOracleId: string;
-  baseFeedId: string;
-  collateralFeedId: string;
 }>;
 
 export type BoostsPricePolicy = Readonly<{

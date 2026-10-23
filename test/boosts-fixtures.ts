@@ -27,8 +27,6 @@ const common = {
   clearingHouse: "0x32",
   baseOracleStorage: "0x33",
   collateralOracleStorage: "0x34",
-  baseFeedOrigin: "0x35",
-  collateralFeedOrigin: "0x36",
   protocol: "0x37",
   clock: "0x6",
   collateralDecimals: 6 as const,
@@ -172,10 +170,6 @@ export function fixtureRead(
         accountNumber: 1n,
         registryId: product.registry,
         clearingHouseId: product.clearingHouse,
-        baseOracleId: product.baseOracleStorage,
-        collateralOracleId: product.collateralOracleStorage,
-        baseFeedId: product.baseFeedOrigin,
-        collateralFeedId: product.collateralFeedOrigin,
       },
       checkpoint: CHECKPOINT,
       venueEquityAtoms: 10_100_000n,
@@ -342,10 +336,6 @@ function bindingFor(product: BoostsProductManifest) {
     account_number: 1n,
     registry_id: id(product.registry),
     clearing_house_id: id(product.clearingHouse),
-    base_oracle_id: id(product.baseOracleStorage),
-    collateral_oracle_id: id(product.collateralOracleStorage),
-    base_feed_id: id(product.baseFeedOrigin),
-    collateral_feed_id: id(product.collateralFeedOrigin),
   };
 }
 

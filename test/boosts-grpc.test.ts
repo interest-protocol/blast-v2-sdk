@@ -10,6 +10,7 @@ import { BoostsClient } from "../src/boosts/client.ts";
 import { createBoostsGrpcTransport } from "../src/boosts/grpc.ts";
 import { getBoostsProduct } from "../src/boosts/manifest.ts";
 import { boostsCapturedSnapshotBcs } from "../src/boosts/state.ts";
+import { assertBuildersMatchAbi, readAbi } from "./abi.ts";
 import {
   BOOSTS_FIXTURE_MANIFEST,
   CHECKPOINT_BCS,
@@ -195,6 +196,11 @@ function grpcHarness(
       transaction: Transaction;
       checksEnabled?: boolean;
     }) {
+      assertBuildersMatchAbi(
+        input.transaction,
+        readAbi("production-boosts-v1.json", "boostsAftermath"),
+        BOOSTS_FIXTURE_MANIFEST.adapterPackage.packageId,
+      );
       state.simulations += 1;
       state.checksEnabled = input.checksEnabled;
       state.moveCalls = input.transaction

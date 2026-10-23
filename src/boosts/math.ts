@@ -254,10 +254,6 @@ function validateBinding(expected: BoostsBinding, actual: BoostsBinding): void {
     "accountObjectId",
     "registryId",
     "clearingHouseId",
-    "baseOracleId",
-    "collateralOracleId",
-    "baseFeedId",
-    "collateralFeedId",
   ] as const;
   if (
     expected.accountNumber !== actual.accountNumber ||

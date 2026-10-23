@@ -23,6 +23,7 @@ import type {
   BoostsProductSnapshotV1,
   BoostsTransport,
 } from "../src/boosts/types.ts";
+import { assertBuildersMatchAbi, readAbi } from "./abi.ts";
 import {
   BOOSTS_FIXTURE_MANIFEST,
   fixtureEvent,
@@ -31,6 +32,8 @@ import {
 
 const NOW_MS = Date.parse("2026-09-21T00:00:10.000Z");
 const SENDER = "0xbeef";
+const boostsAbi = readAbi("production-boosts-v1.json", "boostsAftermath");
+const adminAbi = readAbi("production-admin-v1.json", "admin");
 
 test("builds an issuer-authorized icon-only metadata update", () => {
   const transaction = buildBoostsIconUpdateTransaction(
@@ -38,7 +41,7 @@ test("builds an issuer-authorized icon-only metadata update", () => {
     {
       productKey: "nvda-2x-bull",
       sender: SENDER,
-      adminPackageId: "0xa1",
+      adminPackageId: "0xad",
       corePackageId: "0xc0",
       authorityId: "0xa2",
       adminCapId: "0xa3",
@@ -48,6 +51,12 @@ test("builds an issuer-authorized icon-only metadata update", () => {
       iconUrl: "https://assets.example/coins/nvda-2x-bull.png",
     },
   );
+  assertBuildersMatchAbi(
+    transaction,
+    boostsAbi,
+    BOOSTS_FIXTURE_MANIFEST.adapterPackage.packageId,
+  );
+  assertBuildersMatchAbi(transaction, adminAbi, "0xad");
   const calls = transaction
     .getData()
     .commands.flatMap((command) =>
@@ -59,12 +68,12 @@ test("builds an issuer-authorized icon-only metadata update", () => {
   assert.deepEqual(
     calls.map((call) => `${call.package}::${call.module}::${call.function}`),
     [
-      `${normalizeSuiAddress("0xa1")}::acl::sign_in`,
+      `${normalizeSuiAddress("0xad")}::blast_acl::sign_in`,
       `${BOOSTS_FIXTURE_MANIFEST.adapterPackage.packageId}::vault::update_metadata`,
     ],
   );
   assert.deepEqual(calls[0]?.typeArguments, [
-    `${normalizeSuiAddress("0xc0")}::blast_boosts_core::BLAST_BOOSTS_CORE`,
+    `${normalizeSuiAddress("0xc0")}::blast_boosts_core::VaultIssuer`,
   ]);
   assert.deepEqual(calls[1]?.typeArguments, [
     BOOSTS_FIXTURE_MANIFEST.products[1].productType,
@@ -88,7 +97,7 @@ test("builds an issuer-authorized icon-only metadata update", () => {
       buildBoostsIconUpdateTransaction(BOOSTS_FIXTURE_MANIFEST, {
         productKey: "nvda-2x-bull",
         sender: SENDER,
-        adminPackageId: "0xa1",
+        adminPackageId: "0xad",
         corePackageId: "0xc0",
         authorityId: "0xa2",
         adminCapId: "0xa3",
@@ -104,7 +113,7 @@ test("builds an issuer-authorized icon-only metadata update", () => {
       buildBoostsIconUpdateTransaction(BOOSTS_FIXTURE_MANIFEST, {
         productKey: "nvda-2x-bull",
         sender: SENDER,
-        adminPackageId: "0xa1",
+        adminPackageId: "0xad",
         corePackageId: "0xc0",
         authorityId: "0xa2",
         adminCapId: "0xa3",
@@ -159,6 +168,14 @@ test("builds the exact public mint redeem and rebalance ABI for every Bull produ
       [redeem, "redeem", 11, 1],
       [rebalance, "rebalance", 8, 0],
     ] as const) {
+      assert.deepEqual(
+        assertBuildersMatchAbi(
+          transaction,
+          boostsAbi,
+          BOOSTS_FIXTURE_MANIFEST.adapterPackage.packageId,
+        ),
+        [`operations::${operation}`],
+      );
       const shape = inspectBoostsTransactionShape(transaction);
       assert.equal(shape.operation, operation);
       assert.equal(shape.sender, normalizeSuiAddress(SENDER));

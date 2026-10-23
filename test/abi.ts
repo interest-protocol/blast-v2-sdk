@@ -9,6 +9,7 @@ type AbiFunction = {
   sdk: string;
   typeParameters: unknown[];
   parameters: unknown[];
+  returns: unknown[];
 };
 type AbiModule = {
   functions: AbiFunction[];
@@ -49,7 +50,9 @@ export function assertBuildersMatchAbi(
     );
     assert.ok(frozen, `${name} is in the frozen ABI`);
     assert.ok(
-      frozen.sdk === "builder" || frozen.sdk === "compositional",
+      frozen.sdk === "builder" ||
+        frozen.sdk === "compositional" ||
+        frozen.sdk === "read",
       `${name} is a builder`,
     );
     assert.equal(call.typeArguments.length, frozen.typeParameters.length, name);
