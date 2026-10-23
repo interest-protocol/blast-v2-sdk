@@ -16,7 +16,8 @@
 
 ## Package decision and implementation
 
-Independent private package `@interest-protocol/blast-partner-client@0.1.0` with
+At the initial merge, an independent private package
+`@interest-protocol/blast-partner-client@0.1.0` with
 zero runtime/peer dependencies. A root SDK subpath would still impose the root
 package's Sui peers and transaction dependencies on REST consumers. No root npm
 workspace/lockfile changes are needed; run package commands from this directory.
@@ -136,8 +137,9 @@ and `dist` remain for review/retesting; temporary package consumers were removed
 
 Implementation and the requested review are complete for the six reads. The
 user authorized committing and opening a draft PR; merge and npm release remain
-separate steps. Package remains `private: true` and
-`UNLICENSED`; select licensing and authorize a release before publishing.
+separate steps. The subsequent release preparation removes `private: true` and
+applies the user-approved MIT license. npm publication still needs explicit
+authorization and a publisher with verified scope rights; see RELEASE.md.
 No actual partner key was created, loaded, sent, or tested; authenticated live
 smoke verification needs the integrator's existing credential in a controlled
 server environment. Deno/edge/real browser execution is not directly verified.
@@ -154,3 +156,26 @@ The existing on-chain CI job remains in place, alongside the new isolated job.
   invalid-UTF-8 response failures; codes stay null when the body cannot be parsed.
 - Added two regressions covering these error boundaries and 429/503 body failures.
   The public OpenAPI and backend gate/registry were compared again with no drift.
+
+## Release preparation follow-up
+
+- Owned checkout is unchanged; current preparation branch is
+  `codex/partner-client-release-prep`, based on merge commit
+  `a35b44ac34cdf388e670ce04750a05f3bddf976f`. The release preparation branch needs review
+  and merge before selecting the final publication revision.
+- User selected MIT. Added LICENSE and unreleased 0.1.0 changelog, public npm
+  registry/access metadata and full prepublish checks. Removed the consumer Node
+  engine constraint; development Node requirements remain in devEngines.
+- Clean builds prevent stale dist files from entering the tarball. Package
+  validation checks release metadata, license/changelog contents, dependency
+  isolation and a mocked read through an installed tarball.
+- Applied typescript-house-style to handwritten code: explicit response parsing,
+  descriptive schema/generator/validation names, workflow phases and named
+  package verification steps. Retained existing Biome and zero runtime dependencies.
+- Release runbook: RELEASE.md. Checks, archive, digest, source patch and current
+  blockers: /home/ubuntu/blast-v2/outputs/releases/2026-10-23-partner-rest-sdk/.
+- No authenticated npm identity on this host; npm scope rights unverified. Public
+  registry lookup returned 404 for the package, which is not a name reservation.
+  GitHub CI cannot start due to account billing/spending limits. Repository is
+  private, so npm provenance/public source access need an owner decision if required.
+- No npm publication, npm login, credentials/settings changes or deployment.

@@ -1,18 +1,14 @@
 {
   "name": "@interest-protocol/blast-partner-client",
   "version": "0.1.0",
-  "private": true,
-  "description": "Server-side BLAST partner REST read client, without on-chain dependencies",
+  "description": "Environment-agnostic TypeScript client for BLAST partner REST reads",
   "type": "module",
   "sideEffects": false,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/interest-protocol/blast-v2-sdk.git",
     "directory": "packages/partner-client"
-  },
-  "engines": {
-    "node": ">=22.18"
   },
   "exports": {
     ".": {
@@ -23,13 +19,15 @@
   "files": [
     "dist",
     "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
     "contracts",
     "examples"
   ],
   "scripts": {
     "generate": "node scripts/generate.mjs",
     "check:generated": "node scripts/generate.mjs --check",
-    "build": "tsc -p tsconfig.json",
+    "build": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true });\" && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "node --test --test-concurrency=1 test/*.test.ts",
     "format": "biome format --write src test scripts examples",
@@ -37,7 +35,8 @@
     "lint": "biome lint src test scripts examples",
     "check:package": "npm run build && publint --strict && attw --pack . --profile esm-only && node scripts/check-package.mjs",
     "check": "npm run check:generated && npm run format:check && npm run lint && npm run typecheck && npm test && npm run check:package",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run check"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
@@ -45,5 +44,22 @@
     "@types/node": "24.13.3",
     "publint": "0.3.25",
     "typescript": "7.0.2"
+  },
+  "homepage": "https://docs.blast.fun/developers/partner-api/endpoints/",
+  "keywords": [
+    "blast",
+    "partner-api",
+    "rest",
+    "typescript"
+  ],
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=22.18"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

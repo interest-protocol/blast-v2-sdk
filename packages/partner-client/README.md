@@ -15,7 +15,8 @@ SDK repository. It has **zero runtime and peer dependencies**. Installing a subp
 of `@interest-protocol/blast-sdk` would still install its on-chain dependencies and
 require Sui peers. This package leaves that SDK and its on-chain `./partners` export
 intact. No transaction builders, wallet integration, gas sponsorship, or signing.
-The package is currently private and unpublished; use a locally built tarball for review.
+The initial `0.1.0` release is prepared under the MIT license and remains
+unpublished. Use a locally built tarball until the npm release is available.
 
 ## Server quickstart
 
@@ -198,4 +199,8 @@ compatible bug fixes use a patch release. After 1.0, use normal semantic version
 New optional response fields require a reviewed compatible contract update and
 client release: strict v1 validation can reject a newer additive response until
 updated. Adding live operations requires verified availability, contracts and tests.
-Publication is a separate authorized release step; `private: true` prevents accidents.
+Publication is a separate authorized release step. Maintainers must follow the
+repository release runbook at `packages/partner-client/RELEASE.md`;
+`prepublishOnly` runs the full check suite. The package is MIT licensed; this
+license applies to this package, including its generated contracts and examples.
+The repository's other packages are outside the scope of this LICENSE file.
