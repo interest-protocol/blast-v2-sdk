@@ -30,7 +30,7 @@
     "check": "npm run check:abi && npm run format:check && npm run lint && npm run typecheck && npm run check:package && npm test && npm run check:generated --workspace @interest-protocol/blast-partner-client",
     "format": "biome format --write . && biome check --write --only=assist/source/organizeImports . && npm run format --workspace @interest-protocol/blast-partner-client",
     "format:check": "biome format . && npm run format:check --workspace @interest-protocol/blast-partner-client",
-    "lint": "biome lint . && npm run lint --workspace @interest-protocol/blast-partner-client",
+    "lint": "npm run build && biome lint . && npm run lint --workspace @interest-protocol/blast-partner-client",
     "holder-rewards": "node scripts/holder-rewards.mjs",
     "build": "npm run build --workspaces",
     "typecheck": "npm run build && tsc && tsc -p e2e/presale-mainnet/tsconfig.json --noEmit && npm run typecheck --workspaces",
