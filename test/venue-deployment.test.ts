@@ -1,14 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ClientWithCoreApi } from "@mysten/sui/client";
-import { ObjectError } from "@mysten/sui/client";
-import { Transaction } from "@mysten/sui/transactions";
-import { fromHex, toHex } from "@mysten/sui/utils";
 import type {
   BlastDeploymentInput,
   DeploymentRejectionCode,
-} from "../src/deployments/index.ts";
-
+} from "@interest-protocol/blast-deployments-sdk";
 import {
   BluefinPoolCreationFeeError,
   defineBlastDeployment,
@@ -17,11 +12,15 @@ import {
   migratorsDeployment,
   resolveVenueObjects,
   VenueUnavailableError,
-} from "../src/deployments/index.ts";
+} from "@interest-protocol/blast-deployments-sdk";
 import {
   MigratorCalls,
   MigratorTransactions,
-} from "../src/migrators/transactions.ts";
+} from "@interest-protocol/blast-migrators-sdk/transactions";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { ObjectError } from "@mysten/sui/client";
+import { Transaction } from "@mysten/sui/transactions";
+import { fromHex, toHex } from "@mysten/sui/utils";
 import {
   BLUEFIN_FEE_SNAPSHOT,
   manifestWithVenues,

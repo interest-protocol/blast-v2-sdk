@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { AllocationPlan } from "../src/launchpad/allocation.ts";
-import { addProtocolAllocation } from "../src/launchpad/allocation.ts";
-import { deriveLaunchEconomics } from "../src/launchpad/economics.ts";
+import type { AllocationPlan } from "@interest-protocol/blast-launchpad-sdk/allocation";
+import { addProtocolAllocation } from "@interest-protocol/blast-launchpad-sdk/allocation";
+import { deriveLaunchEconomics } from "@interest-protocol/blast-launchpad-sdk/economics";
 
 const liquidityOnly = (curveBps: bigint): AllocationPlan => ({
   curveMemeBps: curveBps,

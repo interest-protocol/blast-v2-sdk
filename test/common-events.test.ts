@@ -5,7 +5,7 @@ import {
   normalizeNativeTransactionPosition,
   normalizeSuiEventPosition,
   suiEventId,
-} from "../src/lib/events.ts";
+} from "@interest-protocol/blast-core/events";
 
 test("normalizes one native Sui event position", () => {
   const position = normalizeSuiEventPosition({

@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bcs } from "@mysten/sui/bcs";
-import type { ClientWithCoreApi } from "@mysten/sui/client";
-import { Transaction } from "@mysten/sui/transactions";
 import {
   createPresaleCreatorClient,
   decodePresaleCreatorEvents,
   presaleBcs,
   presaleEventBcs,
   presaleVaultBcs,
-} from "../src/presale/index.ts";
+} from "@interest-protocol/blast-presale-sdk";
+import { bcs } from "@mysten/sui/bcs";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { Transaction } from "@mysten/sui/transactions";
 
 const id = (byte: string) => `0x${byte.repeat(32)}`;
 const SALE = id("11"),

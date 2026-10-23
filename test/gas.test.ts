@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
+import { grossGasBudget } from "@interest-protocol/blast-core/gas";
+import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
+import { addCetusPoolWithLiquidity } from "@interest-protocol/blast-migrators-sdk/cetus-pool";
+import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
+import { MigratorTransactions } from "@interest-protocol/blast-migrators-sdk/transactions";
+import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
+import { PresaleTransactions } from "@interest-protocol/blast-presale-sdk/transactions";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
-
-import { grossGasBudget } from "../src/lib/gas.ts";
-import type { SharedObjectReference } from "../src/lib/sui.ts";
-import { addCetusPoolWithLiquidity } from "../src/migrators/cetus-pool.ts";
-import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
-import { MigratorTransactions } from "../src/migrators/transactions.ts";
-import type { PresaleDeployment } from "../src/presale/transactions.ts";
-import { PresaleTransactions } from "../src/presale/transactions.ts";
 
 const SENDER = `0x${"a1".repeat(32)}`;
 const PRICE = 1_000n;

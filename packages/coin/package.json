@@ -1,0 +1,50 @@
+{
+  "name": "@interest-protocol/blast-coin-sdk",
+  "version": "0.0.0",
+  "description": "Blast coin SDK",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interest-protocol/blast-v2-sdk.git",
+    "directory": "packages/coin"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./template": {
+      "types": "./dist/template.d.ts",
+      "default": "./dist/template.js"
+    },
+    "./transactions": {
+      "types": "./dist/transactions.d.ts",
+      "default": "./dist/transactions.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node --eval \"fs.rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:package": "publint --strict && attw --pack . --profile esm-only",
+    "prepack": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@interest-protocol/blast-core": "0.0.0"
+  },
+  "peerDependencies": {
+    "@mysten/move-bytecode-template": "^0.4.1",
+    "@mysten/sui": "^2.26.2"
+  }
+}

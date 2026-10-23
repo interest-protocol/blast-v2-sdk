@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { BoostsClient } from "../src/boosts/client.ts";
+import { BoostsClient } from "@interest-protocol/blast-boosts-sdk/client";
 import {
   defineBoostsManifest,
   getBoostsProduct,
-} from "../src/boosts/manifest.ts";
+} from "@interest-protocol/blast-boosts-sdk/manifest";
 import {
   decodeBoostsTreasurySupply,
   decodeBoostsVaultObject,
-} from "../src/boosts/state.ts";
+} from "@interest-protocol/blast-boosts-sdk/state";
 import type {
   BoostsManifest,
   BoostsProductKey,
   BoostsProductRead,
   BoostsTransport,
-} from "../src/boosts/types.ts";
+} from "@interest-protocol/blast-boosts-sdk/types";
 import {
   ADAPTER_ORIGINAL,
   BOOSTS_FIXTURE_MANIFEST,

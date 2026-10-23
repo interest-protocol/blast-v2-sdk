@@ -7,7 +7,7 @@ import {
   suiIdBcs,
   suiObjectIdBcs,
   suiUidBcs,
-} from "../src/lib/bcs.ts";
+} from "@interest-protocol/blast-core/bcs";
 
 test("round-trips canonical Sui BCS primitives", () => {
   assert.match(

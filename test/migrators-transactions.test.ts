@@ -1,18 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import type { Transaction } from "@mysten/sui/transactions";
-import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
 import {
   buildRewardManifest,
   MIGRATOR_REWARD_LEAF_DOMAIN,
-} from "../src/holder-rewards/allocations.ts";
-import type { SharedObjectReference } from "../src/lib/sui.ts";
-import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
+} from "@interest-protocol/blast-core/rewards/allocations";
+import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
+import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
 import {
   MigratorCalls,
   MigratorTransactions,
-} from "../src/migrators/transactions.ts";
+} from "@interest-protocol/blast-migrators-sdk/transactions";
+import type { Transaction } from "@mysten/sui/transactions";
+import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
 
 function shared<const Mutable extends boolean>(
   objectId: string,

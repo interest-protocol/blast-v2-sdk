@@ -1,4 +1,85 @@
-# Blast SDK
+# Blast SDK monorepo
+
+This npm workspace contains independently publishable SDK packages. The root is
+private; `packages/blast-sdk` preserves the original `@interest-protocol/blast-sdk`
+package, including its root export and every existing subpath. Existing users
+can keep their imports. New users can install only the SDK they need:
+
+```sh
+npm install @interest-protocol/blast-presale-sdk @mysten/sui @mysten/move-bytecode-template
+```
+
+```ts
+import { PresaleClient } from "@interest-protocol/blast-presale-sdk";
+// The existing import still works:
+import { PresaleClient as LegacyPresaleClient } from "@interest-protocol/blast-sdk/presale";
+```
+
+| Directory | npm package | Purpose |
+| --- | --- | --- |
+| `packages/core` | `@interest-protocol/blast-core` | Shared primitives, integer math, transaction utilities, and reward accounting |
+| `packages/admin` | `@interest-protocol/blast-admin-sdk` | ACL reads and administrator transactions |
+| `packages/blast-sui` | `@interest-protocol/blast-sui-sdk` | blastSUI reads, previews, and transactions |
+| `packages/boosts` | `@interest-protocol/blast-boosts-sdk` | Boosts products and transactions |
+| `packages/coin` | `@interest-protocol/blast-coin-sdk` | Standalone Sui coin creation |
+| `packages/cctp` | `@interest-protocol/blast-cctp-sdk` | EVM USDC deposit parameters and ABIs |
+| `packages/launchpad` | `@interest-protocol/blast-launchpad-sdk` | Launch creation, trading, economics, and events |
+| `packages/presale` | `@interest-protocol/blast-presale-sdk` | Presale creation, commitments, migration, and claims |
+| `packages/migrators` | `@interest-protocol/blast-migrators-sdk` | Venue pool creation, launch migrations, and vaults |
+| `packages/partners` | `@interest-protocol/blast-partners-sdk` | On-chain partner administration and payment previews |
+| `packages/deployments` | `@interest-protocol/blast-deployments-sdk` | Deployment identity, protocol access, and venue readers |
+| `packages/holder-rewards` | `@interest-protocol/blast-holder-rewards-sdk` | Reward accounting and operator workflows |
+| `packages/partner-client` | `@interest-protocol/blast-partner-client` | Authenticated REST read client; no runtime dependencies |
+| `packages/blast-sdk` | `@interest-protocol/blast-sdk` | Compatible root and subpath exports for existing consumers |
+
+The REST partner client is separate from the on-chain partners SDK. Venue
+readers live in the deployments SDK (`/bluefin-venue` and `/cetus-venue`);
+the existing `blast-sdk/migrators` entry point continues to export them.
+Packages import each other through declared package exports. Shared reward
+primitives and migration math live in core to keep the dependency graph acyclic.
+
+## Workspace development and releases
+
+Run installation and checks from the repository root. The root lockfile is the
+single dependency lock for every workspace:
+
+```sh
+npm ci
+npm run build
+npm run typecheck
+npm test
+npm run check:package
+```
+
+`build` runs workspaces sequentially in dependency order. Build the workspace
+once before running a focused check, for example
+`npm test --workspace @interest-protocol/blast-partner-client` or
+`node --test --test-concurrency=1 test/presale-math.test.ts`. Tests and operational
+tools use the built package exports. Formatting, linting, typechecking, and
+package checks include the REST client as well as the on-chain SDKs.
+
+`check:package` validates every package with publint and Are the Types Wrong,
+then installs their tarballs into a temporary consumer outside the workspace.
+It checks every original SDK entry point against the pre-migration export
+snapshot (ESM and Node `require()`), verifies re-export identity, and compiles all
+1,519 original public symbol imports along with a
+TypeScript consumer. It also checks declared dependencies and build order.
+
+Each public workspace owns its version, dependencies, export map, and publish
+configuration. Internal dependency versions are ordinary npm versions so packed
+packages work without workspace resolution. Before a release, assign real
+versions to the packages being released and update affected internal dependency
+ranges, regenerate the root lockfile, then run `npm run check` with the pinned
+contracts checkout and Sui CLI. Publish dependencies before their dependants
+in the order listed in the root `workspaces` array, using
+`npm publish --workspace <package-name>`. A change to a product used by the
+compatibility package also requires updating that package's dependency range.
+The root itself cannot be published. This conversion does not publish or change
+the existing unreleased protocol identity (`SDK_RELEASE`). The REST client's
+MIT license applies only to that package; see its release documentation.
+
+## Compatible Blast SDK
+
 
 The SDK mirrors the frozen Sui ABIs of every Blast package without becoming a
 second source of truth for protocol execution. See
@@ -379,7 +460,7 @@ honors.
 Cetus and Bluefin Spot are the two post-migration venues the SDK trades
 through, each with one adapter of the same shape. A launch trades only on the
 venue its migration recorded; the caller never picks another. The Cetus adapter
-(`src/migrators/cetus-venue.ts`) never trusts a caller-supplied pool:
+(`packages/deployments/src/cetus-venue.ts`) never trusts a caller-supplied pool:
 
 1. `getCetusPool` reads a Cetus `pool::Pool`; `resolveCetusVenueRoute` accepts
    it only as the pool the launch's `LpVault` recorded, of the deployment's
@@ -401,7 +482,7 @@ venue its migration recorded; the caller never picks another. The Cetus adapter
 
 Every error is a `CetusVenueError` whose `code` names the failed check.
 
-The Bluefin adapter (`src/migrators/bluefin-venue.ts`) mirrors it one for one:
+The Bluefin adapter (`packages/deployments/src/bluefin-venue.ts`) mirrors it one for one:
 `getBluefinPool` and `decodeBluefinPoolObject` (the whole `pool::Pool` layout,
 trailing bytes refused), `decodeBluefinSwapEvent` (`events::AssetSwap`),
 `resolveBluefinVenueRoute` (the vault's `Pool<Meme, Quote>` of the
@@ -817,14 +898,14 @@ and its pin together in both repositories.
 Use Node 22.18 or newer:
 
 ```bash
-npm install
+npm ci
 npm run typecheck
 npm test
-BLAST_CONTRACTS_DIR=../contracts npm run check:abi
+BLAST_CONTRACTS_DIR=../blast-v2-contracts npm run check:abi
 ```
 
 `npm run check:abi` extracts the frozen contracts commit with `git archive` from
-the contracts repository (`BLAST_CONTRACTS_DIR`, default `../contracts`) and
+the contracts repository (`BLAST_CONTRACTS_DIR`, default `../blast-v2-contracts`) and
 compares its `sui move summary` with `abi/` using the pinned Sui CLI; the
 contracts working tree and branch do not matter. The default test suite runs the
 same comparison when that repository contains the commit.

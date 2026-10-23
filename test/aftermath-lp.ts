@@ -1,3 +1,9 @@
+import { suiUidBcs } from "@interest-protocol/blast-core/bcs";
+import type { AftermathLpCoin } from "@interest-protocol/blast-presale-sdk/aftermath-lp";
+import {
+  AFTERMATH_AMM_PACKAGE_ID,
+  verifyAftermathLpCoin,
+} from "@interest-protocol/blast-presale-sdk/aftermath-lp";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
@@ -6,13 +12,6 @@ import {
   normalizeSuiAddress,
   normalizeSuiObjectId,
 } from "@mysten/sui/utils";
-
-import { suiUidBcs } from "../src/lib/bcs.ts";
-import type { AftermathLpCoin } from "../src/presale/aftermath-lp.ts";
-import {
-  AFTERMATH_AMM_PACKAGE_ID,
-  verifyAftermathLpCoin,
-} from "../src/presale/aftermath-lp.ts";
 
 // A fake chain holding one Aftermath `CreatePoolCapV2` as the mainnet
 // publication 5FE2eVoacFwnLfixqRAGftH9UwWotxDt3BJUqkWHxWwQ laid it out: the

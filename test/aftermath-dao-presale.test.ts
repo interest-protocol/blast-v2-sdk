@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-
+import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
+import {
+  AftermathDaoPresaleTransactions,
+  decodeAftermathDaoPresaleEvent,
+} from "@interest-protocol/blast-presale-sdk/aftermath-dao";
+import type { AftermathLpCoin } from "@interest-protocol/blast-presale-sdk/aftermath-lp";
+import { openEligibility } from "@interest-protocol/blast-presale-sdk/math";
+import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
 import { bcs } from "@mysten/sui/bcs";
 import type { Transaction } from "@mysten/sui/transactions";
 import {
@@ -9,15 +16,6 @@ import {
   normalizeSuiAddress,
   SUI_CLOCK_OBJECT_ID,
 } from "@mysten/sui/utils";
-
-import type { SharedObjectReference } from "../src/lib/sui.ts";
-import {
-  AftermathDaoPresaleTransactions,
-  decodeAftermathDaoPresaleEvent,
-} from "../src/presale/aftermath-dao.ts";
-import type { AftermathLpCoin } from "../src/presale/aftermath-lp.ts";
-import { openEligibility } from "../src/presale/math.ts";
-import type { PresaleDeployment } from "../src/presale/transactions.ts";
 import { verifiedLpCoin } from "./aftermath-lp.ts";
 
 function shared<const Mutable extends boolean>(

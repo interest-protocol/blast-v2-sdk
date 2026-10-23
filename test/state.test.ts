@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import type { ClientWithCoreApi } from "@mysten/sui/client";
-import { ObjectError } from "@mysten/sui/client";
-import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
-
 import {
   decodeLaunchConfigObject,
   decodeLaunchObject,
@@ -16,7 +11,10 @@ import {
   openingRoundEndMs,
   previewProtocolFeeClaim,
   timelockedValue,
-} from "../src/launchpad/state.ts";
+} from "@interest-protocol/blast-launchpad-sdk/state";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { ObjectError } from "@mysten/sui/client";
+import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 import type { LaunchpadFixture } from "./fixtures/launchpad-442116a.ts";
 import {
   LAUNCHPAD_FIXTURE_HEX,

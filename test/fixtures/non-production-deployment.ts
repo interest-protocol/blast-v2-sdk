@@ -1,5 +1,5 @@
-import { FROZEN_ABI } from "../../src/deployments/identity.ts";
-import type { BlastDeploymentInput } from "../../src/deployments/types.ts";
+import { FROZEN_ABI } from "@interest-protocol/blast-deployments-sdk/identity";
+import type { BlastDeploymentInput } from "@interest-protocol/blast-deployments-sdk/types";
 
 /**
  * One valid non-production manifest. Blast runs on mainnet only, so it names

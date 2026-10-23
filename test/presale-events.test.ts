@@ -1,15 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-
-import type { SuiClientTypes } from "@mysten/sui/client";
-import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
-import { itemAt } from "../src/lib/arrays.ts";
+import { itemAt } from "@interest-protocol/blast-core/arrays";
 import type {
   DecodedPresaleEvent,
   PresaleEventKind,
   PresaleEventPayloads,
-} from "../src/presale/events.ts";
+} from "@interest-protocol/blast-presale-sdk/events";
 import {
   decodePresaleEvent,
   decodePresalePolicyEvent,
@@ -17,17 +14,19 @@ import {
   presaleEventModules,
   presaleEventSpecs,
   presalePolicyEventSpecs,
-} from "../src/presale/events.ts";
+} from "@interest-protocol/blast-presale-sdk/events";
 import {
   canClosePresaleEarly,
   openEligibility,
   previewClaim,
   previewSettlement,
-} from "../src/presale/math.ts";
+} from "@interest-protocol/blast-presale-sdk/math";
 import {
   createPresaleEventProjection,
   reducePresaleEvent,
-} from "../src/presale/reducer.ts";
+} from "@interest-protocol/blast-presale-sdk/reducer";
+import type { SuiClientTypes } from "@mysten/sui/client";
+import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 import { orderedEventFields } from "./abi.ts";
 
 const pkg = normalizeSuiAddress("0x5e");

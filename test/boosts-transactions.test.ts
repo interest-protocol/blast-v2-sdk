@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import type { SuiClientTypes } from "@mysten/sui/client";
-import { Transaction } from "@mysten/sui/transactions";
-import { normalizeSuiAddress } from "@mysten/sui/utils";
-
-import { BoostsClient } from "../src/boosts/client.ts";
+import { BoostsClient } from "@interest-protocol/blast-boosts-sdk/client";
 import {
   AFTERMATH_PERPETUALS_PACKAGES,
   assertBoostsTransactionShape,
@@ -17,12 +12,15 @@ import {
   parseBoostsCollateralAmount,
   parseBoostsShareAmount,
   resolveBoostsRedeemAmount,
-} from "../src/boosts/transactions.ts";
+} from "@interest-protocol/blast-boosts-sdk/transactions";
 import type {
   BoostsProductKey,
   BoostsProductSnapshotV1,
   BoostsTransport,
-} from "../src/boosts/types.ts";
+} from "@interest-protocol/blast-boosts-sdk/types";
+import type { SuiClientTypes } from "@mysten/sui/client";
+import { Transaction } from "@mysten/sui/transactions";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 import { assertBuildersMatchAbi, readAbi } from "./abi.ts";
 import {
   BOOSTS_FIXTURE_MANIFEST,

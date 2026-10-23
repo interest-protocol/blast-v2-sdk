@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { BasisPoints, U64, U128 } from "../src/lib/integers.ts";
+import type {
+  BasisPoints,
+  U64,
+  U128,
+} from "@interest-protocol/blast-core/integers";
 import {
   BASIS_POINTS_DENOMINATOR,
   checkedAddU64,
@@ -14,7 +18,7 @@ import {
   requireU128,
   U64_MAX,
   U128_MAX,
-} from "../src/lib/integers.ts";
+} from "@interest-protocol/blast-core/integers";
 
 test("accepts the complete u64 range", () => {
   const zero: U64 = requireU64("value", 0n);

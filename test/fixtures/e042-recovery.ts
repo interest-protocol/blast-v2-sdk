@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
+import * as admin from "@interest-protocol/blast-admin-sdk";
 import { Transaction } from "@mysten/sui/transactions";
-import * as admin from "../../src/admin/index.ts";
 
 // This isolated process replaces the chain boundary; it never loads keys or RPCs.
 const id = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
@@ -39,7 +39,7 @@ const unexpected = () => {
   throw new Error("unexpected operation during recovery");
 };
 
-mock.module("../../src/admin/index.ts", {
+mock.module("@interest-protocol/blast-admin-sdk", {
   namedExports: {
     ...admin,
     getAcl: async () => ({ admins: { [state.adminCap]: roles } }),

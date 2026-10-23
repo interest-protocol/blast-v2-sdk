@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { Transaction } from "@mysten/sui/transactions";
-import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
-import type { LaunchpadDeployment } from "../src/launchpad/transactions.ts";
+import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
+import type { LaunchpadDeployment } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import {
   LaunchpadCalls,
   LaunchpadTransactions,
-} from "../src/launchpad/transactions.ts";
-import type { SharedObjectReference } from "../src/lib/sui.ts";
+} from "@interest-protocol/blast-launchpad-sdk/transactions";
+import { Transaction } from "@mysten/sui/transactions";
+import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
 import {
   assertBuildersMatchAbi,
   moveCallArguments,

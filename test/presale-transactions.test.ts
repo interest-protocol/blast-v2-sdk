@@ -1,7 +1,30 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-
+import { itemAt } from "@interest-protocol/blast-core/arrays";
+import { moveResults } from "@interest-protocol/blast-core/ptb";
+import type { RewardManifestSummary } from "@interest-protocol/blast-core/rewards/allocations";
+import {
+  buildRewardManifest,
+  MIGRATOR_REWARD_LEAF_DOMAIN,
+  PRESALE_REWARD_LEAF_DOMAIN,
+} from "@interest-protocol/blast-core/rewards/allocations";
+import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
+import { buildAllowlist } from "@interest-protocol/blast-presale-sdk/allowlist";
+import {
+  openEligibility,
+  uncappedForAnyone,
+  uncappedForEligible,
+} from "@interest-protocol/blast-presale-sdk/math";
+import type {
+  PresaleDeployment,
+  PresaleTerms,
+} from "@interest-protocol/blast-presale-sdk/transactions";
+import {
+  cetusMemeSide,
+  PresaleCalls,
+  PresaleTransactions,
+} from "@interest-protocol/blast-presale-sdk/transactions";
 import { bcs } from "@mysten/sui/bcs";
 import { Transaction } from "@mysten/sui/transactions";
 import {
@@ -10,31 +33,6 @@ import {
   normalizeSuiAddress,
   SUI_CLOCK_OBJECT_ID,
 } from "@mysten/sui/utils";
-
-import type { RewardManifestSummary } from "../src/holder-rewards/allocations.ts";
-import {
-  buildRewardManifest,
-  MIGRATOR_REWARD_LEAF_DOMAIN,
-  PRESALE_REWARD_LEAF_DOMAIN,
-} from "../src/holder-rewards/allocations.ts";
-import { itemAt } from "../src/lib/arrays.ts";
-import { moveResults } from "../src/lib/ptb.ts";
-import type { SharedObjectReference } from "../src/lib/sui.ts";
-import { buildAllowlist } from "../src/presale/allowlist.ts";
-import {
-  openEligibility,
-  uncappedForAnyone,
-  uncappedForEligible,
-} from "../src/presale/math.ts";
-import type {
-  PresaleDeployment,
-  PresaleTerms,
-} from "../src/presale/transactions.ts";
-import {
-  cetusMemeSide,
-  PresaleCalls,
-  PresaleTransactions,
-} from "../src/presale/transactions.ts";
 
 function shared<const Mutable extends boolean>(
   objectId: string,

@@ -1,20 +1,22 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-
-import type { BcsType } from "@mysten/sui/bcs";
-import { rewardRoundBcs } from "../src/holder-rewards/state.ts";
+import { rewardRoundBcs } from "@interest-protocol/blast-core/rewards/state";
 import {
   allocationPlanBcs,
   feeSplitBcs,
   protocolAllocationBcs,
-} from "../src/launchpad/allocation.ts";
-import { launchBcs, launchConfigBcs } from "../src/launchpad/state.ts";
+} from "@interest-protocol/blast-launchpad-sdk/allocation";
+import {
+  launchBcs,
+  launchConfigBcs,
+} from "@interest-protocol/blast-launchpad-sdk/state";
 import {
   lpFeePolicyBcs,
   lpFeeSharePairBcs,
   lpVaultBcs,
-} from "../src/migrators/state.ts";
+} from "@interest-protocol/blast-migrators-sdk/state";
+import type { BcsType } from "@mysten/sui/bcs";
 
 type FrozenStruct = { name: string; fields: { name: string }[] };
 type Artifact = {

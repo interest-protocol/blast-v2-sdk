@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { TypeTagSerializer } from "@mysten/sui/bcs";
-import type { ClientWithCoreApi } from "@mysten/sui/client";
-import { deriveDynamicFieldID, normalizeSuiAddress } from "@mysten/sui/utils";
-
-import { BlastSuiClient, blastSui } from "../src/blast-sui/client.ts";
+import {
+  BlastSuiClient,
+  blastSui,
+} from "@interest-protocol/blast-sui-sdk/client";
 import {
   BlastSuiCalls,
   BlastSuiTransactions,
-} from "../src/blast-sui/transactions.ts";
-import type { BlastSuiDeployment } from "../src/blast-sui/types.ts";
+} from "@interest-protocol/blast-sui-sdk/transactions";
+import type { BlastSuiDeployment } from "@interest-protocol/blast-sui-sdk/types";
+import { TypeTagSerializer } from "@mysten/sui/bcs";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { deriveDynamicFieldID, normalizeSuiAddress } from "@mysten/sui/utils";
 import {
   BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
   BLAST_SUI_VAULT_GOLDEN_BYTES,

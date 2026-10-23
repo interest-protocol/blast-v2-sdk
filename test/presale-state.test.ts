@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import type { ClientWithCoreApi } from "@mysten/sui/client";
-import { ObjectError } from "@mysten/sui/client";
-import { normalizeSuiAddress } from "@mysten/sui/utils";
-
 import {
   decodePresaleCreationPolicyObject,
   decodePresaleFeePolicyObject,
@@ -17,7 +12,10 @@ import {
   presaleBcs,
   presaleRewardIsClaimed,
   uncappedPhaseBcs,
-} from "../src/presale/state.ts";
+} from "@interest-protocol/blast-presale-sdk/state";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { ObjectError } from "@mysten/sui/client";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 // Byte fixtures written field by field from the Move declarations (and the
 // `PresaleState` / `VaultState` serde mirrors in the contracts' presale venue

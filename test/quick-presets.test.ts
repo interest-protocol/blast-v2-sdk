@@ -5,14 +5,14 @@ import type {
   ProtocolAccess,
   QuickPreset,
   QuickPresetValues,
-} from "../src/deployments/index.ts";
+} from "@interest-protocol/blast-deployments-sdk";
 import {
   defineBlastDeployment,
   defineQuickPreset,
   deploymentFingerprint,
   QUICK_PRESETS,
   resolveQuickPreset,
-} from "../src/deployments/index.ts";
+} from "@interest-protocol/blast-deployments-sdk";
 import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
 
 const deployment = defineBlastDeployment(NON_PRODUCTION_MANIFEST);

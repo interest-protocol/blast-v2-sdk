@@ -26,9 +26,10 @@ integration check, not a supported-runtime test claim. Keep keys on servers.
    status/remotes and dependency ownership first. On the shared VPS, acquire the
    shared memory guard before installs or the full suite; budget 2 GiB plus the
    required 4 GiB reserve and use one test worker.
-2. From `packages/partner-client`, run `npm ci --ignore-scripts --no-audit
-   --no-fund`, then `npm run check` and `bun test --max-concurrency=1
-   test/client.test.ts` when Bun is available. The suite checks generated types,
+2. From the repository root, run `npm ci --ignore-scripts --no-audit
+   --no-fund`, then `npm run check --workspace
+   @interest-protocol/blast-partner-client`. From `packages/partner-client`, run
+   `bun test --max-concurrency=1 test/client.test.ts` when Bun is available. The suite checks generated types,
    source/test/example types, formatting, lint, mocked transport regressions,
    declaration resolution, package contents and an isolated tarball consumer.
    `prepublishOnly` also runs the full suite for directory-based publication.

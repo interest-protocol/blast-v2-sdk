@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
+import {
+  blastLaunchpad,
+  LaunchpadClient,
+} from "@interest-protocol/blast-launchpad-sdk/client";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-
-import { blastLaunchpad, LaunchpadClient } from "../src/launchpad/client.ts";
 
 test("registers the typed launchpad client extension", () => {
   const client = new SuiGrpcClient({

@@ -11,14 +11,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import type { PresaleAbortName } from "../src/presale/aborts.ts";
+import type { PresaleAbortName } from "@interest-protocol/blast-presale-sdk/aborts";
 import {
   AFTERMATH_PRESALE_ABORTS,
   aftermathPresaleAbortName,
   PRESALE_ABORTS,
   presaleAbortName,
-} from "../src/presale/aborts.ts";
-import type { PresaleAbortCode } from "../src/presale/math.ts";
+} from "@interest-protocol/blast-presale-sdk/aborts";
+import type { PresaleAbortCode } from "@interest-protocol/blast-presale-sdk/math";
 
 // `check:abi` freezes each ABI at its artifact's commit; this test reads the
 // sources at the same commit with `git archive`, never from the working tree.

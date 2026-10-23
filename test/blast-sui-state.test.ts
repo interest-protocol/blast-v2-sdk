@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TypeTagSerializer } from "@mysten/sui/bcs";
-import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
-import { deriveDynamicFieldID, normalizeSuiAddress } from "@mysten/sui/utils";
-
 import {
   blastSuiDepositReceiptBcs,
   blastSuiTreasuryCapBcs,
@@ -12,7 +8,10 @@ import {
   decodeBlastSuiVaultObject,
   getBlastSuiDepositReceipt,
   getBlastSuiVault,
-} from "../src/blast-sui/state.ts";
+} from "@interest-protocol/blast-sui-sdk/state";
+import { TypeTagSerializer } from "@mysten/sui/bcs";
+import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
+import { deriveDynamicFieldID, normalizeSuiAddress } from "@mysten/sui/utils";
 import {
   BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
   BLAST_SUI_VAULT_GOLDEN_BYTES,

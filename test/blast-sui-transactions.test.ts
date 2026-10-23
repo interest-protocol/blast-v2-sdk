@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
+import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
+import {
+  BlastSuiCalls,
+  BlastSuiTransactions,
+} from "@interest-protocol/blast-sui-sdk/transactions";
+import type { BlastSuiDeployment } from "@interest-protocol/blast-sui-sdk/types";
 import type { TransactionObjectInput } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
 import {
@@ -9,12 +14,6 @@ import {
   SUI_SYSTEM_STATE_OBJECT_ID,
   SUI_TYPE_ARG,
 } from "@mysten/sui/utils";
-import {
-  BlastSuiCalls,
-  BlastSuiTransactions,
-} from "../src/blast-sui/transactions.ts";
-import type { BlastSuiDeployment } from "../src/blast-sui/types.ts";
-import type { SharedObjectReference } from "../src/lib/sui.ts";
 import {
   assertBuildersMatchAbi,
   moveCallArguments,

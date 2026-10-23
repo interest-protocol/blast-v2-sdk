@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
+import { finalizeCoinRegistration } from "@interest-protocol/blast-coin-sdk";
+import {
+  defineBlastDeployment,
+  presaleDeployment,
+} from "@interest-protocol/blast-deployments-sdk";
+import { PresaleCalls } from "@interest-protocol/blast-presale-sdk";
+import type { BluefinPoolCreation } from "@interest-protocol/blast-sdk/migrators";
+import {
+  addBluefinPoolWithLiquidity,
+  shareBluefinPool,
+} from "@interest-protocol/blast-sdk/migrators";
 import { bcs } from "@mysten/sui/bcs";
 import type { TransactionArgument } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
@@ -10,18 +20,6 @@ import {
   normalizeSuiAddress,
   SUI_TYPE_ARG,
 } from "@mysten/sui/utils";
-
-import { finalizeCoinRegistration } from "../src/coin/index.ts";
-import {
-  defineBlastDeployment,
-  presaleDeployment,
-} from "../src/deployments/index.ts";
-import type { BluefinPoolCreation } from "../src/migrators/index.ts";
-import {
-  addBluefinPoolWithLiquidity,
-  shareBluefinPool,
-} from "../src/migrators/index.ts";
-import { PresaleCalls } from "../src/presale/index.ts";
 import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
 
 const options: BluefinPoolCreation = {

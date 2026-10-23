@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { CctpMode } from "@interest-protocol/blast-cctp-sdk";
+import {
+  CCTP_MODE_STANDARD,
+  cctpDepositParameters,
+  cctpForwarderAbi,
+  cctpForwarderFactoryAbi,
+} from "@interest-protocol/blast-cctp-sdk";
 import type { Hex } from "viem";
 import {
   createPublicClient,
@@ -15,13 +22,6 @@ import {
   zeroAddress,
   zeroHash,
 } from "viem";
-import type { CctpMode } from "../src/cctp/index.ts";
-import {
-  CCTP_MODE_STANDARD,
-  cctpDepositParameters,
-  cctpForwarderAbi,
-  cctpForwarderFactoryAbi,
-} from "../src/cctp/index.ts";
 
 const factory = "0xf3A0C5997Db95DE3365d3EE2cd3bFe1E62D1150d";
 const deposit = "0x5e15Be27Bad976eFDd316D6dBC2BBA4Db9406b23";

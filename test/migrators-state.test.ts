@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bcs } from "@mysten/sui/bcs";
-import type { ClientWithCoreApi } from "@mysten/sui/client";
-import { ObjectError } from "@mysten/sui/client";
-import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
-
-import { getOpeningRoundBid } from "../src/launchpad/state.ts";
+import { getOpeningRoundBid } from "@interest-protocol/blast-launchpad-sdk/state";
 import {
   decodeLpVaultObject,
   getLpFeePolicy,
@@ -14,7 +9,11 @@ import {
   lpFeePolicyBcs,
   lpFeeSharePairBcs,
   lpVaultBcs,
-} from "../src/migrators/state.ts";
+} from "@interest-protocol/blast-migrators-sdk/state";
+import { bcs } from "@mysten/sui/bcs";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { ObjectError } from "@mysten/sui/client";
+import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
 
 const objectId = "0xc";
 const poolId = "0xd";

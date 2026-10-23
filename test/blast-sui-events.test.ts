@@ -1,20 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-
-import type { BcsType } from "@mysten/sui/bcs";
-import { bcs } from "@mysten/sui/bcs";
-import type { SuiClientTypes } from "@mysten/sui/client";
-import {
-  normalizeStructTag,
-  normalizeSuiAddress,
-  normalizeSuiObjectId,
-} from "@mysten/sui/utils";
+import type { BasisPoints } from "@interest-protocol/blast-core/integers";
 import type {
   BlastSuiEventKind,
   BlastSuiEventPackageIdentity,
   BlastSuiEventPayloads,
-} from "../src/blast-sui/index.ts";
+} from "@interest-protocol/blast-sui-sdk";
 import {
   blastSuiEventBcs,
   blastSuiEventId,
@@ -23,8 +15,15 @@ import {
   exchangeRateEventBcs,
   poolCustodyEventBcs,
   vaultCustodyEventBcs,
-} from "../src/blast-sui/index.ts";
-import type { BasisPoints } from "../src/lib/integers.ts";
+} from "@interest-protocol/blast-sui-sdk";
+import type { BcsType } from "@mysten/sui/bcs";
+import { bcs } from "@mysten/sui/bcs";
+import type { SuiClientTypes } from "@mysten/sui/client";
+import {
+  normalizeStructTag,
+  normalizeSuiAddress,
+  normalizeSuiObjectId,
+} from "@mysten/sui/utils";
 
 const packages: BlastSuiEventPackageIdentity = {
   packageId: "0x123",

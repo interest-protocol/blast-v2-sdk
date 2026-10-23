@@ -1,14 +1,14 @@
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
-import type { Transaction } from "@mysten/sui/transactions";
-import type { RewardManifest } from "../src/holder-rewards/allocations.ts";
+import type { RewardManifest } from "@interest-protocol/blast-core/rewards/allocations";
 import type {
   HolderRewardsOperator,
   HolderRewardsOperatorConfig,
-} from "../src/holder-rewards/operator.ts";
-import { holderRewardsOperator } from "../src/holder-rewards/operator.ts";
+} from "@interest-protocol/blast-holder-rewards-sdk/operator";
+import { holderRewardsOperator } from "@interest-protocol/blast-holder-rewards-sdk/operator";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import type { Transaction } from "@mysten/sui/transactions";
 import {
   fileHolderRewardsStore,
   readOperatorJson,

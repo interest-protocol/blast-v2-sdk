@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-
+import type { CoinTemplateOptions } from "@interest-protocol/blast-coin-sdk/template";
+import { buildCoinPackageBytecode } from "@interest-protocol/blast-coin-sdk/template";
+import { publishCoin } from "@interest-protocol/blast-coin-sdk/transactions";
 import {
   deserialize,
   get_constants,
@@ -9,10 +11,6 @@ import {
 } from "@mysten/move-bytecode-template";
 import { bcs } from "@mysten/sui/bcs";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
-
-import type { CoinTemplateOptions } from "../src/coin/template.ts";
-import { buildCoinPackageBytecode } from "../src/coin/template.ts";
-import { publishCoin } from "../src/coin/transactions.ts";
 
 /** The template's compiled defaults (contracts `sui/coin_template/sources/my_coin.move`). */
 const templateDefaults: CoinTemplateOptions = {

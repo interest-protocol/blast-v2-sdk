@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { normalizeSuiAddress } from "@mysten/sui/utils";
 import {
   allocateHolderRewards,
   buildRewardManifest,
   MIGRATOR_REWARD_LEAF_DOMAIN,
   verifyRewardProof,
-} from "../src/holder-rewards/allocations.ts";
+} from "@interest-protocol/blast-core/rewards/allocations";
 import {
   applyHolderCheckpoint,
   createHolderLedger,
   holderWeights,
   resetHolderWeights,
-} from "../src/holder-rewards/holders.ts";
+} from "@interest-protocol/blast-core/rewards/holders";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 const ALICE = normalizeSuiAddress("0xa");
 const BOB = normalizeSuiAddress("0xb");

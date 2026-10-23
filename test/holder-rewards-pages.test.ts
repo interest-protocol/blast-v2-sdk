@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeSuiAddress } from "@mysten/sui/utils";
+import { itemAt } from "@interest-protocol/blast-core/arrays";
 import type {
   RewardAllocation,
   RewardLeafDomain,
   RewardManifestPageStore,
   RewardProof,
-} from "../src/holder-rewards/allocations.ts";
+} from "@interest-protocol/blast-core/rewards/allocations";
 import {
   allocateHolderRewardPage,
   allocateHolderRewards,
@@ -17,9 +17,8 @@ import {
   PRESALE_REWARD_LEAF_DOMAIN,
   validateRewardManifestSummary,
   verifyRewardSummaryProof,
-} from "../src/holder-rewards/allocations.ts";
-
-import { itemAt } from "../src/lib/arrays.ts";
+} from "@interest-protocol/blast-core/rewards/allocations";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 const address = (index: number) =>
   normalizeSuiAddress(`0x${(index + 1).toString(16)}`);

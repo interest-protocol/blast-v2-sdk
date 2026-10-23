@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { normalizeSuiObjectId } from "@mysten/sui/utils";
-
-import { AdminCalls } from "../src/admin/transactions.ts";
-import { BlastSuiCalls } from "../src/blast-sui/transactions.ts";
-import type { BlastDeploymentInput } from "../src/deployments/index.ts";
+import { AdminCalls } from "@interest-protocol/blast-admin-sdk/transactions";
+import type { BlastDeploymentInput } from "@interest-protocol/blast-deployments-sdk";
 import {
   adminDeployment,
   BLAST_DEPLOYMENTS,
@@ -19,11 +15,13 @@ import {
   migratorsDeployment,
   partnersDeployment,
   presaleDeployment,
-} from "../src/deployments/index.ts";
-import { LaunchpadCalls } from "../src/launchpad/transactions.ts";
-import { MigratorCalls } from "../src/migrators/transactions.ts";
-import { PartnersCalls } from "../src/partners/transactions.ts";
-import { PresaleCalls } from "../src/presale/transactions.ts";
+} from "@interest-protocol/blast-deployments-sdk";
+import { LaunchpadCalls } from "@interest-protocol/blast-launchpad-sdk/transactions";
+import { MigratorCalls } from "@interest-protocol/blast-migrators-sdk/transactions";
+import { PartnersCalls } from "@interest-protocol/blast-partners-sdk/transactions";
+import { PresaleCalls } from "@interest-protocol/blast-presale-sdk/transactions";
+import { BlastSuiCalls } from "@interest-protocol/blast-sui-sdk/transactions";
+import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
 
 const id = (value: string) => normalizeSuiObjectId(value);

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { autoLpFixedSide, sqrtPriceX64 } from "../src/migrators/index.ts";
+import {
+  autoLpFixedSide,
+  sqrtPriceX64,
+} from "@interest-protocol/blast-sdk/migrators";
 
 test("matches the contract Q64.64 migration-price vectors", () => {
   const oneX64 = 18_446_744_073_709_551_616n;

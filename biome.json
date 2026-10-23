@@ -2,12 +2,14 @@
   "$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
   "files": {
     "includes": [
-      "src/**/*.ts",
+      "packages/*/src/**/*.ts",
       "test/**/*.ts",
       "operator/**/*.ts",
       "scripts/**/*.mjs",
+      "test/**/*.mjs",
       "e2e/**/*.ts",
-      "!!packages/partner-client"
+      "!!packages/partner-client",
+      "!packages/partner-client/**"
     ]
   },
   "formatter": {
@@ -30,7 +32,9 @@
       "complexity": {
         "noExcessiveCognitiveComplexity": {
           "level": "error",
-          "options": { "maxAllowedComplexity": 15 }
+          "options": {
+            "maxAllowedComplexity": 15
+          }
         }
       },
       "correctness": {
@@ -41,7 +45,9 @@
       "style": {
         "useImportType": {
           "level": "error",
-          "options": { "style": "separatedType" }
+          "options": {
+            "style": "separatedType"
+          }
         }
       },
       "suspicious": {
@@ -51,9 +57,13 @@
   },
   "overrides": [
     {
-      "includes": ["src/**"],
+      "includes": ["packages/*/src/**"],
       "linter": {
-        "rules": { "correctness": { "noNodejsModules": "error" } }
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "error"
+          }
+        }
       }
     }
   ],
