@@ -33,7 +33,7 @@ const AFTERMATH_COMMIT = frozenCommit(
   "production-aftermath-dao-presale-v1.json",
 );
 const configured = process.env.BLAST_CONTRACTS_DIR;
-const contracts = configured ?? "../contracts";
+const contracts = configured ?? "../blast-v2-contracts";
 // A configured repository must hold the pinned sources; only an absent
 // default checkout skips, as in `abi-parity.test.ts`.
 const skip =

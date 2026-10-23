@@ -599,7 +599,7 @@ test("pins the frozen ABI identity to the committed artifacts", () => {
     createHash("sha256").update(bytes).digest("hex");
   assert.equal(
     FROZEN_ABI.contractsCommit,
-    "dfd42a8f65507d17fe34e41adccf37bdd8a34379",
+    "01d7659617abcd552cece6d05b9db409ec4ff2c0",
   );
   assert.equal(
     FROZEN_ABI.artifacts.launchpad,
@@ -612,6 +612,11 @@ test("pins the frozen ABI identity to the committed artifacts", () => {
   for (const name of [
     "production-launchpad-v1.json",
     "production-blast-sui-v1.json",
+    "production-presale-v1.json",
+    "production-admin-v1.json",
+    "production-partners-v1.json",
+    "production-aftermath-dao-presale-v1.json",
+    "production-boosts-v1.json",
   ]) {
     assert.equal(
       JSON.parse(artifact(name).toString("utf8")).baseline.contractsCommit,

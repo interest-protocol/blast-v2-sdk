@@ -151,8 +151,6 @@ export function boostsDeploymentFingerprint(manifest: BoostsManifest): string {
       clearingHouse: product.clearingHouse,
       baseOracleStorage: product.baseOracleStorage,
       collateralOracleStorage: product.collateralOracleStorage,
-      baseFeedOrigin: product.baseFeedOrigin,
-      collateralFeedOrigin: product.collateralFeedOrigin,
       protocol: product.protocol,
       clock: product.clock,
       collateralDecimals: product.collateralDecimals,

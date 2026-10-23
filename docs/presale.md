@@ -10,8 +10,8 @@ creation allowlists, LP-fee splits, holder-reward rounds, and administration thr
 Blast ACL.
 
 The SDK targets the versioned presale ABI (contracts ADR 0117), including the
-native Aftermath `FinalizeTicket` change at contracts commit
-`0fa909c871c7c879f85f881c4ec699c57364b00e`. It requires a
+native Aftermath `FinalizeTicket` change, frozen with all SDK products at contracts commit
+`01d7659617abcd552cece6d05b9db409ec4ff2c0`. It requires a
 fresh publication and activation; no mainnet preset is registered for this ABI.
 The earlier unversioned mainnet package cannot accept the new argument. Supply
 an explicit deployment after `package_admin::wrap(Bootstrap, UpgradeCap)` shares

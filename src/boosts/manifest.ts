@@ -183,11 +183,6 @@ function normalizeProduct(
       `${key}.collateralOracleStorage`,
       product.collateralOracleStorage,
     ),
-    baseFeedOrigin: objectId(`${key}.baseFeedOrigin`, product.baseFeedOrigin),
-    collateralFeedOrigin: objectId(
-      `${key}.collateralFeedOrigin`,
-      product.collateralFeedOrigin,
-    ),
     protocol: objectId(`${key}.protocol`, product.protocol),
     clock: objectId(`${key}.clock`, product.clock),
   });

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "dfd42a8f65507d17fe34e41adccf37bdd8a34379",
+    "contractsCommit": "01d7659617abcd552cece6d05b9db409ec4ff2c0",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0059: remove sender and unchanged state from event payloads",
