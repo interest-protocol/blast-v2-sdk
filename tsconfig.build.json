@@ -11,5 +11,9 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["src/**/*.ts", "types/runtime.d.ts"]
+  "include": [
+    "packages/*/src/**/*.ts",
+    "types/runtime.d.ts"
+  ],
+  "exclude": []
 }

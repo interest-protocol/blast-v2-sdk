@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { HolderRewardsStore } from "../src/holder-rewards/operator.ts";
+import type { HolderRewardsStore } from "@interest-protocol/blast-holder-rewards-sdk/operator";
 
 /** Atomic replacement keeps the durable checkpoint watermark with the balances it describes. */
 export async function writeOperatorJson(

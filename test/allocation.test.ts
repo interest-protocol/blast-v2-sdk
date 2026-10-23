@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { normalizeSuiAddress } from "@mysten/sui/utils";
-import type { AllocationPlan, FeeSplit } from "../src/launchpad/allocation.ts";
+import type {
+  AllocationPlan,
+  FeeSplit,
+} from "@interest-protocol/blast-launchpad-sdk/allocation";
 import {
   addProtocolAllocation,
   allocationPlanBcs,
@@ -14,7 +15,8 @@ import {
   normalizeFeeSplit,
   previewFeeCollection,
   requireCompletePlan,
-} from "../src/launchpad/allocation.ts";
+} from "@interest-protocol/blast-launchpad-sdk/allocation";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 import { LAUNCHPAD_FIXTURE_HEX } from "./fixtures/launchpad-442116a.ts";
 
 const U64_MAX = (1n << 64n) - 1n;

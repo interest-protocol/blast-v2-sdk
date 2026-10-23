@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
+import { BoostsClient } from "@interest-protocol/blast-boosts-sdk/client";
+import type { BoostsTransport } from "@interest-protocol/blast-boosts-sdk/types";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { BoostsClient } from "../src/boosts/client.ts";
-import type { BoostsTransport } from "../src/boosts/types.ts";
 import {
   BOOSTS_FIXTURE_MANIFEST,
   fixtureEvent,

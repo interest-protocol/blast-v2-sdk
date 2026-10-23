@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeSuiAddress } from "@mysten/sui/utils";
-import { decodeHolderCheckpoint } from "../src/holder-rewards/checkpoints.ts";
+import { decodeHolderCheckpoint } from "@interest-protocol/blast-core/rewards/checkpoints";
 import {
   decodeRewardRound,
   rewardIsClaimed,
   rewardRoundBcs,
-} from "../src/holder-rewards/state.ts";
+} from "@interest-protocol/blast-core/rewards/state";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 const addr = normalizeSuiAddress;
 const MEME = `${addr("0x42")}::meme::MEME`;

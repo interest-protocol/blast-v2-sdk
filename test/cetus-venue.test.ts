@@ -1,26 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { bcs } from "@mysten/sui/bcs";
-import type { ClientWithCoreApi } from "@mysten/sui/client";
-import type { Transaction } from "@mysten/sui/transactions";
-import {
-  fromBase64,
-  fromHex,
-  normalizeSuiObjectId,
-  SUI_CLOCK_OBJECT_ID,
-} from "@mysten/sui/utils";
-
 import {
   defineBlastDeployment,
   deploymentFingerprint,
   evaluateProtocolAccess,
-} from "../src/deployments/index.ts";
-import type { BlastDeploymentInput } from "../src/deployments/types.ts";
+} from "@interest-protocol/blast-deployments-sdk";
 import type {
   CetusProviderQuote,
   CetusQuoteRequest,
-} from "../src/migrators/cetus-venue.ts";
+} from "@interest-protocol/blast-deployments-sdk/cetus-venue";
 import {
   buildCetusSwapTransaction,
   CETUS_MAX_SQRT_PRICE_X64,
@@ -34,7 +22,17 @@ import {
   quoteCetusSwap,
   reconcileCetusSwap,
   resolveCetusVenueRoute,
-} from "../src/migrators/cetus-venue.ts";
+} from "@interest-protocol/blast-deployments-sdk/cetus-venue";
+import type { BlastDeploymentInput } from "@interest-protocol/blast-deployments-sdk/types";
+import { bcs } from "@mysten/sui/bcs";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import type { Transaction } from "@mysten/sui/transactions";
+import {
+  fromBase64,
+  fromHex,
+  normalizeSuiObjectId,
+  SUI_CLOCK_OBJECT_ID,
+} from "@mysten/sui/utils";
 import {
   BLAST_CETUS,
   CETUS_LINEAGE,

@@ -2,14 +2,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-
-import type { ClientWithCoreApi } from "@mysten/sui/client";
-import { normalizeSuiObjectId } from "@mysten/sui/utils";
-
 import type {
   DeploymentRuntimeObservation,
   SdkRelease,
-} from "../src/deployments/index.ts";
+} from "@interest-protocol/blast-deployments-sdk";
 import {
   BLAST_DEPLOYMENTS,
   defineBlastDeployment,
@@ -19,8 +15,10 @@ import {
   observeDeploymentRuntime,
   SDK_RELEASE,
   sharedObjectEntries,
-} from "../src/deployments/index.ts";
-import type { BlastDeploymentInput } from "../src/deployments/types.ts";
+} from "@interest-protocol/blast-deployments-sdk";
+import type { BlastDeploymentInput } from "@interest-protocol/blast-deployments-sdk/types";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
 import { manifestWithVenues, runtimeFor } from "./fixtures/venue-deployment.ts";
 
@@ -500,7 +498,10 @@ test("fails closed while the production registry or SDK release identity is abse
     commit: null,
   });
   const packageJson = JSON.parse(
-    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    readFileSync(
+      new URL("../packages/blast-sdk/package.json", import.meta.url),
+      "utf8",
+    ),
   );
   assert.equal(SDK_RELEASE.name, packageJson.name);
   assert.equal(SDK_RELEASE.version, packageJson.version);

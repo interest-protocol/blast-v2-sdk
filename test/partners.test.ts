@@ -1,29 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import type { SuiClientTypes } from "@mysten/sui/client";
-import { Transaction } from "@mysten/sui/transactions";
-import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
-
 import type {
   PartnerEventKind,
   PartnerEventPayloads,
-} from "../src/partners/events.ts";
-import { decodePartnerEvent, partnerEventBcs } from "../src/partners/events.ts";
+} from "@interest-protocol/blast-partners-sdk/events";
+import {
+  decodePartnerEvent,
+  partnerEventBcs,
+} from "@interest-protocol/blast-partners-sdk/events";
 import {
   createPartnersEventProjection,
   reducePartnerEvent,
-} from "../src/partners/reducer.ts";
+} from "@interest-protocol/blast-partners-sdk/reducer";
 import {
   decodePartnerObject,
   PARTNER_DELAY_MS,
   partnerBcs,
   partnerPayment,
-} from "../src/partners/state.ts";
+} from "@interest-protocol/blast-partners-sdk/state";
 import {
   PartnersCalls,
   PartnersTransactions,
-} from "../src/partners/transactions.ts";
+} from "@interest-protocol/blast-partners-sdk/transactions";
+import type { SuiClientTypes } from "@mysten/sui/client";
+import { Transaction } from "@mysten/sui/transactions";
+import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 import {
   assertBuildersMatchAbi,
   moveCallArguments,

@@ -6,22 +6,6 @@ on:
   pull_request:
 
 jobs:
-  partner-client:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: packages/partner-client
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: packages/partner-client/package-lock.json
-      - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm run check
-
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -46,6 +30,8 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run check:generated --workspace @interest-protocol/blast-partner-client
+      - run: npm run check:package
       - name: Check out the contracts commit the ABI is frozen at
         if: env.CONTRACTS_READ_TOKEN != ''
         uses: actions/checkout@v4

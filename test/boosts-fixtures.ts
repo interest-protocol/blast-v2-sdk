@@ -1,20 +1,23 @@
-import { bcs, TypeTagSerializer } from "@mysten/sui/bcs";
-import type { SuiClientTypes } from "@mysten/sui/client";
-import { deriveDynamicFieldID } from "@mysten/sui/utils";
-import type { BoostsActivityKind } from "../src/boosts/events.ts";
-import { boostsActivityEventBcs } from "../src/boosts/events.ts";
+import type { BoostsActivityKind } from "@interest-protocol/blast-boosts-sdk/events";
+import { boostsActivityEventBcs } from "@interest-protocol/blast-boosts-sdk/events";
 import {
   defineBoostsManifest,
   getBoostsProduct,
-} from "../src/boosts/manifest.ts";
-import { boostsTreasuryCapBcs, boostsVaultBcs } from "../src/boosts/state.ts";
+} from "@interest-protocol/blast-boosts-sdk/manifest";
+import {
+  boostsTreasuryCapBcs,
+  boostsVaultBcs,
+} from "@interest-protocol/blast-boosts-sdk/state";
 import type {
   BoostsCheckpoint,
   BoostsManifest,
   BoostsProductKey,
   BoostsProductManifest,
   BoostsTreasuryProductRead,
-} from "../src/boosts/types.ts";
+} from "@interest-protocol/blast-boosts-sdk/types";
+import { bcs, TypeTagSerializer } from "@mysten/sui/bcs";
+import type { SuiClientTypes } from "@mysten/sui/client";
+import { deriveDynamicFieldID } from "@mysten/sui/utils";
 
 export const ADAPTER_CURRENT = "0xa1";
 export const ADAPTER_ORIGINAL = "0xa0";

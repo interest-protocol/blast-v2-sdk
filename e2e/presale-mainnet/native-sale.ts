@@ -1,9 +1,9 @@
+import { moveResults } from "@interest-protocol/blast-core/ptb";
+import type { AftermathLpCoin } from "@interest-protocol/blast-presale-sdk/aftermath-lp";
+import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
+import { PresaleCalls } from "@interest-protocol/blast-presale-sdk/transactions";
 import type { TransactionArgument } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
-import { moveResults } from "../../src/lib/ptb.ts";
-import type { AftermathLpCoin } from "../../src/presale/aftermath-lp.ts";
-import type { PresaleDeployment } from "../../src/presale/transactions.ts";
-import { PresaleCalls } from "../../src/presale/transactions.ts";
 
 type Shared = { objectId: string; initialSharedVersion: string };
 export type Admissions = { quoteAllowed: boolean; witnessAllowed: boolean };

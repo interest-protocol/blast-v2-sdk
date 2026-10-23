@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { boostsActivityEventBcs } from "../src/boosts/events.ts";
+import { boostsActivityEventBcs } from "@interest-protocol/blast-boosts-sdk/events";
 import {
   boostsCapturedSnapshotBcs,
   boostsVaultBcs,
-} from "../src/boosts/state.ts";
+} from "@interest-protocol/blast-boosts-sdk/state";
 import { readAbi } from "./abi.ts";
 import { fixtureEvent, fixtureRead } from "./boosts-fixtures.ts";
 

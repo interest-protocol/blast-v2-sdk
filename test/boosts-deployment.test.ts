@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { BoostsClient } from "../src/boosts/client.ts";
+import { BoostsClient } from "@interest-protocol/blast-boosts-sdk/client";
 import {
   boostsDeploymentFingerprint,
   validateBoostsDeployment,
-} from "../src/boosts/deployment.ts";
-import { defineBoostsManifest } from "../src/boosts/manifest.ts";
+} from "@interest-protocol/blast-boosts-sdk/deployment";
+import { defineBoostsManifest } from "@interest-protocol/blast-boosts-sdk/manifest";
 import type {
   BoostsProductRead,
   BoostsTransport,
-} from "../src/boosts/types.ts";
+} from "@interest-protocol/blast-boosts-sdk/types";
 import { BOOSTS_FIXTURE_MANIFEST, fixtureRead } from "./boosts-fixtures.ts";
 
 test("validates all three active products and exact independent caps", async () => {

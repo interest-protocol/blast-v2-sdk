@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { after, test } from "node:test";
 import { setTimeout } from "node:timers/promises";
-import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { decodeAftermathDaoPresaleEvent } from "../src/presale/aftermath-dao.ts";
-import { PresaleClient } from "../src/presale/client.ts";
+import { decodeAftermathDaoPresaleEvent } from "@interest-protocol/blast-presale-sdk/aftermath-dao";
+import { PresaleClient } from "@interest-protocol/blast-presale-sdk/client";
 import {
   decodePresaleEvent,
   decodePresalePolicyEvent,
-} from "../src/presale/events.ts";
+} from "@interest-protocol/blast-presale-sdk/events";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { VENUE_LINEAGE } from "../test/fixtures/venue-deployment.ts";
 
 const fixture = JSON.parse(

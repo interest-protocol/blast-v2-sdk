@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bcs } from "@mysten/sui/bcs";
-import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
-import { ObjectError } from "@mysten/sui/client";
-import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 import {
   decodeNativeAftermathEvent,
   decodeNativeAftermathPoolCreationObject,
@@ -11,16 +7,20 @@ import {
   nativeAftermathEventBcs,
   nativeAftermathEventSpecs,
   nativeAftermathReservationOf,
-} from "../src/presale/aftermath-native.ts";
-import { PresaleClient } from "../src/presale/client.ts";
+} from "@interest-protocol/blast-presale-sdk/aftermath-native";
+import { PresaleClient } from "@interest-protocol/blast-presale-sdk/client";
 import type {
   NativeAftermathPresaleTerms,
   PresaleDeployment,
-} from "../src/presale/transactions.ts";
+} from "@interest-protocol/blast-presale-sdk/transactions";
 import {
   PresaleCalls,
   PresaleTransactions,
-} from "../src/presale/transactions.ts";
+} from "@interest-protocol/blast-presale-sdk/transactions";
+import { bcs } from "@mysten/sui/bcs";
+import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
+import { ObjectError } from "@mysten/sui/client";
+import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 import {
   assertBuildersMatchAbi,
   moveCallArguments,

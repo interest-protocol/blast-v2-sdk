@@ -1,25 +1,24 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-
+import { getAcl } from "@interest-protocol/blast-admin-sdk";
+import type { PresaleAdminRole } from "@interest-protocol/blast-presale-sdk";
+import {
+  aftermathPoolCoinTypes,
+  aftermathSaleTokenFirst,
+} from "@interest-protocol/blast-presale-sdk/aftermath";
+import {
+  AFTERMATH_LP_PACKAGE_DEPENDENCIES,
+  findAftermathLpCoinPublication,
+  publishAftermathLpCoin,
+  verifyAftermathLpCoin,
+} from "@interest-protocol/blast-presale-sdk/aftermath-lp";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import type { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import type { TransactionArgument } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
-import { getAcl } from "../../../src/admin/index.ts";
-import {
-  aftermathPoolCoinTypes,
-  aftermathSaleTokenFirst,
-} from "../../../src/presale/aftermath.ts";
-import {
-  AFTERMATH_LP_PACKAGE_DEPENDENCIES,
-  findAftermathLpCoinPublication,
-  publishAftermathLpCoin,
-  verifyAftermathLpCoin,
-} from "../../../src/presale/aftermath-lp.ts";
-import type { PresaleAdminRole } from "../../../src/presale/index.ts";
 import type { Executed } from "../chain.ts";
 import {
   balanceChange,

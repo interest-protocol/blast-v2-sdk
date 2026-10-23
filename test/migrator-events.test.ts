@@ -1,29 +1,28 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-
-import type { BcsType } from "@mysten/sui/bcs";
-import type { SuiClientTypes } from "@mysten/sui/client";
-import { normalizeSuiObjectId } from "@mysten/sui/utils";
-import type { LaunchpadEventKind } from "../src/launchpad/events.ts";
+import type { LaunchpadEventKind } from "@interest-protocol/blast-launchpad-sdk/events";
 import {
   decodeLaunchpadEvent,
   launchpadEventBcs,
   launchpadEventSpecs,
-} from "../src/launchpad/events.ts";
+} from "@interest-protocol/blast-launchpad-sdk/events";
 import type {
   MigratorEventKind,
   MigratorEventPackageIdentity,
-} from "../src/migrators/events.ts";
+} from "@interest-protocol/blast-migrators-sdk/events";
 import {
   decodeMigratorEvent,
   migratorEventBcs,
   migratorEventSpecs,
-} from "../src/migrators/events.ts";
+} from "@interest-protocol/blast-migrators-sdk/events";
 import {
   createLaunchpadProductProjection,
   reduceLaunchpadProductInput,
-} from "../src/migrators/reducer.ts";
+} from "@interest-protocol/blast-migrators-sdk/reducer";
+import type { BcsType } from "@mysten/sui/bcs";
+import type { SuiClientTypes } from "@mysten/sui/client";
+import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import { orderedEventFields } from "./abi.ts";
 
 const launchpadPackages = { originalPackageId: "0x122" };

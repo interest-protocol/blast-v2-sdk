@@ -42,7 +42,7 @@ The SDK must not:
   filesystem, or browser storage, and no persistence or locking policy. A
   workflow that needs durable state takes a store interface (for example
   `HolderRewardsStore`) that the deployment implements. Node tooling, such as
-  the file-backed operator CLI, lives in `operator/`, outside `src`.
+  the file-backed operator CLI, lives in `operator/`, outside package `src` trees.
 
 A preview may differ from an executed balance by atomic rounding dust or
 intervening transaction history. When they disagree, the executed balance and
@@ -51,6 +51,11 @@ preview.
 
 ## Working rules
 
+- Install and run repository checks from the root using the shared npm workspace
+  lockfile. Build workspaces before focused tests; tests import built exports.
+- Keep cross-package imports on declared package exports. The root workspace is
+  private; `packages/blast-sdk` owns legacy import compatibility. Package layout
+  and release order are documented in `README.md`.
 - Every derivation documents input/output units, rounding direction, and who
   receives the rounding remainder.
 - Mirror contract formulas exactly, including rounding, when previewing a value
@@ -58,10 +63,10 @@ preview.
 - Validate inputs only enough to reject impossible canonical states; do not
   duplicate contract admission policy that may legitimately change.
 - Run `npm run typecheck` and `npm test` before committing. Typecheck also
-  compiles `src` without Node types (`tsconfig.build.json`, which also emits
-  the published `dist`); only ES2023 and the globals in `types/runtime.d.ts`
-  are available there. Run `npm run check:package` after changing exports or
-  package metadata.
+  compiles each on-chain package without Node types using its build config; only
+  ES2023 and the globals in `types/runtime.d.ts` are available there. The REST
+  client uses its own portable Web API types. Run `npm run check:package` after
+  changing exports or package metadata.
 
 ## Agent skills
 

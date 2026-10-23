@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import type { SuiClientTypes } from "@mysten/sui/client";
-import { sha256 } from "@noble/hashes/sha2.js";
 import {
   decodeBoostsActivityEvent,
   queryBoostsActivity,
-} from "../src/boosts/events.ts";
-import { getBoostsProduct } from "../src/boosts/manifest.ts";
-import type { BoostsTransport } from "../src/boosts/types.ts";
+} from "@interest-protocol/blast-boosts-sdk/events";
+import { getBoostsProduct } from "@interest-protocol/blast-boosts-sdk/manifest";
+import type { BoostsTransport } from "@interest-protocol/blast-boosts-sdk/types";
+import type { SuiClientTypes } from "@mysten/sui/client";
+import { sha256 } from "@noble/hashes/sha2.js";
 import {
   ADAPTER_ORIGINAL,
   BOOSTS_FIXTURE_MANIFEST,

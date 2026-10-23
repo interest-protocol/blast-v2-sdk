@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
+import { BoostsClient } from "@interest-protocol/blast-boosts-sdk/client";
+import { createBoostsGrpcTransport } from "@interest-protocol/blast-boosts-sdk/grpc";
+import { getBoostsProduct } from "@interest-protocol/blast-boosts-sdk/manifest";
+import { boostsCapturedSnapshotBcs } from "@interest-protocol/blast-boosts-sdk/state";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiObjectId } from "@mysten/sui/utils";
-
-import { BoostsClient } from "../src/boosts/client.ts";
-import { createBoostsGrpcTransport } from "../src/boosts/grpc.ts";
-import { getBoostsProduct } from "../src/boosts/manifest.ts";
-import { boostsCapturedSnapshotBcs } from "../src/boosts/state.ts";
 import { assertBuildersMatchAbi, readAbi } from "./abi.ts";
 import {
   BOOSTS_FIXTURE_MANIFEST,

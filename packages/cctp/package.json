@@ -1,0 +1,46 @@
+{
+  "name": "@interest-protocol/blast-cctp-sdk",
+  "version": "0.0.0",
+  "description": "Blast cctp SDK",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interest-protocol/blast-v2-sdk.git",
+    "directory": "packages/cctp"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    "./abi": {
+      "types": "./dist/abi.d.ts",
+      "default": "./dist/abi.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node --eval \"fs.rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:package": "publint --strict && attw --pack . --profile esm-only",
+    "prepack": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "tiny-invariant": "^1.3.3",
+    "viem": "^2.57.4"
+  },
+  "peerDependencies": {
+    "@mysten/sui": "^2.26.2"
+  }
+}

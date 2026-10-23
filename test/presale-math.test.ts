@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { itemAt } from "../src/lib/arrays.ts";
-import { U64_MAX } from "../src/lib/integers.ts";
+import { itemAt } from "@interest-protocol/blast-core/arrays";
+import { U64_MAX } from "@interest-protocol/blast-core/integers";
 import type {
   CommitPreviewInput,
   PresaleCreationConfig,
-} from "../src/presale/math.ts";
+} from "@interest-protocol/blast-presale-sdk/math";
 import {
   allowlistedEligibility,
   apportion,
@@ -32,7 +32,7 @@ import {
   validateBluefinPresaleTier,
   validateFeeSplit,
   vestingTerms,
-} from "../src/presale/math.ts";
+} from "@interest-protocol/blast-presale-sdk/math";
 
 // Fixture values of `blast_presale_tests.move`.
 const RAISE = 1_000n;

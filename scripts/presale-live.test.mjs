@@ -2,24 +2,22 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { after, test } from "node:test";
-
-import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { Transaction } from "@mysten/sui/transactions";
-import { normalizeSuiAddress } from "@mysten/sui/utils";
-
-import { AdminCalls } from "../src/admin/transactions.ts";
-import { buildAllowlist } from "../src/presale/allowlist.ts";
-import { PresaleClient } from "../src/presale/client.ts";
+import { AdminCalls } from "@interest-protocol/blast-admin-sdk/transactions";
+import { buildAllowlist } from "@interest-protocol/blast-presale-sdk/allowlist";
+import { PresaleClient } from "@interest-protocol/blast-presale-sdk/client";
 import {
   allowlistedEligibility,
   openEligibility,
   uncappedForAnyone,
   uncappedForEligible,
-} from "../src/presale/math.ts";
+} from "@interest-protocol/blast-presale-sdk/math";
 import {
   PresaleCalls,
   PresaleTransactions,
-} from "../src/presale/transactions.ts";
+} from "@interest-protocol/blast-presale-sdk/transactions";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
+import { Transaction } from "@mysten/sui/transactions";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 import { VENUE_LINEAGE } from "../test/fixtures/venue-deployment.ts";
 
 const fixture = JSON.parse(

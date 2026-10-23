@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import type { SuiClientTypes } from "@mysten/sui/client";
-import type { Transaction } from "@mysten/sui/transactions";
-import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
-
 import {
   readCurrencyRegistration,
   readLaunchCreation,
   readMemePublication,
-} from "../src/launchpad/effects.ts";
-import { LaunchpadTransactions } from "../src/launchpad/transactions.ts";
+} from "@interest-protocol/blast-launchpad-sdk/effects";
+import { LaunchpadTransactions } from "@interest-protocol/blast-launchpad-sdk/transactions";
+import type { SuiClientTypes } from "@mysten/sui/client";
+import type { Transaction } from "@mysten/sui/transactions";
+import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 
 const launchpad = normalizeSuiObjectId("0x122");
 const memePackage = normalizeSuiObjectId("0xabc");

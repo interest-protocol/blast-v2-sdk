@@ -1,7 +1,7 @@
 import type {
   BlastDeploymentInput,
   DeploymentRuntimeObservation,
-} from "../../src/deployments/index.ts";
+} from "@interest-protocol/blast-deployments-sdk";
 import { NON_PRODUCTION_MANIFEST } from "./non-production-deployment.ts";
 
 /**

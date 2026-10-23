@@ -6,7 +6,7 @@ import {
   previewOpeningRoundDelivery,
   previewOpeningRoundSettlement,
   previewSell,
-} from "../src/launchpad/curve.ts";
+} from "@interest-protocol/blast-launchpad-sdk/curve";
 
 const baseState = {
   memeReserve: 800_000_000_000_000_000n,

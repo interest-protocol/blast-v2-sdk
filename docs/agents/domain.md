@@ -16,7 +16,9 @@ Use the single-context domain documentation layout for this repository.
 ├── CONTEXT.md
 ├── docs/
 │   └── adr/
-└── src/
+└── packages/
+    └── <sdk>/
+        └── src/
 ```
 
 Use glossary terms consistently in issues, specifications, tests, and code.

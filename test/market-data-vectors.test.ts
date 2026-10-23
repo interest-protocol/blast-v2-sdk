@@ -2,11 +2,18 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-
+import {
+  bluefinVenuePrice,
+  bluefinVenueTrade,
+} from "@interest-protocol/blast-deployments-sdk/bluefin-venue";
+import {
+  cetusVenuePrice,
+  cetusVenueTrade,
+} from "@interest-protocol/blast-deployments-sdk/cetus-venue";
 import type {
   LiveSupplyChange,
   LiveSupplyState,
-} from "../src/launchpad/market-data.ts";
+} from "@interest-protocol/blast-launchpad-sdk/market-data";
 import {
   applyLiveSupplyChange,
   curvePrice,
@@ -16,16 +23,8 @@ import {
   liveSupply,
   marketCap,
   parsePriceRational,
-} from "../src/launchpad/market-data.ts";
-import type { LaunchLifecycle } from "../src/launchpad/state.ts";
-import {
-  bluefinVenuePrice,
-  bluefinVenueTrade,
-} from "../src/migrators/bluefin-venue.ts";
-import {
-  cetusVenuePrice,
-  cetusVenueTrade,
-} from "../src/migrators/cetus-venue.ts";
+} from "@interest-protocol/blast-launchpad-sdk/market-data";
+import type { LaunchLifecycle } from "@interest-protocol/blast-launchpad-sdk/state";
 
 /**
  * blast-infra's `tests/vectors/market-data.sha256`, generated from the contracts

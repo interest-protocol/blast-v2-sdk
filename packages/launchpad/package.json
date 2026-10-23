@@ -1,0 +1,91 @@
+{
+  "name": "@interest-protocol/blast-launchpad-sdk",
+  "version": "0.0.0",
+  "description": "Blast launchpad SDK",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interest-protocol/blast-v2-sdk.git",
+    "directory": "packages/launchpad"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    "./allocation": {
+      "types": "./dist/allocation.d.ts",
+      "default": "./dist/allocation.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    },
+    "./creator-claim": {
+      "types": "./dist/creator-claim.d.ts",
+      "default": "./dist/creator-claim.js"
+    },
+    "./curve": {
+      "types": "./dist/curve.d.ts",
+      "default": "./dist/curve.js"
+    },
+    "./economics": {
+      "types": "./dist/economics.d.ts",
+      "default": "./dist/economics.js"
+    },
+    "./effects": {
+      "types": "./dist/effects.d.ts",
+      "default": "./dist/effects.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "default": "./dist/events.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./market-data": {
+      "types": "./dist/market-data.d.ts",
+      "default": "./dist/market-data.js"
+    },
+    "./reducer": {
+      "types": "./dist/reducer.d.ts",
+      "default": "./dist/reducer.js"
+    },
+    "./state": {
+      "types": "./dist/state.d.ts",
+      "default": "./dist/state.js"
+    },
+    "./template": {
+      "types": "./dist/template.d.ts",
+      "default": "./dist/template.js"
+    },
+    "./transactions": {
+      "types": "./dist/transactions.d.ts",
+      "default": "./dist/transactions.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node --eval \"fs.rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:package": "publint --strict && attw --pack . --profile esm-only",
+    "prepack": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@interest-protocol/blast-admin-sdk": "0.0.0",
+    "@interest-protocol/blast-core": "0.0.0"
+  },
+  "peerDependencies": {
+    "@mysten/move-bytecode-template": "^0.4.1",
+    "@mysten/sui": "^2.26.2"
+  }
+}

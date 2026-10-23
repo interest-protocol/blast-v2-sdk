@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
+import { finalizeCoinRegistration } from "@interest-protocol/blast-coin-sdk";
+import {
+  defineBlastDeployment,
+  presaleDeployment,
+} from "@interest-protocol/blast-deployments-sdk";
+import { PresaleTransactions } from "@interest-protocol/blast-presale-sdk";
+import type { CetusPoolCreation } from "@interest-protocol/blast-sdk/migrators";
+import { addCetusPoolWithLiquidity } from "@interest-protocol/blast-sdk/migrators";
 import { bcs } from "@mysten/sui/bcs";
 import type { TransactionArgument } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
@@ -9,15 +16,6 @@ import {
   normalizeStructTag,
   normalizeSuiAddress,
 } from "@mysten/sui/utils";
-
-import { finalizeCoinRegistration } from "../src/coin/index.ts";
-import {
-  defineBlastDeployment,
-  presaleDeployment,
-} from "../src/deployments/index.ts";
-import type { CetusPoolCreation } from "../src/migrators/index.ts";
-import { addCetusPoolWithLiquidity } from "../src/migrators/index.ts";
-import { PresaleTransactions } from "../src/presale/index.ts";
 import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
 
 const options: CetusPoolCreation = {

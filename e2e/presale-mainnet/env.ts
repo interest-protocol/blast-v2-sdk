@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { AdminTransactions, getAcl } from "@interest-protocol/blast-admin-sdk";
+import { PresaleClient } from "@interest-protocol/blast-presale-sdk";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
-import { AdminTransactions, getAcl } from "../../src/admin/index.ts";
-import { PresaleClient } from "../../src/presale/index.ts";
 import {
   assertFinalizeTicketAbi,
   parseConfig,

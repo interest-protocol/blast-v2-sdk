@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
+import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
-import type { PresaleDeployment } from "../../src/presale/transactions.ts";
 
 export type FinalConfig = {
   schemaVersion: 1;

@@ -4,38 +4,38 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
 import test from "node:test";
+import type { RewardManifest } from "@interest-protocol/blast-core/rewards/allocations";
+import {
+  buildRewardManifest,
+  MIGRATOR_REWARD_LEAF_DOMAIN,
+  PRESALE_REWARD_LEAF_DOMAIN,
+  validateRewardManifest,
+} from "@interest-protocol/blast-core/rewards/allocations";
+import type { HolderLedger } from "@interest-protocol/blast-core/rewards/holders";
+import {
+  createHolderLedger,
+  holderWeights,
+  resetHolderWeights,
+} from "@interest-protocol/blast-core/rewards/holders";
+import {
+  assertRewardRoundMatchesManifest,
+  pendingRewardAllocations,
+} from "@interest-protocol/blast-core/rewards/keeper";
+import { rewardRoundBcs } from "@interest-protocol/blast-core/rewards/state";
+import type { HolderRewardsStore } from "@interest-protocol/blast-holder-rewards-sdk/operator";
+import { holderRewardsOperator } from "@interest-protocol/blast-holder-rewards-sdk/operator";
+import { lpVaultBcs } from "@interest-protocol/blast-migrators-sdk/state";
+import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
+import {
+  presaleRewardRoundBcs,
+  presaleVaultBcs,
+} from "@interest-protocol/blast-presale-sdk/state";
 import { bcs } from "@mysten/sui/bcs";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { fromBase64, fromHex, normalizeSuiAddress } from "@mysten/sui/utils";
 import { withOperatorLock, writeOperatorJson } from "../operator/file-store.ts";
 import { runHolderRewardsOperator } from "../operator/holder-rewards.ts";
-import type { RewardManifest } from "../src/holder-rewards/allocations.ts";
-import {
-  buildRewardManifest,
-  MIGRATOR_REWARD_LEAF_DOMAIN,
-  PRESALE_REWARD_LEAF_DOMAIN,
-  validateRewardManifest,
-} from "../src/holder-rewards/allocations.ts";
-import type { HolderLedger } from "../src/holder-rewards/holders.ts";
-import {
-  createHolderLedger,
-  holderWeights,
-  resetHolderWeights,
-} from "../src/holder-rewards/holders.ts";
-import {
-  assertRewardRoundMatchesManifest,
-  pendingRewardAllocations,
-} from "../src/holder-rewards/keeper.ts";
-import type { HolderRewardsStore } from "../src/holder-rewards/operator.ts";
-import { holderRewardsOperator } from "../src/holder-rewards/operator.ts";
-import { rewardRoundBcs } from "../src/holder-rewards/state.ts";
-import { lpVaultBcs } from "../src/migrators/state.ts";
-import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
-import {
-  presaleRewardRoundBcs,
-  presaleVaultBcs,
-} from "../src/presale/state.ts";
 
 const manifest = buildRewardManifest({
   leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,

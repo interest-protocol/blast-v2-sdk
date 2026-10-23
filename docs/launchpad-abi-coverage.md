@@ -31,7 +31,7 @@ are separate artifacts because they are separately published, immutable
 packages that every product links, not part of the launchpad's upgrade
 lineage.
 
-`FROZEN_ABI` in `src/deployments/identity.ts` carries the launchpad artifact's
+`FROZEN_ABI` in `packages/deployments/src/identity.ts` carries the launchpad artifact's
 `contractsCommit` and the sha256 of the launchpad and Blast SUI artifacts. A
 deployment manifest must name the same values, or `evaluateProtocolAccess`
 disables signing (`abi-mismatch`); `test/deployment-identity.test.ts` keeps

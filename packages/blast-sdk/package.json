@@ -1,0 +1,101 @@
+{
+  "name": "@interest-protocol/blast-sdk",
+  "version": "0.0.0",
+  "description": "Deterministic off-chain previews, reads, and transaction builders for Blast V2",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interest-protocol/blast-v2-sdk.git",
+    "directory": "packages/blast-sdk"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./admin": {
+      "types": "./dist/admin.d.ts",
+      "default": "./dist/admin.js"
+    },
+    "./blast-sui": {
+      "types": "./dist/blast-sui.d.ts",
+      "default": "./dist/blast-sui.js"
+    },
+    "./deployments": {
+      "types": "./dist/deployments.d.ts",
+      "default": "./dist/deployments.js"
+    },
+    "./boosts": {
+      "types": "./dist/boosts.d.ts",
+      "default": "./dist/boosts.js"
+    },
+    "./coin": {
+      "types": "./dist/coin.d.ts",
+      "default": "./dist/coin.js"
+    },
+    "./cctp": {
+      "types": "./dist/cctp.d.ts",
+      "default": "./dist/cctp.js"
+    },
+    "./holder-rewards": {
+      "types": "./dist/holder-rewards.d.ts",
+      "default": "./dist/holder-rewards.js"
+    },
+    "./launchpad": {
+      "types": "./dist/launchpad.d.ts",
+      "default": "./dist/launchpad.js"
+    },
+    "./launchpad/template": {
+      "types": "./dist/launchpad/template.d.ts",
+      "default": "./dist/launchpad/template.js"
+    },
+    "./migrators": {
+      "types": "./dist/migrators.d.ts",
+      "default": "./dist/migrators.js"
+    },
+    "./partners": {
+      "types": "./dist/partners.d.ts",
+      "default": "./dist/partners.js"
+    },
+    "./presale": {
+      "types": "./dist/presale.d.ts",
+      "default": "./dist/presale.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node --eval \"fs.rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:package": "publint --strict && attw --pack . --profile esm-only",
+    "prepack": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@interest-protocol/blast-admin-sdk": "0.0.0",
+    "@interest-protocol/blast-sui-sdk": "0.0.0",
+    "@interest-protocol/blast-boosts-sdk": "0.0.0",
+    "@interest-protocol/blast-cctp-sdk": "0.0.0",
+    "@interest-protocol/blast-coin-sdk": "0.0.0",
+    "@interest-protocol/blast-core": "0.0.0",
+    "@interest-protocol/blast-deployments-sdk": "0.0.0",
+    "@interest-protocol/blast-holder-rewards-sdk": "0.0.0",
+    "@interest-protocol/blast-launchpad-sdk": "0.0.0",
+    "@interest-protocol/blast-migrators-sdk": "0.0.0",
+    "@interest-protocol/blast-partners-sdk": "0.0.0",
+    "@interest-protocol/blast-presale-sdk": "0.0.0"
+  },
+  "peerDependencies": {
+    "@mysten/move-bytecode-template": "^0.4.1",
+    "@mysten/sui": "^2.26.2"
+  }
+}

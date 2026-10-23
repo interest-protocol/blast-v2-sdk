@@ -1,20 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
+import { requireBasisPoints } from "@interest-protocol/blast-core/integers";
 import type {
   BlastSuiEventKind,
   BlastSuiEventPayloads,
   BlastSuiNativeFact,
   DecodedBlastSuiEvent,
   VaultCustodyEvent,
-} from "../src/blast-sui/index.ts";
+} from "@interest-protocol/blast-sui-sdk";
 import {
   blastSuiEventSpecs,
   createBlastSuiProjection,
   reduceBlastSuiInput,
-} from "../src/blast-sui/index.ts";
-import { requireBasisPoints } from "../src/lib/integers.ts";
+} from "@interest-protocol/blast-sui-sdk";
+import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
 
 const vaultId = normalizeSuiObjectId("0x1");
 const firstReceiptId = normalizeSuiObjectId("0x2");

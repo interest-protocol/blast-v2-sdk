@@ -1,26 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { bcs } from "@mysten/sui/bcs";
-import type { ClientWithCoreApi } from "@mysten/sui/client";
-import type { Transaction } from "@mysten/sui/transactions";
-import {
-  fromBase64,
-  fromHex,
-  normalizeSuiObjectId,
-  SUI_CLOCK_OBJECT_ID,
-} from "@mysten/sui/utils";
-
 import {
   defineBlastDeployment,
   deploymentFingerprint,
   evaluateProtocolAccess,
-} from "../src/deployments/index.ts";
-import type { BlastDeploymentInput } from "../src/deployments/types.ts";
+} from "@interest-protocol/blast-deployments-sdk";
 import type {
   BluefinProviderQuote,
   BluefinQuoteRequest,
-} from "../src/migrators/bluefin-venue.ts";
+} from "@interest-protocol/blast-deployments-sdk/bluefin-venue";
 import {
   BluefinVenueError,
   bluefinVenuePrice,
@@ -32,8 +20,18 @@ import {
   quoteBluefinSwap,
   reconcileBluefinSwap,
   resolveBluefinVenueRoute,
-} from "../src/migrators/bluefin-venue.ts";
-import * as migrators from "../src/migrators/index.ts";
+} from "@interest-protocol/blast-deployments-sdk/bluefin-venue";
+import type { BlastDeploymentInput } from "@interest-protocol/blast-deployments-sdk/types";
+import * as migrators from "@interest-protocol/blast-sdk/migrators";
+import { bcs } from "@mysten/sui/bcs";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import type { Transaction } from "@mysten/sui/transactions";
+import {
+  fromBase64,
+  fromHex,
+  normalizeSuiObjectId,
+  SUI_CLOCK_OBJECT_ID,
+} from "@mysten/sui/utils";
 import {
   BLAST_BLUEFIN,
   MAINNET_BLUEFIN_SWAPS,

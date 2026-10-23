@@ -1,0 +1,76 @@
+{
+  "name": "@interest-protocol/blast-deployments-sdk",
+  "version": "0.0.0",
+  "description": "Blast deployments SDK",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interest-protocol/blast-v2-sdk.git",
+    "directory": "packages/deployments"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    "./bluefin-venue": {
+      "types": "./dist/bluefin-venue.d.ts",
+      "default": "./dist/bluefin-venue.js"
+    },
+    "./cetus-venue": {
+      "types": "./dist/cetus-venue.d.ts",
+      "default": "./dist/cetus-venue.js"
+    },
+    "./identity": {
+      "types": "./dist/identity.d.ts",
+      "default": "./dist/identity.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./presets": {
+      "types": "./dist/presets.d.ts",
+      "default": "./dist/presets.js"
+    },
+    "./registry": {
+      "types": "./dist/registry.d.ts",
+      "default": "./dist/registry.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    },
+    "./venues": {
+      "types": "./dist/venues.d.ts",
+      "default": "./dist/venues.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node --eval \"fs.rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:package": "publint --strict && attw --pack . --profile esm-only",
+    "prepack": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@interest-protocol/blast-admin-sdk": "0.0.0",
+    "@interest-protocol/blast-sui-sdk": "0.0.0",
+    "@interest-protocol/blast-core": "0.0.0",
+    "@interest-protocol/blast-launchpad-sdk": "0.0.0",
+    "@interest-protocol/blast-migrators-sdk": "0.0.0",
+    "@interest-protocol/blast-partners-sdk": "0.0.0",
+    "@interest-protocol/blast-presale-sdk": "0.0.0",
+    "@noble/hashes": "2.4.0"
+  },
+  "peerDependencies": {
+    "@mysten/sui": "^2.26.2"
+  }
+}

@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { toHex } from "@mysten/sui/utils";
-
 import {
   encodeCreatorClaimAttestation,
   encodeCreatorClaimMessage,
-} from "../src/launchpad/creator-claim.ts";
+} from "@interest-protocol/blast-launchpad-sdk/creator-claim";
+import { toHex } from "@mysten/sui/utils";
 
 const accountCommitment = Uint8Array.from([
   0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00, 0xaa, 0xbb, 0xcc,

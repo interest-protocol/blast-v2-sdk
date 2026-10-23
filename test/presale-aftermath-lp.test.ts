@@ -1,16 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-
-import { deserialize, get_constants } from "@mysten/move-bytecode-template";
-import { bcs } from "@mysten/sui/bcs";
-import {
-  normalizeStructTag,
-  normalizeSuiAddress,
-  normalizeSuiObjectId,
-} from "@mysten/sui/utils";
-
-import type { AftermathLpCoinOptions } from "../src/presale/aftermath-lp.ts";
+import type { AftermathLpCoinOptions } from "@interest-protocol/blast-presale-sdk/aftermath-lp";
 import {
   AFTERMATH_AMM_PACKAGE_ID,
   AFTERMATH_LP_DECIMALS,
@@ -22,7 +13,14 @@ import {
   publishAftermathLpCoin,
   verifyAftermathLpCoin,
   verifyAftermathLpCoinPublication,
-} from "../src/presale/aftermath-lp.ts";
+} from "@interest-protocol/blast-presale-sdk/aftermath-lp";
+import { deserialize, get_constants } from "@mysten/move-bytecode-template";
+import { bcs } from "@mysten/sui/bcs";
+import {
+  normalizeStructTag,
+  normalizeSuiAddress,
+  normalizeSuiObjectId,
+} from "@mysten/sui/utils";
 import type { FakeLpCoinChain } from "./aftermath-lp.ts";
 import {
   AMM,

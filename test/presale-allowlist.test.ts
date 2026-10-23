@@ -1,21 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { fromHex, toHex } from "@mysten/sui/utils";
-import { blake2b } from "@noble/hashes/blake2.js";
-
+import { itemAt } from "@interest-protocol/blast-core/arrays";
 import {
   buildRewardManifest,
   MIGRATOR_REWARD_LEAF_DOMAIN,
   PRESALE_REWARD_LEAF_DOMAIN,
   verifyRewardProof,
-} from "../src/holder-rewards/allocations.ts";
-import { itemAt } from "../src/lib/arrays.ts";
+} from "@interest-protocol/blast-core/rewards/allocations";
 import {
   allowlistLeaf,
   buildAllowlist,
   verifyAllowlistProof,
-} from "../src/presale/allowlist.ts";
+} from "@interest-protocol/blast-presale-sdk/allowlist";
+import { fromHex, toHex } from "@mysten/sui/utils";
+import { blake2b } from "@noble/hashes/blake2.js";
 
 // Digests a Move unit test printed from `blast_presale::allowlist_leaf`,
 // `merkle_tree::node`, and `holder_rewards::leaf` at contracts 442116a.

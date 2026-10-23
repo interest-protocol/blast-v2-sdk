@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { BasisPoints } from "@interest-protocol/blast-core/integers";
+import {
+  requireBasisPoints,
+  U64_MAX,
+} from "@interest-protocol/blast-core/integers";
 import {
   blastGrossSuiOutDown,
   blastRedeemFeeUp,
@@ -9,15 +14,13 @@ import {
   poolTokensAtRateDown,
   poolTokensForSuiUp,
   suiAtRateDown,
-} from "../src/blast-sui/math.ts";
+} from "@interest-protocol/blast-sui-sdk/math";
 import {
   blastSuiDepositReceiptType,
   blastSuiType,
   funSuiType,
   normalizeBlastSuiDeployment,
-} from "../src/blast-sui/types.ts";
-import type { BasisPoints } from "../src/lib/integers.ts";
-import { requireBasisPoints, U64_MAX } from "../src/lib/integers.ts";
+} from "@interest-protocol/blast-sui-sdk/types";
 
 test("uses original package IDs for blast Sui type identities", () => {
   const originalPackageId = "0x422";

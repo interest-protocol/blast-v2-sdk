@@ -1,24 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
+import type { CoinSourceOptions } from "@interest-protocol/blast-core/coins";
+import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
+import { LaunchpadClient } from "@interest-protocol/blast-launchpad-sdk/client";
+import type { LaunchpadDeployment } from "@interest-protocol/blast-launchpad-sdk/transactions";
+import { LaunchpadTransactions } from "@interest-protocol/blast-launchpad-sdk/transactions";
+import { MigratorsClient } from "@interest-protocol/blast-migrators-sdk/client";
+import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
+import { MigratorTransactions } from "@interest-protocol/blast-migrators-sdk/transactions";
+import { PresaleClient } from "@interest-protocol/blast-presale-sdk/client";
+import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
+import { PresaleTransactions } from "@interest-protocol/blast-presale-sdk/transactions";
+import { BlastSuiClient } from "@interest-protocol/blast-sui-sdk/client";
+import { BlastSuiTransactions } from "@interest-protocol/blast-sui-sdk/transactions";
+import type { BlastSuiDeployment } from "@interest-protocol/blast-sui-sdk/types";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag } from "@mysten/sui/utils";
-
-import { BlastSuiClient } from "../src/blast-sui/client.ts";
-import { BlastSuiTransactions } from "../src/blast-sui/transactions.ts";
-import type { BlastSuiDeployment } from "../src/blast-sui/types.ts";
-import { LaunchpadClient } from "../src/launchpad/client.ts";
-import type { LaunchpadDeployment } from "../src/launchpad/transactions.ts";
-import { LaunchpadTransactions } from "../src/launchpad/transactions.ts";
-import type { CoinSourceOptions } from "../src/lib/coins.ts";
-import type { SharedObjectReference } from "../src/lib/sui.ts";
-import { MigratorsClient } from "../src/migrators/client.ts";
-import type { MigratorsDeployment } from "../src/migrators/transactions.ts";
-import { MigratorTransactions } from "../src/migrators/transactions.ts";
-import { PresaleClient } from "../src/presale/client.ts";
-import type { PresaleDeployment } from "../src/presale/transactions.ts";
-import { PresaleTransactions } from "../src/presale/transactions.ts";
 
 function shared<const Mutable extends boolean>(
   objectId: string,

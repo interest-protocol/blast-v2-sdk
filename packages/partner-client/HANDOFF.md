@@ -97,7 +97,8 @@ this versioned specification. No authenticated production reads were attempted.
 - `.env.example`: placeholder only.
 - `README.md`: quickstart, transport, pagination, retry and compatibility policies.
 - `HANDOFF.md`: this handoff.
-- `package.json`, `package-lock.json`: independent package and dev tooling only.
+- `package.json`: independent package and dev tooling; dependencies are locked
+  in the monorepo root `package-lock.json`.
 - `tsconfig.json`, `tsconfig.test.json`, `biome.json`: strict portable build/checks.
 
 Shared coordination artifact:

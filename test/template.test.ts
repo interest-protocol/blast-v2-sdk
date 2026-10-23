@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-
+import {
+  buildMemePackageBytecode,
+  deriveMemeTemplateIdentifiers,
+  memeAtomicSupply,
+} from "@interest-protocol/blast-launchpad-sdk/template";
+import { LaunchpadTransactions } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import { deserialize, get_constants } from "@mysten/move-bytecode-template";
 import { bcs } from "@mysten/sui/bcs";
 import {
@@ -9,13 +14,6 @@ import {
   normalizeSuiObjectId,
   SUI_FRAMEWORK_ADDRESS,
 } from "@mysten/sui/utils";
-
-import {
-  buildMemePackageBytecode,
-  deriveMemeTemplateIdentifiers,
-  memeAtomicSupply,
-} from "../src/launchpad/template.ts";
-import { LaunchpadTransactions } from "../src/launchpad/transactions.ts";
 
 const blastPackageId = normalizeSuiObjectId("0xb1a57");
 const latestBlastPackageId = normalizeSuiObjectId("0xb1a58");

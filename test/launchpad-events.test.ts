@@ -1,23 +1,22 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-
-import type { BcsType } from "@mysten/sui/bcs";
-import type { SuiClientTypes } from "@mysten/sui/client";
-import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import type {
   LaunchpadEventKind,
   LaunchpadEventPackageIdentity,
-} from "../src/launchpad/events.ts";
+} from "@interest-protocol/blast-launchpad-sdk/events";
 import {
   decodeLaunchpadEvent,
   launchpadEventBcs,
   launchpadEventSpecs,
-} from "../src/launchpad/events.ts";
+} from "@interest-protocol/blast-launchpad-sdk/events";
 import {
   createLaunchpadEventProjection,
   reduceLaunchpadEvent,
-} from "../src/launchpad/reducer.ts";
+} from "@interest-protocol/blast-launchpad-sdk/reducer";
+import type { BcsType } from "@mysten/sui/bcs";
+import type { SuiClientTypes } from "@mysten/sui/client";
+import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import { orderedEventFields } from "./abi.ts";
 
 const packages: LaunchpadEventPackageIdentity = {

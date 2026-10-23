@@ -1,0 +1,114 @@
+{
+  "name": "@interest-protocol/blast-core",
+  "version": "0.0.0",
+  "description": "Blast core SDK",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interest-protocol/blast-v2-sdk.git",
+    "directory": "packages/core"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    "./arrays": {
+      "types": "./dist/arrays.d.ts",
+      "default": "./dist/arrays.js"
+    },
+    "./bcs": {
+      "types": "./dist/bcs.d.ts",
+      "default": "./dist/bcs.js"
+    },
+    "./bytecode-template": {
+      "types": "./dist/bytecode-template.d.ts",
+      "default": "./dist/bytecode-template.js"
+    },
+    "./cetus": {
+      "types": "./dist/cetus.d.ts",
+      "default": "./dist/cetus.js"
+    },
+    "./coins": {
+      "types": "./dist/coins.d.ts",
+      "default": "./dist/coins.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "default": "./dist/events.js"
+    },
+    "./gas": {
+      "types": "./dist/gas.d.ts",
+      "default": "./dist/gas.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./integers": {
+      "types": "./dist/integers.d.ts",
+      "default": "./dist/integers.js"
+    },
+    "./merkle": {
+      "types": "./dist/merkle.d.ts",
+      "default": "./dist/merkle.js"
+    },
+    "./migration-math": {
+      "types": "./dist/migration-math.d.ts",
+      "default": "./dist/migration-math.js"
+    },
+    "./ptb": {
+      "types": "./dist/ptb.d.ts",
+      "default": "./dist/ptb.js"
+    },
+    "./rewards/allocations": {
+      "types": "./dist/rewards/allocations.d.ts",
+      "default": "./dist/rewards/allocations.js"
+    },
+    "./rewards/checkpoints": {
+      "types": "./dist/rewards/checkpoints.d.ts",
+      "default": "./dist/rewards/checkpoints.js"
+    },
+    "./rewards/holders": {
+      "types": "./dist/rewards/holders.d.ts",
+      "default": "./dist/rewards/holders.js"
+    },
+    "./rewards/keeper": {
+      "types": "./dist/rewards/keeper.d.ts",
+      "default": "./dist/rewards/keeper.js"
+    },
+    "./rewards/state": {
+      "types": "./dist/rewards/state.d.ts",
+      "default": "./dist/rewards/state.js"
+    },
+    "./sui": {
+      "types": "./dist/sui.d.ts",
+      "default": "./dist/sui.js"
+    },
+    "./timelock": {
+      "types": "./dist/timelock.d.ts",
+      "default": "./dist/timelock.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node --eval \"fs.rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:package": "publint --strict && attw --pack . --profile esm-only",
+    "prepack": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.4.0"
+  },
+  "peerDependencies": {
+    "@mysten/move-bytecode-template": "^0.4.1",
+    "@mysten/sui": "^2.26.2"
+  }
+}

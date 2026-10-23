@@ -1,18 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { bcs } from "@mysten/sui/bcs";
-import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
-import { ObjectError } from "@mysten/sui/client";
-import type { Transaction } from "@mysten/sui/transactions";
-import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
-
-import { definePresaleDeployment } from "../src/deployments/registry.ts";
-import type { SharedObjectReference } from "../src/lib/sui.ts";
+import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
+import { definePresaleDeployment } from "@interest-protocol/blast-deployments-sdk/registry";
 import type {
   AftermathPresaleEventKind,
   AftermathPresaleEventPayloads,
-} from "../src/presale/aftermath.ts";
+} from "@interest-protocol/blast-presale-sdk/aftermath";
 import {
   AFTERMATH_MAINNET_OBJECTS,
   aftermathPoolCoinTypes,
@@ -25,18 +18,23 @@ import {
   decodeAftermathPresaleEvent,
   defineAftermathPresaleDeployment,
   findAftermathPoolCreation,
-} from "../src/presale/aftermath.ts";
-import type { AftermathLpCoin } from "../src/presale/aftermath-lp.ts";
-import { PresaleClient } from "../src/presale/client.ts";
-import { openEligibility } from "../src/presale/math.ts";
+} from "@interest-protocol/blast-presale-sdk/aftermath";
+import type { AftermathLpCoin } from "@interest-protocol/blast-presale-sdk/aftermath-lp";
+import { PresaleClient } from "@interest-protocol/blast-presale-sdk/client";
+import { openEligibility } from "@interest-protocol/blast-presale-sdk/math";
 import type {
   AftermathPresaleTerms,
   PresaleDeployment,
-} from "../src/presale/transactions.ts";
+} from "@interest-protocol/blast-presale-sdk/transactions";
 import {
   PresaleCalls,
   PresaleTransactions,
-} from "../src/presale/transactions.ts";
+} from "@interest-protocol/blast-presale-sdk/transactions";
+import { bcs } from "@mysten/sui/bcs";
+import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
+import { ObjectError } from "@mysten/sui/client";
+import type { Transaction } from "@mysten/sui/transactions";
+import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 import {
   assertBuildersMatchAbi,
   moveCallArguments,
