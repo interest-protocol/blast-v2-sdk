@@ -6,7 +6,8 @@
       "test/**/*.ts",
       "operator/**/*.ts",
       "scripts/**/*.mjs",
-      "e2e/**/*.ts"
+      "e2e/**/*.ts",
+      "!!packages/partner-client"
     ]
   },
   "formatter": {
