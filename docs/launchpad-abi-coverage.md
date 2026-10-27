@@ -31,6 +31,15 @@ are separate artifacts because they are separately published, immutable
 packages that every product links, not part of the launchpad's upgrade
 lineage.
 
+The buyback `quote_in` amendment was made in `interest-protocol/blast-v2-move`,
+which now owns the launchpad and migrators source (its ADR 0134) and does not
+contain contracts `01d7659`, so `npm run check:abi` cannot read it yet. At
+blast-v2-move's import commit `73f532f` the checker's summaries of `launchpad`,
+`launch_ticket_template` and `migrators` equal this artifact's; at `f888097`
+they differ only by that parameter, and the migrators section was regenerated
+from that summary. The artifact keeps the contracts baseline until the checker
+reads launchpad sources from blast-v2-move.
+
 `FROZEN_ABI` in `packages/deployments/src/identity.ts` carries the launchpad artifact's
 `contractsCommit` and the sha256 of the launchpad and Blast SUI artifacts. A
 deployment manifest must name the same values, or `evaluateProtocolAccess`
@@ -100,7 +109,7 @@ and event declarations.
 | `creator_authority::new_address`, `new_account` | Compiled Meme template | `test/template.test.ts` | Template-internal constructors. |
 | Cetus `migrate`, `collect_fees`, `settle_and_update_fee_split` (type arguments `<Meme, Quote, CoinA, CoinB>`, ADR 0100) | `migrateCetus`, `collectCetusFees`, `settleAndUpdateCetusFeeSplit` with `memeSide` | `test/migrators-transactions.test.ts`, `test/abi-parity.test.ts` | Migration takes the mutable LP Burn `BurnManager`; collection and split updates take it immutably with the `Clock`, and the mutable Meme `Currency` to burn the burn share. |
 | Bluefin `migrate`, `collect_fees`, `settle_and_update_fee_split` | `migrateBluefin`, `collectBluefinFees`, `settleAndUpdateBluefinFeeSplit` | `test/migrators-transactions.test.ts` | Migration pays the exact SUI pool-creation fee, from gas unless `useGasCoin: false`; collection and split updates take the mutable Meme `Currency`. |
-| Cetus `buyback_and_burn` (same four type arguments), Bluefin `buyback_and_burn` | `buybackAndBurnCetus` with `memeSide`, `buybackAndBurnBluefin` | `test/migrators-transactions.test.ts` | Admin builders composing `sign_in<BuybackAdmin>`; the caller sets `minMemeOut` from an off-chain price. |
+| Cetus `buyback_and_burn` (same four type arguments), Bluefin `buyback_and_burn` | `buybackAndBurnCetus` with `memeSide`, `buybackAndBurnBluefin` | `test/migrators-transactions.test.ts` | Admin builders composing `sign_in<BuybackAdmin>`; the caller passes `quoteIn`, a positive `u64` amount of the vault's burn Quote to spend (the contract aborts with `EBuybackQuoteOutOfRange` above what it holds), and sets `minMemeOut` from an off-chain price. |
 | `vault::claim_creator_fees`, `vault::claim_protocol_fees` | `MigratorCalls` and `MigratorTransactions` claim methods | `test/migrators-transactions.test.ts` | The creator claim passes the read-only launch and its live `CurveFeeCap`; the residual claim composes `sign_in<TreasuryAdmin>`; both route the returned coins. |
 | `vault::claim_protocol_lp_fees_with_partner` (ADR 0107) | `claimProtocolLpFeesWithPartner`; `collectCetusFees` and `collectBluefinFees` with `partner` | `test/migrators-transactions.test.ts` | Permissionless: passes the read-only `LpFeePolicy`, the vault's `Partner`, and the `Clock`; pays the partner and the policy's destination, returns nothing, and pays nothing when the vault holds nothing, so collections on a partnered vault append it. |
 | `lp_fee_policy::set_default_shares`, `set_coin_shares`, `clear_coin_shares`, `set_protocol_destination` | `setLpFeeDefaultShares`, `setLpFeeCoinShares`, `clearLpFeeCoinShares`, `setLpFeeProtocolDestination` | `test/migrators-transactions.test.ts` | Admin builders composing `sign_in<FeeAdmin>` (shares) or `sign_in<TreasuryAdmin>` (destination) with the mutable `LpFeePolicy`. |

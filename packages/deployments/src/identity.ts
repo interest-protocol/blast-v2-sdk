@@ -36,7 +36,7 @@ export const FROZEN_ABI = Object.freeze({
   contractsCommit: "01d7659617abcd552cece6d05b9db409ec4ff2c0",
   artifacts: Object.freeze({
     launchpad:
-      "4c6cef053ed514f974ee9ced7a19cd09466389937bb51989192acc592a5edc03",
+      "65a3ebe90f65f5ecca86055182ffc9cfceff49fe972fdfc81b10b68a2f9adaa3",
     blastSui:
       "943236915134897494c1a1eb7f18d2a0ea8a012e6e657321abc5fc274ee3587f",
   }),
