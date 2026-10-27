@@ -32,7 +32,7 @@ import {
 } from "../launchpad/transactions.ts";
 import type { CoinSourceOptions } from "../lib/coins.ts";
 import { grossGasBudget } from "../lib/gas.ts";
-import { requireU64 } from "../lib/integers.ts";
+import { requirePositiveU64, requireU64 } from "../lib/integers.ts";
 import { deploymentObject, moveResults } from "../lib/ptb.ts";
 import type {
   SharedObjectIdentity,
@@ -406,10 +406,12 @@ export class MigratorCalls {
   }
 
   /**
-   * Swaps the vault's whole burn Quote for Meme in its Cetus pool and burns
-   * it, under a `BuybackAdmin` witness. Aborts unless the swap returns at least
-   * `minMemeOut`; set it from an off-chain price, since anyone can move the
-   * pool's price within a transaction. Unspent Quote waits for the next one.
+   * Swaps `quoteIn` atomic units of the vault's burn Quote for Meme in its
+   * Cetus pool and burns it, under a `BuybackAdmin` witness. The contract
+   * aborts with `EBuybackQuoteOutOfRange` when `quoteIn` exceeds the vault's
+   * burn Quote, and unless the swap returns at least `minMemeOut`; set it from
+   * an off-chain price, since anyone can move the pool's price within a
+   * transaction. Unspent Quote waits for the next buyback.
    */
   buybackAndBurnCetus(
     options: LaunchTypes &
@@ -419,11 +421,13 @@ export class MigratorCalls {
         adminWitness: TransactionObjectInput;
         memeCurrency: SharedObjectReference<true>;
         pool: SharedObjectReference<true>;
+        quoteIn: bigint;
         minMemeOut: bigint;
       },
   ) {
     const types = normalizeLaunchTypes(options);
     const memeSide = normalizeMemeSide(options.memeSide);
+    const quoteIn = requirePositiveU64("quoteIn", options.quoteIn);
     const minMemeOut = requireU64("minMemeOut", options.minMemeOut);
     return (tx: Transaction): void => {
       tx.moveCall({
@@ -436,6 +440,7 @@ export class MigratorCalls {
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "pool", options.pool, true),
+          tx.pure.u64(quoteIn),
           tx.pure.u64(minMemeOut),
           tx.object.clock(),
         ],
@@ -451,10 +456,12 @@ export class MigratorCalls {
       memeCurrency: SharedObjectReference<true>;
       bluefinConfig: SharedObjectReference<false>;
       pool: SharedObjectReference<true>;
+      quoteIn: bigint;
       minMemeOut: bigint;
     },
   ) {
     const types = normalizeLaunchTypes(options);
+    const quoteIn = requirePositiveU64("quoteIn", options.quoteIn);
     const minMemeOut = requireU64("minMemeOut", options.minMemeOut);
     return (tx: Transaction): void => {
       tx.moveCall({
@@ -467,6 +474,7 @@ export class MigratorCalls {
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
           sharedObject(tx, "pool", options.pool, true),
+          tx.pure.u64(quoteIn),
           tx.pure.u64(minMemeOut),
           tx.object.clock(),
         ],
