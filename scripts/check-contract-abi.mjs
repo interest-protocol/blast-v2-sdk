@@ -63,6 +63,7 @@ const artifactDeclarations = [
       "contracts ADR 0107: the LpVault inherits launch::partner_id and, when partnered, holds Blast's LP fees until anyone calls vault::claim_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesClaimed records each claim",
       "contracts ADR 0108: meme_template is launch_ticket_template with byte-identical bytecode, and the standalone coin_template, with no public functions, joins the generated-package templates",
       "contracts ADR 0089 (events review, 2026-10-14): the LpVault drops its fee-split generation; FeesCollected drops generation and FeeSplitChanged drops old_generation and new_generation, since native event order and the old/new split pair already sequence split changes",
+      "blast-v2-move f888097 (contracts ADR 0091 amended in place 2026-10-27): cetus::buyback_and_burn and bluefin::buyback_and_burn take quote_in: u64 before min_meme_out and spend exactly that much of the vault's burn Quote, aborting with vault EBuybackQuoteOutOfRange (code 4, replacing ENoBuybackQuote) on zero or more than is held",
     ],
   },
   {

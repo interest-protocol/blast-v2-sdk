@@ -10,8 +10,13 @@ import {
   MigratorCalls,
   MigratorTransactions,
 } from "@interest-protocol/blast-migrators-sdk/transactions";
+import { bcs } from "@mysten/sui/bcs";
 import type { Transaction } from "@mysten/sui/transactions";
-import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
+import {
+  fromBase64,
+  normalizeSuiObjectId,
+  SUI_CLOCK_OBJECT_ID,
+} from "@mysten/sui/utils";
 
 function shared<const Mutable extends boolean>(
   objectId: string,
@@ -302,7 +307,7 @@ test("settles and updates the fee split under the live curve-fee cap", () => {
   );
 });
 
-test("buys back and burns under admin sign-in with a minimum Meme out", () => {
+test("buys back and burns a chosen Quote amount under admin sign-in with a minimum Meme out", () => {
   const sdk = new MigratorTransactions(deployment);
   const cetusTx = sdk.buybackAndBurnCetus({
     ...types,
@@ -312,6 +317,7 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
     adminCapId: "0xad1",
     memeCurrency: shared("0xd", "22", true),
     pool: shared("0x73", "33", true),
+    quoteIn: 7n,
     minMemeOut: 5n,
   });
   assert.deepEqual(moveFunctions(cetusTx), [
@@ -329,8 +335,13 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
     "shared:0x70",
     "shared-mut:0x73",
     "pure",
+    "pure",
     CLOCK,
   ]);
+  assert.deepEqual(
+    buyback.arguments.slice(6, 8).map((argument) => pureU64(cetusTx, argument)),
+    [7n, 5n],
+  );
 
   const bluefinTx = sdk.buybackAndBurnBluefin({
     ...types,
@@ -339,34 +350,70 @@ test("buys back and burns under admin sign-in with a minimum Meme out", () => {
     memeCurrency: shared("0xd", "22", true),
     bluefinConfig: shared("0x80", "40", false),
     pool: shared("0x81", "41", true),
+    quoteIn: 3n,
     minMemeOut: 5n,
   });
+  const bluefinBuyback = moveCall(bluefinTx, "bluefin::buyback_and_burn");
+  assert.deepEqual(argumentKinds(bluefinTx, bluefinBuyback), [
+    "shared-mut:0xc",
+    "shared:0x61",
+    `Result:${commandIndex(bluefinTx, "blast_acl::sign_in")}`,
+    "shared-mut:0xd",
+    "shared:0x80",
+    "shared-mut:0x81",
+    "pure",
+    "pure",
+    CLOCK,
+  ]);
   assert.deepEqual(
-    argumentKinds(bluefinTx, moveCall(bluefinTx, "bluefin::buyback_and_burn")),
-    [
-      "shared-mut:0xc",
-      "shared:0x61",
-      `Result:${commandIndex(bluefinTx, "blast_acl::sign_in")}`,
-      "shared-mut:0xd",
-      "shared:0x80",
-      "shared-mut:0x81",
-      "pure",
-      CLOCK,
-    ],
+    bluefinBuyback.arguments
+      .slice(6, 8)
+      .map((argument) => pureU64(bluefinTx, argument)),
+    [3n, 5n],
   );
+  const bluefinOptions = {
+    ...types,
+    vault: shared("0xc", "20", true),
+    adminCapId: "0xad1",
+    memeCurrency: shared("0xd", "22", true),
+    bluefinConfig: shared("0x80", "40", false),
+    pool: shared("0x81", "41", true),
+  };
   assert.throws(
     () =>
       sdk.buybackAndBurnBluefin({
-        ...types,
-        vault: shared("0xc", "20", true),
-        adminCapId: "0xad1",
-        memeCurrency: shared("0xd", "22", true),
-        bluefinConfig: shared("0x80", "40", false),
-        pool: shared("0x81", "41", true),
+        ...bluefinOptions,
+        quoteIn: 1n,
         minMemeOut: -1n,
       }),
-    /u64/,
+    /minMemeOut must be a u64/,
   );
+  for (const quoteIn of [0n, -1n, 1n << 64n]) {
+    assert.throws(
+      () =>
+        sdk.buybackAndBurnBluefin({
+          ...bluefinOptions,
+          quoteIn,
+          minMemeOut: 0n,
+        }),
+      /quoteIn must be a positive u64/,
+    );
+    assert.throws(
+      () =>
+        sdk.buybackAndBurnCetus({
+          ...types,
+          cetusConfig: cetus.cetusConfig,
+          memeSide: "b",
+          vault: shared("0xc", "20", true),
+          adminCapId: "0xad1",
+          memeCurrency: shared("0xd", "22", true),
+          pool: shared("0x73", "33", true),
+          quoteIn,
+          minMemeOut: 0n,
+        }),
+      /quoteIn must be a positive u64/,
+    );
+  }
 });
 
 test("claims a partnered vault's held LP fees after each collection", () => {
@@ -617,6 +664,17 @@ function argumentKinds(
     if (argument.$kind !== "Input") return argument.$kind;
     return describeInput(tx.getData().inputs[argument.Input]);
   });
+}
+
+/** Decodes the pure `u64` input `argument` names. */
+function pureU64(
+  tx: Transaction,
+  argument: ReturnType<typeof moveCall>["arguments"][number] | undefined,
+): bigint {
+  assert.ok(argument?.$kind === "Input");
+  const input = tx.getData().inputs[argument.Input];
+  assert.ok(input?.$kind === "Pure");
+  return BigInt(bcs.u64().parse(fromBase64(input.Pure.bytes)));
 }
 
 function describeInput(
