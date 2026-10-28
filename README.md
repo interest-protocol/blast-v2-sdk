@@ -2,7 +2,9 @@
 
 Canonical contract source and generated Move references live in
 [interest-protocol/blast-v2-contracts](https://github.com/interest-protocol/blast-v2-contracts).
-The canonical mainnet SDK bindings use contract source commit
+The canonical MVR mainnet bindings use source metadata commit
+[`52effbc`](https://github.com/interest-protocol/blast-v2-contracts/tree/52effbcee5f12b727484ba0bb14f96aa5e2b4786/sui).
+The production Move implementation and frozen ABI remain at reviewed commit
 [`9255e78`](https://github.com/interest-protocol/blast-v2-contracts/tree/9255e78751b70b22d8f33cc6577df126a3434424/sui).
 
 This npm workspace contains independently publishable SDK packages. The root is
@@ -85,16 +87,19 @@ MIT license applies only to that package; see its release documentation.
 
 ## Canonical mainnet bindings
 
-The `0.1.0` on-chain packages bind the 2026-10-28 canonical publication:
+These sources bind the 2026-10-28 canonical MVR publication, which supersedes
+the earlier deployment shipped in npm `0.1.0`. The deployments and compatible
+SDK packages are prepared as unpublished `0.1.1`; the other product packages
+retain `0.1.0` because their ABI and implementation are unchanged:
 
-- Presale: `0xedb6ddae546132a66f5ae5a1c3561ef07bf892620bd78d90659aba962f7be0af`
-- Launchpad (bonding curve): `0x827e04933699da94c23d9ea529f184656738cacdb7962f03be791fd715b76743`
+- Presale: `0xb0279fbe54bfd1d920e985a4dba0916b2b73a5218514edeecb7b9dd30cf2863b`
+- Launchpad (bonding curve): `0x079a1b44c551613cbc63cc0406f8ff8d717407378dd6f17d43d9e1b3fd63a573`
 
-See the [SDK installation guide](https://docs.blast.fun/developers/sdk/) for
-standalone and compatible package installation, and the
-[canonical package and shared-object reference](https://docs.blast.fun/developers/addresses/)
-for all six package IDs, eleven SDK shared objects, three upgrade-custody objects,
-and their initial sharing versions.
+The [verified deployment record](https://github.com/interest-protocol/blast-v2-contracts/blob/390daf87bf42e4da40804d98c7fad64157967d80/deployments/sui/mainnet/2026-10-28-canonical-mvr-launch-stack.json)
+contains the five new package IDs, eleven SDK shared objects, three upgrade
+custody objects and their initial sharing versions. The immutable timelock
+dependency retains its existing identity. The public documentation and npm
+`0.1.0` describe the earlier publication until their follow-up releases.
 
 Use the call-ready constants from `@interest-protocol/blast-deployments-sdk`
 (or the compatible `@interest-protocol/blast-sdk/deployments` export):
@@ -118,6 +123,33 @@ The deployment package also exports `MAINNET_ADMIN_DEPLOYMENT`,
 Bindings include the matching ACL, partners, timelock and migrators, and all
 initial shared versions, including the activated version singletons.
 `npm run check:mainnet` verifies deployed interfaces and object identities.
+
+To resolve package addresses through MVR, use the installed Sui client's cached
+resolver:
+
+```ts
+import { resolveMainnetDeployments } from "@interest-protocol/blast-deployments-sdk";
+import { LaunchpadCalls } from "@interest-protocol/blast-launchpad-sdk";
+import { PresaleCalls } from "@interest-protocol/blast-presale-sdk";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
+
+const client = new SuiGrpcClient({
+  network: "mainnet",
+  baseUrl: "https://fullnode.mainnet.sui.io:443",
+});
+const deployments = await resolveMainnetDeployments(client);
+const launchpad = new LaunchpadCalls(deployments.launchpad);
+const presale = new PresaleCalls(deployments.presale);
+```
+
+`CANONICAL_MAINNET_MVR_NAMES` records the five `@blastpackages/<package>/1`
+names. Resolution verifies the reviewed package identities and rejects missing
+or mismatched results; it does not silently fall back to static addresses.
+Shared object IDs, initial sharing versions and original type identities stay
+bound to the deployment record. An unversioned MVR name follows native package
+upgrades, which can precede Blast's separate operational activation. A reviewed
+SDK release must update both the pin and deployment evidence before adopting
+an upgrade. See [Mysten's MVR client API](https://sdk.mystenlabs.com/sui/clients/querying#mvr).
 
 Package publication and custody do not attest to product configuration or venue
 readiness. `BLAST_DEPLOYMENTS` remains empty until product rollout verification

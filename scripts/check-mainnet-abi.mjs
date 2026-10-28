@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   CANONICAL_MAINNET_PACKAGES,
   CANONICAL_MAINNET_SHARED_OBJECTS,
+  resolveMainnetDeployments,
 } from "@interest-protocol/blast-deployments-sdk";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 
@@ -227,6 +228,8 @@ const client = new SuiGrpcClient({
   network: "mainnet",
   baseUrl: "https://fullnode.mainnet.sui.io:443",
 });
+await resolveMainnetDeployments(client);
+console.log("Verified all five pinned @blastpackages MVR resolutions.");
 const { chainIdentifier } = await client.core.getChainIdentifier();
 assert.equal(chainIdentifier, "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S");
 const shared = Object.entries(CANONICAL_MAINNET_SHARED_OBJECTS).flatMap(

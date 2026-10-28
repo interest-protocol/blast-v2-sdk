@@ -466,7 +466,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
   );
   assert.ok(nonProduction.includes("environment-mismatch"));
   assert.ok(nonProduction.includes("unreleased-deployment"));
-  assert.ok(!nonProduction.includes("sdk-unreleased"));
+  assert.ok(nonProduction.includes("sdk-unreleased"));
 
   const relabeled = {
     ...manifest,
@@ -489,13 +489,12 @@ test("never lets a non-production or fixture identity sign in production", () =>
   );
 });
 
-test("a published SDK still fails closed until the production deployment is released", () => {
+test("the pending MVR SDK release keeps production signing disabled", () => {
   assert.deepEqual(BLAST_DEPLOYMENTS, {});
   assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
-  assert.equal(SDK_RELEASE.version, "0.1.0");
-  assert.equal(SDK_RELEASE.published, true);
-  assert.ok(SDK_RELEASE.commit);
-  assert.match(SDK_RELEASE.commit, /^[0-9a-f]{40}$/);
+  assert.equal(SDK_RELEASE.version, "0.1.1");
+  assert.equal(SDK_RELEASE.published, false);
+  assert.equal(SDK_RELEASE.commit, null);
   const packageJson = JSON.parse(
     readFileSync(
       new URL("../packages/blast-sdk/package.json", import.meta.url),
@@ -504,7 +503,7 @@ test("a published SDK still fails closed until the production deployment is rele
   );
   assert.equal(SDK_RELEASE.name, packageJson.name);
   assert.equal(SDK_RELEASE.version, packageJson.version);
-  assert.equal(packageJson.version, "0.1.0");
+  assert.equal(packageJson.version, "0.1.1");
 
   const production = productionManifest();
   const runtime = runtimeFor(production);
@@ -525,7 +524,7 @@ test("a published SDK still fails closed until the production deployment is rele
     }).signing,
     "enabled",
   );
-  // Publishing the SDK does not attest to product rollout or admit a foreign manifest.
+  // The pending build cannot sign in production without release and rollout evidence.
   assert.deepEqual(
     codes(
       evaluateProtocolAccess({
@@ -534,7 +533,7 @@ test("a published SDK still fails closed until the production deployment is rele
         runtime,
       }),
     ),
-    ["unreleased-deployment", "sdk-mismatch"],
+    ["unreleased-deployment", "sdk-unreleased", "sdk-mismatch"],
   );
   for (const sdk of [
     { ...released, published: false },

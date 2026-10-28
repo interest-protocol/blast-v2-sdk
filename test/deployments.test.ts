@@ -274,7 +274,7 @@ test("registers the canonical activated presale release", () => {
   assert.deepEqual(getPresaleDeployment("mainnet"), MAINNET_PRESALE_DEPLOYMENT);
   assert.equal(
     getPresaleDeployment("mainnet").packageId,
-    "0xedb6ddae546132a66f5ae5a1c3561ef07bf892620bd78d90659aba962f7be0af",
+    "0xb0279fbe54bfd1d920e985a4dba0916b2b73a5218514edeecb7b9dd30cf2863b",
   );
   assert.equal(
     getPresaleDeployment("mainnet").packageVersion.initialSharedVersion,
