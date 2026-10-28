@@ -1,5 +1,10 @@
 # Blast SDK monorepo
 
+Canonical contract source and generated Move references live in
+[interest-protocol/blast-v2-contracts](https://github.com/interest-protocol/blast-v2-contracts).
+The canonical mainnet SDK bindings use contract source commit
+[`9255e78`](https://github.com/interest-protocol/blast-v2-contracts/tree/9255e78751b70b22d8f33cc6577df126a3434424/sui).
+
 This npm workspace contains independently publishable SDK packages. The root is
 private; `packages/blast-sdk` preserves the original `@interest-protocol/blast-sdk`
 package, including its root export and every existing subpath. Existing users

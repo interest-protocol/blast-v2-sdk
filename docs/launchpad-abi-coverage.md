@@ -2,6 +2,10 @@
 
 ## Baseline
 
+The contract repository is
+[interest-protocol/blast-v2-contracts](https://github.com/interest-protocol/blast-v2-contracts).
+Use its pinned source and generated `llms/` references when reviewing an ABI.
+
 `scripts/check-contract-abi.mjs` summarizes each package of a contracts
 checkout (`npm run check:abi` reads `../blast-v2-contracts` (or `BLAST_CONTRACTS_DIR`); CI checks out the commit
 pinned in `.github/workflows/check.yml`) and compares it with the frozen
