@@ -5,6 +5,7 @@ import test from "node:test";
 import type {
   DeploymentRuntimeObservation,
   SdkRelease,
+  VenueAvailability,
 } from "@interest-protocol/blast-deployments-sdk";
 import {
   BLAST_DEPLOYMENTS,
@@ -465,7 +466,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
     }),
   );
   assert.ok(nonProduction.includes("environment-mismatch"));
-  assert.ok(nonProduction.includes("unreleased-deployment"));
+  assert.ok(nonProduction.includes("foreign-lineage"));
   assert.equal(nonProduction.includes("sdk-unreleased"), false);
 
   const relabeled = {
@@ -490,7 +491,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
 });
 
 test("the published MVR SDK still requires a released deployment and matching runtime", () => {
-  assert.deepEqual(BLAST_DEPLOYMENTS, {});
+  assert.ok(BLAST_DEPLOYMENTS.mainnet);
   assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
   assert.equal(SDK_RELEASE.version, "0.1.1");
   assert.equal(SDK_RELEASE.published, true);
@@ -534,7 +535,7 @@ test("the published MVR SDK still requires a released deployment and matching ru
         runtime,
       }),
     ),
-    ["unreleased-deployment", "sdk-mismatch"],
+    ["foreign-lineage", "sdk-mismatch"],
   );
   for (const sdk of [
     { ...released, published: false },
@@ -711,3 +712,37 @@ function productionManifest() {
     },
   } as const satisfies BlastDeploymentInput;
 }
+
+test("the registered canonical mainnet stack signs against a matching runtime", () => {
+  const released = BLAST_DEPLOYMENTS.mainnet;
+  assert.ok(released);
+  const access = evaluateProtocolAccess({
+    manifest: released,
+    mode: "production",
+    runtime: runtimeFor(released as unknown as BlastDeploymentInput),
+  });
+  assert.equal(access.signing, "enabled");
+  // No route is admitted until the multisig configures migrators.venueConfig.
+  for (const venue of ["cetus", "bluefin"] as const) {
+    const availability: VenueAvailability = access.venues[venue];
+    assert.deepEqual(
+      availability.available
+        ? []
+        : availability.reasons.map((entry) => entry.code),
+      ["venue-not-routed"],
+    );
+  }
+  assert.notEqual(
+    codes(
+      evaluateProtocolAccess({
+        manifest: released,
+        mode: "production",
+        runtime: {
+          ...runtimeFor(released as unknown as BlastDeploymentInput),
+          chainIdentifier: "69WiPg3DAQiwdxfncX6wYQ2siKwAe6L9BZthQea3JNMD",
+        },
+      }),
+    ).length,
+    0,
+  );
+});

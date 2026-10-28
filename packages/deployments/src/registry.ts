@@ -15,7 +15,12 @@ import type { PartnersDeployment } from "@interest-protocol/blast-partners-sdk/t
 import { defineAftermathPresaleDeployment } from "@interest-protocol/blast-presale-sdk/aftermath";
 import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
 import { isValidTransactionDigest } from "@mysten/sui/utils";
-import { MAINNET_PRESALE_DEPLOYMENT } from "./mainnet.ts";
+import {
+  CANONICAL_MAINNET_PACKAGES,
+  CANONICAL_MAINNET_SHARED_OBJECTS,
+  MAINNET_PRESALE_DEPLOYMENT,
+} from "./mainnet.ts";
+import { FROZEN_ABI, SDK_RELEASE } from "./release.ts";
 import type {
   BlastDeployment,
   BlastDeploymentInput,
@@ -84,13 +89,111 @@ export class DeploymentManifestError extends Error {
   }
 }
 
+/** When the canonical stack's publish and custody were verified on mainnet. */
+const CANONICAL_MAINNET_VERIFIED_AT_MS = "1793192079762";
+
 /**
- * Canonical released deployments, the only production identities. Release
- * tooling adds an entry only after it validates publish effects and
- * post-deploy evidence on the target chain; until then every network is
- * absent and production signing stays disabled.
+ * Publish and seal transactions of the canonical stack, with their
+ * checkpoints. Source: contracts
+ * `deployments/sui/mainnet/2026-10-28-canonical-mvr-launch-stack.json`.
  */
-export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({});
+const CANONICAL_MAINNET_TRANSACTIONS = {
+  admin: ["9QPC85nBDcKvM3NsWc24qMYGQ9LSMP54eJVWgkAwArBh", "339055856"],
+  partners: ["76Z3rwhNrZxTz5th9Knu8QgCqveCAxMzWGrmeWGBLbYY", "339055930"],
+  launchpad: ["3Qqc2DnEDucks229oFvRWBzkxD6DhDw44ZbToqZKHQHo", "339055980"],
+  launchpadSeal: ["DAnSTzxqR3B79NfdrWrfh5V3ATPewpEh7XsbzKgmDWMD", "339056167"],
+  migrators: ["4UXZoF2hwvhz5WxA8tC6nMqYYD8RaPsBdqVsnsRLRqsw", "339056212"],
+  migratorsSeal: ["6hMFmSSYT4T8JKwe9gvxqdAHCRzF7H8mS21NskCjTTuN", "339056352"],
+  presale: ["FdT1SiwhaXHzscenaYzmhNwr7GDRGmGrCXFsUfmx2T2P", "339056472"],
+  presaleSeal: ["HrWaVvBh2ukHj3foiwXbreMCNwkFc8LCueTMXzqTRPfE", "339056547"],
+} as const;
+
+/**
+ * Canonical released deployments, the only production identities. Mainnet is
+ * the 2026-10-28 canonical stack, with the Cetus and Bluefin revisions its
+ * migrators package links against. Routes are the tiers the multisig admits
+ * in `migrators.venueConfig`; a venue without one stays unavailable.
+ */
+export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({
+  mainnet: defineBlastDeployment({
+    schemaVersion: BLAST_DEPLOYMENT_SCHEMA_VERSION,
+    environment: "production",
+    network: "mainnet",
+    chainIdentifier: SUI_CHAIN_IDENTIFIERS.mainnet,
+    explorer: { baseUrl: "https://suiscan.xyz/mainnet" },
+    packages: {
+      ...CANONICAL_MAINNET_PACKAGES,
+      // Cetus CLMM revision 15, Cetus LP Burn revision 8, Bluefin Spot revision 17.
+      cetusClmm: {
+        packageId:
+          "0x260693ec785a6e6c9d81d58c7d2ff72f1288ae0fa6a9725abe05a6478b11f084",
+        originalPackageId:
+          "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb",
+      },
+      cetusLpBurn: {
+        packageId:
+          "0xc4aabc874f5060d3147d8f74c14e3a8a1f9f8d92edea138a51635395ed167cd9",
+        originalPackageId:
+          "0x12d73de9a6bc3cb658ec9dc0fe7de2662be1cea5c76c092fcc3606048cdbac27",
+      },
+      bluefinSpot: {
+        packageId:
+          "0xd075338d105482f1527cbfd363d6413558f184dec36d9138a70261e87f486e9c",
+        originalPackageId:
+          "0x3492c874c1e3b3e2984e8c41b589e642d4d0a5d6459e5a9cfc2d52fd7c89c267",
+      },
+    },
+    sharedObjects: {
+      ...CANONICAL_MAINNET_SHARED_OBJECTS,
+      cetus: {
+        config: {
+          objectId:
+            "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f",
+          initialSharedVersion: "1574190",
+        },
+        pools: {
+          objectId:
+            "0xf699e7f2276f5c9a75944b37a0c5b5d9ddfd2471bf6242483b03ab2887d198d0",
+          initialSharedVersion: "1574190",
+        },
+        burnManager: {
+          objectId:
+            "0x1d94aa32518d0cb00f9de6ed60d450c9a2090761f326752ffad06b2e9404f845",
+          initialSharedVersion: "327723159",
+        },
+      },
+      bluefin: {
+        config: {
+          objectId:
+            "0x03db251ba509a8d5d8777b6338836082335d93eecbdd09a11e190a1cff51c352",
+          initialSharedVersion: "406496849",
+        },
+      },
+    },
+    // Filled from `migrators.venueConfig` once the multisig admits the tiers.
+    routes: [],
+    source: {
+      contractsCommit: FROZEN_ABI.contractsCommit,
+      abi: FROZEN_ABI.artifacts,
+    },
+    release: {
+      transactions: Object.fromEntries(
+        Object.entries(CANONICAL_MAINNET_TRANSACTIONS).map(
+          ([step, [digest]]) => [step, digest],
+        ),
+      ),
+    },
+    sdk: { version: SDK_RELEASE.version, commit: SDK_RELEASE.commit ?? "" },
+    evidence: Object.entries(CANONICAL_MAINNET_TRANSACTIONS).map(
+      ([step, [transactionDigest, checkpoint]]) => ({
+        check: `${step}-published`,
+        transactionDigest,
+        checkpoint,
+        verifiedAtMs: CANONICAL_MAINNET_VERIFIED_AT_MS,
+      }),
+    ),
+  }),
+});
 
 const PRESALE_SHARED_OBJECTS = SHARED_OBJECT_KEYS.presale;
 
