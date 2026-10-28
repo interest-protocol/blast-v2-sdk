@@ -111,8 +111,8 @@ const CANONICAL_MAINNET_TRANSACTIONS = {
 /**
  * Canonical released deployments, the only production identities. Mainnet is
  * the 2026-10-28 canonical stack, with the Cetus and Bluefin revisions its
- * migrators package links against. Routes are the tiers the multisig admits
- * in `migrators.venueConfig`; a venue without one stays unavailable.
+ * migrators package links against. Routes are the pool tiers creators may
+ * pick; the launchpad's `LaunchConfig` admits both venues' witnesses.
  */
 export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({
   mainnet: defineBlastDeployment({
@@ -170,8 +170,52 @@ export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({
         },
       },
     },
-    // Filled from `migrators.venueConfig` once the multisig admits the tiers.
-    routes: [],
+    // Owner, 2026-10-28: every tier the DEXes support. Cetus: each tick spacing its mainnet
+    // `GlobalConfig.fee_tiers` registers. Bluefin has no registry, so the same pairs within its
+    // bounds (fee rate at most 20,000). Fee rates are parts per million.
+    routes: [
+      {
+        venue: "cetus",
+        tiers: [
+          { tickSpacing: 2, feeRate: "100" },
+          { tickSpacing: 4, feeRate: "200" },
+          { tickSpacing: 6, feeRate: "300" },
+          { tickSpacing: 8, feeRate: "400" },
+          { tickSpacing: 10, feeRate: "500" },
+          { tickSpacing: 20, feeRate: "1000" },
+          { tickSpacing: 30, feeRate: "1500" },
+          { tickSpacing: 40, feeRate: "2000" },
+          { tickSpacing: 60, feeRate: "2500" },
+          { tickSpacing: 80, feeRate: "3000" },
+          { tickSpacing: 100, feeRate: "4000" },
+          { tickSpacing: 120, feeRate: "6000" },
+          { tickSpacing: 160, feeRate: "8000" },
+          { tickSpacing: 200, feeRate: "10000" },
+          { tickSpacing: 220, feeRate: "20000" },
+          { tickSpacing: 260, feeRate: "40000" },
+        ],
+      },
+      {
+        venue: "bluefin",
+        tiers: [
+          { tickSpacing: 2, feeRate: "100" },
+          { tickSpacing: 4, feeRate: "200" },
+          { tickSpacing: 6, feeRate: "300" },
+          { tickSpacing: 8, feeRate: "400" },
+          { tickSpacing: 10, feeRate: "500" },
+          { tickSpacing: 20, feeRate: "1000" },
+          { tickSpacing: 30, feeRate: "1500" },
+          { tickSpacing: 40, feeRate: "2000" },
+          { tickSpacing: 60, feeRate: "2500" },
+          { tickSpacing: 80, feeRate: "3000" },
+          { tickSpacing: 100, feeRate: "4000" },
+          { tickSpacing: 120, feeRate: "6000" },
+          { tickSpacing: 160, feeRate: "8000" },
+          { tickSpacing: 200, feeRate: "10000" },
+          { tickSpacing: 220, feeRate: "20000" },
+        ],
+      },
+    ],
     source: {
       contractsCommit: FROZEN_ABI.contractsCommit,
       abi: FROZEN_ABI.artifacts,

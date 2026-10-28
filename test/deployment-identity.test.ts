@@ -722,15 +722,9 @@ test("the registered canonical mainnet stack signs against a matching runtime", 
     runtime: runtimeFor(released as unknown as BlastDeploymentInput),
   });
   assert.equal(access.signing, "enabled");
-  // No route is admitted until the multisig configures migrators.venueConfig.
   for (const venue of ["cetus", "bluefin"] as const) {
     const availability: VenueAvailability = access.venues[venue];
-    assert.deepEqual(
-      availability.available
-        ? []
-        : availability.reasons.map((entry) => entry.code),
-      ["venue-not-routed"],
-    );
+    assert.deepEqual(availability, { available: true });
   }
   assert.notEqual(
     codes(
