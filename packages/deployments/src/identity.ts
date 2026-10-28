@@ -54,15 +54,15 @@ export type SdkRelease = Readonly<{
 }>;
 
 /**
- * The shipped SDK state: private, unversioned, and without a release commit.
- * Production signing requires a published, versioned SDK with a commit, so it
- * stays disabled for this build.
+ * Release identity of the validated sources published in the 0.1.0 packages.
+ * Production signing separately requires a released deployment and runtime
+ * verification; canonical package bindings alone do not authorize it.
  */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
   version: "0.1.0",
-  published: false,
-  commit: null,
+  published: true,
+  commit: "3ddcef54116f9458586e3bf77fbf6c0f680de09e",
 });
 
 export type DeploymentRejectionCode =
