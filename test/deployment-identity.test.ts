@@ -466,7 +466,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
   );
   assert.ok(nonProduction.includes("environment-mismatch"));
   assert.ok(nonProduction.includes("unreleased-deployment"));
-  assert.ok(nonProduction.includes("sdk-unreleased"));
+  assert.equal(nonProduction.includes("sdk-unreleased"), false);
 
   const relabeled = {
     ...manifest,
@@ -489,12 +489,13 @@ test("never lets a non-production or fixture identity sign in production", () =>
   );
 });
 
-test("the pending MVR SDK release keeps production signing disabled", () => {
+test("the published MVR SDK still requires a released deployment and matching runtime", () => {
   assert.deepEqual(BLAST_DEPLOYMENTS, {});
   assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
   assert.equal(SDK_RELEASE.version, "0.1.1");
-  assert.equal(SDK_RELEASE.published, false);
-  assert.equal(SDK_RELEASE.commit, null);
+  assert.equal(SDK_RELEASE.published, true);
+  assert.ok(SDK_RELEASE.commit);
+  assert.match(SDK_RELEASE.commit, /^[0-9a-f]{40}$/);
   const packageJson = JSON.parse(
     readFileSync(
       new URL("../packages/blast-sdk/package.json", import.meta.url),
@@ -524,7 +525,7 @@ test("the pending MVR SDK release keeps production signing disabled", () => {
     }).signing,
     "enabled",
   );
-  // The pending build cannot sign in production without release and rollout evidence.
+  // Publication alone cannot sign for an unregistered deployment or another SDK identity.
   assert.deepEqual(
     codes(
       evaluateProtocolAccess({
@@ -533,7 +534,7 @@ test("the pending MVR SDK release keeps production signing disabled", () => {
         runtime,
       }),
     ),
-    ["unreleased-deployment", "sdk-unreleased", "sdk-mismatch"],
+    ["unreleased-deployment", "sdk-mismatch"],
   );
   for (const sdk of [
     { ...released, published: false },
