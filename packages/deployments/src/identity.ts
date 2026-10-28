@@ -33,10 +33,10 @@ import { SHARED_OBJECT_GROUPS, VENUE_IDENTITY_SETS } from "./types.ts";
  * ABI mismatch.
  */
 export const FROZEN_ABI = Object.freeze({
-  contractsCommit: "01d7659617abcd552cece6d05b9db409ec4ff2c0",
+  contractsCommit: "9255e78751b70b22d8f33cc6577df126a3434424",
   artifacts: Object.freeze({
     launchpad:
-      "65a3ebe90f65f5ecca86055182ffc9cfceff49fe972fdfc81b10b68a2f9adaa3",
+      "7ca399dd441aeaa8f63df5e67e44cb7d93a678a47410e4c86193baede5661887",
     blastSui:
       "943236915134897494c1a1eb7f18d2a0ea8a012e6e657321abc5fc274ee3587f",
   }),
@@ -54,15 +54,15 @@ export type SdkRelease = Readonly<{
 }>;
 
 /**
- * The shipped SDK state: private, unversioned, and without a release commit.
- * Production signing requires a published, versioned SDK with a commit, so it
- * stays disabled for this build.
+ * Release identity of the validated sources published in the 0.1.0 packages.
+ * Production signing separately requires a released deployment and runtime
+ * verification; canonical package bindings alone do not authorize it.
  */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
-  version: "0.0.0",
-  published: false,
-  commit: null,
+  version: "0.1.0",
+  published: true,
+  commit: "3ddcef54116f9458586e3bf77fbf6c0f680de09e",
 });
 
 export type DeploymentRejectionCode =

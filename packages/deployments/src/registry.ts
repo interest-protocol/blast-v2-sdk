@@ -15,6 +15,7 @@ import type { PartnersDeployment } from "@interest-protocol/blast-partners-sdk/t
 import { defineAftermathPresaleDeployment } from "@interest-protocol/blast-presale-sdk/aftermath";
 import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
 import { isValidTransactionDigest } from "@mysten/sui/utils";
+import { MAINNET_PRESALE_DEPLOYMENT } from "./mainnet.ts";
 import type {
   BlastDeployment,
   BlastDeploymentInput,
@@ -128,12 +129,14 @@ export function definePresaleDeployment(
 }
 
 /**
- * Versioned presale releases require a fresh publication and activation. The
- * earlier unversioned mainnet package cannot accept this SDK's version argument.
+ * Canonical versioned presale, freshly published and activated on mainnet.
+ * Venue admission and economics remain governed by the live policies.
  */
 export const BLAST_PRESALE_DEPLOYMENTS: Readonly<
   Partial<Record<BlastNetwork, PresaleDeployment>>
-> = Object.freeze({});
+> = Object.freeze({
+  mainnet: definePresaleDeployment(MAINNET_PRESALE_DEPLOYMENT),
+});
 
 /**
  * The released presale deployment on `network`: the complete Blast release's

@@ -1,12 +1,17 @@
 # Blast SDK monorepo
 
+Canonical contract source and generated Move references live in
+[interest-protocol/blast-v2-contracts](https://github.com/interest-protocol/blast-v2-contracts).
+The canonical mainnet SDK bindings use contract source commit
+[`9255e78`](https://github.com/interest-protocol/blast-v2-contracts/tree/9255e78751b70b22d8f33cc6577df126a3434424/sui).
+
 This npm workspace contains independently publishable SDK packages. The root is
 private; `packages/blast-sdk` preserves the original `@interest-protocol/blast-sdk`
 package, including its root export and every existing subpath. Existing users
 can keep their imports. New users can install only the SDK they need:
 
 ```sh
-npm install @interest-protocol/blast-presale-sdk @mysten/sui @mysten/move-bytecode-template
+npm install @interest-protocol/blast-presale-sdk@0.1.0 @interest-protocol/blast-deployments-sdk@0.1.0 @mysten/sui@2.26.2 @mysten/move-bytecode-template@0.4.1
 ```
 
 ```ts
@@ -74,9 +79,51 @@ contracts checkout and Sui CLI. Publish dependencies before their dependants
 in the order listed in the root `workspaces` array, using
 `npm publish --workspace <package-name>`. A change to a product used by the
 compatibility package also requires updating that package's dependency range.
-The root itself cannot be published. This conversion does not publish or change
-the existing unreleased protocol identity (`SDK_RELEASE`). The REST client's
+The root itself cannot be published. The first on-chain SDK release is `0.1.0`;
+its `SDK_RELEASE` stamp records the validated source commit. The REST client's
 MIT license applies only to that package; see its release documentation.
+
+## Canonical mainnet bindings
+
+The `0.1.0` on-chain packages bind the 2026-10-28 canonical publication:
+
+- Presale: `0xedb6ddae546132a66f5ae5a1c3561ef07bf892620bd78d90659aba962f7be0af`
+- Launchpad (bonding curve): `0x827e04933699da94c23d9ea529f184656738cacdb7962f03be791fd715b76743`
+
+See the [SDK installation guide](https://docs.blast.fun/developers/sdk/) for
+standalone and compatible package installation, and the
+[canonical package and shared-object reference](https://docs.blast.fun/developers/addresses/)
+for all six package IDs, eleven SDK shared objects, three upgrade-custody objects,
+and their initial sharing versions.
+
+Use the call-ready constants from `@interest-protocol/blast-deployments-sdk`
+(or the compatible `@interest-protocol/blast-sdk/deployments` export):
+
+```ts
+import {
+  MAINNET_LAUNCHPAD_DEPLOYMENT,
+  MAINNET_MIGRATORS_DEPLOYMENT,
+  getPresaleDeployment,
+} from "@interest-protocol/blast-deployments-sdk";
+import { LaunchpadCalls } from "@interest-protocol/blast-launchpad-sdk";
+import { PresaleCalls } from "@interest-protocol/blast-presale-sdk";
+
+const launchpad = new LaunchpadCalls(MAINNET_LAUNCHPAD_DEPLOYMENT);
+const presale = new PresaleCalls(getPresaleDeployment("mainnet"));
+```
+
+The deployment package also exports `MAINNET_ADMIN_DEPLOYMENT`,
+`MAINNET_PARTNERS_DEPLOYMENT`, `MAINNET_PRESALE_DEPLOYMENT`,
+`CANONICAL_MAINNET_PACKAGES`, and `CANONICAL_MAINNET_SHARED_OBJECTS`.
+Bindings include the matching ACL, partners, timelock and migrators, and all
+initial shared versions, including the activated version singletons.
+`npm run check:mainnet` verifies deployed interfaces and object identities.
+
+Package publication and custody do not attest to product configuration or venue
+readiness. `BLAST_DEPLOYMENTS` remains empty until product rollout verification
+is complete; `evaluateProtocolAccess` therefore continues to reject production
+signing. Standalone bindings construct calls with the canonical identities;
+live policies determine whether an operation is admitted.
 
 ## Compatible Blast SDK
 
@@ -87,7 +134,7 @@ second source of truth for protocol execution. See
 contracts commits.
 
 ```sh
-npm install @interest-protocol/blast-sdk @mysten/sui @mysten/move-bytecode-template
+npm install @interest-protocol/blast-sdk@0.1.0 @mysten/sui@2.26.2 @mysten/move-bytecode-template@0.4.1
 ```
 
 The package is ESM with TypeScript declarations and has no Node, browser, or

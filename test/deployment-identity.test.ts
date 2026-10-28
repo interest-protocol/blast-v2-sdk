@@ -466,7 +466,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
   );
   assert.ok(nonProduction.includes("environment-mismatch"));
   assert.ok(nonProduction.includes("unreleased-deployment"));
-  assert.ok(nonProduction.includes("sdk-unreleased"));
+  assert.ok(!nonProduction.includes("sdk-unreleased"));
 
   const relabeled = {
     ...manifest,
@@ -489,14 +489,13 @@ test("never lets a non-production or fixture identity sign in production", () =>
   );
 });
 
-test("fails closed while the production registry or SDK release identity is absent", () => {
+test("a published SDK still fails closed until the production deployment is released", () => {
   assert.deepEqual(BLAST_DEPLOYMENTS, {});
-  assert.deepEqual(SDK_RELEASE, {
-    name: "@interest-protocol/blast-sdk",
-    version: "0.0.0",
-    published: false,
-    commit: null,
-  });
+  assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
+  assert.equal(SDK_RELEASE.version, "0.1.0");
+  assert.equal(SDK_RELEASE.published, true);
+  assert.ok(SDK_RELEASE.commit);
+  assert.match(SDK_RELEASE.commit, /^[0-9a-f]{40}$/);
   const packageJson = JSON.parse(
     readFileSync(
       new URL("../packages/blast-sdk/package.json", import.meta.url),
@@ -505,9 +504,7 @@ test("fails closed while the production registry or SDK release identity is abse
   );
   assert.equal(SDK_RELEASE.name, packageJson.name);
   assert.equal(SDK_RELEASE.version, packageJson.version);
-  // The package is publishable but unreleased while its version is 0.0.0.
-  assert.equal(packageJson.version, "0.0.0");
-  assert.equal(SDK_RELEASE.published, false);
+  assert.equal(packageJson.version, "0.1.0");
 
   const production = productionManifest();
   const runtime = runtimeFor(production);
@@ -528,7 +525,7 @@ test("fails closed while the production registry or SDK release identity is abse
     }).signing,
     "enabled",
   );
-  // The shipped registry is empty and the shipped SDK is private and unversioned.
+  // Publishing the SDK does not attest to product rollout or admit a foreign manifest.
   assert.deepEqual(
     codes(
       evaluateProtocolAccess({
@@ -537,7 +534,7 @@ test("fails closed while the production registry or SDK release identity is abse
         runtime,
       }),
     ),
-    ["unreleased-deployment", "sdk-unreleased", "sdk-mismatch"],
+    ["unreleased-deployment", "sdk-mismatch"],
   );
   for (const sdk of [
     { ...released, published: false },
@@ -600,7 +597,7 @@ test("pins the frozen ABI identity to the committed artifacts", () => {
     createHash("sha256").update(bytes).digest("hex");
   assert.equal(
     FROZEN_ABI.contractsCommit,
-    "01d7659617abcd552cece6d05b9db409ec4ff2c0",
+    "9255e78751b70b22d8f33cc6577df126a3434424",
   );
   assert.equal(
     FROZEN_ABI.artifacts.launchpad,
@@ -612,16 +609,23 @@ test("pins the frozen ABI identity to the committed artifacts", () => {
   );
   for (const name of [
     "production-launchpad-v1.json",
-    "production-blast-sui-v1.json",
     "production-presale-v1.json",
     "production-admin-v1.json",
     "production-partners-v1.json",
+  ]) {
+    assert.equal(
+      JSON.parse(artifact(name).toString("utf8")).baseline.contractsCommit,
+      FROZEN_ABI.contractsCommit,
+    );
+  }
+  for (const name of [
+    "production-blast-sui-v1.json",
     "production-aftermath-dao-presale-v1.json",
     "production-boosts-v1.json",
   ]) {
     assert.equal(
       JSON.parse(artifact(name).toString("utf8")).baseline.contractsCommit,
-      FROZEN_ABI.contractsCommit,
+      "01d7659617abcd552cece6d05b9db409ec4ff2c0",
     );
   }
   assert.equal("unresolvedRoutes" in FROZEN_ABI, false);

@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Deterministic off-chain previews, reads, and transaction builders for Blast V2",
   "type": "module",
   "repository": {
@@ -81,18 +81,18 @@
     "access": "public"
   },
   "dependencies": {
-    "@interest-protocol/blast-admin-sdk": "0.0.0",
-    "@interest-protocol/blast-sui-sdk": "0.0.0",
-    "@interest-protocol/blast-boosts-sdk": "0.0.0",
-    "@interest-protocol/blast-cctp-sdk": "0.0.0",
-    "@interest-protocol/blast-coin-sdk": "0.0.0",
-    "@interest-protocol/blast-core": "0.0.0",
-    "@interest-protocol/blast-deployments-sdk": "0.0.0",
-    "@interest-protocol/blast-holder-rewards-sdk": "0.0.0",
-    "@interest-protocol/blast-launchpad-sdk": "0.0.0",
-    "@interest-protocol/blast-migrators-sdk": "0.0.0",
-    "@interest-protocol/blast-partners-sdk": "0.0.0",
-    "@interest-protocol/blast-presale-sdk": "0.0.0"
+    "@interest-protocol/blast-admin-sdk": "0.1.0",
+    "@interest-protocol/blast-sui-sdk": "0.1.0",
+    "@interest-protocol/blast-boosts-sdk": "0.1.0",
+    "@interest-protocol/blast-cctp-sdk": "0.1.0",
+    "@interest-protocol/blast-coin-sdk": "0.1.0",
+    "@interest-protocol/blast-core": "0.1.0",
+    "@interest-protocol/blast-deployments-sdk": "0.1.0",
+    "@interest-protocol/blast-holder-rewards-sdk": "0.1.0",
+    "@interest-protocol/blast-launchpad-sdk": "0.1.0",
+    "@interest-protocol/blast-migrators-sdk": "0.1.0",
+    "@interest-protocol/blast-partners-sdk": "0.1.0",
+    "@interest-protocol/blast-presale-sdk": "0.1.0"
   },
   "peerDependencies": {
     "@mysten/move-bytecode-template": "^0.4.1",

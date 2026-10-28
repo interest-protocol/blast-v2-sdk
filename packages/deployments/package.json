@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-deployments-sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Blast deployments SDK",
   "type": "module",
   "repository": {
@@ -61,13 +61,13 @@
     "access": "public"
   },
   "dependencies": {
-    "@interest-protocol/blast-admin-sdk": "0.0.0",
-    "@interest-protocol/blast-sui-sdk": "0.0.0",
-    "@interest-protocol/blast-core": "0.0.0",
-    "@interest-protocol/blast-launchpad-sdk": "0.0.0",
-    "@interest-protocol/blast-migrators-sdk": "0.0.0",
-    "@interest-protocol/blast-partners-sdk": "0.0.0",
-    "@interest-protocol/blast-presale-sdk": "0.0.0",
+    "@interest-protocol/blast-admin-sdk": "0.1.0",
+    "@interest-protocol/blast-sui-sdk": "0.1.0",
+    "@interest-protocol/blast-core": "0.1.0",
+    "@interest-protocol/blast-launchpad-sdk": "0.1.0",
+    "@interest-protocol/blast-migrators-sdk": "0.1.0",
+    "@interest-protocol/blast-partners-sdk": "0.1.0",
+    "@interest-protocol/blast-presale-sdk": "0.1.0",
     "@noble/hashes": "2.4.0"
   },
   "peerDependencies": {

@@ -24,7 +24,7 @@ for (const [subpath, expected] of Object.entries(baseline)) {
   const actual = await import(specifier);
   assert.deepEqual(
     Object.fromEntries(
-      Object.entries(actual).map(([key, value]) => [key, typeof value]),
+      Object.keys(expected).map((key) => [key, typeof actual[key]]),
     ),
     expected,
     `${specifier} changed its legacy exports`,

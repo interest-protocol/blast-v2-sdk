@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-coin-sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Blast coin SDK",
   "type": "module",
   "repository": {
@@ -41,7 +41,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@interest-protocol/blast-core": "0.0.0"
+    "@interest-protocol/blast-core": "0.1.0"
   },
   "peerDependencies": {
     "@mysten/move-bytecode-template": "^0.4.1",

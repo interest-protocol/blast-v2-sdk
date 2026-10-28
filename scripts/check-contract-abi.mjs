@@ -22,10 +22,15 @@ const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
 };
+const CANONICAL_BASELINE = {
+  contractsCommit: "9255e78751b70b22d8f33cc6577df126a3434424",
+  workingTreeDifferedAtFreeze: false,
+};
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
   {
     path: "production-launchpad-v1.json",
+    baseline: CANONICAL_BASELINE,
     packages: [
       ["launchpad", "launchpad", "blast_fun"],
       [
@@ -68,7 +73,8 @@ const artifactDeclarations = [
   },
   {
     path: "production-presale-v1.json",
-    // Versioned presale source; fresh publication and activation pending.
+    baseline: CANONICAL_BASELINE,
+    // Canonical versioned presale published and activated on mainnet.
     approvedAbiAmendments: [
       "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
       "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness",
@@ -92,6 +98,7 @@ const artifactDeclarations = [
   },
   {
     path: "production-admin-v1.json",
+    baseline: CANONICAL_BASELINE,
     approvedAbiAmendments: [
       "contracts ADR 0097 (amended 2026-10-02, admin package review): upgrade_custody::publisher borrows the sealed Publisher, operational_version::new takes the package's one-time witness, and advance takes the versioned object's UID",
     ],
@@ -99,6 +106,7 @@ const artifactDeclarations = [
   },
   {
     path: "production-partners-v1.json",
+    baseline: CANONICAL_BASELINE,
     approvedAbiAmendments: [
       "contracts ADR 0095 (amended 2026-10-11): pay takes TxContext and transfers the partner's share as a coin",
     ],

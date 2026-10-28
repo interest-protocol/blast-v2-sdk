@@ -2,6 +2,10 @@
 
 ## Baseline
 
+The contract repository is
+[interest-protocol/blast-v2-contracts](https://github.com/interest-protocol/blast-v2-contracts).
+Use its pinned source and generated `llms/` references when reviewing an ABI.
+
 `scripts/check-contract-abi.mjs` summarizes each package of a contracts
 checkout (`npm run check:abi` reads `../blast-v2-contracts` (or `BLAST_CONTRACTS_DIR`); CI checks out the commit
 pinned in `.github/workflows/check.yml`) and compares it with the frozen
@@ -21,24 +25,17 @@ artifacts:
 - `abi/production-aftermath-dao-presale-v1.json` for the standalone Aftermath DAO presale vendor; and
 - `abi/production-boosts-v1.json` for Boosts core, products, and its Aftermath adapter.
 
-The shared baseline and CI checkout now use contracts
-`01d7659617abcd552cece6d05b9db409ec4ff2c0`. Every artifact uses this same source revision. Each
-artifact records `baseline.contractsCommit`, the commit it was frozen at,
-and `baseline.approvedAbiAmendments`, every reviewed contracts change to its
-ABI since that baseline, and Sui CLI `1.77.2-51d177ad7d65`, which the checker
-verifies before it runs `sui move summary`. `blast_admin` and `blast_partners`
-are separate artifacts because they are separately published, immutable
-packages that every product links, not part of the launchpad's upgrade
-lineage.
+The canonical launchpad, migrators, presale, ACL and partners artifacts use
+contracts `9255e78751b70b22d8f33cc6577df126a3434424`, the source of the
+2026-10-28 mainnet publication. CI checks out that revision with full history.
+Blast SUI, Boosts and the separate Aftermath DAO vendor retain their independently
+frozen `01d7659617abcd552cece6d05b9db409ec4ff2c0` revision. Each artifact
+records its own source and the pinned Sui CLI `1.77.2-51d177ad7d65`.
 
-The buyback `quote_in` amendment was made in `interest-protocol/blast-v2-move`,
-which now owns the launchpad and migrators source (its ADR 0134) and does not
-contain contracts `01d7659`, so `npm run check:abi` cannot read it yet. At
-blast-v2-move's import commit `73f532f` the checker's summaries of `launchpad`,
-`launch_ticket_template` and `migrators` equal this artifact's; at `f888097`
-they differ only by that parameter, and the migrators section was regenerated
-from that summary. The artifact keeps the contracts baseline until the checker
-reads launchpad sources from blast-v2-move.
+`npm run check:mainnet` additionally compares all five canonical packages against
+mainnet GraphQL: every public function's full signature, generic constraints,
+BCS struct/event fields in order, abilities, phantom parameters, and enum variants.
+The canonical migrators include the explicit buyback `quote_in` argument.
 
 `FROZEN_ABI` in `packages/deployments/src/identity.ts` carries the launchpad artifact's
 `contractsCommit` and the sha256 of the launchpad and Blast SUI artifacts. A
@@ -259,17 +256,21 @@ that fact.
 | Blast SUI `package_admin::{new,share,add_capability,authorize_upgrade,commit_upgrade_and_advance,restrict_to_additive,make_immutable}` and `blast_sui_domain::package_admin_role` | Intentional package-bootstrap/upgrade exclusion. Administration uses `blast_admin::acl` with the `BLAST_SUI_DOMAIN` witness; the Blast SUI package no longer has its own `acl` module or ACL/upgrade events. `PackageCapabilityAdded` remains decoded. |
 | Blast SUI `vault::create` and `deposit_receipt::create_display` | Intentional deployment-bootstrap exclusions. No deployment transaction is built or executed. |
 | Contract changes for SDK convenience | Excluded. This slice changes no Move logic. |
-| Deployment/publish/upgrade/configuration actions and placeholder IDs | Excluded. The registry has no deployment record or placeholder identity. |
+| Deployment/publish/upgrade/configuration actions and placeholder IDs | Excluded. Canonical mainnet call bindings are exported separately; the complete production registry remains gated. |
 | Indexer process, database, API, backend, frontend wiring, and duplicated API formulas | Excluded. Protocol arithmetic remains in this SDK. |
 
 ## Remaining work before the indexer and API
 
-No Blast V2 contract is deployed for this release, and the SDK has no canonical
-network deployment entry. Before an indexer or API begins:
+The canonical launchpad, migrators, presale, ACL and partners were published on
+Sui mainnet on 28 October 2026. SDK `0.1.0` exports their real package and
+shared-object bindings; see the [installation and binding guide](../README.md#canonical-mainnet-bindings)
+and the [canonical deployment reference](https://docs.blast.fun/developers/addresses/).
+Publication, activation and custody verification do not establish product rollout
+readiness. Before an indexer or API begins:
 
-1. Publish the required packages and generated Meme package through an approved
-   release process. Capture real current/original package IDs and shared-object
-   identities from successful publication effects.
+1. Use the canonical current/original package IDs and initial shared versions
+   exported by `@interest-protocol/blast-deployments-sdk`. Each launch's generated
+   Meme package remains a separate publication; capture its own effects and lineage.
 2. Verify returned, transferred, shared, and deleted object identities from
    transaction effects, including tickets, capabilities, receipts, vaults, and
    package-administration objects.
