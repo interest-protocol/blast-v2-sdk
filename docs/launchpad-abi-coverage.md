@@ -252,17 +252,21 @@ that fact.
 | Blast SUI `package_admin::{new,share,add_capability,authorize_upgrade,commit_upgrade_and_advance,restrict_to_additive,make_immutable}` and `blast_sui_domain::package_admin_role` | Intentional package-bootstrap/upgrade exclusion. Administration uses `blast_admin::acl` with the `BLAST_SUI_DOMAIN` witness; the Blast SUI package no longer has its own `acl` module or ACL/upgrade events. `PackageCapabilityAdded` remains decoded. |
 | Blast SUI `vault::create` and `deposit_receipt::create_display` | Intentional deployment-bootstrap exclusions. No deployment transaction is built or executed. |
 | Contract changes for SDK convenience | Excluded. This slice changes no Move logic. |
-| Deployment/publish/upgrade/configuration actions and placeholder IDs | Excluded. The registry has no deployment record or placeholder identity. |
+| Deployment/publish/upgrade/configuration actions and placeholder IDs | Excluded. Canonical mainnet call bindings are exported separately; the complete production registry remains gated. |
 | Indexer process, database, API, backend, frontend wiring, and duplicated API formulas | Excluded. Protocol arithmetic remains in this SDK. |
 
 ## Remaining work before the indexer and API
 
-No Blast V2 contract is deployed for this release, and the SDK has no canonical
-network deployment entry. Before an indexer or API begins:
+The canonical launchpad, migrators, presale, ACL and partners were published on
+Sui mainnet on 28 October 2026. SDK `0.1.0` exports their real package and
+shared-object bindings; see the [installation and binding guide](../README.md#canonical-mainnet-bindings)
+and the [canonical deployment reference](https://docs.blast.fun/developers/addresses/).
+Publication, activation and custody verification do not establish product rollout
+readiness. Before an indexer or API begins:
 
-1. Publish the required packages and generated Meme package through an approved
-   release process. Capture real current/original package IDs and shared-object
-   identities from successful publication effects.
+1. Use the canonical current/original package IDs and initial shared versions
+   exported by `@interest-protocol/blast-deployments-sdk`. Each launch's generated
+   Meme package remains a separate publication; capture its own effects and lineage.
 2. Verify returned, transferred, shared, and deleted object identities from
    transaction effects, including tickets, capabilities, receipts, vaults, and
    package-administration objects.

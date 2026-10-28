@@ -6,7 +6,7 @@ package, including its root export and every existing subpath. Existing users
 can keep their imports. New users can install only the SDK they need:
 
 ```sh
-npm install @interest-protocol/blast-presale-sdk @mysten/sui @mysten/move-bytecode-template
+npm install @interest-protocol/blast-presale-sdk@0.1.0 @interest-protocol/blast-deployments-sdk@0.1.0 @mysten/sui@2.26.2 @mysten/move-bytecode-template@0.4.1
 ```
 
 ```ts
@@ -85,6 +85,12 @@ The `0.1.0` on-chain packages bind the 2026-10-28 canonical publication:
 - Presale: `0xedb6ddae546132a66f5ae5a1c3561ef07bf892620bd78d90659aba962f7be0af`
 - Launchpad (bonding curve): `0x827e04933699da94c23d9ea529f184656738cacdb7962f03be791fd715b76743`
 
+See the [SDK installation guide](https://docs.blast.fun/developers/sdk/) for
+standalone and compatible package installation, and the
+[canonical package and shared-object reference](https://docs.blast.fun/developers/addresses/)
+for all six package IDs, eleven SDK shared objects, three upgrade-custody objects,
+and their initial sharing versions.
+
 Use the call-ready constants from `@interest-protocol/blast-deployments-sdk`
 (or the compatible `@interest-protocol/blast-sdk/deployments` export):
 
@@ -123,7 +129,7 @@ second source of truth for protocol execution. See
 contracts commits.
 
 ```sh
-npm install @interest-protocol/blast-sdk @mysten/sui @mysten/move-bytecode-template
+npm install @interest-protocol/blast-sdk@0.1.0 @mysten/sui@2.26.2 @mysten/move-bytecode-template@0.4.1
 ```
 
 The package is ESM with TypeScript declarations and has no Node, browser, or
