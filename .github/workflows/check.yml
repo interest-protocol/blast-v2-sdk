@@ -38,7 +38,7 @@ jobs:
         with:
           repository: interest-protocol/blast-v2-contracts
           # Bump with every `npm run check:abi:write`.
-          ref: 01d7659617abcd552cece6d05b9db409ec4ff2c0
+          ref: 9255e78751b70b22d8f33cc6577df126a3434424
           fetch-depth: 0
           token: ${{ secrets.CONTRACTS_READ_TOKEN }}
           path: blast-v2-contracts

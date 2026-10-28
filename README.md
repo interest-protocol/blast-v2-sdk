@@ -74,9 +74,45 @@ contracts checkout and Sui CLI. Publish dependencies before their dependants
 in the order listed in the root `workspaces` array, using
 `npm publish --workspace <package-name>`. A change to a product used by the
 compatibility package also requires updating that package's dependency range.
-The root itself cannot be published. This conversion does not publish or change
-the existing unreleased protocol identity (`SDK_RELEASE`). The REST client's
+The root itself cannot be published. The first on-chain SDK release is `0.1.0`;
+its `SDK_RELEASE` stamp records the validated source commit. The REST client's
 MIT license applies only to that package; see its release documentation.
+
+## Canonical mainnet bindings
+
+The `0.1.0` on-chain packages bind the 2026-10-28 canonical publication:
+
+- Presale: `0xedb6ddae546132a66f5ae5a1c3561ef07bf892620bd78d90659aba962f7be0af`
+- Launchpad (bonding curve): `0x827e04933699da94c23d9ea529f184656738cacdb7962f03be791fd715b76743`
+
+Use the call-ready constants from `@interest-protocol/blast-deployments-sdk`
+(or the compatible `@interest-protocol/blast-sdk/deployments` export):
+
+```ts
+import {
+  MAINNET_LAUNCHPAD_DEPLOYMENT,
+  MAINNET_MIGRATORS_DEPLOYMENT,
+  getPresaleDeployment,
+} from "@interest-protocol/blast-deployments-sdk";
+import { LaunchpadCalls } from "@interest-protocol/blast-launchpad-sdk";
+import { PresaleCalls } from "@interest-protocol/blast-presale-sdk";
+
+const launchpad = new LaunchpadCalls(MAINNET_LAUNCHPAD_DEPLOYMENT);
+const presale = new PresaleCalls(getPresaleDeployment("mainnet"));
+```
+
+The deployment package also exports `MAINNET_ADMIN_DEPLOYMENT`,
+`MAINNET_PARTNERS_DEPLOYMENT`, `MAINNET_PRESALE_DEPLOYMENT`,
+`CANONICAL_MAINNET_PACKAGES`, and `CANONICAL_MAINNET_SHARED_OBJECTS`.
+Bindings include the matching ACL, partners, timelock and migrators, and all
+initial shared versions, including the activated version singletons.
+`npm run check:mainnet` verifies deployed interfaces and object identities.
+
+Package publication and custody do not attest to product configuration or venue
+readiness. `BLAST_DEPLOYMENTS` remains empty until product rollout verification
+is complete; `evaluateProtocolAccess` therefore continues to reject production
+signing. Standalone bindings construct calls with the canonical identities;
+live policies determine whether an operation is admitted.
 
 ## Compatible Blast SDK
 

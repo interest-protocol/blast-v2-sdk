@@ -1,4 +1,7 @@
-import { FROZEN_ABI } from "@interest-protocol/blast-deployments-sdk/identity";
+import {
+  FROZEN_ABI,
+  SDK_RELEASE,
+} from "@interest-protocol/blast-deployments-sdk/identity";
 import type { BlastDeploymentInput } from "@interest-protocol/blast-deployments-sdk/types";
 
 /**
@@ -141,8 +144,8 @@ export const NON_PRODUCTION_MANIFEST = {
     },
   },
   sdk: {
-    version: "0.0.0",
-    commit: "70bd985c812b9e304ab771a9335a26246c993d9f",
+    version: SDK_RELEASE.version,
+    commit: SDK_RELEASE.commit ?? "70bd985c812b9e304ab771a9335a26246c993d9f",
   },
   evidence: [
     {

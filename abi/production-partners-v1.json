@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "01d7659617abcd552cece6d05b9db409ec4ff2c0",
+    "contractsCommit": "9255e78751b70b22d8f33cc6577df126a3434424",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0095 (amended 2026-10-11): pay takes TxContext and transfers the partner's share as a coin"

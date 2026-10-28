@@ -493,7 +493,7 @@ test("fails closed while the production registry or SDK release identity is abse
   assert.deepEqual(BLAST_DEPLOYMENTS, {});
   assert.deepEqual(SDK_RELEASE, {
     name: "@interest-protocol/blast-sdk",
-    version: "0.0.0",
+    version: "0.1.0",
     published: false,
     commit: null,
   });
@@ -505,8 +505,8 @@ test("fails closed while the production registry or SDK release identity is abse
   );
   assert.equal(SDK_RELEASE.name, packageJson.name);
   assert.equal(SDK_RELEASE.version, packageJson.version);
-  // The package is publishable but unreleased while its version is 0.0.0.
-  assert.equal(packageJson.version, "0.0.0");
+  // A real package version alone does not attest that it was published.
+  assert.equal(packageJson.version, "0.1.0");
   assert.equal(SDK_RELEASE.published, false);
 
   const production = productionManifest();
@@ -600,7 +600,7 @@ test("pins the frozen ABI identity to the committed artifacts", () => {
     createHash("sha256").update(bytes).digest("hex");
   assert.equal(
     FROZEN_ABI.contractsCommit,
-    "01d7659617abcd552cece6d05b9db409ec4ff2c0",
+    "9255e78751b70b22d8f33cc6577df126a3434424",
   );
   assert.equal(
     FROZEN_ABI.artifacts.launchpad,
@@ -612,16 +612,23 @@ test("pins the frozen ABI identity to the committed artifacts", () => {
   );
   for (const name of [
     "production-launchpad-v1.json",
-    "production-blast-sui-v1.json",
     "production-presale-v1.json",
     "production-admin-v1.json",
     "production-partners-v1.json",
+  ]) {
+    assert.equal(
+      JSON.parse(artifact(name).toString("utf8")).baseline.contractsCommit,
+      FROZEN_ABI.contractsCommit,
+    );
+  }
+  for (const name of [
+    "production-blast-sui-v1.json",
     "production-aftermath-dao-presale-v1.json",
     "production-boosts-v1.json",
   ]) {
     assert.equal(
       JSON.parse(artifact(name).toString("utf8")).baseline.contractsCommit,
-      FROZEN_ABI.contractsCommit,
+      "01d7659617abcd552cece6d05b9db409ec4ff2c0",
     );
   }
   assert.equal("unresolvedRoutes" in FROZEN_ABI, false);

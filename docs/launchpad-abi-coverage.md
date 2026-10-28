@@ -21,24 +21,17 @@ artifacts:
 - `abi/production-aftermath-dao-presale-v1.json` for the standalone Aftermath DAO presale vendor; and
 - `abi/production-boosts-v1.json` for Boosts core, products, and its Aftermath adapter.
 
-The shared baseline and CI checkout now use contracts
-`01d7659617abcd552cece6d05b9db409ec4ff2c0`. Every artifact uses this same source revision. Each
-artifact records `baseline.contractsCommit`, the commit it was frozen at,
-and `baseline.approvedAbiAmendments`, every reviewed contracts change to its
-ABI since that baseline, and Sui CLI `1.77.2-51d177ad7d65`, which the checker
-verifies before it runs `sui move summary`. `blast_admin` and `blast_partners`
-are separate artifacts because they are separately published, immutable
-packages that every product links, not part of the launchpad's upgrade
-lineage.
+The canonical launchpad, migrators, presale, ACL and partners artifacts use
+contracts `9255e78751b70b22d8f33cc6577df126a3434424`, the source of the
+2026-10-28 mainnet publication. CI checks out that revision with full history.
+Blast SUI, Boosts and the separate Aftermath DAO vendor retain their independently
+frozen `01d7659617abcd552cece6d05b9db409ec4ff2c0` revision. Each artifact
+records its own source and the pinned Sui CLI `1.77.2-51d177ad7d65`.
 
-The buyback `quote_in` amendment was made in `interest-protocol/blast-v2-move`,
-which now owns the launchpad and migrators source (its ADR 0134) and does not
-contain contracts `01d7659`, so `npm run check:abi` cannot read it yet. At
-blast-v2-move's import commit `73f532f` the checker's summaries of `launchpad`,
-`launch_ticket_template` and `migrators` equal this artifact's; at `f888097`
-they differ only by that parameter, and the migrators section was regenerated
-from that summary. The artifact keeps the contracts baseline until the checker
-reads launchpad sources from blast-v2-move.
+`npm run check:mainnet` additionally compares all five canonical packages against
+mainnet GraphQL: every public function's full signature, generic constraints,
+BCS struct/event fields in order, abilities, phantom parameters, and enum variants.
+The canonical migrators include the explicit buyback `quote_in` argument.
 
 `FROZEN_ABI` in `packages/deployments/src/identity.ts` carries the launchpad artifact's
 `contractsCommit` and the sha256 of the launchpad and Blast SUI artifacts. A

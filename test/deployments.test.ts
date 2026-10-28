@@ -12,6 +12,7 @@ import {
   getBlastDeployment,
   getPresaleDeployment,
   launchpadDeployment,
+  MAINNET_PRESALE_DEPLOYMENT,
   migratorsDeployment,
   partnersDeployment,
   presaleDeployment,
@@ -265,9 +266,20 @@ test("rejects placeholder package IDs", () => {
   );
 });
 
-test("requires a fresh activated release for the versioned presale ABI", () => {
-  assert.deepEqual(BLAST_PRESALE_DEPLOYMENTS, {});
-  assert.throws(() => getPresaleDeployment("mainnet"), /not deployed/);
+test("registers the canonical activated presale release", () => {
+  assert.deepEqual(
+    BLAST_PRESALE_DEPLOYMENTS.mainnet,
+    MAINNET_PRESALE_DEPLOYMENT,
+  );
+  assert.deepEqual(getPresaleDeployment("mainnet"), MAINNET_PRESALE_DEPLOYMENT);
+  assert.equal(
+    getPresaleDeployment("mainnet").packageId,
+    "0xedb6ddae546132a66f5ae5a1c3561ef07bf892620bd78d90659aba962f7be0af",
+  );
+  assert.equal(
+    getPresaleDeployment("mainnet").packageVersion.initialSharedVersion,
+    "2",
+  );
 });
 
 test("normalizes a standalone presale manifest and requires every singleton", () => {
