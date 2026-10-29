@@ -89,8 +89,9 @@ MIT license applies only to that package; see its release documentation.
 
 These sources bind the 2026-10-28 canonical MVR publication, which supersedes
 the earlier deployment shipped in npm `0.1.0`. The deployments and compatible
-SDK packages ship as `0.1.1`; the other product packages
-retain `0.1.0` because their ABI and implementation are unchanged:
+SDK packages ship as `0.1.2`, which also registers the mainnet deployment
+(`BLAST_DEPLOYMENTS.mainnet`, every Cetus and Bluefin tier); the other product
+packages retain `0.1.0` because their ABI and implementation are unchanged:
 
 - Presale: `0xb0279fbe54bfd1d920e985a4dba0916b2b73a5218514edeecb7b9dd30cf2863b`
 - Launchpad (bonding curve): `0x079a1b44c551613cbc63cc0406f8ff8d717407378dd6f17d43d9e1b3fd63a573`
@@ -99,7 +100,7 @@ The [verified deployment record](https://github.com/interest-protocol/blast-v2-c
 contains the five new package IDs, eleven SDK shared objects, three upgrade
 custody objects and their initial sharing versions. The immutable timelock
 dependency retains its existing identity. The public documentation and npm
-`0.1.0` describe the earlier publication; use `0.1.1` for these canonical bindings.
+`0.1.0` describe the earlier publication; use `0.1.2` for these canonical bindings.
 
 Use the call-ready constants from `@interest-protocol/blast-deployments-sdk`
 (or the compatible `@interest-protocol/blast-sdk/deployments` export):

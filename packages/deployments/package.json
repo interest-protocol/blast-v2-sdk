@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-deployments-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Blast deployments SDK",
   "type": "module",
   "repository": {

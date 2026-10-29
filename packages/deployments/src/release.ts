@@ -25,13 +25,13 @@ export type SdkRelease = Readonly<{
 }>;
 
 /**
- * Release identity of the validated canonical MVR sources shipped in 0.1.1.
- * Production signing separately requires a released deployment and runtime
- * verification; canonical package bindings alone do not authorize it.
+ * Release identity of 0.1.2: the canonical MVR sources with the registered
+ * mainnet deployment (`BLAST_DEPLOYMENTS.mainnet`). Production signing still
+ * requires a matching runtime observation.
  */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
-  version: "0.1.1",
+  version: "0.1.2",
   published: true,
-  commit: "1719b378f9a755c86fd8e70dc35f6ac651da343f",
+  commit: "89d85e2298d6d850a1921d580fa2d411e8632063",
 });
