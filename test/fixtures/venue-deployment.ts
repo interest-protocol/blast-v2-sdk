@@ -142,11 +142,11 @@ export function runtimeFor(
   const original = (name: string) =>
     input.packages[name]?.originalPackageId ?? "0x0";
   const types: Record<string, string> = {
-    "launchpad.packageVersion": `${original("launchpad")}::package_version::PackageVersion`,
+    "launchpad.packageVersion": `${original("launchpad")}::blast_fun::PackageVersion`,
     "launchpad.launchConfig": `${original("launchpad")}::launch_config::LaunchConfig`,
     "launchpad.runtimeConfig": `${original("launchpad")}::runtime_config::RuntimeConfig`,
     "admin.acl": `${original("admin")}::blast_acl::ACL`,
-    "migrators.packageVersion": `${original("migrators")}::package_version::PackageVersion`,
+    "migrators.packageVersion": `${original("migrators")}::blast_fun_migrators::PackageVersion`,
     "migrators.lpFeePolicy": `${original("migrators")}::lp_fee_policy::LpFeePolicy`,
     "migrators.venueConfig": `${original("migrators")}::venue_config::VenueConfig`,
     "presale.packageVersion": `${original("presale")}::blast_presale_package::PackageVersion`,

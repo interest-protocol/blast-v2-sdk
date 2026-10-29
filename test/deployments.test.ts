@@ -7,8 +7,11 @@ import {
   BLAST_DEPLOYMENTS,
   BLAST_PRESALE_DEPLOYMENTS,
   blastSuiDeployment,
+  CANONICAL_MAINNET_PACKAGES,
+  CANONICAL_MAINNET_SHARED_OBJECTS,
   defineBlastDeployment,
   definePresaleDeployment,
+  FROZEN_ABI,
   getBlastDeployment,
   getPresaleDeployment,
   launchpadDeployment,
@@ -16,6 +19,7 @@ import {
   migratorsDeployment,
   partnersDeployment,
   presaleDeployment,
+  SDK_RELEASE,
 } from "@interest-protocol/blast-deployments-sdk";
 import { LaunchpadCalls } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import { MigratorCalls } from "@interest-protocol/blast-migrators-sdk/transactions";
@@ -244,12 +248,36 @@ test("accepts only mainnet, bound to its genesis digest", () => {
   );
 });
 
-test("does not invent constants before a canonical release", () => {
-  assert.deepEqual(BLAST_DEPLOYMENTS, {});
-  assert.throws(
-    () => getBlastDeployment("mainnet"),
-    /Blast V2 is not deployed on Sui mainnet/,
-  );
+test("registers the canonical mainnet stack as the released deployment", () => {
+  const released = getBlastDeployment("mainnet");
+  assert.equal(BLAST_DEPLOYMENTS.mainnet, released);
+  assert.equal(released.environment, "production");
+  for (const [name, reference] of Object.entries(CANONICAL_MAINNET_PACKAGES)) {
+    assert.deepEqual(
+      released.packages[name as keyof typeof released.packages],
+      reference,
+    );
+  }
+  for (const [group, objects] of Object.entries(
+    CANONICAL_MAINNET_SHARED_OBJECTS,
+  )) {
+    assert.deepEqual(
+      released.sharedObjects[group as keyof typeof released.sharedObjects],
+      objects,
+    );
+  }
+  assert.deepEqual(released.source, {
+    contractsCommit: FROZEN_ABI.contractsCommit,
+    abi: FROZEN_ABI.artifacts,
+  });
+  assert.deepEqual(released.sdk, {
+    version: SDK_RELEASE.version,
+    commit: SDK_RELEASE.commit,
+  });
+  assert.ok(released.evidence.length > 0);
+  assert.deepEqual(getPresaleDeployment("mainnet"), {
+    ...MAINNET_PRESALE_DEPLOYMENT,
+  });
 });
 
 test("rejects placeholder package IDs", () => {
