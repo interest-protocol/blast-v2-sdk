@@ -85,6 +85,7 @@ const publication = {
     changed("0xd3", owner(publisher)),
   ]),
   objectTypes: {
+    [memePackage]: "package",
     [normalizeSuiObjectId("0xd1")]:
       `${launchpad}::launch_ticket::LaunchTicket<${memeType}>`,
     [normalizeSuiObjectId("0xd2")]: `0x2::coin_registry::Currency<${memeType}>`,
@@ -92,7 +93,7 @@ const publication = {
   },
 };
 
-test("discovers the published Meme type, its ticket, and its pending currency", () => {
+test("reads the published Meme, ticket, and currency with the Core API package marker", () => {
   assert.deepEqual(readMemePublication(publication, "0x122"), {
     packageId: memePackage,
     memeType: normalizeStructTag(memeType),
@@ -108,6 +109,50 @@ test("discovers the published Meme type, its ticket, and its pending currency", 
       digest: "digest-0xd2",
     },
   });
+});
+
+test("requires exactly one published package even with Core API package markers", () => {
+  const [publishedPackage, ...objects] = publication.effects.changedObjects;
+  assert.ok(publishedPackage);
+  const extraPackage = changed("0xdef", null, {
+    outputState: "PackageWrite",
+  });
+  for (const changedObjects of [
+    objects,
+    [publishedPackage, extraPackage, ...objects],
+  ]) {
+    assert.throws(
+      () =>
+        readMemePublication(
+          {
+            effects: effects(changedObjects),
+            objectTypes: {
+              ...publication.objectTypes,
+              [extraPackage.objectId]: "package",
+            },
+          },
+          "0x122",
+        ),
+      /publication must create exactly one package/,
+    );
+  }
+});
+
+test("rejects malformed object struct tags in publication effects", () => {
+  assert.throws(
+    () =>
+      readMemePublication(
+        {
+          ...publication,
+          objectTypes: {
+            ...publication.objectTypes,
+            [normalizeSuiObjectId("0xd1")]: "invalid-struct-tag",
+          },
+        },
+        "0x122",
+      ),
+    /Invalid struct tag: invalid-struct-tag/,
+  );
 });
 
 test("rejects publication effects without exactly one ticket from the launchpad", () => {
@@ -263,8 +308,10 @@ test("reads the shared launch a creation transaction produced", () => {
     effects: effects([
       changed("0xf1", shared("12")),
       changed("0xf2", owner(publisher)),
+      changed("0xabc", null, { outputState: "PackageWrite" }),
     ]),
     objectTypes: {
+      [memePackage]: "package",
       [normalizeSuiObjectId("0xf1")]:
         `${launchpad}::launch::Launch<${memeType}, 0x2::sui::SUI>`,
       [normalizeSuiObjectId("0xf2")]: `0x2::coin::Coin<${memeType}>`,
