@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-holder-rewards-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Blast holder-rewards SDK",
   "type": "module",
   "repository": {
@@ -38,8 +38,8 @@
   },
   "dependencies": {
     "@interest-protocol/blast-core": "0.1.0",
-    "@interest-protocol/blast-migrators-sdk": "0.1.1",
-    "@interest-protocol/blast-presale-sdk": "0.1.1"
+    "@interest-protocol/blast-migrators-sdk": "0.1.2",
+    "@interest-protocol/blast-presale-sdk": "0.1.2"
   },
   "peerDependencies": {
     "@mysten/sui": "^2.26.2"

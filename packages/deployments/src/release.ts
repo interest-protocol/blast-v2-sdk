@@ -25,13 +25,13 @@ export type SdkRelease = Readonly<{
 }>;
 
 /**
- * Release identity of 0.1.3: 0.1.2 plus the composable
- * `LaunchpadCalls.finalizeCurrencyRegistration`. Production signing still
+ * Release identity of 0.1.4: handle Core API package markers in
+ * transaction receipt readers. Production signing still
  * requires a matching runtime observation.
  */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
-  version: "0.1.3",
+  version: "0.1.4",
   published: true,
-  commit: "684009a145f9d9338fc71dd14d83f5aac1f06a89",
+  commit: "3e554d7ce8c0604ef1e79da5ffe02a90c7d4fc24",
 });
