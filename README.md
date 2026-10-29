@@ -417,7 +417,8 @@ transactions:
    `LaunchTicket` its initializer transferred to the publisher, and the
    `Currency<Meme>` sent to the Coin Registry.
 2. `tx.finalizeCurrencyRegistration` shares that currency;
-   `readCurrencyRegistration` returns its shared reference.
+   `readCurrencyRegistration` returns its shared reference. Its
+   `call.finalizeCurrencyRegistration` form registers several Memes in one PTB.
 3. `createCetusLaunch` or `createBluefinLaunch` runs the whole construction
    atomically: the adapter's `new` returns a `LaunchInitializer`;
    `set_virtual_quote`, `set_graduation_target`, `set_allocation_plan`,

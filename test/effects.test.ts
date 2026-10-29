@@ -7,7 +7,7 @@ import {
 } from "@interest-protocol/blast-launchpad-sdk/effects";
 import { LaunchpadTransactions } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import type { Transaction } from "@mysten/sui/transactions";
+import { Inputs, Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 
 const launchpad = normalizeSuiObjectId("0x122");
@@ -16,6 +16,8 @@ const memeType = `${memePackage}::dog::DOG`;
 const quoteType = normalizeStructTag("0x2::sui::SUI");
 const publisher = normalizeSuiObjectId("0xb1a57");
 const registry = normalizeSuiObjectId("0xc");
+// A valid base58 object digest; `build` rejects the placeholder digests above.
+const CURRENCY_DIGEST = "11111111111111111111111111111111";
 
 function changed(
   objectId: string,
@@ -135,20 +137,22 @@ test("rejects publication effects without exactly one ticket from the launchpad"
   );
 });
 
+const deployment = {
+  packageId: "0x123",
+  originalPackageId: "0x122",
+  admin: {
+    packageId: "0xad",
+    acl: { objectId: "0x5", initialSharedVersion: "1" },
+  },
+  partnersPackageId: "0xbe",
+  timelockPackageId: "0x7e",
+  packageVersion: { objectId: "0x2", initialSharedVersion: "1" },
+  launchConfig: { objectId: "0x3", initialSharedVersion: "1" },
+  runtimeConfig: { objectId: "0x4", initialSharedVersion: "1" },
+};
+
 test("finalizes the currency registration and reads the shared Currency", () => {
-  const sdk = new LaunchpadTransactions({
-    packageId: "0x123",
-    originalPackageId: "0x122",
-    admin: {
-      packageId: "0xad",
-      acl: { objectId: "0x5", initialSharedVersion: "1" },
-    },
-    partnersPackageId: "0xbe",
-    timelockPackageId: "0x7e",
-    packageVersion: { objectId: "0x2", initialSharedVersion: "1" },
-    launchConfig: { objectId: "0x3", initialSharedVersion: "1" },
-    runtimeConfig: { objectId: "0x4", initialSharedVersion: "1" },
-  });
+  const sdk = new LaunchpadTransactions(deployment);
   const tx: Transaction = sdk.finalizeCurrencyRegistration({
     memeType,
     currency: readMemePublication(publication, "0x122").pendingCurrency,
@@ -192,6 +196,66 @@ test("finalizes the currency registration and reads the shared Currency", () => 
     initialSharedVersion: "9",
     mutable: true,
   });
+});
+
+/** Builds `tx` offline: the Coin Registry input is pinned instead of fetched. */
+async function kindBytes(tx: Transaction): Promise<Uint8Array> {
+  tx.addBuildPlugin(async (data, _options, next) => {
+    for (const [index, input] of data.inputs.entries()) {
+      if (input.UnresolvedObject?.objectId === registry) {
+        data.inputs[index] = Inputs.SharedObjectRef({
+          objectId: registry,
+          initialSharedVersion: "1",
+          mutable: true,
+        });
+      }
+    }
+    await next();
+  });
+  return tx.build({ onlyTransactionKind: true });
+}
+
+test("the composable registration builds the same bytes as the transaction", async () => {
+  const sdk = new LaunchpadTransactions(deployment);
+  const options = {
+    memeType,
+    currency: { objectId: "0xd2", version: "7", digest: CURRENCY_DIGEST },
+  };
+  const composed = new Transaction();
+  composed.add(sdk.call.finalizeCurrencyRegistration(options));
+
+  assert.deepEqual(
+    await kindBytes(composed),
+    await kindBytes(sdk.finalizeCurrencyRegistration(options)),
+  );
+});
+
+test("registrations in one PTB share the Coin Registry input", () => {
+  const { call } = new LaunchpadTransactions(deployment);
+  const tx = new Transaction();
+  tx.add(
+    call.finalizeCurrencyRegistration({
+      memeType,
+      currency: { objectId: "0xd2", version: "7", digest: CURRENCY_DIGEST },
+    }),
+  );
+  tx.add(
+    call.finalizeCurrencyRegistration({
+      memeType: `${normalizeSuiObjectId("0xabd")}::cat::CAT`,
+      currency: { objectId: "0xd3", version: "8", digest: CURRENCY_DIGEST },
+    }),
+  );
+
+  const { inputs, commands } = tx.getData();
+  assert.equal(commands.length, 2);
+  assert.deepEqual(
+    inputs.map((input) =>
+      input.UnresolvedObject
+        ? input.UnresolvedObject.objectId
+        : input.Object?.Receiving?.objectId,
+    ),
+    [registry, normalizeSuiObjectId("0xd2"), normalizeSuiObjectId("0xd3")],
+  );
 });
 
 test("reads the shared launch a creation transaction produced", () => {

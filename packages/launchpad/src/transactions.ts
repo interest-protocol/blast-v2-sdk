@@ -549,6 +549,31 @@ export class LaunchpadCalls {
     };
   }
 
+  /**
+   * Shares a published Meme's `Currency<Meme>` through
+   * `coin_registry::finalize_registration`; anyone may call it. Each call adds
+   * its own `Receiving` input and reuses the PTB's one Coin Registry input, so
+   * several Memes register in one PTB.
+   */
+  finalizeCurrencyRegistration(options: {
+    memeType: string;
+    currency: ObjectVersionReference;
+  }) {
+    const memeType = normalizeStructTag(options.memeType);
+    const currency = {
+      objectId: normalizeSuiObjectId(options.currency.objectId),
+      version: options.currency.version,
+      digest: options.currency.digest,
+    };
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${SUI_FRAMEWORK_ADDRESS}::coin_registry::finalize_registration`,
+        typeArguments: [memeType],
+        arguments: [tx.object(COIN_REGISTRY_ID), tx.receivingRef(currency)],
+      });
+    };
+  }
+
   /** `launch_config::set_protocol_allocation` (`TreasuryAdmin`): Blast's share of future launches. */
   setProtocolAllocation(options: {
     adminWitness: TransactionObjectInput;
@@ -1067,18 +1092,7 @@ export class LaunchpadTransactions {
     currency: ObjectVersionReference;
   }): Transaction {
     const tx = new Transaction();
-    tx.moveCall({
-      target: `${SUI_FRAMEWORK_ADDRESS}::coin_registry::finalize_registration`,
-      typeArguments: [normalizeStructTag(options.memeType)],
-      arguments: [
-        tx.object(COIN_REGISTRY_ID),
-        tx.receivingRef({
-          objectId: normalizeSuiObjectId(options.currency.objectId),
-          version: options.currency.version,
-          digest: options.currency.digest,
-        }),
-      ],
-    });
+    tx.add(this.call.finalizeCurrencyRegistration(options));
     return tx;
   }
 
