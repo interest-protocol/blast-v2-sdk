@@ -25,13 +25,13 @@ export type SdkRelease = Readonly<{
 }>;
 
 /**
- * Release identity of 0.1.2: the canonical MVR sources with the registered
- * mainnet deployment (`BLAST_DEPLOYMENTS.mainnet`). Production signing still
+ * Release identity of 0.1.3: 0.1.2 plus the composable
+ * `LaunchpadCalls.finalizeCurrencyRegistration`. Production signing still
  * requires a matching runtime observation.
  */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
-  version: "0.1.2",
+  version: "0.1.3",
   published: true,
-  commit: "89d85e2298d6d850a1921d580fa2d411e8632063",
+  commit: "684009a145f9d9338fc71dd14d83f5aac1f06a89",
 });
