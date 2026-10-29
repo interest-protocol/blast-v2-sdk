@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-migrators-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Blast migrators SDK",
   "type": "module",
   "repository": {
@@ -62,7 +62,7 @@
   },
   "dependencies": {
     "@interest-protocol/blast-core": "0.1.0",
-    "@interest-protocol/blast-launchpad-sdk": "0.1.1"
+    "@interest-protocol/blast-launchpad-sdk": "0.1.2"
   },
   "peerDependencies": {
     "@mysten/sui": "^2.26.2"
