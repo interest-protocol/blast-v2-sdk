@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Deterministic off-chain previews, reads, and transaction builders for Blast V2",
   "type": "module",
   "repository": {
@@ -87,7 +87,7 @@
     "@interest-protocol/blast-cctp-sdk": "0.1.0",
     "@interest-protocol/blast-coin-sdk": "0.1.0",
     "@interest-protocol/blast-core": "0.1.0",
-    "@interest-protocol/blast-deployments-sdk": "0.1.1",
+    "@interest-protocol/blast-deployments-sdk": "0.1.2",
     "@interest-protocol/blast-holder-rewards-sdk": "0.1.0",
     "@interest-protocol/blast-launchpad-sdk": "0.1.0",
     "@interest-protocol/blast-migrators-sdk": "0.1.0",

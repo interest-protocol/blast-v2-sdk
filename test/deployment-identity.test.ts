@@ -493,7 +493,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
 test("the published MVR SDK still requires a released deployment and matching runtime", () => {
   assert.ok(BLAST_DEPLOYMENTS.mainnet);
   assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
-  assert.equal(SDK_RELEASE.version, "0.1.1");
+  assert.equal(SDK_RELEASE.version, "0.1.2");
   assert.equal(SDK_RELEASE.published, true);
   assert.ok(SDK_RELEASE.commit);
   assert.match(SDK_RELEASE.commit, /^[0-9a-f]{40}$/);
@@ -505,7 +505,7 @@ test("the published MVR SDK still requires a released deployment and matching ru
   );
   assert.equal(SDK_RELEASE.name, packageJson.name);
   assert.equal(SDK_RELEASE.version, packageJson.version);
-  assert.equal(packageJson.version, "0.1.1");
+  assert.equal(packageJson.version, "0.1.2");
 
   const production = productionManifest();
   const runtime = runtimeFor(production);
