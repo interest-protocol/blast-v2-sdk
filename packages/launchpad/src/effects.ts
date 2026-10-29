@@ -176,7 +176,9 @@ function typeOf(result: TransactionEffectsInput, objectId: string) {
   const type =
     result.objectTypes[normalizeSuiObjectId(objectId)] ??
     result.objectTypes[objectId];
-  return type === undefined ? undefined : parseStructTag(type);
+  return type === undefined || type === "package"
+    ? undefined
+    : parseStructTag(type);
 }
 
 function isCurrencyOf(
