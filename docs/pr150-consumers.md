@@ -33,3 +33,8 @@ written; it never edits funded leaves to pay for gas.
 Consumer integration must pin this source build until a coordinated SDK release
 and fresh deployment manifest are available. This change does not publish npm
 packages or authorize a production cutover.
+
+This PR covers holder-reward custody/intervals and delayed vault fee splits.
+The older ACL, launch/config and administrative command surfaces still need the
+separate [ADR0134 administrative binding migration](https://github.com/interest-protocol/blast-v2-sdk/issues/89).
+That work is also required before a complete fresh-stack SDK/app release.
