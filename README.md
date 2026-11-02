@@ -359,9 +359,10 @@ unsupported route, a private or unversioned SDK (`sdk-unreleased`), an SDK
 other than the one that validated the manifest (`sdk-mismatch`), post-deploy
 evidence missing, a missing or malformed runtime observation
 (`runtime-unverified`), or a runtime chain or shared-object mismatch.
-`BLAST_DEPLOYMENTS` is empty, so production signing stays
-disabled until a reviewed deployment is registered and runtime-verified. The
-published SDK identity is recorded in `SDK_RELEASE`. Quick presets (`QUICK_PRESETS`,
+`BLAST_DEPLOYMENTS` preserves historical publication identities with their original
+ABI. They do not authorize signing with this fresh ABI. A coordinated SDK release
+must register and runtime-verify the new deployment. This build is marked
+unpublished in `SDK_RELEASE`. Quick presets (`QUICK_PRESETS`,
 empty) bind to one deployment fingerprint and an SDK version range, and
 `resolveQuickPreset` returns values only while access is enabled for that exact
 deployment.
@@ -489,7 +490,7 @@ Anyone may claim Blast's Meme, Quote, and SUI (creation-fee) balances with
 (`LaunchState.partnerId`), pass that `partner`: the SDK then calls
 `claim_protocol_fees_with_partner`, which pays the partner its share of each
 balance in the same call. A `TreasuryAdmin` rotates the treasury with
-`setTreasury`.
+`scheduleTreasury`.
 
 ## Migrators
 
@@ -514,8 +515,8 @@ Quote, as `<Meme, Quote, CoinA, CoinB>`, to Cetus's single route per operation
   (`settleAndUpdateCetusFeeSplit`, `settleAndUpdateBluefinFeeSplit`). Both take
   the shared `Launch` read-only.
 - Administrators change Blast's share per coin or by default and its
-  destination (`setLpFeeDefaultShares`, `setLpFeeCoinShares`,
-  `clearLpFeeCoinShares`, `setLpFeeProtocolDestination`), claim migration
+  destination (`scheduleLpFeeDefaultShares`, `scheduleLpFeeCoinShares`,
+  `scheduleClearLpFeeCoinShares`, `scheduleLpFeeProtocolDestination`), claim migration
   residuals (`claimProtocolFees`), and publish holder-reward rounds
   (`publishHolderRewardRound`). Each composes
   `blast_admin::blast_acl::sign_in<Role>` in the same transaction with the one
@@ -613,30 +614,35 @@ must hold that role:
 
 | Package | Transactions | Role |
 | --- | --- | --- |
-| launchpad `LaunchConfig` | `setTradeFees`, `setCreationFee`, `addPartner`, `removePartner` | `FeeAdmin` |
-| launchpad `LaunchConfig` | `setProtocolAllocation` | `TreasuryAdmin` |
+| launchpad `LaunchConfig` | `scheduleTradeFees`, `scheduleCreationFee`, `addPartner`, `removePartner` | `FeeAdmin` |
+| launchpad `LaunchConfig` | `scheduleProtocolAllocation` | `TreasuryAdmin` |
 | launchpad `LaunchConfig` | `setQuoteAllowed`, `setMemeDecimalsAllowed` | `ListingAdmin` |
-| launchpad `LaunchConfig` | `setMigrationWitnessAllowed` | `AdapterAdmin` |
-| launchpad `RuntimeConfig` | `setProtocolFeeShare` | `FeeAdmin` |
+| launchpad `LaunchConfig` | `scheduleMigrationWitness` | `AdapterAdmin` |
+| launchpad `RuntimeConfig` | `scheduleProtocolFeeShare` | `FeeAdmin` |
 | launchpad `RuntimeConfig` | `setCreatorClaimSigner` | `ClaimSignerAdmin` |
-| launchpad `RuntimeConfig` | `setTreasury` | `TreasuryAdmin` |
-| launchpad `Launch` | `reassignCurveFeeCap`, `reassignMetadataCap` | `CreatorAdmin` |
-| migrators | `setLpFeeDefaultShares`, `setLpFeeCoinShares`, `clearLpFeeCoinShares` | `FeeAdmin` |
-| migrators | `setLpFeeProtocolDestination`, `claimProtocolFees` | `TreasuryAdmin` |
+| launchpad `RuntimeConfig` | `scheduleTreasury` | `TreasuryAdmin` |
+| launchpad `Launch` | `scheduleCurveFeeCapReassignment`, `scheduleMetadataCapReassignment` | `CreatorAdmin` |
+| migrators | `scheduleLpFeeDefaultShares`, `scheduleLpFeeCoinShares`, `scheduleClearLpFeeCoinShares` | `FeeAdmin` |
+| migrators | `scheduleLpFeeProtocolDestination`, `claimProtocolFees` | `TreasuryAdmin` |
 | migrators | `buybackAndBurnCetus`, `buybackAndBurnBluefin` | `BuybackAdmin` |
 | migrators | `publishHolderRewardRound` | `RewardsAdmin` |
-| presale | `setProtocolFees`, `setPresaleProtocolFees`, `setProtocolLpFees`, `addPartner`, `removePartner` | `blast_presale_domain::FeeAdmin` |
-| presale | `setProtocolDestination` | `blast_presale_domain::TreasuryAdmin` |
+| presale | `scheduleProtocolFees`, `setPresaleProtocolFees`, `scheduleProtocolLpFees`, `addPartner`, `removePartner` | `blast_presale_domain::FeeAdmin` |
+| presale | `scheduleProtocolDestination` | `blast_presale_domain::TreasuryAdmin` |
 | presale | `setQuoteAllowed` | `blast_presale_domain::ListingAdmin` |
-| presale | `setMigrationWitnessAllowed` | `blast_presale_domain::AdapterAdmin` |
+| presale | `scheduleMigrationWitness` | `blast_presale_domain::AdapterAdmin` |
 | presale | `publishHolderRewardRound`, `publishHolderRewardReserveRound`, `settleHolderRewardGasReserve`, `reconcileUnallocatedHolderMeme` | `blast_presale_domain::RewardsAdmin` |
 | blast SUI | `setRedeemFee` | `blast_sui_domain::FeeAdmin` |
 | partners | `register`, `scheduleShare`, `scheduleCap` | `blast_partners::PartnerAdmin` |
 
-`decodeAclObject`/`getAcl` read the ACL, and `decodeAclEvent` with
+`decodeAclObject` reads Table metadata; `getAclAdminRoles` reads a cap, and `getAcl`
+enumerates the Table with bounded pagination. and `decodeAclEvent` with
 `reduceAclEvent` replays its nine membership and root-transfer events. Package
-upgrades (`package_admin` custody and the generic upgrade events) stay with the
-CLI publish tooling.
+upgrades expose `scheduleUpgrade`, `scheduleMakeImmutable`, `scheduleUpgradeDelay`,
+`cancelUpgradeAction`, `applyUpgradeDelay`, and `makeImmutable`. `Calls` additionally
+composes `wrapPublication`, `authorizeUpgrade` and `commitUpgradeAndAdvance` with
+Sui publish/upgrade commands. Read custody and generation using
+`getPackageAdministration` and `getPackageVersion`; generic custody events use
+`decodePackageAdministrationEvent`.
 
 ## Partners
 
@@ -1000,3 +1006,11 @@ See [docs/launch-economics.md](docs/launch-economics.md) for the endpoint and
 valuation formulas. See
 [docs/launchpad-abi-coverage.md](docs/launchpad-abi-coverage.md) for the frozen
 ABI baseline and the complete SDK coverage matrix.
+
+### Fresh PR150 administration
+
+The active source ABI, delayed-policy workflow and pause masks are documented in
+[PR150 consumer interfaces](docs/pr150-consumers.md). All `schedule*` methods only
+create proposals. Apply in a later transaction after readiness; `CancelAdmin`
+may cancel. Quote delisting and witness removal remain immediate. The historical
+mainnet manifest does not match this fresh ABI and cannot enable signing.

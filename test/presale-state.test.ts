@@ -359,6 +359,9 @@ test("decodes the CreationPolicy's allowed Quote types and migrators", () => {
     ...addr("0xcf"), // id
     ...vec([ascii(suiName)]), // allowed_quotes: VecSet<TypeName>
     ...vec([ascii(witness)]), // allowed_migration_witnesses
+    ...u64(172_800_000n), // witness_delay_ms
+    ...u8(0), // pending_witness_delay
+    ...vec([]), // pending_witnesses
   ]);
   const policy = decodePresaleCreationPolicyObject(
     object(`${pkg}::creation_policy::CreationPolicy`, content, "0xcf"),

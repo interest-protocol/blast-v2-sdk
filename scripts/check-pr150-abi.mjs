@@ -11,7 +11,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // This is a source ABI for a fresh PR150 stack, separate from published mainnet artifacts.
-const commit = "f661a03462d557dbf6d57c5b82a5ede98519643d";
+const commit = "a4899fe573d747b9ab9dd5cfba74be56dd992f8f";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const temporary = mkdtempSync(join(tmpdir(), "blast-pr150-abi-"));
 const contracts = resolve(
@@ -36,6 +36,8 @@ try {
   run("tar", ["-x", "-C", temporary], { input: archive });
   const packages = {};
   for (const [key, directory, marker] of [
+    ["admin", "admin", "blast_acl"],
+    ["launchpad", "launchpad", "launch"],
     ["migrators", "migrators", "blast_holder_rewards"],
     ["presale", "presale", "presale_vault"],
   ]) {

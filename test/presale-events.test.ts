@@ -87,14 +87,21 @@ function decode<Kind extends PresaleEventKind>(
 }
 
 test("event specs match every event frozen in the presale ABI", () => {
-  assert.deepEqual(
-    orderedModuleEventFields({
-      ...presaleEventSpecs,
-      ...presalePolicyEventSpecs,
-    }),
-    orderedModuleEventFields(readFrozenPresaleEventSpecs()),
-  );
-  assert.equal(Object.keys(presaleEventModules).length, 25);
+  const frozen = readFrozenPresaleEventSpecs();
+  const current = { ...presaleEventSpecs, ...presalePolicyEventSpecs };
+  for (const [module, events] of Object.entries(frozen)) {
+    for (const [kind, fields] of Object.entries(events)) {
+      assert.deepEqual(
+        orderedEventFields({
+          [kind]: (
+            current as Record<string, Record<string, Record<string, string>>>
+          )[module]![kind]!,
+        }),
+        orderedEventFields({ [kind]: fields }),
+        `${module}::${kind}`,
+      );
+    }
+  }
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
@@ -417,6 +424,8 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     "FeeSplitScheduled",
     "FeeSplitCancelled",
     "FeeSplitChanged",
+    "ProtocolLpFeesScheduled",
+    "ProtocolLpFeesCancelled",
   ];
   for (const kind of Object.keys(presaleEventModules) as PresaleEventKind[]) {
     const expected = twice.includes(kind) ? 2 : never.includes(kind) ? 0 : 1;

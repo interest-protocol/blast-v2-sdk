@@ -48,17 +48,34 @@ export type Delayed<T> = {
   pending: { value: T; delay_ms: bigint; ready_at_ms: bigint } | null;
 };
 
+/** Exact proposal layout, including policy-only proposals. */
+export function pendingBcs<T, Input>(value: BcsType<T, Input>) {
+  return bcs.struct("Pending", {
+    value,
+    delay_ms: u64Bcs,
+    ready_at_ms: u64Bcs,
+  });
+}
+
 /** Exact `blast_admin::delayed::Delayed<T>` field order. */
 export function delayedBcs<T, Input>(value: BcsType<T, Input>) {
   return bcs.struct("Delayed", {
     value,
     delay_ms: u64Bcs,
-    pending: bcs.option(
-      bcs.struct("Pending", {
-        value,
-        delay_ms: u64Bcs,
-        ready_at_ms: u64Bcs,
-      }),
-    ),
+    pending: bcs.option(pendingBcs(value)),
   });
 }
+
+export type Pending<T> = NonNullable<Delayed<T>["pending"]>;
+
+/** Admission removals are immediate; additions and notice changes require apply. */
+export const migrationAdmissionFields = {
+  witness_delay_ms: u64Bcs,
+  pending_witness_delay: bcs.option(pendingBcs(bcs.bool())),
+  pending_witnesses: bcs.vector(
+    bcs.struct("Entry", {
+      key: moveTypeNameBcs,
+      value: pendingBcs(bcs.bool()),
+    }),
+  ),
+};

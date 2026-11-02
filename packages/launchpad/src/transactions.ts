@@ -63,6 +63,9 @@ export type LaunchpadDeployment = {
  * migrators reuse the launchpad's roles.
  */
 export type BlastFunAdminRole =
+  | "PauseAdmin"
+  | "UnpauseAdmin"
+  | "CancelAdmin"
   | "UpgradeAdmin"
   | "CreatorAdmin"
   | "BuybackAdmin"
@@ -574,21 +577,6 @@ export class LaunchpadCalls {
     };
   }
 
-  /** `launch_config::set_protocol_allocation` (`TreasuryAdmin`): Blast's share of future launches. */
-  setProtocolAllocation(options: {
-    adminWitness: TransactionObjectInput;
-    memeBps: bigint;
-    quoteBps: bigint;
-  }) {
-    const meme = this.bps(options.memeBps);
-    const quote = this.bps(options.quoteBps);
-    return this.#configCall(
-      "launch_config::set_protocol_allocation",
-      options,
-      (tx) => [tx.add(meme), tx.add(quote)],
-    );
-  }
-
   /** `launch_config::set_meme_decimals_allowed` (`ListingAdmin`). */
   setMemeDecimalsAllowed(options: {
     adminWitness: TransactionObjectInput;
@@ -613,33 +601,6 @@ export class LaunchpadCalls {
       options,
       (tx) => [tx.pure.bool(options.allowed)],
       [normalizeStructTag(options.quoteType)],
-    );
-  }
-
-  /** `launch_config::set_trade_fees` (`FeeAdmin`): the fees later launches snapshot. */
-  setTradeFees(options: {
-    adminWitness: TransactionObjectInput;
-    quoteFeeBps: bigint;
-    memeFeeBps: bigint;
-  }) {
-    const quote = this.bps(options.quoteFeeBps);
-    const meme = this.bps(options.memeFeeBps);
-    return this.#configCall("launch_config::set_trade_fees", options, (tx) => [
-      tx.add(quote),
-      tx.add(meme),
-    ]);
-  }
-
-  /** `launch_config::set_creation_fee` (`FeeAdmin`), in MIST. */
-  setCreationFee(options: {
-    adminWitness: TransactionObjectInput;
-    creationFee: bigint;
-  }) {
-    const creationFee = requireU64("creationFee", options.creationFee);
-    return this.#configCall(
-      "launch_config::set_creation_fee",
-      options,
-      (tx) => [tx.pure.u64(creationFee)],
     );
   }
 
@@ -668,30 +629,15 @@ export class LaunchpadCalls {
   }
 
   /**
-   * `launch_config::set_migration_witness_allowed<W>` (`AdapterAdmin`); see
-   * `MigratorCalls.migrationWitnessType`.
-   */
-  setMigrationWitnessAllowed(options: {
-    adminWitness: TransactionObjectInput;
-    migrationWitnessType: string;
-    allowed: boolean;
-  }) {
-    return this.#configCall(
-      "launch_config::set_migration_witness_allowed",
-      options,
-      (tx) => [tx.pure.bool(options.allowed)],
-      [normalizeStructTag(options.migrationWitnessType)],
-    );
-  }
-
-  /**
    * `runtime_config::set_creator_claim_signer` (`ClaimSignerAdmin`): the
-   * Ed25519 key that signs account claims; empty revokes it.
+   * Ed25519 key that signs account claims; use revokeCreatorClaimSigner to revoke.
    */
   setCreatorClaimSigner(options: {
     adminWitness: TransactionObjectInput;
     signerPublicKey: Uint8Array;
   }) {
+    if (options.signerPublicKey.length !== 32)
+      throw new RangeError("signerPublicKey must contain 32 bytes");
     return this.#configCall(
       "runtime_config::set_creator_claim_signer",
       options,
@@ -699,56 +645,775 @@ export class LaunchpadCalls {
     );
   }
 
-  /** `runtime_config::set_protocol_fee_share` (`FeeAdmin`): Blast's share of every curve fee. */
-  setProtocolFeeShare(options: {
+  /** `launch_config::apply_creation_fee`. Permissionless; the contract validates readiness and ownership. */
+  applyCreationFee() {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::apply_creation_fee`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch_config::apply_migration_delay`. Permissionless; the contract validates readiness and ownership. */
+  applyMigrationDelay() {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::apply_migration_delay`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch_config::apply_migration_witness`. Permissionless; the contract validates readiness and ownership. */
+  applyMigrationWitness(options: { migrationWitnessType: string }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::apply_migration_witness`,
+        typeArguments: [normalizeStructTag(options.migrationWitnessType)],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch_config::apply_protocol_allocation`. Permissionless; the contract validates readiness and ownership. */
+  applyProtocolAllocation() {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::apply_protocol_allocation`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch_config::apply_trade_fees`. Permissionless; the contract validates readiness and ownership. */
+  applyTradeFees() {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::apply_trade_fees`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch_config::cancel_creation_fee`. Requires CancelAdmin. */
+  cancelCreationFee(options: { adminWitness: TransactionObjectInput }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::cancel_creation_fee`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `launch_config::cancel_migration_delay`. Requires CancelAdmin. */
+  cancelMigrationDelay(options: { adminWitness: TransactionObjectInput }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::cancel_migration_delay`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `launch_config::cancel_migration_witness`. Requires CancelAdmin. */
+  cancelMigrationWitness(options: {
+    migrationWitnessType: string;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::cancel_migration_witness`,
+        typeArguments: [normalizeStructTag(options.migrationWitnessType)],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `launch_config::cancel_protocol_allocation`. Requires CancelAdmin. */
+  cancelProtocolAllocation(options: { adminWitness: TransactionObjectInput }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::cancel_protocol_allocation`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `launch_config::cancel_trade_fees`. Requires CancelAdmin. */
+  cancelTradeFees(options: { adminWitness: TransactionObjectInput }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::cancel_trade_fees`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `launch_config::remove_migration_witness`. Requires AdapterAdmin. */
+  removeMigrationWitness(options: {
+    migrationWitnessType: string;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::remove_migration_witness`,
+        typeArguments: [normalizeStructTag(options.migrationWitnessType)],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `launch_config::schedule_creation_fee`. Requires FeeAdmin. */
+  scheduleCreationFee(options: {
+    adminWitness: TransactionObjectInput;
+    creationFee: bigint;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::schedule_creation_fee`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.u64(requireU64("creationFee", options.creationFee)),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch_config::schedule_migration_delay`. Requires AdapterAdmin. */
+  scheduleMigrationDelay(options: {
+    adminWitness: TransactionObjectInput;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::schedule_migration_delay`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch_config::schedule_migration_witness`. Requires AdapterAdmin. */
+  scheduleMigrationWitness(options: {
+    migrationWitnessType: string;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::schedule_migration_witness`,
+        typeArguments: [normalizeStructTag(options.migrationWitnessType)],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch_config::schedule_protocol_allocation`. Requires TreasuryAdmin. */
+  scheduleProtocolAllocation(options: {
+    adminWitness: TransactionObjectInput;
+    memeBps: bigint;
+    quoteBps: bigint;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::schedule_protocol_allocation`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.add(this.bps(options.memeBps)),
+          tx.add(this.bps(options.quoteBps)),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch_config::schedule_trade_fees`. Requires FeeAdmin. */
+  scheduleTradeFees(options: {
+    adminWitness: TransactionObjectInput;
+    quoteFeeBps: bigint;
+    memeFeeBps: bigint;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch_config::schedule_trade_fees`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.launchConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.add(this.bps(options.quoteFeeBps)),
+          tx.add(this.bps(options.memeFeeBps)),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `runtime_config::apply_protocol_fee_share`. Permissionless; the contract validates readiness and ownership. */
+  applyProtocolFeeShare() {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::runtime_config::apply_protocol_fee_share`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.runtimeConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `runtime_config::apply_treasury`. Permissionless; the contract validates readiness and ownership. */
+  applyTreasury() {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::runtime_config::apply_treasury`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.runtimeConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `runtime_config::cancel_protocol_fee_share`. Requires CancelAdmin. */
+  cancelProtocolFeeShare(options: { adminWitness: TransactionObjectInput }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::runtime_config::cancel_protocol_fee_share`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.runtimeConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `runtime_config::cancel_treasury`. Requires CancelAdmin. */
+  cancelTreasury(options: { adminWitness: TransactionObjectInput }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::runtime_config::cancel_treasury`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.runtimeConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `runtime_config::revoke_creator_claim_signer`. Requires ClaimSignerAdmin. */
+  revokeCreatorClaimSigner(options: { adminWitness: TransactionObjectInput }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::runtime_config::revoke_creator_claim_signer`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.runtimeConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `runtime_config::schedule_protocol_fee_share`. Requires FeeAdmin. */
+  scheduleProtocolFeeShare(options: {
     adminWitness: TransactionObjectInput;
     protocolFeeShareBps: bigint;
+    delayMs: bigint;
   }) {
-    const share = this.bps(options.protocolFeeShareBps);
-    return this.#configCall(
-      "runtime_config::set_protocol_fee_share",
-      options,
-      (tx) => [tx.add(share)],
-    );
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::runtime_config::schedule_protocol_fee_share`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.runtimeConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.add(this.bps(options.protocolFeeShareBps)),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
   }
-
-  /**
-   * `runtime_config::set_treasury` (`TreasuryAdmin`): where every later
-   * protocol fee claim pays Blast.
-   */
-  setTreasury(options: {
+  /** `runtime_config::schedule_treasury`. Requires TreasuryAdmin. */
+  scheduleTreasury(options: {
     adminWitness: TransactionObjectInput;
     treasury: string;
+    delayMs: bigint;
   }) {
-    const treasury = normalizeSuiAddress(options.treasury);
-    return this.#configCall("runtime_config::set_treasury", options, (tx) => [
-      tx.pure.address(treasury),
-    ]);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::runtime_config::schedule_treasury`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.runtimeConfig, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.address(normalizeSuiAddress(options.treasury)),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
   }
-
-  /**
-   * `launch::reassign_curve_fee_cap` (`CreatorAdmin`): retires the pending
-   * claim or live cap and sends a fresh `CurveFeeCap` to `recipient`.
-   */
-  reassignCurveFeeCap(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-      recipient: string;
-    },
-  ) {
-    return this.#reassign("reassign_curve_fee_cap", options);
+  /** `launch::apply_curve_fee_cap_update`. Permissionless; the contract validates readiness and ownership. */
+  applyCurveFeeCapUpdate(options: {
+    memeType: string;
+    quoteType: string;
+    launch: SharedObjectReference<true>;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::apply_curve_fee_cap_update`,
+        typeArguments: [
+          normalizeStructTag(options.memeType),
+          normalizeStructTag(options.quoteType),
+        ],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
   }
-
-  /** `launch::reassign_metadata_cap` (`CreatorAdmin`), for the `BlastMetadataCap`. */
-  reassignMetadataCap(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-      recipient: string;
-    },
-  ) {
-    return this.#reassign("reassign_metadata_cap", options);
+  /** `launch::apply_metadata_cap_update`. Permissionless; the contract validates readiness and ownership. */
+  applyMetadataCapUpdate(options: {
+    memeType: string;
+    quoteType: string;
+    launch: SharedObjectReference<true>;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::apply_metadata_cap_update`,
+        typeArguments: [
+          normalizeStructTag(options.memeType),
+          normalizeStructTag(options.quoteType),
+        ],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch::cancel_curve_fee_cap_reassignment`. Requires CancelAdmin. */
+  cancelCurveFeeCapReassignment(options: {
+    memeType: string;
+    quoteType: string;
+    launch: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::cancel_curve_fee_cap_reassignment`,
+        typeArguments: [
+          normalizeStructTag(options.memeType),
+          normalizeStructTag(options.quoteType),
+        ],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `launch::cancel_metadata_cap_reassignment`. Requires CancelAdmin. */
+  cancelMetadataCapReassignment(options: {
+    memeType: string;
+    quoteType: string;
+    launch: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::cancel_metadata_cap_reassignment`,
+        typeArguments: [
+          normalizeStructTag(options.memeType),
+          normalizeStructTag(options.quoteType),
+        ],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `launch::schedule_curve_fee_cap_delay`. Requires CreatorAdmin. */
+  scheduleCurveFeeCapDelay(options: {
+    memeType: string;
+    quoteType: string;
+    launch: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::schedule_curve_fee_cap_delay`,
+        typeArguments: [
+          normalizeStructTag(options.memeType),
+          normalizeStructTag(options.quoteType),
+        ],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch::schedule_curve_fee_cap_reassignment`. Requires CreatorAdmin. */
+  scheduleCurveFeeCapReassignment(options: {
+    memeType: string;
+    quoteType: string;
+    launch: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    recipient: string;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::schedule_curve_fee_cap_reassignment`,
+        typeArguments: [
+          normalizeStructTag(options.memeType),
+          normalizeStructTag(options.quoteType),
+        ],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.address(normalizeSuiAddress(options.recipient)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch::schedule_metadata_cap_delay`. Requires CreatorAdmin. */
+  scheduleMetadataCapDelay(options: {
+    memeType: string;
+    quoteType: string;
+    launch: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::schedule_metadata_cap_delay`,
+        typeArguments: [
+          normalizeStructTag(options.memeType),
+          normalizeStructTag(options.quoteType),
+        ],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch::schedule_metadata_cap_reassignment`. Requires CreatorAdmin. */
+  scheduleMetadataCapReassignment(options: {
+    memeType: string;
+    quoteType: string;
+    launch: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    recipient: string;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::schedule_metadata_cap_reassignment`,
+        typeArguments: [
+          normalizeStructTag(options.memeType),
+          normalizeStructTag(options.quoteType),
+        ],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.address(normalizeSuiAddress(options.recipient)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `blast_fun::pause`. Requires PauseAdmin. */
+  pause(options: { adminWitness: TransactionObjectInput; bits: number }) {
+    if (
+      !Number.isInteger(options.bits) ||
+      options.bits <= 0 ||
+      options.bits > 255 ||
+      (options.bits & ~7) !== 0
+    )
+      throw new RangeError("invalid pause bits");
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::blast_fun::pause`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.packageVersion, true),
+          tx.object(options.adminWitness),
+          tx.pure.u8(options.bits),
+        ],
+      });
+    };
+  }
+  /** `blast_fun::unpause`. Requires UnpauseAdmin. */
+  unpause(options: { adminWitness: TransactionObjectInput; bits: number }) {
+    if (
+      !Number.isInteger(options.bits) ||
+      options.bits <= 0 ||
+      options.bits > 255 ||
+      (options.bits & ~7) !== 0
+    )
+      throw new RangeError("invalid pause bits");
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::blast_fun::unpause`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.packageVersion, true),
+          tx.object(options.adminWitness),
+          tx.pure.u8(options.bits),
+        ],
+      });
+    };
+  }
+  /** `package_admin::apply_upgrade_delay`. Permissionless; the contract validates readiness and ownership. */
+  applyUpgradeDelay(options: { packageAdmin: SharedObjectReference<true> }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::apply_upgrade_delay`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::authorize_upgrade`. Requires UpgradeAdmin. */
+  authorizeUpgrade(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    digest: Uint8Array;
+  }) {
+    if (options.digest.length !== 32)
+      throw new RangeError("digest must contain 32 bytes");
+    return (tx: Transaction): TransactionResult => {
+      return tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::authorize_upgrade`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.vector("u8", Array.from(options.digest)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::cancel_upgrade_action`. Requires CancelAdmin. */
+  cancelUpgradeAction(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::cancel_upgrade_action`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `package_admin::commit_upgrade_and_advance`. Requires UpgradeAdmin. */
+  commitUpgradeAndAdvance(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    receipt: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::commit_upgrade_and_advance`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.packageVersion, true),
+          tx.object(options.adminWitness),
+          tx.object(options.receipt),
+        ],
+      });
+    };
+  }
+  /** `package_admin::make_immutable`. Requires UpgradeAdmin. */
+  makeImmutable(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::make_immutable`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::schedule_make_immutable`. Requires UpgradeAdmin. */
+  scheduleMakeImmutable(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::schedule_make_immutable`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::schedule_upgrade`. Requires UpgradeAdmin. */
+  scheduleUpgrade(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    digest: Uint8Array;
+  }) {
+    if (options.digest.length !== 32)
+      throw new RangeError("digest must contain 32 bytes");
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::schedule_upgrade`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.vector("u8", Array.from(options.digest)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::schedule_upgrade_delay`. Requires UpgradeAdmin. */
+  scheduleUpgradeDelay(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::schedule_upgrade_delay`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::wrap`. Permissionless; the contract validates readiness and ownership. */
+  wrapPublication(options: {
+    publication: TransactionObjectInput;
+    upgradeCap: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::wrap`,
+        typeArguments: [],
+        arguments: [
+          tx.object(options.publication),
+          tx.object(options.upgradeCap),
+        ],
+      });
+    };
   }
 
   #configCall(
@@ -768,30 +1433,6 @@ export class LaunchpadCalls {
           this.#packageVersion(tx),
           tx.object(options.adminWitness),
           ...extra(tx),
-        ],
-      });
-    };
-  }
-
-  #reassign(
-    functionName: "reassign_curve_fee_cap" | "reassign_metadata_cap",
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-      recipient: string;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    const recipient = normalizeSuiAddress(options.recipient);
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::${functionName}`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          this.#packageVersion(tx),
-          tx.object(options.adminWitness),
-          tx.pure.address(recipient),
         ],
       });
     };
@@ -1136,16 +1777,6 @@ export class LaunchpadTransactions {
     return tx;
   }
 
-  setProtocolAllocation(options: {
-    adminCapId: string;
-    memeBps: bigint;
-    quoteBps: bigint;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
-      this.call.setProtocolAllocation({ ...options, adminWitness }),
-    );
-  }
-
   setMemeDecimalsAllowed(options: {
     adminCapId: string;
     decimals: number;
@@ -1163,25 +1794,6 @@ export class LaunchpadTransactions {
   }): Transaction {
     return this.#asAdmin(options.adminCapId, "ListingAdmin", (adminWitness) =>
       this.call.setQuoteAllowed({ ...options, adminWitness }),
-    );
-  }
-
-  setTradeFees(options: {
-    adminCapId: string;
-    quoteFeeBps: bigint;
-    memeFeeBps: bigint;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
-      this.call.setTradeFees({ ...options, adminWitness }),
-    );
-  }
-
-  setCreationFee(options: {
-    adminCapId: string;
-    creationFee: bigint;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
-      this.call.setCreationFee({ ...options, adminWitness }),
     );
   }
 
@@ -1203,16 +1815,6 @@ export class LaunchpadTransactions {
     );
   }
 
-  setMigrationWitnessAllowed(options: {
-    adminCapId: string;
-    migrationWitnessType: string;
-    allowed: boolean;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
-      this.call.setMigrationWitnessAllowed({ ...options, adminWitness }),
-    );
-  }
-
   setCreatorClaimSigner(options: {
     adminCapId: string;
     signerPublicKey: Uint8Array;
@@ -1225,46 +1827,357 @@ export class LaunchpadTransactions {
     );
   }
 
-  setProtocolFeeShare(options: {
-    adminCapId: string;
-    protocolFeeShareBps: bigint;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
-      this.call.setProtocolFeeShare({ ...options, adminWitness }),
-    );
-  }
-
-  setTreasury(options: { adminCapId: string; treasury: string }): Transaction {
-    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
-      this.call.setTreasury({ ...options, adminWitness }),
-    );
-  }
-
-  reassignCurveFeeCap(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      adminCapId: string;
-      recipient: string;
-    },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
-      this.call.reassignCurveFeeCap({ ...options, adminWitness }),
-    );
-  }
-
-  reassignMetadataCap(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      adminCapId: string;
-      recipient: string;
-    },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
-      this.call.reassignMetadataCap({ ...options, adminWitness }),
-    );
-  }
-
   /** Signs in as `role` and runs one administrator call in the same PTB. */
+  applyCreationFee(): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyCreationFee());
+    return tx;
+  }
+  applyMigrationDelay(): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyMigrationDelay());
+    return tx;
+  }
+  applyMigrationWitness(
+    options: Parameters<LaunchpadCalls["applyMigrationWitness"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyMigrationWitness(options));
+    return tx;
+  }
+  applyProtocolAllocation(): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyProtocolAllocation());
+    return tx;
+  }
+  applyTradeFees(): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyTradeFees());
+    return tx;
+  }
+  cancelCreationFee(
+    options: Omit<
+      Parameters<LaunchpadCalls["cancelCreationFee"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelCreationFee({ ...options, adminWitness }),
+    );
+  }
+  cancelMigrationDelay(
+    options: Omit<
+      Parameters<LaunchpadCalls["cancelMigrationDelay"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelMigrationDelay({ ...options, adminWitness }),
+    );
+  }
+  cancelMigrationWitness(
+    options: Omit<
+      Parameters<LaunchpadCalls["cancelMigrationWitness"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelMigrationWitness({ ...options, adminWitness }),
+    );
+  }
+  cancelProtocolAllocation(
+    options: Omit<
+      Parameters<LaunchpadCalls["cancelProtocolAllocation"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelProtocolAllocation({ ...options, adminWitness }),
+    );
+  }
+  cancelTradeFees(
+    options: Omit<
+      Parameters<LaunchpadCalls["cancelTradeFees"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelTradeFees({ ...options, adminWitness }),
+    );
+  }
+  removeMigrationWitness(
+    options: Omit<
+      Parameters<LaunchpadCalls["removeMigrationWitness"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
+      this.call.removeMigrationWitness({ ...options, adminWitness }),
+    );
+  }
+  scheduleCreationFee(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleCreationFee"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.scheduleCreationFee({ ...options, adminWitness }),
+    );
+  }
+  scheduleMigrationDelay(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleMigrationDelay"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
+      this.call.scheduleMigrationDelay({ ...options, adminWitness }),
+    );
+  }
+  scheduleMigrationWitness(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleMigrationWitness"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
+      this.call.scheduleMigrationWitness({ ...options, adminWitness }),
+    );
+  }
+  scheduleProtocolAllocation(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleProtocolAllocation"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
+      this.call.scheduleProtocolAllocation({ ...options, adminWitness }),
+    );
+  }
+  scheduleTradeFees(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleTradeFees"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.scheduleTradeFees({ ...options, adminWitness }),
+    );
+  }
+  applyProtocolFeeShare(): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyProtocolFeeShare());
+    return tx;
+  }
+  applyTreasury(): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyTreasury());
+    return tx;
+  }
+  cancelProtocolFeeShare(
+    options: Omit<
+      Parameters<LaunchpadCalls["cancelProtocolFeeShare"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelProtocolFeeShare({ ...options, adminWitness }),
+    );
+  }
+  cancelTreasury(
+    options: Omit<
+      Parameters<LaunchpadCalls["cancelTreasury"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelTreasury({ ...options, adminWitness }),
+    );
+  }
+  revokeCreatorClaimSigner(
+    options: Omit<
+      Parameters<LaunchpadCalls["revokeCreatorClaimSigner"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(
+      options.adminCapId,
+      "ClaimSignerAdmin",
+      (adminWitness) =>
+        this.call.revokeCreatorClaimSigner({ ...options, adminWitness }),
+    );
+  }
+  scheduleProtocolFeeShare(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleProtocolFeeShare"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.scheduleProtocolFeeShare({ ...options, adminWitness }),
+    );
+  }
+  scheduleTreasury(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleTreasury"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
+      this.call.scheduleTreasury({ ...options, adminWitness }),
+    );
+  }
+  applyCurveFeeCapUpdate(
+    options: Parameters<LaunchpadCalls["applyCurveFeeCapUpdate"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyCurveFeeCapUpdate(options));
+    return tx;
+  }
+  applyMetadataCapUpdate(
+    options: Parameters<LaunchpadCalls["applyMetadataCapUpdate"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyMetadataCapUpdate(options));
+    return tx;
+  }
+  cancelCurveFeeCapReassignment(
+    options: Omit<
+      Parameters<LaunchpadCalls["cancelCurveFeeCapReassignment"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelCurveFeeCapReassignment({ ...options, adminWitness }),
+    );
+  }
+  cancelMetadataCapReassignment(
+    options: Omit<
+      Parameters<LaunchpadCalls["cancelMetadataCapReassignment"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelMetadataCapReassignment({ ...options, adminWitness }),
+    );
+  }
+  scheduleCurveFeeCapDelay(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleCurveFeeCapDelay"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
+      this.call.scheduleCurveFeeCapDelay({ ...options, adminWitness }),
+    );
+  }
+  scheduleCurveFeeCapReassignment(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleCurveFeeCapReassignment"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
+      this.call.scheduleCurveFeeCapReassignment({ ...options, adminWitness }),
+    );
+  }
+  scheduleMetadataCapDelay(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleMetadataCapDelay"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
+      this.call.scheduleMetadataCapDelay({ ...options, adminWitness }),
+    );
+  }
+  scheduleMetadataCapReassignment(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleMetadataCapReassignment"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
+      this.call.scheduleMetadataCapReassignment({ ...options, adminWitness }),
+    );
+  }
+  pause(
+    options: Omit<Parameters<LaunchpadCalls["pause"]>[0], "adminWitness"> & {
+      adminCapId: string;
+    },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "PauseAdmin", (adminWitness) =>
+      this.call.pause({ ...options, adminWitness }),
+    );
+  }
+  unpause(
+    options: Omit<Parameters<LaunchpadCalls["unpause"]>[0], "adminWitness"> & {
+      adminCapId: string;
+    },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "UnpauseAdmin", (adminWitness) =>
+      this.call.unpause({ ...options, adminWitness }),
+    );
+  }
+  applyUpgradeDelay(
+    options: Parameters<LaunchpadCalls["applyUpgradeDelay"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyUpgradeDelay(options));
+    return tx;
+  }
+  cancelUpgradeAction(
+    options: Omit<
+      Parameters<LaunchpadCalls["cancelUpgradeAction"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelUpgradeAction({ ...options, adminWitness }),
+    );
+  }
+  makeImmutable(
+    options: Omit<
+      Parameters<LaunchpadCalls["makeImmutable"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
+      this.call.makeImmutable({ ...options, adminWitness }),
+    );
+  }
+  scheduleMakeImmutable(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleMakeImmutable"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
+      this.call.scheduleMakeImmutable({ ...options, adminWitness }),
+    );
+  }
+  scheduleUpgrade(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleUpgrade"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
+      this.call.scheduleUpgrade({ ...options, adminWitness }),
+    );
+  }
+  scheduleUpgradeDelay(
+    options: Omit<
+      Parameters<LaunchpadCalls["scheduleUpgradeDelay"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
+      this.call.scheduleUpgradeDelay({ ...options, adminWitness }),
+    );
+  }
+
   #asAdmin(
     adminCapId: string,
     role: BlastFunAdminRole,
@@ -1382,3 +2295,10 @@ export function normalizeLaunchTypes(types: LaunchTypes): LaunchTypes {
     quoteType: normalizeStructTag(types.quoteType),
   };
 }
+
+/** Flags may be ORed together; each package has its own migration bit. */
+export const LAUNCHPAD_PAUSE_BITS = {
+  Create: 1,
+  Trading: 2,
+  Migrate: 4,
+} as const;

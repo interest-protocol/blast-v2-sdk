@@ -130,7 +130,7 @@ test("decodes the ACL from its BCS layout", () => {
           .serialize({
             id: { id: { bytes: id("0xac") } },
             super_admin_cap_id: id("0x5a"),
-            admins: [{ key: id("0xc1"), value: [ROLE] }],
+            admins: { id: { id: { bytes: id("0x7a") } }, size: 1n },
             pending_super_admin: {
               before: null,
               after: pending,
@@ -144,7 +144,8 @@ test("decodes the ACL from its BCS layout", () => {
     );
   const idle = acl(null);
   assert.equal(idle.superAdminCapId, id("0x5a"));
-  assert.deepEqual(idle.admins, { [id("0xc1")]: [ROLE] });
+  assert.equal(idle.adminsTableId, id("0x7a"));
+  assert.equal(idle.adminCount, 1n);
   assert.equal(idle.pendingSuperAdmin, null);
   assert.deepEqual(acl("0xb0b").pendingSuperAdmin, {
     recipient: id("0xb0b"),
@@ -227,7 +228,7 @@ test("the ACL and its events follow the frozen Move field order", () => {
           .serialize({
             id: { id: { bytes: id("0xac") } },
             super_admin_cap_id: id("0x5a"),
-            admins: [],
+            admins: { id: { id: { bytes: id("0x7a") } }, size: 0n },
             pending_super_admin: {
               before: null,
               after: null,

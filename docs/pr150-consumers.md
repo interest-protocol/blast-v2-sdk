@@ -1,6 +1,6 @@
 # PR150 consumer ABI
 
-These bindings target a fresh contract stack at `f661a03462d557dbf6d57c5b82a5ede98519643d`.
+These bindings target a fresh contract stack at `a4899fe573d747b9ab9dd5cfba74be56dd992f8f`.
 The compiled public signatures and ordered fields are frozen separately in
 `abi/pr150-consumers.json`; run `npm run check:abi:pr150` with `BLAST_CONTRACTS_DIR`
 pointing to a contracts checkout containing that commit. Published mainnet ABI
@@ -34,7 +34,43 @@ Consumer integration must pin this source build until a coordinated SDK release
 and fresh deployment manifest are available. This change does not publish npm
 packages or authorize a production cutover.
 
-This PR covers holder-reward custody/intervals and delayed vault fee splits.
-The older ACL, launch/config and administrative command surfaces still need the
-separate [ADR0134 administrative binding migration](https://github.com/interest-protocol/blast-v2-sdk/issues/89).
-That work is also required before a complete fresh-stack SDK/app release.
+Administrative bindings also target the fresh stack:
+
+- ACL metadata contains `adminsTableId` and `adminCount`. `getAclAdminRoles`
+  performs a targeted Table lookup; only an absent field means revocation.
+  `getAcl` enumerates up to 100 pages and rejects inconsistent reads.
+- Launch/config/runtime/creation-policy readers expose applied values plus
+  delays and pending proposals. Readiness alone never changes the applied value.
+- Replace immediate fee, treasury and witness setters with `schedule*`, followed
+  by `apply*` after readiness, or `cancel*` using `CancelAdmin`. Fee proposals
+  take `delayMs`; witness admission uses the policy's notice. Witness removal
+  and Quote delisting remain immediate.
+- `setPresaleProtocolFees` remains a pre-start override, capped by the applied
+  `FeePolicy`; the builder supplies that policy reference.
+- `scheduleCurveFeeCapReassignment` / `scheduleMetadataCapReassignment` and their
+  delay-only proposals use `applyCurveFeeCapUpdate` / `applyMetadataCapUpdate`.
+  An outer null means no proposal; a pending null recipient means delay-only.
+- `pause` / `unpause` use separate roles. Launchpad masks are Create=1,
+  Trading=2, Migrate=4; presale masks are Create=1, Commit=2, Migrate=8.
+- Each package exposes delayed upgrade actions. Compose `authorizeUpgrade`,
+  Sui's upgrade command and `commitUpgradeAndAdvance` in one PTB. The commit
+  mutates the version container and advances the operational generation.
+
+```ts
+const proposal = launchpad.tx.scheduleTradeFees({
+  adminCapId, quoteFeeBps: 100n, memeFeeBps: 0n, delayMs: 172_800_000n,
+});
+// Submit the proposal, wait for its on-chain ready_at_ms, then submit:
+const application = launchpad.tx.applyTradeFees();
+```
+
+`172_800_000` milliseconds is 48 hours. The compiler-signature matrix checks
+roles, argument order and shared-object mutability. Fresh Move-generated golden
+bytes check launch, config and runtime decoders. Table ACL, delayed application,
+upgrade identity, masks and LP Quote guard have regression tests.
+
+The active `FROZEN_ABI` is the PR150 source snapshot. Historical deployment IDs
+retain their original source identity and cannot sign with this SDK. This build
+is marked unpublished until a coordinated release and fresh manifest are registered.
+The live presale harness requires `BLAST_PRESALE_FIXTURE` naming a fresh fixture
+at this source commit, with migration witnesses already scheduled and applied.

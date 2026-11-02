@@ -27,16 +27,8 @@ type Artifact = {
 };
 
 const artifact = JSON.parse(
-  readFileSync(
-    new URL("../abi/production-launchpad-v1.json", import.meta.url),
-    "utf8",
-  ),
-) as Artifact;
-
-const pr150 = JSON.parse(
   readFileSync(new URL("../abi/pr150-consumers.json", import.meta.url), "utf8"),
 ) as Artifact;
-artifact.packages.migrators = pr150.packages.migrators!;
 
 const uid = (id: string) => ({ id: { bytes: id } });
 const balance = { value: 0n };
@@ -93,11 +85,21 @@ test("SDK object layouts follow the frozen Move field order", () => {
         id: uid("0x1"),
         meme_decimals: [],
         quotes: { id: uid("0x2"), size: 0n },
-        quote_fee_bps: 0n,
-        meme_fee_bps: 0n,
+        trade_fees: {
+          value: { quote_fee_bps: 0n, meme_fee_bps: 0n },
+          delay_ms: 172_800_000n,
+          pending: null,
+        },
         migration_witnesses: [],
-        protocol_allocation: { meme_bps: 0n, quote_bps: 0n },
-        creation_fee: 0n,
+        witness_delay_ms: 172_800_000n,
+        pending_witness_delay: null,
+        pending_witnesses: [],
+        protocol_allocation: {
+          value: { meme_bps: 0n, quote_bps: 0n },
+          delay_ms: 172_800_000n,
+          pending: null,
+        },
+        creation_fee: { value: 0n, delay_ms: 172_800_000n, pending: null },
       },
     ],
     ["migrators", "vault", "LpVault", lpVaultBcs as never, vault()],
@@ -187,6 +189,10 @@ function launch() {
       protocol_sui: balance,
     },
     metadata_cap: { id: uid("0x2") },
+    curve_fee_cap_delay_ms: 172_800_000n,
+    pending_curve_fee_cap_recipient: null,
+    metadata_cap_delay_ms: 172_800_000n,
+    pending_metadata_cap_recipient: null,
     creator: null,
     curve_fee_cap_id: null,
     blast_metadata_cap_id: null,

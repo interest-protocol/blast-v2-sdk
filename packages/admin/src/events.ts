@@ -11,15 +11,18 @@ import {
 } from "@interest-protocol/blast-core/events";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { normalizeSuiAddress, parseStructTag } from "@mysten/sui/utils";
+import {
+  normalizeStructTag,
+  normalizeSuiAddress,
+  parseStructTag,
+} from "@mysten/sui/utils";
 
 const roles = bcs.vector(moveTypeNameBcs);
 const transfer = { recipient: addressBcs, execute_after_ms: u64Bcs };
 
 /**
  * The `blast_admin::blast_admin_events` the ACL emits, in Move field order.
- * The generic upgrade-custody and operational-version events belong to
- * package upgrades, which the SDK leaves to publish tooling.
+ * Generic custody and version facts use packageAdministrationEventBcs below.
  */
 export const aclEventBcs = {
   AdminGranted: bcs.struct("AdminGranted", {
@@ -100,4 +103,90 @@ export function decodeAclEvent(
 
 export function aclEventId(event: DecodedAclEvent): string {
   return suiEventId(event.position);
+}
+
+/** Native custody and operational generation facts, authenticated by the consumer's package marker. */
+export const packageAdministrationEventBcs = {
+  OperationalVersionAdvanced: bcs.struct("OperationalVersionAdvanced", {
+    container_id: suiObjectIdBcs,
+    package_id: addressBcs,
+    previous_generation: u64Bcs,
+    new_generation: u64Bcs,
+  }),
+  UpgradeAuthorized: bcs.struct("UpgradeAuthorized", {
+    custodian_id: suiObjectIdBcs,
+    upgrade_cap_id: suiObjectIdBcs,
+    package_id: suiObjectIdBcs,
+    native_version: u64Bcs,
+    policy: bcs.u8(),
+    digest: bcs.vector(bcs.u8()),
+  }),
+  UpgradeCapDestroyed: bcs.struct("UpgradeCapDestroyed", {
+    custodian_id: suiObjectIdBcs,
+    upgrade_cap_id: suiObjectIdBcs,
+    package_id: addressBcs,
+    final_native_version: u64Bcs,
+    final_policy: bcs.u8(),
+  }),
+  UpgradeCommitted: bcs.struct("UpgradeCommitted", {
+    custodian_id: suiObjectIdBcs,
+    upgrade_cap_id: suiObjectIdBcs,
+    original_package_id: addressBcs,
+    new_package_id: suiObjectIdBcs,
+    previous_native_version: u64Bcs,
+    new_native_version: u64Bcs,
+  }),
+  UpgradeCustodyCreated: bcs.struct("UpgradeCustodyCreated", {
+    custodian_id: suiObjectIdBcs,
+    publisher_id: suiObjectIdBcs,
+    upgrade_cap_id: suiObjectIdBcs,
+    package_id: suiObjectIdBcs,
+    native_version: u64Bcs,
+    policy: bcs.u8(),
+  }),
+  UpgradePolicyRestricted: bcs.struct("UpgradePolicyRestricted", {
+    custodian_id: suiObjectIdBcs,
+    upgrade_cap_id: suiObjectIdBcs,
+    package_id: addressBcs,
+    native_version: u64Bcs,
+    previous_policy: bcs.u8(),
+    new_policy: bcs.u8(),
+  }),
+};
+export type PackageAdministrationEventKind =
+  keyof typeof packageAdministrationEventBcs;
+export type DecodedPackageAdministrationEvent = {
+  [Kind in PackageAdministrationEventKind]: {
+    source: "package-administration";
+    kind: Kind;
+    packageMarker: string;
+    payload: ReturnType<(typeof packageAdministrationEventBcs)[Kind]["parse"]>;
+    sender: string;
+    position: SuiEventPosition;
+  };
+}[PackageAdministrationEventKind];
+
+export function decodePackageAdministrationEvent(
+  event: SuiClientTypes.EventEntry,
+  identity: { adminPackageId: string; packageMarker: string },
+): DecodedPackageAdministrationEvent {
+  const tag = parseStructTag(event.eventType);
+  if (
+    tag.address !== normalizeSuiAddress(identity.adminPackageId) ||
+    tag.module !== "blast_admin_events" ||
+    tag.typeParams.length !== 1 ||
+    normalizeStructTag(tag.typeParams[0]!) !==
+      normalizeStructTag(identity.packageMarker) ||
+    !Object.hasOwn(packageAdministrationEventBcs, tag.name)
+  )
+    throw new TypeError("unexpected package administration event identity");
+  const kind = tag.name as PackageAdministrationEventKind;
+  return {
+    source: "package-administration",
+    kind,
+    packageMarker: normalizeStructTag(identity.packageMarker),
+    payload: packageAdministrationEventBcs[kind].parse(event.bcs),
+    sender: normalizeSuiAddress(event.sender),
+    position: normalizeSuiEventPosition(event),
+  } as DecodedPackageAdministrationEvent;
 }

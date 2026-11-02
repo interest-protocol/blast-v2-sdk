@@ -82,12 +82,12 @@ The contract enforces this admission check; SDK previews do not certify currency
 | Own position | `newCetusVault`, `newBluefinVault` | Anyone, for their own position: locks it in a new `Vault` with zero presale IDs, the given fee split, and an optional accepted partner (contracts ADR 0109). |
 | Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication signs in as `RewardsAdmin` (`adminCapId`). |
 | Cap | `destroyCap` | After cancellation only. |
-| Blast's rates | `setProtocolFees` | Signs in as `FeeAdmin`. Applies to presales created afterward. |
+| Blast's rates | `scheduleProtocolFees` | Signs in as `FeeAdmin`; call `applyProtocolFees` after the notice. Affects later presales. |
 | Blast's rates on one sale | `setPresaleProtocolFees` | Signs in as `FeeAdmin`. In the creation PTB before `share` (pass the `Presale` result and an `adminWitness` from `call.signIn`), or once shared until the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
-| Blast's LP-fee rates on one vault | `setProtocolLpFees` | Signs in as `FeeAdmin`. Applies to that vault's later collections, including fees already in the pool. The contract rejects an unchanged pair (`ProtocolLpFeesChanged`). |
-| Blast's payout address | `setProtocolDestination` | Signs in as `TreasuryAdmin`. Applies to every later payout. |
+| Blast's LP-fee rates on one vault | `scheduleProtocolLpFees` | Signs in as `FeeAdmin`; call `applyProtocolLpFees` after readiness. Only `ProtocolLpFeesChanged` changes the applied pair. |
+| Blast's payout address | `scheduleProtocolDestination` | Signs in as `TreasuryAdmin`; call `applyProtocolDestination` after the notice. Affects later payouts. |
 | Partners | `addPartner`, `removePartner` | Sign in as `FeeAdmin`. Which Blast partners presales created afterward may name: added at once, removed after `PARTNER_DELAY_MS`. |
-| Listing | `setQuoteAllowed`, `setMigrationWitnessAllowed` | Sign in as `ListingAdmin` and `AdapterAdmin`. Which Quote types and migrators presales created afterward may use; existing sales are unaffected. A migrator is a `venue` of this package or the `witnessType` of an external migrator's `Witness` struct. |
+| Listing | `setQuoteAllowed`, `scheduleMigrationWitness` | Sign in as `ListingAdmin` and `AdapterAdmin`. Which Quote types and migrators presales created afterward may use; existing sales are unaffected. A migrator is a `venue` of this package or the `witnessType` of an external migrator's `Witness` struct. |
 
 `PresaleCalls` exposes each Move call separately for composition.
 
@@ -243,7 +243,7 @@ builder throws and `venueOf` never returns `"aftermath"`.
 - **Venue.** `PresaleVenue` includes `"aftermath"`; its witness is
   `<vendor>::blast_aftermath_dao_presale::Witness`
   (`migrationWitnessType("aftermath")`, `aftermathWitnessType`), which
-  `setMigrationWitnessAllowed({ venue: "aftermath" })` allows.
+  `scheduleMigrationWitness({ venue: "aftermath" })` allows.
   `venueOf(migrationWitness)` names a sale's venue.
 - **Creation.** `createAftermathPresale` follows the initializer flow
   (contracts ADR 0110): the vendor's `new<SaleToken, Quote>` with its
@@ -348,10 +348,10 @@ must hold that role:
 
 | Role | Transactions |
 | --- | --- |
-| `FeeAdmin` | `setProtocolFees`, `setPresaleProtocolFees`, `setProtocolLpFees`, `addPartner`, `removePartner` |
-| `TreasuryAdmin` | `setProtocolDestination` |
+| `FeeAdmin` | `scheduleProtocolFees`, `setPresaleProtocolFees`, `scheduleProtocolLpFees`, `addPartner`, `removePartner` |
+| `TreasuryAdmin` | `scheduleProtocolDestination` |
 | `ListingAdmin` | `setQuoteAllowed` |
-| `AdapterAdmin` | `setMigrationWitnessAllowed` |
+| `AdapterAdmin` | `scheduleMigrationWitness` |
 | `RewardsAdmin` | `publishHolderRewardRound`, `settleHolderRewardGasReserve` |
 | `UpgradeAdmin` | none: upgrade custody stays with the CLI publish tooling |
 
@@ -406,7 +406,7 @@ is created:
 - `lpFeeMemeBps` and `lpFeeQuoteBps` of each collected LP fee, rounded up, go
   to the current destination before the creator's split (`FeesCollected`), or
   wait in a partnered sale's vault (see [Partners](#partners)).
-  The vault snapshots them at migration; `setProtocolLpFees` later replaces
+  The vault snapshots them at migration; `scheduleProtocolLpFees` later replaces
   one vault's pair (`ProtocolLpFeesChanged`).
 
 In a sale's creation PTB before `share`, or after it until the sale's
@@ -490,7 +490,7 @@ once (`EQuoteNotAllowed`, `EMigrationWitnessNotAllowed`); a later delisting neve
 touches a live sale. `blast_presale::new` and `migrate` are public (contracts
 ADR 0104), so a migrator in another package, such as a partner's vendor package,
 creates and migrates sales with its own sealed `Witness` once allowed. Pass that
-struct as `setMigrationWitnessAllowed({ witnessType })`; the contract rejects a
+struct as `scheduleMigrationWitness({ witnessType })`, then call `applyMigrationWitness` after readiness; the contract rejects a
 primitive, a vector, or a framework (`0x1` or `0x2`) type
 (`EInvalidMigrationWitness`), any of which anyone can construct, and the
 builder throws before it reaches the chain. Read it with `PresaleClient.getCreationPolicy` before

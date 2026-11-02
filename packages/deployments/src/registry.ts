@@ -20,7 +20,7 @@ import {
   CANONICAL_MAINNET_SHARED_OBJECTS,
   MAINNET_PRESALE_DEPLOYMENT,
 } from "./mainnet.ts";
-import { FROZEN_ABI, SDK_RELEASE } from "./release.ts";
+
 import type {
   BlastDeployment,
   BlastDeploymentInput,
@@ -217,8 +217,14 @@ export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({
       },
     ],
     source: {
-      contractsCommit: FROZEN_ABI.contractsCommit,
-      abi: FROZEN_ABI.artifacts,
+      // Historical publication; never relabel these package IDs with a new ABI.
+      contractsCommit: "9255e78751b70b22d8f33cc6577df126a3434424",
+      abi: {
+        launchpad:
+          "7ca399dd441aeaa8f63df5e67e44cb7d93a678a47410e4c86193baede5661887",
+        blastSui:
+          "943236915134897494c1a1eb7f18d2a0ea8a012e6e657321abc5fc274ee3587f",
+      },
     },
     release: {
       transactions: Object.fromEntries(
@@ -227,7 +233,10 @@ export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({
         ),
       ),
     },
-    sdk: { version: SDK_RELEASE.version, commit: SDK_RELEASE.commit ?? "" },
+    sdk: {
+      version: "0.1.4",
+      commit: "3e554d7ce8c0604ef1e79da5ffe02a90c7d4fc24",
+    },
     evidence: Object.entries(CANONICAL_MAINNET_TRANSACTIONS).map(
       ([step, [transactionDigest, checkpoint]]) => ({
         check: `${step}-published`,

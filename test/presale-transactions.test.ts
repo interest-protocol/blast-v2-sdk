@@ -564,7 +564,8 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       ["shared-mut:0xd0", "shared:0x64", "shared-mut:0xba", CLOCK],
     ],
     [
-      tx.setProtocolFees({
+      tx.scheduleProtocolFees({
+        delayMs: 172_800_000n,
         adminCapId: "0xadc",
         fees: {
           raiseBps: 333n,
@@ -573,7 +574,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
           lpFeeQuoteBps: 1_000n,
         },
       }),
-      "fee_policy::set_fees",
+      "fee_policy::schedule_fees",
       [
         "shared-mut:0x61",
         "shared:0x64",
@@ -582,6 +583,8 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         "Result:2",
         "Result:3",
         "Result:4",
+        "pure",
+        CLOCK,
       ],
     ],
     [
@@ -601,6 +604,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         "shared-mut:0xab",
         "shared:0x64",
         ...ADMIN,
+        "shared:0x61",
         "Result:1",
         "Result:2",
         "Result:3",
@@ -609,15 +613,24 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       ],
     ],
     [
-      tx.setProtocolLpFees({
+      tx.scheduleProtocolLpFees({
+        delayMs: 172_800_000n,
         ...types,
         vault,
         adminCapId: "0xadc",
         lpFeeMemeBps: 500n,
         lpFeeQuoteBps: 0n,
       }),
-      "presale_vault::set_protocol_lp_fees",
-      ["shared-mut:0xba", "shared:0x64", ...ADMIN, "Result:1", "Result:2"],
+      "presale_vault::schedule_protocol_lp_fees",
+      [
+        "shared-mut:0xba",
+        "shared:0x64",
+        ...ADMIN,
+        "Result:1",
+        "Result:2",
+        "pure",
+        CLOCK,
+      ],
     ],
     [
       tx.setQuoteAllowed({
@@ -629,18 +642,21 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       ["shared-mut:0x62", "shared:0x64", ...ADMIN, "pure"],
     ],
     [
-      tx.setMigrationWitnessAllowed({
+      tx.scheduleMigrationWitness({
         adminCapId: "0xadc",
         venue: "bluefin",
-        allowed: false,
       }),
-      "creation_policy::set_migration_witness_allowed",
-      ["shared-mut:0x62", "shared:0x64", ...ADMIN, "pure"],
+      "creation_policy::schedule_migration_witness",
+      ["shared-mut:0x62", "shared:0x64", ...ADMIN, CLOCK],
     ],
     [
-      tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
-      "fee_policy::set_destination",
-      ["shared-mut:0x61", "shared:0x64", ...ADMIN, "pure"],
+      tx.scheduleProtocolDestination({
+        delayMs: 172_800_000n,
+        adminCapId: "0xadc",
+        destination: "0x7ea5",
+      }),
+      "fee_policy::schedule_destination",
+      ["shared-mut:0x61", "shared:0x64", ...ADMIN, "pure", "pure", CLOCK],
     ],
     [
       tx.payProtocolFeesWithPartner({ ...types, presale, partner }),
@@ -826,17 +842,27 @@ test("signs each administrator call in to blast_acl with its own presale role", 
     quoteType: sui,
     allowed: true,
   });
-  const listVenue = tx.setMigrationWitnessAllowed({
+  const listVenue = tx.scheduleMigrationWitness({
     adminCapId: "0xadc",
     venue: "cetus",
-    allowed: true,
   });
   const cases: [Transaction, string][] = [
-    [tx.setProtocolFees({ adminCapId: "0xadc", fees: noFees }), "FeeAdmin"],
+    [
+      tx.scheduleProtocolFees({
+        delayMs: 172_800_000n,
+        adminCapId: "0xadc",
+        fees: noFees,
+      }),
+      "FeeAdmin",
+    ],
     [listQuote, "ListingAdmin"],
     [listVenue, "AdapterAdmin"],
     [
-      tx.setProtocolDestination({ adminCapId: "0xadc", destination: "0x7ea5" }),
+      tx.scheduleProtocolDestination({
+        delayMs: 172_800_000n,
+        adminCapId: "0xadc",
+        destination: "0x7ea5",
+      }),
       "TreasuryAdmin",
     ],
     [
@@ -849,7 +875,8 @@ test("signs each administrator call in to blast_acl with its own presale role", 
       "FeeAdmin",
     ],
     [
-      tx.setProtocolLpFees({
+      tx.scheduleProtocolLpFees({
+        delayMs: 172_800_000n,
         ...types,
         vault,
         adminCapId: "0xadc",
@@ -878,13 +905,14 @@ test("signs each administrator call in to blast_acl with its own presale role", 
     [sui],
   );
   assert.deepEqual(
-    moveCall(listVenue, "creation_policy::set_migration_witness_allowed")
+    moveCall(listVenue, "creation_policy::schedule_migration_witness")
       .typeArguments,
     [normalizeStructTag("0x5e::cetus::Witness")],
   );
   for (const lpFeeMemeBps of [-1n, 10_001n]) {
     assert.throws(() =>
-      tx.setProtocolLpFees({
+      tx.scheduleProtocolLpFees({
+        delayMs: 172_800_000n,
         ...types,
         vault,
         adminCapId: "0xadc",
@@ -895,7 +923,8 @@ test("signs each administrator call in to blast_acl with its own presale role", 
   }
   for (const raiseBps of [-1n, 10_001n]) {
     assert.throws(() =>
-      tx.setProtocolFees({
+      tx.scheduleProtocolFees({
+        delayMs: 172_800_000n,
         adminCapId: "0xadc",
         fees: { ...noFees, raiseBps },
       }),
@@ -905,22 +934,21 @@ test("signs each administrator call in to blast_acl with its own presale role", 
 
 test("allows an external migrator's witness and rejects types anyone can construct", () => {
   const witness = "0xabc::blast_aftermath_dao_presale::Witness";
-  const allowExternal = tx.setMigrationWitnessAllowed({
+  const allowExternal = tx.scheduleMigrationWitness({
     adminCapId: "0xadc",
     witnessType: witness,
-    allowed: true,
   });
 
   const call = moveCall(
     allowExternal,
-    "creation_policy::set_migration_witness_allowed",
+    "creation_policy::schedule_migration_witness",
   );
   assert.deepEqual(call.typeArguments, [normalizeStructTag(witness)]);
   assert.deepEqual(argumentKinds(allowExternal, call), [
     "shared-mut:0x62",
     "shared:0x64",
     ...ADMIN,
-    "pure",
+    CLOCK,
   ]);
   for (const witnessType of [
     "u64",
@@ -932,10 +960,9 @@ test("allows an external migrator's witness and rejects types anyone can constru
   ]) {
     assert.throws(
       () =>
-        tx.setMigrationWitnessAllowed({
+        tx.scheduleMigrationWitness({
           adminCapId: "0xadc",
           witnessType,
-          allowed: true,
         }),
       witnessType,
     );
@@ -1326,10 +1353,7 @@ type AbiFunction = {
   parameters: unknown[];
 };
 const abi = JSON.parse(
-  readFileSync(
-    new URL("../abi/production-presale-v1.json", import.meta.url),
-    "utf8",
-  ),
+  readFileSync(new URL("../abi/pr150-consumers.json", import.meta.url), "utf8"),
 ) as {
   packages: {
     presale: { modules: Record<string, { functions: AbiFunction[] }> };

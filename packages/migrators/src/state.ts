@@ -93,6 +93,9 @@ export const lpFeeSharePairBcs = bcs.struct("SharePair", {
   quote_bps: bpsBcs,
 });
 
+/** Per-coin override, including a proposed clear (null) and its notice. */
+export const lpFeeCoinPolicyBcs = delayedBcs(bcs.option(lpFeeSharePairBcs));
+
 /** BCS layout of `blast_fun_migrators::lp_fee_policy::LpFeePolicy`. */
 export const lpFeePolicyBcs = bcs.struct("LpFeePolicy", {
   id: suiUidBcs,
@@ -142,6 +145,8 @@ export type LpFeeShares = { memeBps: bigint; quoteBps: bigint };
 export type LpFeePolicyState = SharedObjectReference<false> & {
   /** Address every collection pays Blast's share to. */
   protocolDestination: string;
+  protocolDestinationPolicy: Delayed<string>;
+  defaultSharesPolicy: Delayed<{ meme_bps: bigint; quote_bps: bigint }>;
   defaultShares: LpFeeShares;
   /** Table of per-coin share pairs, keyed by original Meme `TypeName`. */
   coinSharesTableId: string;
@@ -266,6 +271,8 @@ export async function getLpFeePolicy(
     ),
     mutable: false,
     protocolDestination: normalizeSuiAddress(parsed.destination.value),
+    protocolDestinationPolicy: parsed.destination,
+    defaultSharesPolicy: parsed.defaults,
     defaultShares: {
       memeBps: parsed.defaults.value.meme_bps,
       quoteBps: parsed.defaults.value.quote_bps,
@@ -294,9 +301,7 @@ export async function getLpFeeShares(
           .toBytes(),
       },
     });
-    const pair = delayedBcs(bcs.option(lpFeeSharePairBcs)).parse(
-      dynamicField.value.bcs,
-    ).value;
+    const pair = lpFeeCoinPolicyBcs.parse(dynamicField.value.bcs).value;
     if (pair === null) return { ...policy.defaultShares, source: "default" };
     return { memeBps: pair.meme_bps, quoteBps: pair.quote_bps, source: "coin" };
   } catch (error) {

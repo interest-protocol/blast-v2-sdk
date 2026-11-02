@@ -57,7 +57,7 @@ function nested(arg: TransactionArgument | undefined) {
   return arg.NestedResult;
 }
 const lpCoin = await verifiedLpCoin(`${id(113)}::af_lp::AF_LP`, id(114));
-function sale(baseline = { quoteAllowed: false, witnessAllowed: false }) {
+function sale(baseline = { quoteAllowed: false, witnessAllowed: true }) {
   return nativeSaleTransaction({
     deployment,
     memeType: `${id(110)}::sale_tokens::SALE_F`,
@@ -107,10 +107,8 @@ test("native creation threads new's two results and shares both final objects", 
     [finalizeIndex, 1],
   );
 });
-test("temporary admissions surround creation and restore their baseline in the same PTB", () => {
+test("temporary Quote admission surrounds creation and restores its baseline", () => {
   for (const baseline of [
-    { quoteAllowed: false, witnessAllowed: false },
-    { quoteAllowed: true, witnessAllowed: false },
     { quoteAllowed: false, witnessAllowed: true },
     { quoteAllowed: true, witnessAllowed: true },
   ]) {
@@ -123,7 +121,6 @@ test("temporary admissions surround creation and restore their baseline in the s
     );
     for (const [name, alreadyAllowed] of [
       ["set_quote_allowed", baseline.quoteAllowed],
-      ["set_migration_witness_allowed", baseline.witnessAllowed],
     ] as const) {
       const changes = data.commands.flatMap((c, index) =>
         c.MoveCall?.function === name ? [{ call: c.MoveCall, index }] : [],
@@ -142,6 +139,14 @@ test("temporary admissions surround creation and restore their baseline in the s
         assert.deepEqual(bools, ["AQ==", "AA=="]);
       }
     }
+  }
+});
+test("creation requires an already applied migration-witness admission", () => {
+  for (const quoteAllowed of [false, true]) {
+    assert.throws(
+      () => sale({ quoteAllowed, witnessAllowed: false }),
+      /Schedule and apply/,
+    );
   }
 });
 function datatype(

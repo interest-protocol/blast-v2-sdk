@@ -1,6 +1,7 @@
-import type { Delayed } from "@interest-protocol/blast-core/bcs";
+import type { Delayed, Pending } from "@interest-protocol/blast-core/bcs";
 import {
   delayedBcs,
+  migrationAdmissionFields,
   moveTypeNameBcs,
   suiBalanceBcs,
   suiIdBcs,
@@ -373,6 +374,7 @@ export const creationPolicyBcs = bcs.struct("CreationPolicy", {
   id: suiUidBcs,
   allowed_quotes: typeNameSet,
   allowed_migration_witnesses: typeNameSet,
+  ...migrationAdmissionFields,
 });
 
 /** BCS layout of `holder_rewards::Round<Meme, Quote>`. */
@@ -552,6 +554,8 @@ export type PresaleRewardRoundState = SharedObjectReference<true> & {
 export type PresaleFeePolicyState = SharedObjectReference<true> & {
   destination: string;
   fees: ProtocolFees;
+  destinationPolicy: Delayed<string>;
+  feesPolicy: Delayed<ProtocolFees>;
 };
 
 /**
@@ -560,6 +564,9 @@ export type PresaleFeePolicyState = SharedObjectReference<true> & {
  * type strings. Checked once, at creation; existing sales are unaffected.
  */
 export type PresaleCreationPolicyState = SharedObjectReference<true> & {
+  witnessDelayMs: bigint;
+  pendingWitnessDelay: Pending<boolean> | null;
+  pendingWitnesses: Readonly<Record<string, Pending<boolean>>>;
   allowedQuotes: string[];
   allowedMigrationWitnesses: string[];
 };
@@ -725,6 +732,8 @@ export function decodePresaleFeePolicyObject(
     ...sharedIdentity(object, parsed.id.id.bytes),
     destination: parsed.destination.value,
     fees: parsed.fees.value,
+    destinationPolicy: parsed.destination,
+    feesPolicy: parsed.fees,
   };
 }
 
@@ -741,6 +750,11 @@ export function decodePresaleCreationPolicyObject(
   const parsed = creationPolicyBcs.parse(object.content);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
+    witnessDelayMs: parsed.witness_delay_ms,
+    pendingWitnessDelay: parsed.pending_witness_delay,
+    pendingWitnesses: Object.fromEntries(
+      parsed.pending_witnesses.map(({ key, value }) => [key, value]),
+    ),
     allowedQuotes: parsed.allowed_quotes.contents,
     allowedMigrationWitnesses: parsed.allowed_migration_witnesses.contents,
   };

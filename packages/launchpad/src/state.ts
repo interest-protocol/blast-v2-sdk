@@ -1,8 +1,14 @@
+import type { Delayed, Pending } from "@interest-protocol/blast-core/bcs";
 import {
+  addressBcs,
+  delayedBcs,
+  migrationAdmissionFields,
   moveTypeNameBcs,
+  pendingBcs,
   suiBalanceBcs,
   suiIdBcs,
   suiUidBcs,
+  u64Bcs,
 } from "@interest-protocol/blast-core/bcs";
 import {
   BASIS_POINTS_DENOMINATOR,
@@ -71,6 +77,14 @@ export const launchBcs = bcs.struct("Launch", {
   allocated_meme: suiBalanceBcs,
   fee_ledger: FeeLedgerBcs,
   metadata_cap: MetadataCapBcs,
+  curve_fee_cap_delay_ms: u64Bcs,
+  pending_curve_fee_cap_recipient: bcs.option(
+    pendingBcs(bcs.option(addressBcs)),
+  ),
+  metadata_cap_delay_ms: u64Bcs,
+  pending_metadata_cap_recipient: bcs.option(
+    pendingBcs(bcs.option(addressBcs)),
+  ),
   creator: bcs.option(creatorRecipientBcs),
   curve_fee_cap_id: bcs.option(suiIdBcs),
   blast_metadata_cap_id: bcs.option(suiIdBcs),
@@ -144,6 +158,10 @@ export type LaunchState = CurveState &
     creatorQuoteFees: bigint;
     /** Unclaimed creation fee, in MIST whatever the Quote. */
     protocolSuiFees: bigint;
+    curveFeeCapDelayMs: bigint;
+    pendingCurveFeeCapRecipient: Pending<string | null> | null;
+    metadataCapDelayMs: bigint;
+    pendingMetadataCapRecipient: Pending<string | null> | null;
     metadataCapId: string;
     creatorRecipient: CreatorRecipient;
     /** The `CurveFeeCap` the launch honors; null until claimed or reassigned. */
@@ -239,6 +257,10 @@ export function decodeLaunchObject(
     protocolQuoteFees: BigInt(parsed.fee_ledger.protocol_quote.value),
     creatorQuoteFees: BigInt(parsed.fee_ledger.creator_quote.value),
     protocolSuiFees: BigInt(parsed.fee_ledger.protocol_sui.value),
+    curveFeeCapDelayMs: parsed.curve_fee_cap_delay_ms,
+    pendingCurveFeeCapRecipient: parsed.pending_curve_fee_cap_recipient,
+    metadataCapDelayMs: parsed.metadata_cap_delay_ms,
+    pendingMetadataCapRecipient: parsed.pending_metadata_cap_recipient,
     metadataCapId: normalizeSuiObjectId(parsed.metadata_cap.id.id.bytes),
     creatorRecipient: decodeCreatorRecipient(parsed.creator),
     curveFeeCapId: optionalId(parsed.curve_fee_cap_id),
@@ -393,22 +415,26 @@ export const launchConfigBcs = bcs.struct("LaunchConfig", {
   id: suiUidBcs,
   meme_decimals: bcs.vector(bcs.u8()),
   quotes: TableBcs,
-  quote_fee_bps: bpsBcs,
-  meme_fee_bps: bpsBcs,
+  trade_fees: delayedBcs(
+    bcs.struct("TradeFees", { quote_fee_bps: bpsBcs, meme_fee_bps: bpsBcs }),
+  ),
   migration_witnesses: bcs.vector(moveTypeNameBcs),
-  // Snake-case keys, as the vendored integration SDK decoded them.
-  protocol_allocation: bcs.struct("ProtocolAllocation", {
-    meme_bps: bpsBcs,
-    quote_bps: bpsBcs,
-  }),
-  creation_fee: bcs.u64(),
+  ...migrationAdmissionFields,
+  protocol_allocation: delayedBcs(
+    bcs.struct("ProtocolAllocation", {
+      meme_bps: bpsBcs,
+      quote_bps: bpsBcs,
+    }),
+  ),
+  creation_fee: delayedBcs(u64Bcs),
 });
 
 /** BCS layout of `blast_fun::runtime_config::RuntimeConfig`. */
 export const runtimeConfigBcs = bcs.struct("RuntimeConfig", {
   id: suiUidBcs,
   creator_claim_signer_public_key: bcs.vector(bcs.u8()),
-  protocol_fee_share_bps: bpsBcs,
+  protocol_fee_share_bps: delayedBcs(bpsBcs),
+  treasury: delayedBcs(addressBcs),
 });
 
 /** `blast_fun_timelock::Timelocked<T>`: `before` until `atMs`, then `after`. */
@@ -448,6 +474,12 @@ export type LaunchConfigState = {
   quoteCount: bigint;
   quoteFeeBps: bigint;
   memeFeeBps: bigint;
+  tradeFeesPolicy: Delayed<{ quote_fee_bps: bigint; meme_fee_bps: bigint }>;
+  protocolAllocationPolicy: Delayed<{ meme_bps: bigint; quote_bps: bigint }>;
+  creationFeePolicy: Delayed<bigint>;
+  witnessDelayMs: bigint;
+  pendingWitnessDelay: Pending<boolean> | null;
+  pendingWitnesses: Readonly<Record<string, Pending<boolean>>>;
   migrationWitnessTypes: string[];
   protocolAllocation: { memeBps: bigint; quoteBps: bigint };
   /** The exact SUI, in MIST, `launch::finalize` requires. */
@@ -461,6 +493,9 @@ export type RuntimeConfigState = {
   creatorClaimSignerPublicKey: Uint8Array;
   /** Blast's share of each trade fee, rounded up to Blast. */
   protocolFeeShareBps: bigint;
+  protocolFeeSharePolicy: Delayed<bigint>;
+  treasury: string;
+  treasuryPolicy: Delayed<string>;
 };
 
 /** Decoded shared `blast_partners::Partner`. */
@@ -491,14 +526,22 @@ export function decodeLaunchConfigObject(
     memeDecimals: [...parsed.meme_decimals],
     quotesTableId: normalizeSuiObjectId(parsed.quotes.id.id.bytes),
     quoteCount: BigInt(parsed.quotes.size),
-    quoteFeeBps: parsed.quote_fee_bps,
-    memeFeeBps: parsed.meme_fee_bps,
+    tradeFeesPolicy: parsed.trade_fees,
+    protocolAllocationPolicy: parsed.protocol_allocation,
+    creationFeePolicy: parsed.creation_fee,
+    witnessDelayMs: parsed.witness_delay_ms,
+    pendingWitnessDelay: parsed.pending_witness_delay,
+    pendingWitnesses: Object.fromEntries(
+      parsed.pending_witnesses.map(({ key, value }) => [key, value]),
+    ),
+    quoteFeeBps: parsed.trade_fees.value.quote_fee_bps,
+    memeFeeBps: parsed.trade_fees.value.meme_fee_bps,
     migrationWitnessTypes: [...parsed.migration_witnesses],
     protocolAllocation: {
-      memeBps: parsed.protocol_allocation.meme_bps,
-      quoteBps: parsed.protocol_allocation.quote_bps,
+      memeBps: parsed.protocol_allocation.value.meme_bps,
+      quoteBps: parsed.protocol_allocation.value.quote_bps,
     },
-    creationFee: BigInt(parsed.creation_fee),
+    creationFee: parsed.creation_fee.value,
   };
 }
 
@@ -518,7 +561,10 @@ export function decodeRuntimeConfigObject(
     creatorClaimSignerPublicKey: Uint8Array.from(
       parsed.creator_claim_signer_public_key,
     ),
-    protocolFeeShareBps: parsed.protocol_fee_share_bps,
+    protocolFeeShareBps: parsed.protocol_fee_share_bps.value,
+    protocolFeeSharePolicy: parsed.protocol_fee_share_bps,
+    treasury: parsed.treasury.value,
+    treasuryPolicy: parsed.treasury,
   };
 }
 

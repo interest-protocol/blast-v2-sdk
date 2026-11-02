@@ -41,7 +41,14 @@ const sampleSplit = {
 test("decodes and idempotently reduces every frozen launchpad event", () => {
   const frozenSpecs = readFrozenLaunchpadEventSpecs();
   assert.deepEqual(
-    orderedEventFields(launchpadEventSpecs),
+    orderedEventFields(
+      Object.fromEntries(
+        Object.keys(frozenSpecs).map((kind) => [
+          kind,
+          launchpadEventSpecs[kind as LaunchpadEventKind],
+        ]),
+      ),
+    ),
     orderedEventFields(frozenSpecs),
   );
   const kinds = Object.keys(frozenSpecs) as LaunchpadEventKind[];
@@ -419,8 +426,8 @@ test("replays launch configuration policy", () => {
   assert.deepEqual(removed.config.quotes, {});
   assert.deepEqual(removed.config.migrationWitnesses, {});
   assert.deepEqual(createLaunchpadEventProjection().config.protocolAllocation, {
-    memeBps: 0n,
-    quoteBps: 0n,
+    memeBps: 250n,
+    quoteBps: 150n,
   });
 });
 

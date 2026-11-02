@@ -130,10 +130,9 @@ test("names the Aftermath venue by the vendor's witness", () => {
   assert.equal(calls.venueOf(`${PRESALE_PKG}::cetus::Witness`), "cetus");
   assert.equal(calls.venueOf("0xdead::other::Witness"), null);
 
-  const allow = tx.setMigrationWitnessAllowed({
+  const allow = tx.scheduleMigrationWitness({
     adminCapId: "0xadc",
     venue: "aftermath",
-    allowed: true,
   });
   assert.deepEqual(moveCallTypeArguments(allow), [
     [normalizeStructTag(`${PRESALE_PKG}::blast_presale_domain::AdapterAdmin`)],

@@ -6,7 +6,7 @@ import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
 
 type AbiFunction = {
   name: string;
-  sdk: string;
+  sdk?: string;
   typeParameters: unknown[];
   parameters: unknown[];
   returns: unknown[];
@@ -50,7 +50,8 @@ export function assertBuildersMatchAbi(
     );
     assert.ok(frozen, `${name} is in the frozen ABI`);
     assert.ok(
-      frozen.sdk === "builder" ||
+      frozen.sdk === undefined ||
+        frozen.sdk === "builder" ||
         frozen.sdk === "compositional" ||
         frozen.sdk === "read",
       `${name} is a builder`,
@@ -74,8 +75,9 @@ export function assertBuildersMatchAbi(
       );
       assert.equal(
         input.Object.SharedObject.mutable,
-        false,
-        `${name} reads PackageVersion`,
+        (frozen.parameters[1] as { Reference?: [boolean, unknown] })
+          ?.Reference?.[0] ?? false,
+        `${name} has the correct PackageVersion mutability`,
       );
     }
     return [name];

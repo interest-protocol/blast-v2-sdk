@@ -24,7 +24,10 @@ export function nativeSaleTransaction(options: {
   const { deployment: d } = options;
   const calls = new PresaleCalls(d);
   const tx = new Transaction();
-  const witnessType = calls.migrationWitnessType("aftermath-native");
+  if (!options.baseline.witnessAllowed)
+    throw new Error(
+      "Schedule and apply the native Aftermath migration witness before creating this sale",
+    );
   const setAdmissions = (allowed: boolean) => {
     if (!options.baseline.quoteAllowed)
       tx.add(
@@ -33,16 +36,6 @@ export function nativeSaleTransaction(options: {
             calls.signIn({ adminCap: options.adminCap, role: "ListingAdmin" }),
           ),
           quoteType: options.quoteType,
-          allowed,
-        }),
-      );
-    if (!options.baseline.witnessAllowed)
-      tx.add(
-        calls.setMigrationWitnessAllowed({
-          adminWitness: tx.add(
-            calls.signIn({ adminCap: options.adminCap, role: "AdapterAdmin" }),
-          ),
-          witnessType,
           allowed,
         }),
       );

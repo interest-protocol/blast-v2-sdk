@@ -198,6 +198,14 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
   const policy = await getLpFeePolicy(client, policyId, originalPackageId);
   assert.equal(policy.protocolDestination, normalizeSuiAddress("0xb1a57"));
   assert.deepEqual(policy.defaultShares, { memeBps: 1_000n, quoteBps: 2_000n });
+  assert.equal(
+    policy.protocolDestinationPolicy.value,
+    policy.protocolDestination,
+  );
+  assert.equal(
+    policy.defaultSharesPolicy.value.meme_bps,
+    policy.defaultShares.memeBps,
+  );
   assert.equal(policy.coinSharesTableId, tableId);
   assert.deepEqual(await getLpFeeShares(client, policy, memeType), {
     memeBps: 500n,

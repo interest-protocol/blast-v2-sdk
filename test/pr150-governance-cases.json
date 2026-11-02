@@ -1,0 +1,1124 @@
+{
+  "launchpad": [
+    {
+      "method": "applyCreationFee",
+      "module": "launch_config",
+      "function": "apply_creation_fee",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "applyMigrationDelay",
+      "module": "launch_config",
+      "function": "apply_migration_delay",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "applyMigrationWitness",
+      "module": "launch_config",
+      "function": "apply_migration_witness",
+      "role": null,
+      "sample": {
+        "migrationWitnessType": "0x5::coin::MEME"
+      },
+      "returns": false
+    },
+    {
+      "method": "applyProtocolAllocation",
+      "module": "launch_config",
+      "function": "apply_protocol_allocation",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "applyTradeFees",
+      "module": "launch_config",
+      "function": "apply_trade_fees",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "cancelCreationFee",
+      "module": "launch_config",
+      "function": "cancel_creation_fee",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelMigrationDelay",
+      "module": "launch_config",
+      "function": "cancel_migration_delay",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelMigrationWitness",
+      "module": "launch_config",
+      "function": "cancel_migration_witness",
+      "role": "CancelAdmin",
+      "sample": {
+        "migrationWitnessType": "0x5::coin::MEME",
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelProtocolAllocation",
+      "module": "launch_config",
+      "function": "cancel_protocol_allocation",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelTradeFees",
+      "module": "launch_config",
+      "function": "cancel_trade_fees",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "removeMigrationWitness",
+      "module": "launch_config",
+      "function": "remove_migration_witness",
+      "role": "AdapterAdmin",
+      "sample": {
+        "migrationWitnessType": "0x5::coin::MEME",
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleCreationFee",
+      "module": "launch_config",
+      "function": "schedule_creation_fee",
+      "role": "FeeAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "creationFee": "BIGINT",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleMigrationDelay",
+      "module": "launch_config",
+      "function": "schedule_migration_delay",
+      "role": "AdapterAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleMigrationWitness",
+      "module": "launch_config",
+      "function": "schedule_migration_witness",
+      "role": "AdapterAdmin",
+      "sample": {
+        "migrationWitnessType": "0x5::coin::MEME",
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleProtocolAllocation",
+      "module": "launch_config",
+      "function": "schedule_protocol_allocation",
+      "role": "TreasuryAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "memeBps": "BIGINT",
+        "quoteBps": "BIGINT",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleTradeFees",
+      "module": "launch_config",
+      "function": "schedule_trade_fees",
+      "role": "FeeAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "quoteFeeBps": "BIGINT",
+        "memeFeeBps": "BIGINT",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "applyProtocolFeeShare",
+      "module": "runtime_config",
+      "function": "apply_protocol_fee_share",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "applyTreasury",
+      "module": "runtime_config",
+      "function": "apply_treasury",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "cancelProtocolFeeShare",
+      "module": "runtime_config",
+      "function": "cancel_protocol_fee_share",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelTreasury",
+      "module": "runtime_config",
+      "function": "cancel_treasury",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "revokeCreatorClaimSigner",
+      "module": "runtime_config",
+      "function": "revoke_creator_claim_signer",
+      "role": "ClaimSignerAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleProtocolFeeShare",
+      "module": "runtime_config",
+      "function": "schedule_protocol_fee_share",
+      "role": "FeeAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "protocolFeeShareBps": "BIGINT",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleTreasury",
+      "module": "runtime_config",
+      "function": "schedule_treasury",
+      "role": "TreasuryAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "treasury": "0x993",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "applyCurveFeeCapUpdate",
+      "module": "launch",
+      "function": "apply_curve_fee_cap_update",
+      "role": null,
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "launch": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "applyMetadataCapUpdate",
+      "module": "launch",
+      "function": "apply_metadata_cap_update",
+      "role": null,
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "launch": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelCurveFeeCapReassignment",
+      "module": "launch",
+      "function": "cancel_curve_fee_cap_reassignment",
+      "role": "CancelAdmin",
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "launch": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelMetadataCapReassignment",
+      "module": "launch",
+      "function": "cancel_metadata_cap_reassignment",
+      "role": "CancelAdmin",
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "launch": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleCurveFeeCapDelay",
+      "module": "launch",
+      "function": "schedule_curve_fee_cap_delay",
+      "role": "CreatorAdmin",
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "launch": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleCurveFeeCapReassignment",
+      "module": "launch",
+      "function": "schedule_curve_fee_cap_reassignment",
+      "role": "CreatorAdmin",
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "launch": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "recipient": "0x993"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleMetadataCapDelay",
+      "module": "launch",
+      "function": "schedule_metadata_cap_delay",
+      "role": "CreatorAdmin",
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "launch": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleMetadataCapReassignment",
+      "module": "launch",
+      "function": "schedule_metadata_cap_reassignment",
+      "role": "CreatorAdmin",
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "launch": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "recipient": "0x993"
+      },
+      "returns": false
+    },
+    {
+      "method": "pause",
+      "module": "blast_fun",
+      "function": "pause",
+      "role": "PauseAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "bits": 1
+      },
+      "returns": false
+    },
+    {
+      "method": "unpause",
+      "module": "blast_fun",
+      "function": "unpause",
+      "role": "UnpauseAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "bits": 1
+      },
+      "returns": false
+    },
+    {
+      "method": "applyUpgradeDelay",
+      "module": "package_admin",
+      "function": "apply_upgrade_delay",
+      "role": null,
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "authorizeUpgrade",
+      "module": "package_admin",
+      "function": "authorize_upgrade",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "digest": "BYTES32"
+      },
+      "returns": true
+    },
+    {
+      "method": "cancelUpgradeAction",
+      "module": "package_admin",
+      "function": "cancel_upgrade_action",
+      "role": "CancelAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "commitUpgradeAndAdvance",
+      "module": "package_admin",
+      "function": "commit_upgrade_and_advance",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "receipt": "0x994"
+      },
+      "returns": false
+    },
+    {
+      "method": "makeImmutable",
+      "module": "package_admin",
+      "function": "make_immutable",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleMakeImmutable",
+      "module": "package_admin",
+      "function": "schedule_make_immutable",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleUpgrade",
+      "module": "package_admin",
+      "function": "schedule_upgrade",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "digest": "BYTES32"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleUpgradeDelay",
+      "module": "package_admin",
+      "function": "schedule_upgrade_delay",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "wrapPublication",
+      "module": "package_admin",
+      "function": "wrap",
+      "role": null,
+      "sample": {
+        "publication": "0x994",
+        "upgradeCap": "0x994"
+      },
+      "returns": false
+    }
+  ],
+  "presale": [
+    {
+      "method": "applyMigrationDelay",
+      "module": "creation_policy",
+      "function": "apply_migration_delay",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "applyMigrationWitness",
+      "module": "creation_policy",
+      "function": "apply_migration_witness",
+      "role": null,
+      "sample": {
+        "migrationWitnessType": "0x5::coin::MEME"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelMigrationDelay",
+      "module": "creation_policy",
+      "function": "cancel_migration_delay",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelMigrationWitness",
+      "module": "creation_policy",
+      "function": "cancel_migration_witness",
+      "role": "CancelAdmin",
+      "sample": {
+        "migrationWitnessType": "0x5::coin::MEME",
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "removeMigrationWitness",
+      "module": "creation_policy",
+      "function": "remove_migration_witness",
+      "role": "AdapterAdmin",
+      "sample": {
+        "migrationWitnessType": "0x5::coin::MEME",
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleMigrationDelay",
+      "module": "creation_policy",
+      "function": "schedule_migration_delay",
+      "role": "AdapterAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleMigrationWitness",
+      "module": "creation_policy",
+      "function": "schedule_migration_witness",
+      "role": "AdapterAdmin",
+      "sample": {
+        "migrationWitnessType": "0x5::coin::MEME",
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "applyProtocolDestination",
+      "module": "fee_policy",
+      "function": "apply_destination",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "applyProtocolFees",
+      "module": "fee_policy",
+      "function": "apply_fees",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "cancelProtocolDestination",
+      "module": "fee_policy",
+      "function": "cancel_destination",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelProtocolFees",
+      "module": "fee_policy",
+      "function": "cancel_fees",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleProtocolDestination",
+      "module": "fee_policy",
+      "function": "schedule_destination",
+      "role": "TreasuryAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "destination": "0x993",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleProtocolFees",
+      "module": "fee_policy",
+      "function": "schedule_fees",
+      "role": "FeeAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT",
+        "fees": {
+          "raiseBps": "BIGINT",
+          "tokenBps": "BIGINT",
+          "lpFeeMemeBps": "BIGINT",
+          "lpFeeQuoteBps": "BIGINT"
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "applyProtocolLpFees",
+      "module": "presale_vault",
+      "function": "apply_protocol_lp_fees",
+      "role": null,
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelProtocolLpFees",
+      "module": "presale_vault",
+      "function": "cancel_protocol_lp_fees",
+      "role": "CancelAdmin",
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleProtocolLpFees",
+      "module": "presale_vault",
+      "function": "schedule_protocol_lp_fees",
+      "role": "FeeAdmin",
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "lpFeeMemeBps": "BIGINT",
+        "lpFeeQuoteBps": "BIGINT",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "pause",
+      "module": "blast_presale_package",
+      "function": "pause",
+      "role": "PauseAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "bits": 1
+      },
+      "returns": false
+    },
+    {
+      "method": "unpause",
+      "module": "blast_presale_package",
+      "function": "unpause",
+      "role": "UnpauseAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "bits": 1
+      },
+      "returns": false
+    },
+    {
+      "method": "applyUpgradeDelay",
+      "module": "package_admin",
+      "function": "apply_upgrade_delay",
+      "role": null,
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "authorizeUpgrade",
+      "module": "package_admin",
+      "function": "authorize_upgrade",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "digest": "BYTES32"
+      },
+      "returns": true
+    },
+    {
+      "method": "cancelUpgradeAction",
+      "module": "package_admin",
+      "function": "cancel_upgrade_action",
+      "role": "CancelAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "commitUpgradeAndAdvance",
+      "module": "package_admin",
+      "function": "commit_upgrade_and_advance",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "receipt": "0x994"
+      },
+      "returns": false
+    },
+    {
+      "method": "makeImmutable",
+      "module": "package_admin",
+      "function": "make_immutable",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleMakeImmutable",
+      "module": "package_admin",
+      "function": "schedule_make_immutable",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleUpgrade",
+      "module": "package_admin",
+      "function": "schedule_upgrade",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "digest": "BYTES32"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleUpgradeDelay",
+      "module": "package_admin",
+      "function": "schedule_upgrade_delay",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "wrapPublication",
+      "module": "package_admin",
+      "function": "wrap",
+      "role": null,
+      "sample": {
+        "publication": "0x994",
+        "upgradeCap": "0x994"
+      },
+      "returns": false
+    }
+  ],
+  "migrators": [
+    {
+      "method": "applyLpFeeCoinShares",
+      "module": "lp_fee_policy",
+      "function": "apply_coin_shares",
+      "role": null,
+      "sample": {
+        "memeType": "0x5::coin::MEME"
+      },
+      "returns": false
+    },
+    {
+      "method": "applyLpFeeDefaultShares",
+      "module": "lp_fee_policy",
+      "function": "apply_default_shares",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "applyLpFeeProtocolDestination",
+      "module": "lp_fee_policy",
+      "function": "apply_protocol_destination",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "cancelLpFeeCoinShares",
+      "module": "lp_fee_policy",
+      "function": "cancel_coin_shares",
+      "role": "CancelAdmin",
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelLpFeeDefaultShares",
+      "module": "lp_fee_policy",
+      "function": "cancel_default_shares",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelLpFeeProtocolDestination",
+      "module": "lp_fee_policy",
+      "function": "cancel_protocol_destination",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleClearLpFeeCoinShares",
+      "module": "lp_fee_policy",
+      "function": "schedule_clear_coin_shares",
+      "role": "FeeAdmin",
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleLpFeeCoinShares",
+      "module": "lp_fee_policy",
+      "function": "schedule_coin_shares",
+      "role": "FeeAdmin",
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "adminWitness": "0x991",
+        "memeBps": "BIGINT",
+        "quoteBps": "BIGINT",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleLpFeeDefaultShares",
+      "module": "lp_fee_policy",
+      "function": "schedule_default_shares",
+      "role": "FeeAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "memeBps": "BIGINT",
+        "quoteBps": "BIGINT",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleLpFeeProtocolDestination",
+      "module": "lp_fee_policy",
+      "function": "schedule_protocol_destination",
+      "role": "TreasuryAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "destination": "0x993",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "applyUpgradeDelay",
+      "module": "package_admin",
+      "function": "apply_upgrade_delay",
+      "role": null,
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "authorizeUpgrade",
+      "module": "package_admin",
+      "function": "authorize_upgrade",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "digest": "BYTES32"
+      },
+      "returns": true
+    },
+    {
+      "method": "cancelUpgradeAction",
+      "module": "package_admin",
+      "function": "cancel_upgrade_action",
+      "role": "CancelAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "commitUpgradeAndAdvance",
+      "module": "package_admin",
+      "function": "commit_upgrade_and_advance",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "receipt": "0x994"
+      },
+      "returns": false
+    },
+    {
+      "method": "makeImmutable",
+      "module": "package_admin",
+      "function": "make_immutable",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleMakeImmutable",
+      "module": "package_admin",
+      "function": "schedule_make_immutable",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleUpgrade",
+      "module": "package_admin",
+      "function": "schedule_upgrade",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "digest": "BYTES32"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleUpgradeDelay",
+      "module": "package_admin",
+      "function": "schedule_upgrade_delay",
+      "role": "UpgradeAdmin",
+      "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "wrapPublication",
+      "module": "package_admin",
+      "function": "wrap",
+      "role": null,
+      "sample": {
+        "publication": "0x994",
+        "upgradeCap": "0x994"
+      },
+      "returns": false
+    }
+  ]
+}

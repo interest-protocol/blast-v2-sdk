@@ -120,6 +120,12 @@ export type PresaleVaultProjection = {
    * Blast's shares of each collected LP-fee asset: snapshotted at migration,
    * then replaced by each `ProtocolLpFeesChanged`.
    */
+  pendingProtocolLpFees: {
+    memeBps: bigint;
+    quoteBps: bigint;
+    readyAtMs: bigint;
+    delayMs: bigint;
+  } | null;
   protocolLpFeeMemeBps: bigint;
   protocolLpFeeQuoteBps: bigint;
   migrationMemeResidual: bigint;
@@ -408,6 +414,7 @@ function applyVaultEvent(
             holderRewardsBps: payload.holder_rewards_bps,
             feeSplitDelayMs: 172_800_000n,
             pendingFeeSplit: null,
+            pendingProtocolLpFees: null,
             protocolLpFeeMemeBps: payload.protocol_lp_fee_meme_bps,
             protocolLpFeeQuoteBps: payload.protocol_lp_fee_quote_bps,
             migrationMemeResidual: payload.migration_meme_residual,
@@ -501,9 +508,23 @@ function applyVaultEvent(
         partnerQuotePaid: vault.partnerQuotePaid + payload.partner_quote,
       }));
     }
+    case "ProtocolLpFeesScheduled":
+      return updateVault(state, event.payload.vault_id, () => ({
+        pendingProtocolLpFees: {
+          memeBps: event.payload.meme_bps,
+          quoteBps: event.payload.quote_bps,
+          readyAtMs: event.payload.ready_at_ms,
+          delayMs: event.payload.delay_ms,
+        },
+      }));
+    case "ProtocolLpFeesCancelled":
+      return updateVault(state, event.payload.vault_id, () => ({
+        pendingProtocolLpFees: null,
+      }));
     case "ProtocolLpFeesChanged": {
       const { payload } = event;
       return updateVault(state, payload.vault_id, () => ({
+        pendingProtocolLpFees: null,
         protocolLpFeeMemeBps: payload.protocol_lp_fee_meme_bps,
         protocolLpFeeQuoteBps: payload.protocol_lp_fee_quote_bps,
       }));

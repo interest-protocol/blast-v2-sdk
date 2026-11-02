@@ -487,9 +487,10 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
 
   const cases = [
     [
-      "set_default_shares",
+      "schedule_default_shares",
       "FeeAdmin",
-      sdk.setLpFeeDefaultShares({
+      sdk.scheduleLpFeeDefaultShares({
+        delayMs: 172_800_000n,
         adminCapId: "0xad1",
         memeBps: 100n,
         quoteBps: 200n,
@@ -497,9 +498,10 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
       [],
     ],
     [
-      "set_coin_shares",
+      "schedule_coin_shares",
       "FeeAdmin",
-      sdk.setLpFeeCoinShares({
+      sdk.scheduleLpFeeCoinShares({
+        delayMs: 172_800_000n,
         memeType: types.memeType,
         adminCapId: "0xad1",
         memeBps: 100n,
@@ -508,18 +510,20 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
       [normalizedType(types.memeType)],
     ],
     [
-      "clear_coin_shares",
+      "schedule_clear_coin_shares",
       "FeeAdmin",
-      sdk.clearLpFeeCoinShares({
+      sdk.scheduleClearLpFeeCoinShares({
+        delayMs: 172_800_000n,
         memeType: types.memeType,
         adminCapId: "0xad1",
       }),
       [normalizedType(types.memeType)],
     ],
     [
-      "set_protocol_destination",
+      "schedule_protocol_destination",
       "TreasuryAdmin",
-      sdk.setLpFeeProtocolDestination({
+      sdk.scheduleLpFeeProtocolDestination({
+        delayMs: 172_800_000n,
         adminCapId: "0xad1",
         destination: "0xb",
       }),
@@ -539,7 +543,8 @@ test("composes admin sign-in with residual claims and LP-fee policy changes", ()
   }
   assert.throws(
     () =>
-      sdk.setLpFeeDefaultShares({
+      sdk.scheduleLpFeeDefaultShares({
+        delayMs: 172_800_000n,
         adminCapId: "0xad1",
         memeBps: 10_001n,
         quoteBps: 0n,

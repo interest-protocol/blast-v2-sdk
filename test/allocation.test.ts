@@ -17,7 +17,7 @@ import {
   requireCompletePlan,
 } from "@interest-protocol/blast-launchpad-sdk/allocation";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
-import { LAUNCHPAD_FIXTURE_HEX } from "./fixtures/launchpad-442116a.ts";
+import { LAUNCHPAD_FIXTURE_HEX } from "./fixtures/launchpad-pr150.ts";
 
 const U64_MAX = (1n << 64n) - 1n;
 
@@ -235,10 +235,9 @@ test("stores Blast's shares and checks both sums like allocation::add_protocol",
       }),
     /at most sixteen/,
   );
-  // `allocation::plan` needs positive curve and pool Meme shares only.
-  assert.equal(
-    normalizeAllocationPlan({ ...creator, lpQuoteBps: 0n }).lpQuoteBps,
-    0n,
+  assert.throws(
+    () => normalizeAllocationPlan({ ...creator, lpQuoteBps: 0n }),
+    /positive Quote/,
   );
   assert.throws(
     () => normalizeAllocationPlan({ ...creator, lpMemeBps: 0n }),
@@ -412,4 +411,18 @@ test("decodes a finalized plan from literal contract bytes", () => {
     ],
   });
   assert.deepEqual(requireCompletePlan(decoded), decoded);
+});
+
+test("requires positive LP Quote when constructing a plan", () => {
+  const allocation = {
+    curveMemeBps: 8_000n,
+    lpMemeBps: 2_000n,
+    lpQuoteBps: 0n,
+    recipients: [],
+  };
+  assert.throws(() => normalizeAllocationPlan(allocation), /positive Quote/);
+  assert.equal(
+    normalizeAllocationPlan({ ...allocation, lpQuoteBps: 1n }).lpQuoteBps,
+    1n,
+  );
 });
