@@ -1251,6 +1251,130 @@ export class PresaleCalls {
     };
   }
 
+  /** Schedules a creator split and next notice; waits the currently applied notice. */
+  scheduleFeeSplit(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      presaleCap: TransactionObjectInput;
+      feeRecipients: readonly BpsShare[];
+      holderRewardsBps: bigint;
+      delayMs: bigint;
+    },
+  ) {
+    const split = this.feeSplit(
+      options.feeRecipients,
+      options.holderRewardsBps,
+    );
+    const delay = requireU64("delayMs", options.delayMs);
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "schedule_fee_split",
+        [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
+          tx.object(options.presaleCap),
+          tx.add(split),
+          tx.pure.u64(delay),
+          tx.object.clock(),
+        ],
+        options,
+        "presale_vault",
+      );
+    };
+  }
+
+  cancelFeeSplit(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      presaleCap: TransactionObjectInput;
+    },
+  ) {
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "cancel_fee_split",
+        [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
+          tx.object(options.presaleCap),
+        ],
+        options,
+        "presale_vault",
+      );
+    };
+  }
+
+  /** Aftermath fees are coins delivered to the vault; activation splits each later receipt under the active split. */
+  applyAftermathFeeSplit(
+    options: LaunchTypes & { vault: SharedObjectReference<true> },
+  ) {
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "apply_fee_split",
+        [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
+          tx.object.clock(),
+        ],
+        options,
+        "aftermath",
+      );
+    };
+  }
+
+  settleAndApplyCetusFeeSplit(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      cetusConfig: SharedObjectReference<false>;
+      burnManager: SharedObjectReference<false>;
+      pool: SharedObjectReference<true>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::cetus::settle_and_apply_fee_split`,
+        typeArguments: cetusTypeArguments(types),
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
+          this.#feePolicy(tx),
+          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
+          sharedObject(tx, "burnManager", options.burnManager, false),
+          sharedObject(tx, "pool", options.pool, true),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  settleAndApplyBluefinFeeSplit(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      bluefinConfig: SharedObjectReference<false>;
+      pool: SharedObjectReference<true>;
+    },
+  ) {
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        "settle_and_apply_fee_split",
+        [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
+          this.#feePolicy(tx),
+          sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
+          sharedObject(tx, "pool", options.pool, true),
+          tx.object.clock(),
+        ],
+        options,
+        "bluefin",
+      );
+    };
+  }
+
   /**
    * `cetus::collect_fees`: pays Blast, or holds its LP fees on a partnered
    * vault, then pays every fee recipient and keeps the holder share.
@@ -2110,6 +2234,36 @@ export class PresaleTransactions {
   }
 
   /** Then pays the vault's partner when `partner` is given; see `payProtocolLpFeesWithPartner`. */
+  scheduleFeeSplit(
+    options: Parameters<PresaleCalls["scheduleFeeSplit"]>[0],
+  ): Transaction {
+    return single(this.call.scheduleFeeSplit(options));
+  }
+
+  cancelFeeSplit(
+    options: Parameters<PresaleCalls["cancelFeeSplit"]>[0],
+  ): Transaction {
+    return single(this.call.cancelFeeSplit(options));
+  }
+
+  applyAftermathFeeSplit(
+    options: Parameters<PresaleCalls["applyAftermathFeeSplit"]>[0],
+  ): Transaction {
+    return single(this.call.applyAftermathFeeSplit(options));
+  }
+
+  settleAndApplyCetusFeeSplit(
+    options: Parameters<PresaleCalls["settleAndApplyCetusFeeSplit"]>[0],
+  ): Transaction {
+    return single(this.call.settleAndApplyCetusFeeSplit(options));
+  }
+
+  settleAndApplyBluefinFeeSplit(
+    options: Parameters<PresaleCalls["settleAndApplyBluefinFeeSplit"]>[0],
+  ): Transaction {
+    return single(this.call.settleAndApplyBluefinFeeSplit(options));
+  }
+
   collectCetusFees(
     options: Parameters<PresaleCalls["collectCetusFees"]>[0] & PresalePayout,
   ): Transaction {

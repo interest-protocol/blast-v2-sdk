@@ -30,41 +30,70 @@ type MigratorEventFieldDescriptor =
   | "optionAddress"
   | "optionTypeName"
   | "optionU64"
-  | "feeSplit";
+  | "feeSplit"
+  | "optionBytes";
 
 export const migratorEventSpecs = {
-  AutoLiquidityAdded: {
-    vault_id: "id",
-    meme_amount: "u64",
-    quote_amount: "u64",
-    meme_pending: "u64",
-    quote_pending: "u64",
+  ProtocolDestinationCancelled: {
+    destination: "address",
   },
-  AutoLpPositionOpened: {
+  ProtocolDestinationScheduled: {
+    destination: "address",
+    ready_at_ms: "u64",
+    delay_ms: "u64",
+  },
+  DefaultSharesCancelled: {
+    meme_bps: "u64",
+    quote_bps: "u64",
+  },
+  DefaultSharesScheduled: {
+    meme_bps: "u64",
+    quote_bps: "u64",
+    ready_at_ms: "u64",
+    delay_ms: "u64",
+  },
+  CoinSharesCancelled: {
+    meme: "typeName",
+    meme_bps: "optionU64",
+    quote_bps: "optionU64",
+  },
+  CoinSharesScheduled: {
+    meme: "typeName",
+    meme_bps: "optionU64",
+    quote_bps: "optionU64",
+    ready_at_ms: "u64",
+    delay_ms: "u64",
+  },
+  UpgradeActionCancelled: {
+    digest: "optionBytes",
+  },
+  UpgradeActionScheduled: {
+    digest: "optionBytes",
+    ready_at_ms: "u64",
+    delay_ms: "u64",
+  },
+  LpFeePolicyChanged: {
+    meme: "optionTypeName",
+    old_meme_bps: "optionU64",
+    old_quote_bps: "optionU64",
+    new_meme_bps: "optionU64",
+    new_quote_bps: "optionU64",
+  },
+  LpFeeDestinationChanged: {
+    old_destination: "address",
+    new_destination: "address",
+  },
+  VaultCreated: {
     vault_id: "id",
+    pool_id: "id",
     position_id: "id",
-  },
-  BuybackBurned: {
-    vault_id: "id",
-    quote_spent: "u64",
-    meme_burned: "u64",
-    quote_pending: "u64",
-  },
-  CetusPoolReserved: {
+    venue: "typeName",
     meme: "typeName",
     quote: "typeName",
-    pool_creation_cap_id: "id",
-    tick_spacing: "u32",
-  },
-  CreatorFeesClaimed: {
-    vault_id: "id",
-    meme_amount: "u64",
-    quote_amount: "u64",
-  },
-  FeeSplitChanged: {
-    vault_id: "id",
-    old_fee_split: "feeSplit",
-    new_fee_split: "feeSplit",
+    residual_meme: "u64",
+    residual_quote: "u64",
+    liquidity: "u128",
+    fee_split: "feeSplit",
   },
   FeesCollected: {
     vault_id: "id",
@@ -84,16 +113,86 @@ export const migratorEventSpecs = {
     recipient_meme: "u64Vector",
     recipient_quote: "u64Vector",
   },
-  LpFeeDestinationChanged: {
-    old_destination: "address",
-    new_destination: "address",
+  AutoLiquidityAdded: {
+    vault_id: "id",
+    meme_amount: "u64",
+    quote_amount: "u64",
+    meme_pending: "u64",
+    quote_pending: "u64",
   },
-  LpFeePolicyChanged: {
-    meme: "optionTypeName",
-    old_meme_bps: "optionU64",
-    old_quote_bps: "optionU64",
-    new_meme_bps: "optionU64",
-    new_quote_bps: "optionU64",
+  BuybackBurned: {
+    vault_id: "id",
+    quote_spent: "u64",
+    meme_burned: "u64",
+    quote_pending: "u64",
+  },
+  AutoLpPositionOpened: {
+    vault_id: "id",
+    position_id: "id",
+  },
+  FeeSplitScheduled: {
+    vault_id: "id",
+    proposed: "feeSplit",
+    ready_at_ms: "u64",
+    delay_ms: "u64",
+  },
+  FeeSplitCancelled: {
+    vault_id: "id",
+    proposed: "feeSplit",
+  },
+  FeeSplitChanged: {
+    vault_id: "id",
+    old_fee_split: "feeSplit",
+    new_fee_split: "feeSplit",
+    delay_ms: "u64",
+  },
+  CreatorFeesClaimed: {
+    vault_id: "id",
+    meme_amount: "u64",
+    quote_amount: "u64",
+  },
+  RoundPublished: {
+    vault_id: "id",
+    round_id: "id",
+    number: "u64",
+    start_checkpoint: "u64",
+    end_checkpoint: "u64",
+    claim_deadline_at_ms: "u64",
+    root: "bytes",
+    manifest_digest: "bytes",
+    leaf_count: "u64",
+    meme_amount: "u64",
+    quote_amount: "u64",
+    meme_unallocated: "u64",
+    quote_unallocated: "u64",
+    treasury: "address",
+    gas_reserve_amount: "u64",
+  },
+  GasReserveSettled: {
+    vault_id: "id",
+    round_id: "id",
+    number: "u64",
+    treasury: "address",
+    reimbursement_amount: "u64",
+    reserve_returned: "u64",
+    quote_unallocated: "u64",
+  },
+  RoundClosed: {
+    vault_id: "id",
+    round_id: "id",
+    number: "u64",
+    meme_returned: "u64",
+    quote_returned: "u64",
+    gas_reserve_returned: "u64",
+  },
+  RewardPaid: {
+    round_id: "id",
+    index: "u64",
+    beneficiary: "address",
+    meme_amount: "u64",
+    quote_amount: "u64",
+    meme_remaining: "u64",
+    quote_remaining: "u64",
   },
   ProtocolFeesClaimed: {
     vault_id: "id",
@@ -111,40 +210,18 @@ export const migratorEventSpecs = {
     partner_meme: "u64",
     partner_quote: "u64",
   },
-  RewardPaid: {
-    round_id: "id",
-    index: "u64",
-    beneficiary: "address",
-    meme_amount: "u64",
-    quote_amount: "u64",
-    meme_remaining: "u64",
-    quote_remaining: "u64",
-  },
-  RoundPublished: {
-    vault_id: "id",
-    round_id: "id",
-    number: "u64",
-    start_checkpoint: "u64",
-    end_checkpoint: "u64",
-    root: "bytes",
-    manifest_digest: "bytes",
-    leaf_count: "u64",
-    meme_amount: "u64",
-    quote_amount: "u64",
-    meme_unallocated: "u64",
-    quote_unallocated: "u64",
-  },
-  VaultCreated: {
-    vault_id: "id",
-    pool_id: "id",
-    position_id: "id",
-    venue: "typeName",
+  CetusPoolReserved: {
     meme: "typeName",
     quote: "typeName",
-    residual_meme: "u64",
-    residual_quote: "u64",
-    liquidity: "u128",
-    fee_split: "feeSplit",
+    pool_creation_cap_id: "id",
+    tick_spacing: "u32",
+  },
+  UpgradeDelayScheduled: {
+    delay_ms: "u64",
+    ready_at_ms: "u64",
+  },
+  UpgradeDelayChanged: {
+    delay_ms: "u64",
   },
 } as const satisfies Record<
   string,
@@ -167,6 +244,7 @@ type DescriptorOutputs = {
   optionTypeName: string | null;
   optionU64: bigint | null;
   feeSplit: FeeSplit;
+  optionBytes: Uint8Array | null;
 };
 
 export type MigratorEventPayloads = {
@@ -210,6 +288,7 @@ const MIGRATOR_EVENT_FIELD_BCS: Record<
   optionTypeName: bcs.option(moveTypeNameBcs) as BcsType<unknown, unknown>,
   optionU64: bcs.option(U64Bcs) as BcsType<unknown, unknown>,
   feeSplit: feeSplitBcs as BcsType<unknown, unknown>,
+  optionBytes: bcs.option(BytesBcs) as BcsType<unknown, unknown>,
 };
 
 type MigratorEventBcsMap = {

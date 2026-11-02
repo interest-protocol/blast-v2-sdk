@@ -67,6 +67,9 @@ test("round bitmap decodes claims across word boundaries", () => {
       claimed: [1n << 255n, 1n],
       meme: { value: 20n },
       quote: { value: 40n },
+      claim_deadline_at_ms: 2_000_000_000_000n,
+      treasury: "0xb",
+      gas_reserve: null,
     })
     .toBytes();
   const round = decodeRewardRound(
@@ -80,6 +83,17 @@ test("round bitmap decodes claims across word boundaries", () => {
     "0x99",
   );
   assert.equal(round.vaultId, addr("0xd"));
+  assert.equal(round.claimDeadlineMs, 2_000_000_000_000n);
+  assert.equal(round.treasury, addr("0xb"));
+  assert.equal(round.gasReserveRemaining, null);
+  assert.throws(
+    () =>
+      decodeRewardRound(
+        { ...round, content: Uint8Array.from([...content, 0]) },
+        "0x99",
+      ),
+    /BCS length/,
+  );
   assert.throws(
     () =>
       decodeRewardRound(

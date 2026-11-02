@@ -89,11 +89,11 @@ export type HolderRewardsOperatorConfig = {
    * `blast_presale_domain::RewardsAdmin` role for a presale.
    */
   adminCapId?: string;
-  /** Presale only: claims stay open this many milliseconds after `publishTransaction` builds the round. */
+  /** Claims stay open this many milliseconds after `publishTransaction` builds the round. */
   claimWindowMs?: string;
   /** Explicit per-publication Quote gas reserve; zero chooses Blast-paid gas. */
   gasReserveAmount?: string;
-  /** Presale only: explicit governed treasury expected by this publication. */
+  /** Explicit governed treasury expected by this publication. */
   expectedTreasury?: string;
   /** Sender set on unsigned publication and relay transactions. */
   sender?: string;
@@ -308,20 +308,26 @@ async function prepareRound(context: OperatorContext): Promise<RewardManifest> {
   const end = BigInt(state.ledger.nextCheckpoint) - 1n;
   if (
     end <= BigInt(state.activationCheckpoint) ||
-    (vault.lastCheckpoint !== null &&
-      (config.product === "presale"
-        ? vault.lastCheckpoint > start
-        : vault.lastCheckpoint !== start))
+    (vault.lastCheckpoint !== null && vault.lastCheckpoint > start)
   )
     throw new Error(
       "ledger interval does not match vault; index or advance first",
     );
   const exclusions = [vault.objectId, ...(config.excludedAddresses ?? [])];
   const weights = holderWeights(state.ledger, exclusions);
+  const reserveText = config.gasReserveAmount ?? "0";
+  if (
+    !/^(0|[1-9][0-9]*)$/.test(reserveText) ||
+    BigInt(reserveText) > (1n << 64n) - 1n
+  )
+    throw new RangeError("gasReserveAmount must be a u64");
+  const reserve = BigInt(reserveText);
+  if (reserve < 0n || reserve > vault.rewardsQuote)
+    throw new RangeError("gas reserve exceeds unallocated Quote");
   const allocation = allocateHolderRewards(
     weights,
     vault.rewardsMeme,
-    vault.rewardsQuote,
+    vault.rewardsQuote - reserve,
   );
   if (!allocation.allocations.length)
     throw new Error(
@@ -538,16 +544,17 @@ async function loadProduct(
       },
       publish: (manifest, adminCapId) => {
         if (!config.claimWindowMs || !/^\d+$/.test(config.claimWindowMs))
-          throw new Error("presale publish-tx needs claimWindowMs");
+          throw new Error("publish-tx needs claimWindowMs");
         if (
           config.gasReserveAmount === undefined ||
           !/^(0|[1-9][0-9]*)$/.test(config.gasReserveAmount)
         )
           throw new Error(
-            "presale publish-tx needs explicit gasReserveAmount (0 disables reimbursement)",
+            "publish-tx needs explicit gasReserveAmount (0 disables reimbursement)",
           );
         if (config.expectedTreasury === undefined)
-          throw new Error("presale publish-tx needs explicit expectedTreasury");
+          throw new Error("publish-tx needs explicit expectedTreasury");
+
         return transactions.publishHolderRewardRound({
           ...pair,
           vault,
@@ -575,13 +582,28 @@ async function loadProduct(
       summary: { feeSplit: state.feeSplit },
     },
     readRound: (roundId) => getRewardRound(client, roundId, originalPackageId),
-    publish: (manifest, adminCapId) =>
-      transactions.publishHolderRewardRound({
+    publish: (manifest, adminCapId) => {
+      if (!config.claimWindowMs || !/^\d+$/.test(config.claimWindowMs))
+        throw new Error("publish-tx needs claimWindowMs");
+      if (
+        config.gasReserveAmount === undefined ||
+        !/^(0|[1-9][0-9]*)$/.test(config.gasReserveAmount)
+      )
+        throw new Error(
+          "publish-tx needs explicit gasReserveAmount (0 disables reimbursement)",
+        );
+      if (config.expectedTreasury === undefined)
+        throw new Error("publish-tx needs explicit expectedTreasury");
+      return transactions.publishHolderRewardRound({
         ...pair,
         vault: state,
         adminCapId,
         manifest,
-      }),
+        claimDeadlineMs: BigInt(Date.now()) + BigInt(config.claimWindowMs),
+        gasReserveAmount: BigInt(config.gasReserveAmount),
+        expectedTreasury: config.expectedTreasury,
+      });
+    },
     claim: (round, allocations) =>
       transactions.claimHolderRewards({ ...pair, round, allocations }),
   };

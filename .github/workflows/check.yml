@@ -50,4 +50,10 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           tar -xzf sui.tgz -C "$HOME/.local/bin" ./sui
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Fetch the PR150 contracts source
+        if: env.CONTRACTS_READ_TOKEN != ''
+        run: git -C ../blast-v2-contracts fetch origin f661a03462d557dbf6d57c5b82a5ede98519643d
+      - name: Check fresh PR150 source ABI
+        if: env.CONTRACTS_READ_TOKEN != ''
+        run: npm run check:abi:pr150
       - run: npm test

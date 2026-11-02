@@ -260,50 +260,39 @@ test("collects fees permissionlessly with the live LP-fee policy", () => {
   );
 });
 
-test("settles and updates the fee split under the live curve-fee cap", () => {
+test("settles fees and permissionlessly applies a scheduled split", () => {
   const sdk = new MigratorTransactions(deployment);
-  const tx = sdk.settleAndUpdateCetusFeeSplit({
+  const tx = sdk.settleAndApplyCetusFeeSplit({
     ...types,
     cetusConfig: cetus.cetusConfig,
     memeSide: "a",
     vault: shared("0xc", "20", true),
-    launch: shared("0x9", "19", false),
-    curveFeeCapId: "0xcf",
     memeCurrency: shared("0xd", "22", true),
     burnManager: shared("0x72", "32", false),
     pool: shared("0x73", "33", true),
-    feeSplit: lpFeeSplit,
   });
-  const call = moveCall(tx, "cetus::settle_and_update_fee_split");
+  const call = moveCall(tx, "cetus::settle_and_apply_fee_split");
   assert.deepEqual(call.typeArguments, cetusTypeArguments.a);
   assert.deepEqual(argumentKinds(tx, call), [
     "shared-mut:0xc",
     "shared:0x61",
     "shared:0x40",
-    "shared:0x9",
-    "object:0xcf",
     "shared-mut:0xd",
     "shared:0x70",
     "shared:0x72",
     "shared-mut:0x73",
-    `Result:${commandIndex(tx, "allocation::fee_split")}`,
     CLOCK,
   ]);
-  const feeSplit = moveCall(tx, "allocation::fee_split");
-  assert.equal(feeSplit.package, normalizeSuiObjectId("0x123"));
 
-  const bluefinTx = sdk.settleAndUpdateBluefinFeeSplit({
+  const bluefinTx = sdk.settleAndApplyBluefinFeeSplit({
     ...types,
     vault: shared("0xc", "20", true),
-    launch: shared("0x9", "19", false),
-    curveFeeCapId: "0xcf",
     memeCurrency: shared("0xd", "22", true),
     bluefinConfig: shared("0x80", "40", false),
     pool: shared("0x81", "41", true),
-    feeSplit: lpFeeSplit,
   });
   assert.ok(
-    moveFunctions(bluefinTx).includes("bluefin::settle_and_update_fee_split"),
+    moveFunctions(bluefinTx).includes("bluefin::settle_and_apply_fee_split"),
   );
 });
 
@@ -579,6 +568,9 @@ test("publishes a holder-reward round and relays its claims", () => {
     vault,
     adminCapId: "0xad1",
     manifest,
+    claimDeadlineMs: 2_000_000_000_000n,
+    gasReserveAmount: 7n,
+    expectedTreasury: "0xb",
   });
   assert.equal(signInRole(publish), "RewardsAdmin");
   const call = moveCall(publish, "blast_holder_rewards::publish_round");
@@ -587,7 +579,7 @@ test("publishes a holder-reward round and relays its claims", () => {
     "shared:0x61",
     `Result:${commandIndex(publish, "blast_acl::sign_in")}`,
   ]);
-  assert.equal(call.arguments.length, 11);
+  assert.equal(call.arguments.length, 16);
   assert.throws(
     () =>
       sdk.publishHolderRewardRound({
@@ -595,6 +587,9 @@ test("publishes a holder-reward round and relays its claims", () => {
         vault: shared("0xe", "20", true),
         adminCapId: "0xad1",
         manifest,
+        claimDeadlineMs: 2_000_000_000_000n,
+        gasReserveAmount: 7n,
+        expectedTreasury: "0xb",
       }),
     /another vault/,
   );
@@ -619,6 +614,7 @@ test("publishes a holder-reward round and relays its claims", () => {
     "pure",
     "pure",
     "pure",
+    CLOCK,
   ]);
 });
 
@@ -708,3 +704,82 @@ function normalizedType(type: string): string {
     (_match, address: string) => `0x${address.padStart(64, "0")}::`,
   );
 }
+
+test("schedules and cancels splits with the creator cap, then applies without it", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const options = {
+    ...types,
+    vault: shared("0xc", "20", true),
+    launch: shared("0x9", "19", false),
+    curveFeeCap: "0xcf",
+  };
+  const scheduled = sdk.scheduleFeeSplit({
+    ...options,
+    feeSplit: lpFeeSplit,
+    delayMs: 0n,
+  });
+  assert.deepEqual(
+    argumentKinds(scheduled, moveCall(scheduled, "vault::schedule_fee_split")),
+    [
+      "shared-mut:0xc",
+      "shared:0x61",
+      "shared:0x9",
+      "object:0xcf",
+      `Result:${commandIndex(scheduled, "allocation::fee_split")}`,
+      "pure",
+      CLOCK,
+    ],
+  );
+  const cancelled = sdk.cancelFeeSplit(options);
+  assert.deepEqual(
+    argumentKinds(cancelled, moveCall(cancelled, "vault::cancel_fee_split")),
+    ["shared-mut:0xc", "shared:0x61", "shared:0x9", "object:0xcf"],
+  );
+  assert.throws(
+    () =>
+      sdk.scheduleFeeSplit({ ...options, feeSplit: lpFeeSplit, delayMs: -1n }),
+    /delayMs/,
+  );
+});
+
+test("bonding gas settlement signs in as RewardsAdmin and close is permissionless", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const options = {
+    ...types,
+    vault: shared("0xc", "20", true),
+    round: shared("0x50", "30", true),
+  };
+  const settle = sdk.settleHolderRewardGasReserve({
+    ...options,
+    adminCapId: "0xad1",
+    reimbursementAmount: 0n,
+  });
+  assert.equal(signInRole(settle), "RewardsAdmin");
+  assert.deepEqual(
+    argumentKinds(
+      settle,
+      moveCall(settle, "blast_holder_rewards::settle_gas_reserve"),
+    ),
+    [
+      "shared-mut:0x50",
+      "shared:0x61",
+      `Result:${commandIndex(settle, "blast_acl::sign_in")}`,
+      "shared-mut:0xc",
+      "pure",
+    ],
+  );
+  const close = sdk.closeHolderRewardRound(options);
+  assert.deepEqual(
+    argumentKinds(close, moveCall(close, "blast_holder_rewards::close_round")),
+    ["shared-mut:0x50", "shared:0x61", "shared-mut:0xc", CLOCK],
+  );
+  assert.throws(
+    () =>
+      sdk.settleHolderRewardGasReserve({
+        ...options,
+        adminCapId: "0xad1",
+        reimbursementAmount: -1n,
+      }),
+    /reimbursementAmount/,
+  );
+});

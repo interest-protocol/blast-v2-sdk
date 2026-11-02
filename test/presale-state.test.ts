@@ -248,10 +248,14 @@ test("decodes a Vault from bytes laid out in Move field order", () => {
     ...addr("0x9001"), // pool_id
     ...vec([[...addr("0xc0ffee"), ...u64(7_000n), ...u8(0)]]), // fee_split.shares
     ...u64(3_000n), // fee_split.holder_rewards_bps
+    ...u64(172_800_000n),
+    ...u8(0), // applied notice, no proposal
     ...u64(0n), // protocol_fees.raise_bps
     ...u64(0n), // protocol_fees.token_bps
     ...u64(1_000n), // protocol_fees.lp_fee_meme_bps
     ...u64(2_500n), // protocol_fees.lp_fee_quote_bps
+    ...u64(172_800_000n),
+    ...u8(0), // applied notice, no proposal
     ...u8(1), // partner_id: Some
     ...addr("0x9a27"),
     ...u64(11n), // unpaid_protocol_meme
@@ -316,10 +320,14 @@ test("decodes the FeePolicy from bytes laid out in Move field order", () => {
   const content = Uint8Array.from([
     ...addr("0xfe"), // id
     ...addr("0x7ea5"), // destination
+    ...u64(0n),
+    ...u8(0), // applied notice, no proposal
     ...u64(333n), // fees.raise_bps
     ...u64(500n), // fees.token_bps
     ...u64(1_000n), // fees.lp_fee_meme_bps
     ...u64(1_000n), // fees.lp_fee_quote_bps
+    ...u64(0n),
+    ...u8(0), // applied notice, no proposal
   ]);
   const policy = decodePresaleFeePolicyObject(
     object(`${pkg}::fee_policy::FeePolicy`, content, "0xfe"),

@@ -1,4 +1,5 @@
 import { itemAt } from "@interest-protocol/blast-core/arrays";
+import type { Delayed } from "@interest-protocol/blast-core/bcs";
 import type { DecodedPresaleEvent, PresaleEventKind } from "./events.ts";
 import { presaleEventId, presaleEventModules } from "./events.ts";
 import { apportionRaise, apportionSupply } from "./math.ts";
@@ -8,6 +9,7 @@ import type {
   HardCap,
   PresaleLifecycle,
   ProtocolFees,
+  presaleFeeSplitBcs,
   RecipientPayout,
   UncappedPhase,
   VestingTerms,
@@ -112,6 +114,8 @@ export type PresaleVaultProjection = {
   liquidity: bigint;
   feeRecipients: BpsShare[];
   holderRewardsBps: bigint;
+  feeSplitDelayMs: bigint;
+  pendingFeeSplit: Delayed<typeof presaleFeeSplitBcs.$inferType>["pending"];
   /**
    * Blast's shares of each collected LP-fee asset: snapshotted at migration,
    * then replaced by each `ProtocolLpFeesChanged`.
@@ -402,6 +406,8 @@ function applyVaultEvent(
             liquidity: payload.liquidity,
             feeRecipients,
             holderRewardsBps: payload.holder_rewards_bps,
+            feeSplitDelayMs: 172_800_000n,
+            pendingFeeSplit: null,
             protocolLpFeeMemeBps: payload.protocol_lp_fee_meme_bps,
             protocolLpFeeQuoteBps: payload.protocol_lp_fee_quote_bps,
             migrationMemeResidual: payload.migration_meme_residual,
@@ -423,6 +429,40 @@ function applyVaultEvent(
         },
       };
     }
+    case "FeeSplitScheduled":
+      return updateVault(state, event.payload.vault_id, () => ({
+        pendingFeeSplit: {
+          value: event.payload.proposed,
+          delay_ms: event.payload.delay_ms,
+          ready_at_ms: event.payload.ready_at_ms,
+        },
+      }));
+    case "FeeSplitCancelled":
+      return updateVault(state, event.payload.vault_id, () => ({
+        pendingFeeSplit: null,
+      }));
+    case "FeeSplitChanged":
+      return updateVault(state, event.payload.vault_id, (vault) => {
+        const recipients = event.payload.new_fee_split.fee_recipients;
+        const paid = (amounts: bigint[], recipient: string) =>
+          amounts[
+            vault.feeRecipients.findIndex(
+              (prior) => prior.recipient === recipient,
+            )
+          ] ?? 0n;
+        return {
+          feeRecipients: recipients,
+          holderRewardsBps: event.payload.new_fee_split.holder_rewards_bps,
+          feeSplitDelayMs: event.payload.delay_ms,
+          pendingFeeSplit: null,
+          feeRecipientMemePaid: recipients.map((r) =>
+            paid(vault.feeRecipientMemePaid, r.recipient),
+          ),
+          feeRecipientQuotePaid: recipients.map((r) =>
+            paid(vault.feeRecipientQuotePaid, r.recipient),
+          ),
+        };
+      });
     case "FeesCollected": {
       const { payload } = event;
       return updateVault(state, payload.vault_id, (vault) => ({

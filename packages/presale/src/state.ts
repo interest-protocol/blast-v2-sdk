@@ -1,4 +1,6 @@
+import type { Delayed } from "@interest-protocol/blast-core/bcs";
 import {
+  delayedBcs,
   moveTypeNameBcs,
   suiBalanceBcs,
   suiIdBcs,
@@ -346,8 +348,8 @@ export const presaleVaultBcs = bcs.struct("Vault", {
   presale_id: suiIdBcs,
   presale_cap_id: suiIdBcs,
   pool_id: suiIdBcs,
-  fee_split: presaleFeeSplitBcs,
-  protocol_fees: protocolFeesBcs,
+  fee_split: delayedBcs(presaleFeeSplitBcs),
+  protocol_fees: delayedBcs(protocolFeesBcs),
   partner_id: bcs.option(suiObjectIdBcs),
   unpaid_protocol_meme: suiBalanceBcs,
   unpaid_protocol_quote: suiBalanceBcs,
@@ -362,8 +364,8 @@ export const presaleVaultBcs = bcs.struct("Vault", {
 /** BCS layout of `fee_policy::FeePolicy`, the package's one shared fee policy. */
 export const feePolicyBcs = bcs.struct("FeePolicy", {
   id: suiUidBcs,
-  destination: address,
-  fees: protocolFeesBcs,
+  destination: delayedBcs(address),
+  fees: delayedBcs(protocolFeesBcs),
 });
 
 /** BCS layout of `creation_policy::CreationPolicy`, the package's one shared creation policy. */
@@ -502,6 +504,11 @@ export type PresaleVaultState = SharedObjectReference<true> & {
    * vault without a presale; only the LP-fee shares apply to the vault.
    */
   protocolFees: ProtocolFees;
+  feeSplitPolicy: Delayed<{
+    fee_recipients: BpsShare[];
+    holder_rewards_bps: bigint;
+  }>;
+  protocolFeesPolicy: Delayed<ProtocolFees>;
   /**
    * The partner the sale, or the owner of a vault without a presale, named,
    * paid its cut of Blast's LP fees; null for none.
@@ -662,9 +669,11 @@ export function decodePresaleVaultObject(
     presaleId: normalizeSuiObjectId(parsed.presale_id.bytes),
     presaleCapId: normalizeSuiObjectId(parsed.presale_cap_id.bytes),
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
-    feeRecipients: parsed.fee_split.fee_recipients,
-    holderRewardsBps: parsed.fee_split.holder_rewards_bps,
-    protocolFees: parsed.protocol_fees,
+    feeRecipients: parsed.fee_split.value.fee_recipients,
+    holderRewardsBps: parsed.fee_split.value.holder_rewards_bps,
+    protocolFees: parsed.protocol_fees.value,
+    feeSplitPolicy: parsed.fee_split,
+    protocolFeesPolicy: parsed.protocol_fees,
     partnerId: parsed.partner_id,
     unpaidProtocolMeme: BigInt(parsed.unpaid_protocol_meme.value),
     unpaidProtocolQuote: BigInt(parsed.unpaid_protocol_quote.value),
@@ -714,8 +723,8 @@ export function decodePresaleFeePolicyObject(
   const parsed = feePolicyBcs.parse(object.content);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
-    destination: parsed.destination,
-    fees: parsed.fees,
+    destination: parsed.destination.value,
+    fees: parsed.fees.value,
   };
 }
 

@@ -1516,3 +1516,69 @@ test("eligible-only uncapped phase preserves its start delay", () => {
     `Result:${commandIndex(ptb, "blast_presale::uncapped_for_eligible")}`,
   );
 });
+
+test("PR150 vault split builders match the compiler's argument and generic arity", () => {
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("../abi/pr150-consumers.json", import.meta.url),
+      "utf8",
+    ),
+  ) as {
+    packages: {
+      presale: {
+        modules: Record<
+          string,
+          {
+            functions: {
+              name: string;
+              parameters: unknown[];
+              typeParameters: unknown[];
+            }[];
+          }
+        >;
+      };
+    };
+  };
+  const options = {
+    memeType: memeA,
+    quoteType: sui,
+    vault: shared("0xba", true),
+  };
+  const transactions = [
+    tx.scheduleFeeSplit({
+      ...options,
+      presaleCap: "0xca",
+      feeRecipients: [],
+      holderRewardsBps: 10_000n,
+      delayMs: 0n,
+    }),
+    tx.cancelFeeSplit({ ...options, presaleCap: "0xca" }),
+    tx.applyAftermathFeeSplit(options),
+    tx.settleAndApplyCetusFeeSplit({
+      ...options,
+      cetusConfig: shared("0xd1", false),
+      burnManager: shared("0xd2", false),
+      pool: shared("0xd3", true),
+    }),
+    tx.settleAndApplyBluefinFeeSplit({
+      ...options,
+      bluefinConfig: shared("0xe1", false),
+      pool: shared("0xe2", true),
+    }),
+  ];
+  for (const transaction of transactions)
+    for (const command of transaction.getData().commands) {
+      if (command.$kind !== "MoveCall") continue;
+      const call = command.MoveCall;
+      const f = snapshot.packages.presale.modules[call.module]?.functions.find(
+        (f) => f.name === call.function,
+      );
+      assert.ok(f, `${call.module}::${call.function} exists`);
+      assert.equal(call.typeArguments.length, f.typeParameters.length);
+      assert.equal(
+        call.arguments.length,
+        f.parameters.filter((p) => !JSON.stringify(p).includes('"TxContext"'))
+          .length,
+      );
+    }
+});

@@ -26,6 +26,7 @@ import type {
 import {
   eligibilityPolicyBcs,
   hardCapBcs,
+  presaleFeeSplitBcs,
   uncappedPhaseBcs,
   vestingTermsBcs,
 } from "./state.ts";
@@ -48,7 +49,8 @@ type PresaleEventFieldDescriptor =
   | "optionAddress"
   | "optionId"
   | "optionVesting"
-  | "vestingVector";
+  | "vestingVector"
+  | "feeSplit";
 
 /** Every event `blast_presale` emits, by module, in Move field order. */
 export const presaleEventSpecs = {
@@ -162,6 +164,19 @@ export const presaleEventSpecs = {
     },
   },
   presale_vault: {
+    FeeSplitScheduled: {
+      vault_id: "id",
+      proposed: "feeSplit",
+      ready_at_ms: "u64",
+      delay_ms: "u64",
+    },
+    FeeSplitCancelled: { vault_id: "id", proposed: "feeSplit" },
+    FeeSplitChanged: {
+      vault_id: "id",
+      old_fee_split: "feeSplit",
+      new_fee_split: "feeSplit",
+      delay_ms: "u64",
+    },
     VaultCreated: {
       vault_id: "id",
       presale_id: "id",
@@ -278,6 +293,7 @@ type FlatSpecs = Specs["blast_presale"] &
 export type PresaleEventKind = keyof FlatSpecs;
 
 type DescriptorOutputs = {
+  feeSplit: typeof presaleFeeSplitBcs.$inferType;
   id: string;
   typeName: string;
   address: string;
@@ -323,6 +339,7 @@ const address = bcs.Address.transform({
   output: (value) => normalizeSuiAddress(value),
 });
 const FIELD_BCS: Record<PresaleEventFieldDescriptor, BcsType<unknown>> = {
+  feeSplit: presaleFeeSplitBcs as BcsType<unknown>,
   id: suiObjectIdBcs as BcsType<unknown>,
   typeName: moveTypeNameBcs as BcsType<unknown>,
   address: address as BcsType<unknown>,
@@ -384,8 +401,12 @@ export type DecodedPresaleEvent = {
     kind: Kind;
     payload: PresaleEventPayloads[Kind];
     /** The event's `SaleToken` / `Meme` type argument. */
-    memeType: string;
-    quoteType: string;
+    memeType: Kind extends "FeeSplitScheduled" | "FeeSplitCancelled"
+      ? null
+      : string;
+    quoteType: Kind extends "FeeSplitScheduled" | "FeeSplitCancelled"
+      ? null
+      : string;
     /**
      * `VaultCreated` and `PoolTierReserved` only: the venue marker, e.g.
      * `<pkg>::cetus::Venue`.
@@ -416,12 +437,14 @@ export function decodePresaleEvent(
   const tag = parseStructTag(event.eventType);
   const kind = tag.name as PresaleEventKind;
   const [memeType, quoteType, venueType = null, ...extra] = tag.typeParams;
+  const untyped = kind === "FeeSplitScheduled" || kind === "FeeSplitCancelled";
   if (
     tag.address !== normalizeSuiAddress(packages.originalPackageId) ||
     !Object.hasOwn(presaleEventModules, kind) ||
     presaleEventModules[kind] !== tag.module ||
-    memeType === undefined ||
-    quoteType === undefined ||
+    (untyped
+      ? tag.typeParams.length !== 0
+      : memeType === undefined || quoteType === undefined) ||
     (venueType === null) === VENUE_TYPED_KINDS.has(kind) ||
     extra.length > 0
   ) {
@@ -431,8 +454,8 @@ export function decodePresaleEvent(
     source: "presale",
     kind,
     payload: presaleEventBcs[kind].parse(event.bcs),
-    memeType: normalizeStructTag(memeType),
-    quoteType: normalizeStructTag(quoteType),
+    memeType: memeType === undefined ? null : normalizeStructTag(memeType),
+    quoteType: quoteType === undefined ? null : normalizeStructTag(quoteType),
     venueType: venueType && normalizeStructTag(venueType),
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),

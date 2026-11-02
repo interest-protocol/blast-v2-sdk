@@ -33,6 +33,11 @@ const artifact = JSON.parse(
   ),
 ) as Artifact;
 
+const pr150 = JSON.parse(
+  readFileSync(new URL("../abi/pr150-consumers.json", import.meta.url), "utf8"),
+) as Artifact;
+artifact.packages.migrators = pr150.packages.migrators!;
+
 const uid = (id: string) => ({ id: { bytes: id } });
 const balance = { value: 0n };
 const feeSplit = {
@@ -103,8 +108,12 @@ test("SDK object layouts follow the frozen Move field order", () => {
       lpFeePolicyBcs as never,
       {
         id: uid("0x1"),
-        destination: "0x2",
-        defaults: { meme_bps: 0n, quote_bps: 0n },
+        destination: { value: "0x2", delay_ms: 172_800_000n, pending: null },
+        defaults: {
+          value: { meme_bps: 0n, quote_bps: 0n },
+          delay_ms: 172_800_000n,
+          pending: null,
+        },
         coins: { id: uid("0x3"), size: 0n },
       },
     ],
@@ -128,7 +137,12 @@ test("SDK object layouts follow the frozen Move field order", () => {
       moduleName
     ]?.structs.find(({ name }) => name === structName);
     assert.ok(frozen, `${structName} is frozen`);
-    const parsed = schema.parse(schema.serialize(value).toBytes());
+    let parsed: unknown;
+    try {
+      parsed = schema.parse(schema.serialize(value).toBytes());
+    } catch (cause) {
+      throw new Error(`invalid ${structName} fixture`, { cause });
+    }
     assert.deepEqual(
       Object.keys(parsed as object).map(snakeCase),
       frozen.fields.map(({ name }) => name),
@@ -189,7 +203,7 @@ function vault() {
     protocol_quote_residual: balance,
     unpaid_protocol_meme: balance,
     unpaid_protocol_quote: balance,
-    fee_split: feeSplit,
+    fee_split: { value: feeSplit, delay_ms: 172_800_000n, pending: null },
     creator_meme: balance,
     creator_quote: balance,
     auto_lp_meme: balance,
@@ -206,6 +220,9 @@ function round() {
   return {
     id: uid("0x1"),
     vault: { bytes: "0x2" },
+    claim_deadline_at_ms: 42n,
+    treasury: "0xb",
+    gas_reserve: null,
     number: 0n,
     root: [],
     leaf_count: 0n,

@@ -120,12 +120,16 @@ function fixture(
         presale_cap_id: { bytes: CAP },
         pool_id: { bytes: POOL },
         fee_split: {
-          fee_recipients: [
-            { recipient: options.recipient ?? OWNER, bps: 5000n },
-          ],
-          holder_rewards_bps: 5000n,
+          value: {
+            fee_recipients: [
+              { recipient: options.recipient ?? OWNER, bps: 5000n },
+            ],
+            holder_rewards_bps: 5000n,
+          },
+          delay_ms: 172_800_000n,
+          pending: null,
         },
-        protocol_fees: fees,
+        protocol_fees: { value: fees, delay_ms: 172_800_000n, pending: null },
         partner_id: options.partner ? PARTNER : null,
         unpaid_protocol_meme: { value: 0n },
         unpaid_protocol_quote: { value: 0n },

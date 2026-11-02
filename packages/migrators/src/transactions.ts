@@ -331,76 +331,113 @@ export class MigratorCalls {
   }
 
   /**
-   * Settles the fees accrued under the current split, then commits `feeSplit`
-   * as the vault's split. Only the launch's live `CurveFeeCap` authorizes it.
-   * `launch` is read immutably by Move.
+   * Settles accrued fees under the applied split, then applies the ready proposal.
+   * Permissionless; the adapter enforces readiness before collecting.
    */
-  settleAndUpdateCetusFeeSplit(
+  settleAndApplyCetusFeeSplit(
     options: LaunchTypes &
       CetusObjects & {
         memeSide: CetusMemeSide;
         vault: SharedObjectReference<true>;
-        launch: SharedObjectReference;
-        curveFeeCap: TransactionObjectInput;
         memeCurrency: SharedObjectReference<true>;
         burnManager: SharedObjectReference<false>;
         pool: SharedObjectReference<true>;
-        feeSplit: FeeSplit;
       },
   ) {
     const types = normalizeLaunchTypes(options);
     const memeSide = normalizeMemeSide(options.memeSide);
-    const feeSplit = this.launchpad.feeSplit(options.feeSplit);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::settle_and_update_fee_split`,
+        target: `${this.deployment.packageId}::cetus::settle_and_apply_fee_split`,
         typeArguments: cetusTypeArguments(types, memeSide),
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
           this.#lpFeePolicy(tx),
-          sharedObject(tx, "launch", options.launch, options.launch.mutable),
-          tx.object(options.curveFeeCap),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "burnManager", options.burnManager, false),
           sharedObject(tx, "pool", options.pool, true),
-          tx.add(feeSplit),
           tx.object.clock(),
         ],
       });
     };
   }
 
-  /** Bluefin counterpart of `settleAndUpdateCetusFeeSplit`. */
-  settleAndUpdateBluefinFeeSplit(
+  /** Bluefin counterpart of `settleAndApplyCetusFeeSplit`. */
+  settleAndApplyBluefinFeeSplit(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
-      launch: SharedObjectReference;
-      curveFeeCap: TransactionObjectInput;
       memeCurrency: SharedObjectReference<true>;
       bluefinConfig: SharedObjectReference<false>;
       pool: SharedObjectReference<true>;
-      feeSplit: FeeSplit;
     },
   ) {
     const types = normalizeLaunchTypes(options);
-    const feeSplit = this.launchpad.feeSplit(options.feeSplit);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::bluefin::settle_and_update_fee_split`,
+        target: `${this.deployment.packageId}::bluefin::settle_and_apply_fee_split`,
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
           this.#lpFeePolicy(tx),
-          sharedObject(tx, "launch", options.launch, options.launch.mutable),
-          tx.object(options.curveFeeCap),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
           sharedObject(tx, "pool", options.pool, true),
-          tx.add(feeSplit),
           tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /** Proposes a split and next notice; the currently applied notice governs this wait. */
+  scheduleFeeSplit(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      launch: SharedObjectReference;
+      curveFeeCap: TransactionObjectInput;
+      feeSplit: FeeSplit;
+      delayMs: bigint;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const split = this.launchpad.feeSplit(options.feeSplit);
+    const delay = requireU64("delayMs", options.delayMs);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::vault::schedule_fee_split`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          sharedObject(tx, "launch", options.launch, false),
+          tx.object(options.curveFeeCap),
+          tx.add(split),
+          tx.pure.u64(delay),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  cancelFeeSplit(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      launch: SharedObjectReference;
+      curveFeeCap: TransactionObjectInput;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::vault::cancel_fee_split`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          sharedObject(tx, "launch", options.launch, false),
+          tx.object(options.curveFeeCap),
         ],
       });
     };
@@ -623,6 +660,9 @@ export class MigratorCalls {
       vault: SharedObjectReference<true>;
       adminWitness: TransactionObjectInput;
       manifest: RewardManifest;
+      claimDeadlineMs: bigint;
+      gasReserveAmount: bigint;
+      expectedTreasury: string;
     },
   ) {
     const types = normalizeLaunchTypes(options);
@@ -635,6 +675,9 @@ export class MigratorCalls {
     ) {
       throw new TypeError("manifest belongs to another vault");
     }
+    const deadline = requireU64("claimDeadlineMs", options.claimDeadlineMs);
+    const reserve = requireU64("gasReserveAmount", options.gasReserveAmount);
+    const treasury = normalizeSuiAddress(options.expectedTreasury);
     return (tx: Transaction): void => {
       tx.moveCall({
         target: `${this.deployment.packageId}::blast_holder_rewards::publish_round`,
@@ -643,6 +686,8 @@ export class MigratorCalls {
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
           tx.object(options.adminWitness),
+          this.#lpFeePolicy(tx),
+          tx.pure.address(treasury),
           tx.pure.u64(manifest.number),
           tx.pure.u64(manifest.startCheckpoint),
           tx.pure.u64(manifest.endCheckpoint),
@@ -651,6 +696,9 @@ export class MigratorCalls {
           tx.pure.u64(manifest.allocations.length),
           tx.pure.u64(manifest.memeAmount),
           tx.pure.u64(manifest.quoteAmount),
+          tx.pure.u64(reserve),
+          tx.pure.u64(deadline),
+          tx.object.clock(),
         ],
       });
     };
@@ -692,6 +740,58 @@ export class MigratorCalls {
           tx.pure.u64(memeAmount),
           tx.pure.u64(quoteAmount),
           tx.pure.vector("vector<u8>", proof),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /** Settles optional gas custody once; holder claims remain independently funded. */
+  settleHolderRewardGasReserve(
+    options: LaunchTypes & {
+      round: SharedObjectReference<true>;
+      vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      reimbursementAmount: bigint;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const amount = requireU64(
+      "reimbursementAmount",
+      options.reimbursementAmount,
+    );
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::blast_holder_rewards::settle_gas_reserve`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "round", options.round, true),
+          this.#migratorsVersion(tx),
+          tx.object(options.adminWitness),
+          sharedObject(tx, "vault", options.vault, true),
+          tx.pure.u64(amount),
+        ],
+      });
+    };
+  }
+
+  /** Permissionlessly destroys an expired round and returns all remaining custody to its vault. */
+  closeHolderRewardRound(
+    options: LaunchTypes & {
+      round: SharedObjectReference<true>;
+      vault: SharedObjectReference<true>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::blast_holder_rewards::close_round`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "round", options.round, true),
+          this.#migratorsVersion(tx),
+          sharedObject(tx, "vault", options.vault, true),
+          tx.object.clock(),
         ],
       });
     };
@@ -842,35 +942,35 @@ export class MigratorTransactions {
     return tx;
   }
 
-  settleAndUpdateCetusFeeSplit(
-    options: Omit<
-      Parameters<MigratorCalls["settleAndUpdateCetusFeeSplit"]>[0],
-      "curveFeeCap"
-    > & { curveFeeCapId: string },
+  settleAndApplyCetusFeeSplit(
+    options: Parameters<MigratorCalls["settleAndApplyCetusFeeSplit"]>[0],
   ): Transaction {
     const tx = new Transaction();
-    tx.add(
-      this.call.settleAndUpdateCetusFeeSplit({
-        ...options,
-        curveFeeCap: options.curveFeeCapId,
-      }),
-    );
+    tx.add(this.call.settleAndApplyCetusFeeSplit(options));
     return tx;
   }
 
-  settleAndUpdateBluefinFeeSplit(
-    options: Omit<
-      Parameters<MigratorCalls["settleAndUpdateBluefinFeeSplit"]>[0],
-      "curveFeeCap"
-    > & { curveFeeCapId: string },
+  settleAndApplyBluefinFeeSplit(
+    options: Parameters<MigratorCalls["settleAndApplyBluefinFeeSplit"]>[0],
   ): Transaction {
     const tx = new Transaction();
-    tx.add(
-      this.call.settleAndUpdateBluefinFeeSplit({
-        ...options,
-        curveFeeCap: options.curveFeeCapId,
-      }),
-    );
+    tx.add(this.call.settleAndApplyBluefinFeeSplit(options));
+    return tx;
+  }
+
+  scheduleFeeSplit(
+    options: Parameters<MigratorCalls["scheduleFeeSplit"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.scheduleFeeSplit(options));
+    return tx;
+  }
+
+  cancelFeeSplit(
+    options: Parameters<MigratorCalls["cancelFeeSplit"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.cancelFeeSplit(options));
     return tx;
   }
 
@@ -987,6 +1087,25 @@ export class MigratorTransactions {
     return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
       this.call.publishHolderRewardRound({ ...options, adminWitness }),
     );
+  }
+
+  settleHolderRewardGasReserve(
+    options: Omit<
+      Parameters<MigratorCalls["settleHolderRewardGasReserve"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
+      this.call.settleHolderRewardGasReserve({ ...options, adminWitness }),
+    );
+  }
+
+  closeHolderRewardRound(
+    options: Parameters<MigratorCalls["closeHolderRewardRound"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.closeHolderRewardRound(options));
+    return tx;
   }
 
   /** Relays up to `allocations.length` proofs of one round in a single PTB. */

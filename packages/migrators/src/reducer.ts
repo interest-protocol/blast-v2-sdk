@@ -1,3 +1,4 @@
+import type { Delayed } from "@interest-protocol/blast-core/bcs";
 import type { NativeTransactionPosition } from "@interest-protocol/blast-core/events";
 import { normalizeNativeTransactionPosition } from "@interest-protocol/blast-core/events";
 import { requireU64 } from "@interest-protocol/blast-core/integers";
@@ -28,6 +29,8 @@ export type LpVaultEventProjection = {
   memeType: string;
   quoteType: string;
   feeSplit: FeeSplit;
+  feeSplitDelayMs: bigint;
+  pendingFeeSplit: Delayed<FeeSplit>["pending"];
   creatorMeme: bigint;
   creatorQuote: bigint;
   autoLpMeme: bigint;
@@ -66,6 +69,12 @@ export type HolderRewardRoundProjection = {
   memeRemaining: bigint;
   quoteRemaining: bigint;
   paidIndexes: Readonly<Record<string, true>>;
+  claimDeadlineMs: bigint;
+  treasury: string;
+  gasReserveRemaining: bigint | null;
+  gasReimbursed: bigint;
+  gasReserveReturned: bigint;
+  closed: boolean;
 };
 
 export type LpFeePolicyProjection = {
@@ -219,6 +228,8 @@ export function reduceMigratorEvent(
             memeType: payload.meme,
             quoteType: payload.quote,
             feeSplit: payload.fee_split,
+            feeSplitDelayMs: 172_800_000n,
+            pendingFeeSplit: null,
             creatorMeme: 0n,
             creatorQuote: 0n,
             autoLpMeme: 0n,
@@ -300,11 +311,27 @@ export function reduceMigratorEvent(
         autoLpPositionId: payload.position_id,
       }));
     }
+    case "FeeSplitScheduled":
+      return updateVault(next, event.payload.vault_id, (vault) => ({
+        ...vault,
+        pendingFeeSplit: {
+          value: event.payload.proposed,
+          delay_ms: event.payload.delay_ms,
+          ready_at_ms: event.payload.ready_at_ms,
+        },
+      }));
+    case "FeeSplitCancelled":
+      return updateVault(next, event.payload.vault_id, (vault) => ({
+        ...vault,
+        pendingFeeSplit: null,
+      }));
     case "FeeSplitChanged": {
       const payload = event.payload;
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
         feeSplit: payload.new_fee_split,
+        feeSplitDelayMs: payload.delay_ms,
+        pendingFeeSplit: null,
       }));
     }
     case "CreatorFeesClaimed":
@@ -344,6 +371,64 @@ export function reduceMigratorEvent(
             memeRemaining: payload.meme_amount,
             quoteRemaining: payload.quote_amount,
             paidIndexes: {},
+            claimDeadlineMs: payload.claim_deadline_at_ms,
+            treasury: payload.treasury,
+            gasReserveRemaining:
+              payload.gas_reserve_amount === 0n
+                ? null
+                : payload.gas_reserve_amount,
+            gasReimbursed: 0n,
+            gasReserveReturned: 0n,
+            closed: false,
+          },
+        },
+      };
+    }
+    case "GasReserveSettled": {
+      const payload = event.payload;
+      const round = state.rounds[payload.round_id];
+      if (!round) return next;
+      const updated = updateVault(next, payload.vault_id, (vault) => ({
+        ...vault,
+        rewardsQuote: payload.quote_unallocated,
+      }));
+      return {
+        ...updated,
+        rounds: {
+          ...state.rounds,
+          [payload.round_id]: {
+            ...round,
+            gasReserveRemaining: null,
+            gasReimbursed: payload.reimbursement_amount,
+            gasReserveReturned: payload.reserve_returned,
+          },
+        },
+      };
+    }
+    case "RoundClosed": {
+      const payload = event.payload;
+      const round = state.rounds[payload.round_id];
+      if (!round) return next;
+      const updated = updateVault(next, payload.vault_id, (vault) => ({
+        ...vault,
+        rewardsMeme: vault.rewardsMeme + payload.meme_returned,
+        rewardsQuote:
+          vault.rewardsQuote +
+          payload.quote_returned +
+          payload.gas_reserve_returned,
+      }));
+      return {
+        ...updated,
+        rounds: {
+          ...state.rounds,
+          [payload.round_id]: {
+            ...round,
+            memeRemaining: 0n,
+            quoteRemaining: 0n,
+            gasReserveRemaining: null,
+            gasReserveReturned:
+              round.gasReserveReturned + payload.gas_reserve_returned,
+            closed: true,
           },
         },
       };
@@ -368,24 +453,8 @@ export function reduceMigratorEvent(
         },
       };
     }
-    case "LpFeePolicyChanged": {
-      const payload = event.payload;
-      const pair =
-        payload.new_meme_bps === null || payload.new_quote_bps === null
-          ? null
-          : { memeBps: payload.new_meme_bps, quoteBps: payload.new_quote_bps };
-      if (payload.meme === null) {
-        if (!pair) return next;
-        return {
-          ...next,
-          lpFeePolicy: { ...state.lpFeePolicy, defaultShares: pair },
-        };
-      }
-      const coinShares = { ...state.lpFeePolicy.coinShares };
-      if (pair) coinShares[payload.meme] = pair;
-      else delete coinShares[payload.meme];
-      return { ...next, lpFeePolicy: { ...state.lpFeePolicy, coinShares } };
-    }
+    case "LpFeePolicyChanged":
+      return updateLpFeePolicy(next, event);
     case "LpFeeDestinationChanged":
       return {
         ...next,
@@ -409,6 +478,8 @@ export function reduceMigratorEvent(
         },
       };
     }
+    default:
+      return next;
   }
 }
 
@@ -559,4 +630,26 @@ function nativeFactId(fact: NativeReconstructionFact): string {
     return `${fact.position.transactionDigest}:${fact.kind}:${fact.memeCoin.objectId}:${fact.quoteCoin.objectId}`;
   }
   return `${fact.position.transactionDigest}:${fact.kind}:${fact.packageId}`;
+}
+
+function updateLpFeePolicy(
+  next: MigratorEventProjection,
+  event: Extract<DecodedMigratorEvent, { kind: "LpFeePolicyChanged" }>,
+): MigratorEventProjection {
+  const payload = event.payload;
+  const pair =
+    payload.new_meme_bps === null || payload.new_quote_bps === null
+      ? null
+      : { memeBps: payload.new_meme_bps, quoteBps: payload.new_quote_bps };
+  if (payload.meme === null) {
+    if (!pair) return next;
+    return {
+      ...next,
+      lpFeePolicy: { ...next.lpFeePolicy, defaultShares: pair },
+    };
+  }
+  const coinShares = { ...next.lpFeePolicy.coinShares };
+  if (pair) coinShares[payload.meme] = pair;
+  else delete coinShares[payload.meme];
+  return { ...next, lpFeePolicy: { ...next.lpFeePolicy, coinShares } };
 }
