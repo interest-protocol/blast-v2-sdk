@@ -75,7 +75,7 @@ export type CoinTemplateOptions = {
    * good.
    */
   metadataCapRecipient: string | null;
-  /** Defaults to the lowercased symbol; the witness is the uppercased symbol. */
+  /** Defaults to the lowercased symbol; the witness is the uppercased module name. */
   moduleName?: string;
 };
 
@@ -199,7 +199,7 @@ export async function buildCoinPackageBytecode(
   return bytecode;
 }
 
-/** The module and one-time-witness names the coin type takes from its symbol. */
+/** The coin module name and its uppercase one-time-witness name. */
 export function deriveCoinTemplateIdentifiers(
   symbol: string,
   requestedModuleName?: string,

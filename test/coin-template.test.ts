@@ -4,11 +4,7 @@ import test from "node:test";
 import type { CoinTemplateOptions } from "@interest-protocol/blast-coin-sdk/template";
 import { buildCoinPackageBytecode } from "@interest-protocol/blast-coin-sdk/template";
 import { publishCoin } from "@interest-protocol/blast-coin-sdk/transactions";
-import {
-  deserialize,
-  get_constants,
-  update_identifiers,
-} from "@mysten/move-bytecode-template";
+import { deserialize, get_constants } from "@mysten/move-bytecode-template";
 import { bcs } from "@mysten/sui/bcs";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 
@@ -55,11 +51,8 @@ const address = (value: string) =>
 
 test("locks the embedded artifact to the contracts build of coin_template", async () => {
   const bytecode = await buildCoinPackageBytecode(templateDefaults);
-  // Built with the defaults, only the witness rename differs from the contracts build.
-  const original = update_identifiers(bytecode, { COIN: "MY_COIN" });
-
   assert.equal(
-    createHash("sha256").update(original).digest("hex"),
+    createHash("sha256").update(bytecode).digest("hex"),
     "f175d5053793e7add203f76273745be16048638a3dd8835c2a936a8bb350679f",
   );
 });
@@ -86,6 +79,19 @@ test("patches every constant slot and renames the module and witness", async () 
   assert.ok(compiled.identifiers.includes("DOG"));
   assert.ok(!compiled.identifiers.includes("my_coin"));
   assert.ok(!compiled.identifiers.includes("MY_COIN"));
+});
+
+test("custom module names determine the coin witness without changing the symbol", async () => {
+  const bytecode = await buildCoinPackageBytecode({
+    ...options,
+    symbol: "ELIG",
+    moduleName: "eligible_fill",
+  });
+  const compiled = deserialize(bytecode) as { identifiers: string[] };
+  assert.ok(compiled.identifiers.includes("eligible_fill"));
+  assert.ok(compiled.identifiers.includes("ELIGIBLE_FILL"));
+  assert.ok(!compiled.identifiers.includes("ELIG"));
+  assert.deepEqual(constants(bytecode)[0], ["Vector(U8)", string("ELIG")]);
 });
 
 test("maps each supply mode and the metadata choice, keeping unused recipients at their defaults", async () => {
