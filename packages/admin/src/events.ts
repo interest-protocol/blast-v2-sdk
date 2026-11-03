@@ -1,14 +1,18 @@
+import type { DelayedChange } from "@interest-protocol/blast-core/bcs";
 import {
   addressBcs,
+  delayedChangeBcs,
   moveTypeNameBcs,
   suiObjectIdBcs,
   u64Bcs,
+  unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import type { SuiEventPosition } from "@interest-protocol/blast-core/events";
 import {
   normalizeSuiEventPosition,
   suiEventId,
 } from "@interest-protocol/blast-core/events";
+import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import {
@@ -16,13 +20,15 @@ import {
   normalizeSuiAddress,
   parseStructTag,
 } from "@mysten/sui/utils";
+import { upgradeActionBcs } from "./state.ts";
 
 const roles = bcs.vector(moveTypeNameBcs);
-const transfer = { recipient: addressBcs, execute_after_ms: u64Bcs };
 
 /**
  * The `blast_admin::blast_admin_events` the ACL emits, in Move field order.
- * Generic custody and version facts use packageAdministrationEventBcs below.
+ * Generic custody and version facts use packageAdministrationEventBcs below;
+ * the super admin transfer's lifecycle uses the `delayed` events under
+ * `aclDelayedKeys`.
  */
 export const aclEventBcs = {
   AdminGranted: bcs.struct("AdminGranted", {
@@ -46,11 +52,6 @@ export const aclEventBcs = {
     roles,
     was_active: bcs.bool(),
   }),
-  SuperAdminTransferStarted: bcs.struct("SuperAdminTransferStarted", transfer),
-  SuperAdminTransferCancelled: bcs.struct(
-    "SuperAdminTransferCancelled",
-    transfer,
-  ),
   SuperAdminTransferred: bcs.struct("SuperAdminTransferred", {
     previous_super_admin_cap_id: suiObjectIdBcs,
     new_super_admin_cap_id: suiObjectIdBcs,
@@ -101,7 +102,7 @@ export function decodeAclEvent(
   } as DecodedAclEvent;
 }
 
-export function aclEventId(event: DecodedAclEvent): string {
+export function aclEventId(event: { position: SuiEventPosition }): string {
   return suiEventId(event.position);
 }
 
@@ -189,4 +190,273 @@ export function decodePackageAdministrationEvent(
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
   } as DecodedPackageAdministrationEvent;
+}
+
+/** Every lifecycle event `blast_admin::delayed` emits, generic in `<K, T>`. */
+export const DELAYED_EVENT_KINDS = [
+  "DelayedCreated",
+  "DelayedScheduled",
+  "DelayedCancelled",
+  "DelayedApplied",
+  "DelayedDestroyed",
+  "ActionCreated",
+  "ActionScheduled",
+  "ActionCancelled",
+  "ActionApplied",
+  "ActionDestroyed",
+  "MemberRemoved",
+] as const;
+export type DelayedEventKind = (typeof DELAYED_EVENT_KINDS)[number];
+
+/**
+ * Which value a key's events carry: a `Delayed<K, T>` setting, a
+ * `DelayedAction<K, A>` slot or a `DelayedSet<K, E>` allowlist.
+ */
+export type DelayedFamily = "setting" | "action" | "set";
+
+type FamilyKinds = {
+  setting: Extract<DelayedEventKind, `Delayed${string}`>;
+  action: Extract<DelayedEventKind, `Action${string}`>;
+  set: FamilyKinds["action"] | "MemberRemoved";
+};
+
+const FAMILY_KINDS: {
+  [Family in DelayedFamily]: readonly FamilyKinds[Family][];
+} = {
+  setting: [
+    "DelayedCreated",
+    "DelayedScheduled",
+    "DelayedCancelled",
+    "DelayedApplied",
+    "DelayedDestroyed",
+  ],
+  action: [
+    "ActionCreated",
+    "ActionScheduled",
+    "ActionCancelled",
+    "ActionApplied",
+    "ActionDestroyed",
+  ],
+  set: [
+    "ActionCreated",
+    "ActionScheduled",
+    "ActionCancelled",
+    "ActionApplied",
+    "ActionDestroyed",
+    "MemberRemoved",
+  ],
+};
+
+/** Any `BcsType` decoding `T`, whatever it serializes from. */
+type BcsDecoder<T> = Pick<BcsType<T, never>, "parse">;
+
+/**
+ * One consumer key `K`. Owners never expose `K`'s constructor, so its type
+ * authenticates every event emitted under it; `valueType` is checked too.
+ */
+export type DelayedKeySpec<Key = unknown, Value = unknown> = {
+  /** `<module>::<Struct>` of `K` in the consumer's original package. */
+  key: string;
+  family: DelayedFamily;
+  keyBcs: BcsDecoder<Key>;
+  /** BCS of the second type argument: `T`, `A` or `E`. */
+  valueBcs: BcsDecoder<Value>;
+  /** The second type argument; `{package}` stands for the consumer's original package. */
+  valueType: string;
+};
+export type DelayedKeySpecs = Readonly<Record<string, DelayedKeySpec>>;
+
+/** Move field order of each event; `Value` is `T`, `A` or `E`. */
+export type DelayedEventPayloads<Key, Value> = {
+  DelayedCreated: { owner: string; key: Key; value: Value; delay_ms: bigint };
+  DelayedScheduled: {
+    owner: string;
+    key: Key;
+    value: Value;
+    delay_ms: bigint;
+    ready_at_ms: bigint;
+  };
+  DelayedCancelled: {
+    owner: string;
+    key: Key;
+    value: Value;
+    delay_ms: bigint;
+    ready_at_ms: bigint;
+  };
+  DelayedApplied: {
+    owner: string;
+    key: Key;
+    previous_value: Value;
+    value: Value;
+    delay_ms: bigint;
+  };
+  DelayedDestroyed: { owner: string; key: Key };
+  ActionCreated: { owner: string; key: Key; delay_ms: bigint };
+  ActionScheduled: {
+    owner: string;
+    key: Key;
+    change: DelayedChange<Value>;
+    delay_ms: bigint;
+    ready_at_ms: bigint;
+  };
+  ActionCancelled: {
+    owner: string;
+    key: Key;
+    change: DelayedChange<Value>;
+    delay_ms: bigint;
+    ready_at_ms: bigint;
+  };
+  ActionApplied: {
+    owner: string;
+    key: Key;
+    change: DelayedChange<Value>;
+    delay_ms: bigint;
+  };
+  ActionDestroyed: { owner: string; key: Key };
+  MemberRemoved: { owner: string; key: Key; member: Value };
+};
+
+/**
+ * A decoded delayed event. `name` is the consumer's registry name for `K`;
+ * `owner` is the ID of the object storing the value.
+ */
+export type DecodedDelayedEvent<Specs extends DelayedKeySpecs> = {
+  [Name in keyof Specs & string]: {
+    [Kind in FamilyKinds[Specs[Name]["family"]]]: {
+      source: "delayed";
+      kind: Kind;
+      name: Name;
+      payload: DelayedEventPayloads<
+        Specs[Name] extends DelayedKeySpec<infer Key, unknown> ? Key : never,
+        Specs[Name] extends DelayedKeySpec<unknown, infer Value> ? Value : never
+      >[Kind];
+      sender: string;
+      position: SuiEventPosition;
+    };
+  }[FamilyKinds[Specs[Name]["family"]]];
+}[keyof Specs & string];
+
+/** Whether `eventType` is a `<adminPackageId>::delayed` lifecycle event. */
+export function isDelayedEventType(
+  eventType: string,
+  adminPackageId: string,
+): boolean {
+  const tag = parseStructTag(eventType);
+  return (
+    tag.address === normalizeSuiAddress(adminPackageId) &&
+    tag.module === "delayed"
+  );
+}
+
+/**
+ * Decodes one `blast_admin::delayed` event whose key belongs to `packageId`
+ * (the consumer's original package) and is listed in `keys`.
+ */
+export function decodeDelayedEvent<const Specs extends DelayedKeySpecs>(
+  event: SuiClientTypes.EventEntry,
+  identity: { adminPackageId: string; packageId: string; keys: Specs },
+): DecodedDelayedEvent<Specs> {
+  const tag = parseStructTag(event.eventType);
+  const kind = tag.name as DelayedEventKind;
+  const keyTag = tag.typeParams[0];
+  if (
+    tag.address !== normalizeSuiAddress(identity.adminPackageId) ||
+    tag.module !== "delayed" ||
+    !DELAYED_EVENT_KINDS.includes(kind) ||
+    tag.typeParams.length !== 2 ||
+    keyTag === undefined ||
+    typeof keyTag === "string"
+  )
+    throw new TypeError(`unexpected delayed event type ${event.eventType}`);
+  const packageId = normalizeSuiAddress(identity.packageId);
+  const keyType = normalizeStructTag(keyTag);
+  const entry = Object.entries(identity.keys).find(
+    ([, spec]) => normalizeStructTag(`${packageId}::${spec.key}`) === keyType,
+  );
+  if (
+    entry === undefined ||
+    !(FAMILY_KINDS[entry[1].family] as readonly string[]).includes(kind) ||
+    normalizeStructTag(event.eventType) !==
+      normalizeStructTag(
+        `${tag.address}::delayed::${kind}<${keyType}, ${entry[1].valueType.replaceAll("{package}", packageId)}>`,
+      )
+  )
+    throw new TypeError(`unexpected delayed event key ${event.eventType}`);
+  const [name, spec] = entry;
+  return {
+    source: "delayed",
+    kind,
+    name,
+    payload: delayedEventBcs(kind, spec).parse(event.bcs),
+    sender: normalizeSuiAddress(event.sender),
+    position: normalizeSuiEventPosition(event),
+  } as DecodedDelayedEvent<Specs>;
+}
+
+/** BCS of one delayed event under `spec`, in Move field order. */
+export function delayedEventBcs(
+  kind: DelayedEventKind,
+  spec: Pick<DelayedKeySpec, "keyBcs" | "valueBcs">,
+): BcsType<Record<string, unknown>, Record<string, unknown>> {
+  // Every decoder in a spec is a full BcsType; the spec only promises `parse`.
+  const value = spec.valueBcs as BcsType<unknown, unknown>;
+  const head = {
+    owner: suiObjectIdBcs,
+    key: spec.keyBcs as BcsType<unknown, unknown>,
+  };
+  const change = delayedChangeBcs(value);
+  const fields = {
+    DelayedCreated: { value, delay_ms: u64Bcs },
+    DelayedScheduled: { value, delay_ms: u64Bcs, ready_at_ms: u64Bcs },
+    DelayedCancelled: { value, delay_ms: u64Bcs, ready_at_ms: u64Bcs },
+    DelayedApplied: { previous_value: value, value, delay_ms: u64Bcs },
+    DelayedDestroyed: {},
+    ActionCreated: { delay_ms: u64Bcs },
+    ActionScheduled: { change, delay_ms: u64Bcs, ready_at_ms: u64Bcs },
+    ActionCancelled: { change, delay_ms: u64Bcs, ready_at_ms: u64Bcs },
+    ActionApplied: { change, delay_ms: u64Bcs },
+    ActionDestroyed: {},
+    MemberRemoved: { member: value },
+  }[kind];
+  return bcs.struct(kind, { ...head, ...fields }) as unknown as BcsType<
+    Record<string, unknown>,
+    Record<string, unknown>
+  >;
+}
+
+/**
+ * Each product's `package_admin::UpgradeKey`: its upgrade and make-immutable
+ * slot, `DelayedAction<UpgradeKey, UpgradeAction>`.
+ */
+export const upgradeDelayedKey = {
+  key: "package_admin::UpgradeKey",
+  family: "action",
+  keyBcs: unitKeyBcs,
+  valueBcs: upgradeActionBcs,
+  valueType: "{package}::package_admin::UpgradeAction",
+} as const satisfies DelayedKeySpec;
+
+/** The ACL's one key: the super admin transfer slot, `DelayedAction<SuperAdminTransfer, address>`. */
+export const aclDelayedKeys = {
+  SuperAdminTransfer: {
+    key: "blast_acl::SuperAdminTransfer",
+    family: "action",
+    keyBcs: unitKeyBcs,
+    valueBcs: addressBcs,
+    valueType: "address",
+  },
+} as const satisfies DelayedKeySpecs;
+
+export type DecodedAclDelayedEvent = DecodedDelayedEvent<typeof aclDelayedKeys>;
+
+/** Decodes the ACL's super admin transfer lifecycle. */
+export function decodeAclDelayedEvent(
+  event: SuiClientTypes.EventEntry,
+  adminPackageId: string,
+): DecodedAclDelayedEvent {
+  return decodeDelayedEvent(event, {
+    adminPackageId,
+    packageId: adminPackageId,
+    keys: aclDelayedKeys,
+  });
 }

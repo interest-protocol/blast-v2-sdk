@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import type { DelayedEventKind } from "@interest-protocol/blast-admin-sdk/events";
+import { delayedEventBcs } from "@interest-protocol/blast-admin-sdk/events";
 import type {
   LaunchpadEventKind,
   LaunchpadEventPackageIdentity,
 } from "@interest-protocol/blast-launchpad-sdk/events";
 import {
+  decodeLaunchpadDelayedEvent,
   decodeLaunchpadEvent,
+  launchpadDelayedKeys,
   launchpadEventBcs,
   launchpadEventSpecs,
 } from "@interest-protocol/blast-launchpad-sdk/events";
@@ -52,7 +56,7 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
     orderedEventFields(frozenSpecs),
   );
   const kinds = Object.keys(frozenSpecs) as LaunchpadEventKind[];
-  assert.equal(kinds.length, 28);
+  assert.equal(kinds.length, 24);
 
   let projection = createLaunchpadEventProjection();
   for (const [eventIndex, kind] of orderedForReplay(kinds).entries()) {
@@ -378,17 +382,33 @@ test("replays pre-share purchases that reach the graduation target", () => {
 test("replays launch configuration policy", () => {
   const sui = normalizedType("0x2::sui::SUI");
   const witness = normalizedType("0xf::cetus::CETUS");
+  const admit = { kind: "Action", action: witness } as const;
   const configured = [
     decoded("QuoteSet", { quote: "0x2::sui::SUI", allowed: true }, 0),
     decoded("MemeDecimalsSet", { decimals: 8, allowed: true }, 1),
     decoded("MemeDecimalsSet", { decimals: 6, allowed: false }, 2),
-    decoded("ProtocolAllocationSet", { meme_bps: 100n, quote_bps: 200n }, 3),
-    decoded(
-      "MigrationWitnessSet",
-      { migration_witness: "0xf::cetus::CETUS", allowed: true },
+    delayed(
+      "ProtocolAllocation",
+      "DelayedApplied",
+      {
+        previous_value: { memeBps: 250n, quoteBps: 150n },
+        value: { memeBps: 100n, quoteBps: 200n },
+        delay_ms: 0n,
+      },
+      3,
+    ),
+    delayed(
+      "MigrationWitnesses",
+      "ActionApplied",
+      { change: admit, delay_ms: 0n },
       4,
     ),
-    decoded("CreationFeeChanged", { pos0: 1_001n }, 5),
+    delayed(
+      "CreationFee",
+      "DelayedApplied",
+      { previous_value: 0n, value: 1_001n, delay_ms: 0n },
+      5,
+    ),
     decoded("PartnerAdded", { partner_id: "0x9a" }, 6),
     decoded("PartnerAdded", { partner_id: "0x9b" }, 7),
     decoded(
@@ -396,7 +416,7 @@ test("replays launch configuration policy", () => {
       { partner_id: "0x9b", accepted_until_ms: 604_800_000n },
       8,
     ),
-    decoded("TreasuryChanged", { pos0: "0x7ea5" }, 9),
+    delayed("Treasury", "DelayedCreated", { value: "0x7ea5", delay_ms: 0n }, 9),
   ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
 
   assert.deepEqual(configured.config.quotes, { [sui]: true });
@@ -411,17 +431,13 @@ test("replays launch configuration policy", () => {
     [normalizeSuiObjectId("0x9a")]: (1n << 64n) - 1n,
     [normalizeSuiObjectId("0x9b")]: 604_800_000n,
   });
+  // `RuntimeConfig` reports its first treasury when it is created.
   assert.equal(configured.config.treasury, normalizeSuiObjectId("0x7ea5"));
-  // The publisher is paid until the first `TreasuryChanged`.
   assert.equal(createLaunchpadEventProjection().config.treasury, null);
 
   const removed = [
     decoded("QuoteSet", { quote: "0x2::sui::SUI", allowed: false }, 10),
-    decoded(
-      "MigrationWitnessSet",
-      { migration_witness: "0xf::cetus::CETUS", allowed: false },
-      11,
-    ),
+    delayed("MigrationWitnesses", "MemberRemoved", { member: witness }, 11),
   ].reduce(reduceLaunchpadEvent, configured);
   assert.deepEqual(removed.config.quotes, {});
   assert.deepEqual(removed.config.migrationWitnesses, {});
@@ -604,6 +620,33 @@ test("uses transaction digest and event index as the stable replay identity", ()
   );
 });
 
+/** A `blast_admin::delayed` event under a launchpad key, owned by `0xc0`. */
+function delayed(
+  name: keyof typeof launchpadDelayedKeys,
+  kind: DelayedEventKind,
+  payload: Record<string, unknown>,
+  eventIndex: number,
+) {
+  const original = normalizeSuiObjectId(packages.originalPackageId);
+  const spec = launchpadDelayedKeys[name];
+  return decodeLaunchpadDelayedEvent(
+    {
+      packageId: "0x123",
+      module: "launch_config",
+      sender: "0xd",
+      eventType: `0xad::delayed::${kind}<${original}::${spec.key}, ${spec.valueType.replaceAll("{package}", original)}>`,
+      bcs: delayedEventBcs(kind, spec)
+        .serialize({ owner: "0xc0", key: null, ...payload } as never)
+        .toBytes(),
+      json: null,
+      checkpoint: "9",
+      transactionDigest: `transaction-${eventIndex}`,
+      eventIndex,
+    },
+    { ...packages, adminPackageId: "0xad" },
+  );
+}
+
 function decoded(
   kind: LaunchpadEventKind,
   overrides: Record<string, unknown>,
@@ -616,9 +659,10 @@ function readFrozenLaunchpadEventSpecs(): Record<
   string,
   Record<string, string>
 > {
+  // The fresh stack's compiler ABI: every struct in `events` is an event.
   const artifact = JSON.parse(
     readFileSync(
-      new URL("../abi/production-launchpad-v1.json", import.meta.url),
+      new URL("../abi/pr150-consumers.json", import.meta.url),
       "utf8",
     ),
   ) as {
@@ -626,7 +670,7 @@ function readFrozenLaunchpadEventSpecs(): Record<
       launchpad: {
         modules: {
           events: {
-            events: Array<{
+            structs: Array<{
               name: string;
               fields: Array<{ name: string; type: unknown }>;
             }>;
@@ -636,7 +680,7 @@ function readFrozenLaunchpadEventSpecs(): Record<
     };
   };
   return Object.fromEntries(
-    artifact.packages.launchpad.modules.events.events.map((event) => [
+    artifact.packages.launchpad.modules.events.structs.map((event) => [
       event.name,
       Object.fromEntries(
         event.fields.map((field) => [field.name, abiDescriptor(field.type)]),

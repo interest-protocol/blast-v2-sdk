@@ -597,7 +597,7 @@ test("pins the frozen ABI identity to the committed artifacts", () => {
     createHash("sha256").update(bytes).digest("hex");
   assert.equal(
     FROZEN_ABI.contractsCommit,
-    "7b13bfcbb20d44952c162d706f32ac65bf9716b5",
+    "61b55508ce4dd2b2a6e81035eb029cef7994c26a",
   );
   assert.equal(
     FROZEN_ABI.artifacts.launchpad,

@@ -1,9 +1,9 @@
 /**
- * Every `#[error(code = N)]` constant of the `blast_presale` package, by
- * module; a name's index is its code. `test/presale-aborts.test.ts` checks it
- * against the contracts source at the commit `check:abi` freezes the presale
- * ABI at. Only presale-package modules are listed; other packages reuse
- * module names such as `cetus`, `bluefin`, `bps` and `package_admin`.
+ * Every `#[error(code = N)]` constant of the fresh-stack `blast_presale`
+ * package, by module; a name's index is its code. `test/presale-aborts.test.ts`
+ * checks it against the contracts source at the commit
+ * `abi/pr150-consumers.json` freezes. Other packages reuse module names such
+ * as `cetus`, `bluefin`, `bps` and `package_admin`: check the abort's package.
  */
 export const PRESALE_ABORTS = {
   blast_presale: [
@@ -43,7 +43,9 @@ export const PRESALE_ABORTS = {
     "EInvalidHardCap",
     "EMissingSetting",
     "ESaleTokenNotUnregulated",
+    "EAboveFeePolicy",
   ],
+  blast_presale_package: ["EInvalidPauseBits", "EPauseUnchanged", "EPaused"],
   aftermath: [
     "EPoolMismatch",
     "EDaoFeePoolMismatch",
@@ -76,10 +78,9 @@ export const PRESALE_ABORTS = {
     "ENoMigrationResiduals",
     "EZeroLiquidity",
     "EWrongPresaleCap",
-    "EProtocolLpFeesUnchanged",
     "EWrongPartner",
   ],
-  fee_policy: ["EInvalidFees", "EFeesUnchanged", "EInvalidDestination"],
+  fee_policy: ["EInvalidFees", "EInvalidDestination"],
   creation_policy: [
     "EAllowanceUnchanged",
     "EQuoteNotAllowed",
@@ -88,6 +89,7 @@ export const PRESALE_ABORTS = {
     "EPartnerNotAccepted",
   ],
   bps: ["EInvalidBps"],
+  package_admin: ["EWrongUpgradeAction", "EInvalidDigest"],
 } as const;
 
 export type PresaleAbortModule = keyof typeof PRESALE_ABORTS;

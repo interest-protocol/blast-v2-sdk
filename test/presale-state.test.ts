@@ -246,10 +246,14 @@ test("decodes a Vault from bytes laid out in Move field order", () => {
     ...addr("0xab"), // presale_id
     ...addr("0xca"), // presale_cap_id
     ...addr("0x9001"), // pool_id
+    ...addr("0xba"), // fee_split.owner
+    ...u8(0), // fee_split.key: FeeSplitKey()
     ...vec([[...addr("0xc0ffee"), ...u64(7_000n), ...u8(0)]]), // fee_split.shares
     ...u64(3_000n), // fee_split.holder_rewards_bps
     ...u64(172_800_000n),
     ...u8(0), // applied notice, no proposal
+    ...addr("0xba"), // protocol_fees.owner
+    ...u8(0), // protocol_fees.key: ProtocolLpFeesKey()
     ...u64(0n), // protocol_fees.raise_bps
     ...u64(0n), // protocol_fees.token_bps
     ...u64(1_000n), // protocol_fees.lp_fee_meme_bps
@@ -319,9 +323,13 @@ test("decodes a Vault from bytes laid out in Move field order", () => {
 test("decodes the FeePolicy from bytes laid out in Move field order", () => {
   const content = Uint8Array.from([
     ...addr("0xfe"), // id
+    ...addr("0xfe"), // destination.owner
+    ...u8(0), // destination.key: DestinationKey()
     ...addr("0x7ea5"), // destination
     ...u64(0n),
     ...u8(0), // applied notice, no proposal
+    ...addr("0xfe"), // fees.owner
+    ...u8(0), // fees.key: FeesKey()
     ...u64(333n), // fees.raise_bps
     ...u64(500n), // fees.token_bps
     ...u64(1_000n), // fees.lp_fee_meme_bps
@@ -351,17 +359,33 @@ test("decodes the FeePolicy from bytes laid out in Move field order", () => {
       object(`${pkg}::fee_policy::Other`, content, "0xfe"),
     ),
   );
+  // Each delayed value must belong to the policy that stores it.
+  const foreignOwner = Uint8Array.from(content);
+  foreignOwner.set(addr("0xff"), 32);
+  assert.throws(
+    () =>
+      decodePresaleFeePolicyObject(
+        object(`${pkg}::fee_policy::FeePolicy`, foreignOwner, "0xfe"),
+        pkg,
+      ),
+    /mismatched UID/,
+  );
 });
 
 test("decodes the CreationPolicy's allowed Quote types and migrators", () => {
   const suiName = `${"2".padStart(64, "0")}::sui::SUI`;
+  const otherWitness = `${"5e".padStart(64, "0")}::bluefin::Witness`;
   const content = Uint8Array.from([
     ...addr("0xcf"), // id
     ...vec([ascii(suiName)]), // allowed_quotes: VecSet<TypeName>
-    ...vec([ascii(witness)]), // allowed_migration_witnesses
-    ...u64(172_800_000n), // witness_delay_ms
-    ...u8(0), // pending_witness_delay
-    ...vec([]), // pending_witnesses
+    ...addr("0xcf"), // migration_witnesses.owner
+    ...u8(0), // migration_witnesses.key: MigrationWitnessKey()
+    ...vec([ascii(witness)]), // migration_witnesses.members
+    ...u64(172_800_000n), // migration_witnesses.delay_ms
+    ...vec([[...ascii(otherWitness), ...u64(5n), ...u64(9n)]]), // admissions
+    ...u8(1), // pending_delay: Some
+    ...u64(0n),
+    ...u64(11n),
   ]);
   const policy = decodePresaleCreationPolicyObject(
     object(`${pkg}::creation_policy::CreationPolicy`, content, "0xcf"),
@@ -369,6 +393,14 @@ test("decodes the CreationPolicy's allowed Quote types and migrators", () => {
   );
   assert.deepEqual(policy.allowedQuotes, [`0x${suiName}`]);
   assert.deepEqual(policy.allowedMigrationWitnesses, [`0x${witness}`]);
+  assert.equal(policy.witnessDelayMs, 172_800_000n);
+  assert.deepEqual(policy.pendingWitnesses, {
+    [`0x${otherWitness}`]: { delay_ms: 5n, ready_at_ms: 9n },
+  });
+  assert.deepEqual(policy.pendingWitnessDelay, {
+    delay_ms: 0n,
+    ready_at_ms: 11n,
+  });
   assert.throws(() =>
     decodePresaleCreationPolicyObject(
       object(`${pkg}::fee_policy::FeePolicy`, content, "0xcf"),

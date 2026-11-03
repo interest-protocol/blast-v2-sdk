@@ -1,5 +1,5 @@
 // Fixture generator for test/fixtures/launchpad-pr150.ts. It is not compiled by the SDK.
-// To regenerate: extract contracts commit 7b13bfcbb20d44952c162d706f32ac65bf9716b5 with
+// To regenerate: extract contracts commit 61b55508ce4dd2b2a6e81035eb029cef7994c26a with
 // `git archive`, copy this file to sui/launchpad/tests/ in that copy only, and run
 // `sui move test sdk_fixture_tests` from sui/launchpad. Never add it to the contracts repository.
 #[test_only]
@@ -44,12 +44,12 @@ fun print_fixtures() {
     let next_governance_time = governance_clock.timestamp_ms() + 172_800_000;
     governance_clock.set_for_testing(next_governance_time);
     config.apply_migration_witness<TEST_MIGRATION_WITNESS>(&pv, &governance_clock);
-    print_event<MigrationWitnessSet>(b"event MigrationWitnessSet");
+    print_delayed<ActionApplied<MigrationWitnessKey, TypeName>>(b"event MigrationWitnessAdmitted");
     config.schedule_trade_fees(&pv, &blast_acl::witness_for_testing<FeeAdmin>(), bps::new(100), bps::new(250), 172_800_000, &governance_clock);
     let next_governance_time = governance_clock.timestamp_ms() + 172_800_000;
     governance_clock.set_for_testing(next_governance_time);
     config.apply_trade_fees(&pv, &governance_clock);
-    print_event<LaunchTradeFeesChanged>(b"event LaunchTradeFeesChanged");
+    print_delayed<DelayedApplied<TradeFeesKey, TradeFees>>(b"event TradeFeesApplied");
     config.schedule_protocol_allocation(
         &pv,
         &blast_acl::witness_for_testing<TreasuryAdmin>(),
@@ -58,19 +58,19 @@ fun print_fixtures() {
     let next_governance_time = governance_clock.timestamp_ms() + 172_800_000;
     governance_clock.set_for_testing(next_governance_time);
     config.apply_protocol_allocation(&pv, &governance_clock);
-    print_event<ProtocolAllocationSet>(b"event ProtocolAllocationSet");
+    print_delayed<DelayedApplied<ProtocolAllocationKey, ProtocolAllocation>>(b"event ProtocolAllocationApplied");
     config.schedule_creation_fee(&pv, &blast_acl::witness_for_testing<FeeAdmin>(), 5_000_000_000, 172_800_000, &governance_clock);
     let next_governance_time = governance_clock.timestamp_ms() + 172_800_000;
     governance_clock.set_for_testing(next_governance_time);
     config.apply_creation_fee(&pv, &governance_clock);
-    print_event<CreationFeeChanged>(b"event CreationFeeChanged");
+    print_delayed<DelayedApplied<CreationFeeKey, u64>>(b"event CreationFeeApplied");
     config.add_partner(&pv, &blast_acl::witness_for_testing<FeeAdmin>(), &partner);
     print_event<PartnerAdded>(b"event PartnerAdded");
     runtime.schedule_protocol_fee_share(&pv, &blast_acl::witness_for_testing<FeeAdmin>(), bps::new(3_000), 172_800_000, &governance_clock);
     let next_governance_time = governance_clock.timestamp_ms() + 172_800_000;
     governance_clock.set_for_testing(next_governance_time);
     runtime.apply_protocol_fee_share(&pv, &governance_clock);
-    print_event<ProtocolFeeShareChanged>(b"event ProtocolFeeShareChanged");
+    print_delayed<DelayedApplied<ProtocolFeeShareKey, Bps>>(b"event ProtocolFeeShareApplied");
     label(b"object LaunchConfig");
     debug::print(&bcs::to_bytes(&config));
     label(b"object RuntimeConfig");
@@ -246,51 +246,60 @@ fun label(text: vector<u8>) {
     debug::print(&text.to_string());
 }
 
+fun print_delayed<T: copy + drop>(name: vector<u8>) {
+    let events = event::events_by_type<T>();
+    label(name);
+    debug::print(&bcs::to_bytes(&events[events.length() - 1]));
+}
+
 fun print_event<T: copy + drop>(name: vector<u8>) {
     let events = event::events_by_type<Event<T>>();
     label(name);
     debug::print(&bcs::to_bytes(&events[events.length() - 1].unwrap()));
 }
 
-use blast_admin::blast_acl;
+use blast_admin::{blast_acl, delayed::{ActionApplied, DelayedApplied}};
 use blast_fun::{
-    allocation,
+    allocation::{Self, ProtocolAllocation},
     blast_events::Event,
     blast_fun_domain::{AdapterAdmin, FeeAdmin, ListingAdmin, TreasuryAdmin},
-    bps,
+    bps::{Self, Bps},
     creator_authority,
     events::{
         Bought,
-        CreationFeeChanged,
         CreatorCapsClaimed,
         CreatorFeesClaimed,
         LaunchCreated,
         LaunchShared,
         LaunchTicketCreated,
-        LaunchTradeFeesChanged,
         Migrated,
         MigrationAllocationPaid,
-        MigrationWitnessSet,
         OpeningRoundDelivered,
         OpeningRoundJoined,
         OpeningRoundSettled,
         PartnerAdded,
         PartnerRemoved,
-        ProtocolAllocationSet,
-        ProtocolFeeShareChanged,
         ProtocolFeesAccrued,
         ProtocolFeesClaimed,
         QuoteSet,
         Sold,
     },
     launch::{Self, Launch},
-    launch_config::{Self, LaunchConfig},
+    launch_config::{
+        Self,
+        CreationFeeKey,
+        LaunchConfig,
+        MigrationWitnessKey,
+        ProtocolAllocationKey,
+        TradeFees,
+        TradeFeesKey,
+    },
     launch_ticket,
     blast_fun as package_version,
-    runtime_config,
+    runtime_config::{Self, ProtocolFeeShareKey},
 };
 use blast_partners::blast_partners;
-use std::{bcs, debug, unit_test::destroy};
+use std::{bcs, debug, type_name::TypeName, unit_test::destroy};
 use sui::{
     clock,
     coin::{Self, Coin},

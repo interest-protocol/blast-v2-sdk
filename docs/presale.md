@@ -84,7 +84,7 @@ The contract enforces this admission check; SDK previews do not certify currency
 | Cap | `destroyCap` | After cancellation only. |
 | Blast's rates | `scheduleProtocolFees` | Signs in as `FeeAdmin`; call `applyProtocolFees` after the notice. Affects later presales. |
 | Blast's rates on one sale | `setPresaleProtocolFees` | Signs in as `FeeAdmin`. In the creation PTB before `share` (pass the `Presale` result and an `adminWitness` from `call.signIn`), or once shared until the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
-| Blast's LP-fee rates on one vault | `scheduleProtocolLpFees` | Signs in as `FeeAdmin`; call `applyProtocolLpFees` after readiness. Only `ProtocolLpFeesChanged` changes the applied pair. |
+| Blast's LP-fee rates on one vault | `scheduleProtocolLpFees` | Signs in as `FeeAdmin`; call `applyProtocolLpFees` after readiness. Only its `DelayedApplied` event changes the applied pair. |
 | Blast's payout address | `scheduleProtocolDestination` | Signs in as `TreasuryAdmin`; call `applyProtocolDestination` after the notice. Affects later payouts. |
 | Partners | `addPartner`, `removePartner` | Sign in as `FeeAdmin`. Which Blast partners presales created afterward may name: added at once, removed after `PARTNER_DELAY_MS`. |
 | Listing | `setQuoteAllowed`, `scheduleMigrationWitness` | Sign in as `ListingAdmin` and `AdapterAdmin`. Which Quote types and migrators presales created afterward may use; existing sales are unaffected. A migrator is a `venue` of this package or the `witnessType` of an external migrator's `Witness` struct. |
@@ -407,7 +407,7 @@ is created:
   to the current destination before the creator's split (`FeesCollected`), or
   wait in a partnered sale's vault (see [Partners](#partners)).
   The vault snapshots them at migration; `scheduleProtocolLpFees` later replaces
-  one vault's pair (`ProtocolLpFeesChanged`).
+  one vault's pair (`DelayedApplied` under `ProtocolLpFeesKey`).
 
 In a sale's creation PTB before `share`, or after it until the sale's
 `startMs`, `setPresaleProtocolFees` may replace all four of
@@ -578,9 +578,16 @@ events generic over `<SaleToken, Quote>`. `VaultCreated` and
 `PoolTierReserved` in `poolTiers`, keyed by sale token, since it precedes the
 sale's `PresaleCreated`. A `VaultCreated` for a vault
 without a presale carries the zero `presale_id`, which the reducer projects
-without linking a presale. `decodePresalePolicyEvent` decodes `FeesChanged`,
-`DestinationChanged`, `QuoteSet`, `MigrationWitnessSet`, `PartnerAdded`,
-and `PartnerRemoved`, which have no type arguments.
+without linking a presale. `decodePresalePolicyEvent` decodes `Paused`,
+`Unpaused`, `QuoteSet`, `PartnerAdded` and `PartnerRemoved`, which have no
+type arguments. Delayed values (the `FeePolicy` fees and destination, the
+migration witness allowlist, each vault's fee split and Blast LP rates, and the
+upgrade slot) emit `blast_admin::delayed` events instead;
+`decodePresaleDelayedEvent` decodes them by their `presaleDelayedKeys` key
+given the admin package ID, and `reducePresaleEvent` takes them beside the
+presale events, keeping pending proposals and notices in its `policy` section.
+On a fresh deployment, `configureNow` applies policy settings at a zero notice
+and `armNotices` then raises each notice.
 `reducePresaleEvent` rebuilds each presale's lifecycle, windows, commitments,
 and custody balances, its vault, and its rounds. `Committed` has no wallet
 field, so the reducer keys commitments by the event sender. The `Presale`

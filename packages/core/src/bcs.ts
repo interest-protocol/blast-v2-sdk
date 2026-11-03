@@ -41,41 +41,167 @@ export const addressBcs = bcs.Address.transform({
   output: (value) => normalizeSuiAddress(value),
 });
 
-/** Applied policy and atomic proposal; readiness never applies a value implicitly. */
-export type Delayed<T> = {
-  value: T;
-  delay_ms: bigint;
-  pending: { value: T; delay_ms: bigint; ready_at_ms: bigint } | null;
-};
+/**
+ * A zero-field Move key such as `TradeFeesKey()`: Move gives it one
+ * `dummy_field: bool`, so it encodes as one byte.
+ */
+export const unitKeyBcs = bcs
+  .struct("Key", { dummy_field: bcs.bool() })
+  .transform({
+    input: (_: null) => ({ dummy_field: false }),
+    output: (): null => null,
+  });
 
-/** Exact proposal layout, including policy-only proposals. */
-export function pendingBcs<T, Input>(value: BcsType<T, Input>) {
-  return bcs.struct("Pending", {
+/** `blast_admin::delayed::Proposal<T>`: the value and the notice in force once it applies. */
+export type Proposal<T> = { value: T; delay_ms: bigint; ready_at_ms: bigint };
+
+export function proposalBcs<T, Input>(value: BcsType<T, Input>) {
+  return bcs.struct("Proposal", {
     value,
     delay_ms: u64Bcs,
     ready_at_ms: u64Bcs,
   });
 }
 
-/** Exact `blast_admin::delayed::Delayed<T>` field order. */
-export function delayedBcs<T, Input>(value: BcsType<T, Input>) {
+/** `blast_admin::delayed::Delayed<K, T>`: readiness never applies a value implicitly. */
+export type Delayed<K, T> = {
+  owner: string;
+  key: K;
+  value: T;
+  delay_ms: bigint;
+  pending: Proposal<T> | null;
+};
+
+/** Exact `blast_admin::delayed::Delayed<K, T>` field order. */
+export function delayedBcs<K, KeyInput, T, Input>(
+  key: BcsType<K, KeyInput>,
+  value: BcsType<T, Input>,
+) {
   return bcs.struct("Delayed", {
+    owner: suiObjectIdBcs,
+    key,
     value,
     delay_ms: u64Bcs,
-    pending: bcs.option(pendingBcs(value)),
+    pending: bcs.option(proposalBcs(value)),
   });
 }
 
-export type Pending<T> = NonNullable<Delayed<T>["pending"]>;
+/** `blast_admin::delayed::Change<A>`: an action, or a change of notice only. */
+export type DelayedChange<A> =
+  | { kind: "Action"; action: A }
+  | { kind: "Delay" };
 
-/** Admission removals are immediate; additions and notice changes require apply. */
-export const migrationAdmissionFields = {
-  witness_delay_ms: u64Bcs,
-  pending_witness_delay: bcs.option(pendingBcs(bcs.bool())),
-  pending_witnesses: bcs.vector(
-    bcs.struct("Entry", {
-      key: moveTypeNameBcs,
-      value: pendingBcs(bcs.bool()),
-    }),
-  ),
+export function delayedChangeBcs<A, Input>(action: BcsType<A, Input>) {
+  return bcs.enum("Change", { Action: action, Delay: null }).transform({
+    input: (change: DelayedChange<Input>) =>
+      change.kind === "Action"
+        ? { Action: change.action }
+        : { Delay: true as const },
+    output: (change): DelayedChange<A> =>
+      change.$kind === "Action"
+        ? { kind: "Action", action: change.Action as A }
+        : { kind: "Delay" },
+  });
+}
+
+/** `blast_admin::delayed::DelayedAction<K, A>`: a one-shot action slot. */
+export type DelayedAction<K, A> = {
+  owner: string;
+  key: K;
+  delay_ms: bigint;
+  pending: Proposal<DelayedChange<A>> | null;
 };
+
+export function delayedActionBcs<K, KeyInput, A, Input>(
+  key: BcsType<K, KeyInput>,
+  action: BcsType<A, Input>,
+) {
+  return bcs.struct("DelayedAction", {
+    owner: suiObjectIdBcs,
+    key,
+    delay_ms: u64Bcs,
+    pending: bcs.option(proposalBcs(delayedChangeBcs(action))),
+  });
+}
+
+/** `blast_admin::delayed::Notice`: an admission's deadline, or a proposed next notice. */
+export type Notice = { delay_ms: bigint; ready_at_ms: bigint };
+
+export const noticeBcs = bcs.struct("Notice", {
+  delay_ms: u64Bcs,
+  ready_at_ms: u64Bcs,
+});
+
+/** `blast_admin::delayed::DelayedSet<K, E>`: admissions wait; removals are immediate. */
+export type DelayedSet<K, E> = {
+  owner: string;
+  key: K;
+  members: E[];
+  delay_ms: bigint;
+  admissions: { member: E; notice: Notice }[];
+  pending_delay: Notice | null;
+};
+
+export function delayedSetBcs<K, KeyInput, E, Input>(
+  key: BcsType<K, KeyInput>,
+  member: BcsType<E, Input>,
+) {
+  return bcs
+    .struct("DelayedSet", {
+      owner: suiObjectIdBcs,
+      key,
+      members: bcs.struct("VecSet", { contents: bcs.vector(member) }),
+      delay_ms: u64Bcs,
+      admissions: bcs.struct("VecMap", {
+        contents: bcs.vector(
+          bcs.struct("Entry", { key: member, value: noticeBcs }),
+        ),
+      }),
+      pending_delay: bcs.option(noticeBcs),
+    })
+    .transform({
+      input: (set: {
+        owner: string;
+        key: KeyInput;
+        members: Input[];
+        delay_ms: bigint;
+        admissions: { member: Input; notice: Notice }[];
+        pending_delay: Notice | null;
+      }) => ({
+        owner: set.owner,
+        key: set.key,
+        members: { contents: set.members },
+        delay_ms: set.delay_ms,
+        admissions: {
+          contents: set.admissions.map(({ member, notice }) => ({
+            key: member,
+            value: notice,
+          })),
+        },
+        pending_delay: set.pending_delay,
+      }),
+      output: (set): DelayedSet<K, E> => ({
+        owner: set.owner,
+        key: set.key,
+        members: set.members.contents,
+        delay_ms: set.delay_ms,
+        admissions: set.admissions.contents.map(({ key, value }) => ({
+          member: key,
+          notice: value,
+        })),
+        pending_delay: set.pending_delay,
+      }),
+    });
+}
+
+/** A product's migration witness allowlist, as both products' readers expose it. */
+export function migrationAdmission(set: DelayedSet<null, string>) {
+  return {
+    migrationWitnessTypes: [...set.members],
+    witnessDelayMs: set.delay_ms,
+    pendingWitnessDelay: set.pending_delay,
+    pendingWitnesses: Object.fromEntries(
+      set.admissions.map(({ member, notice }) => [member, notice]),
+    ) as Readonly<Record<string, Notice>>,
+  };
+}

@@ -1,14 +1,15 @@
+import type { DelayedAction } from "@interest-protocol/blast-core/bcs";
 import {
   addressBcs,
+  delayedActionBcs,
   moveTypeNameBcs,
-  pendingBcs,
   suiObjectIdBcs,
   suiUidBcs,
   u64Bcs,
+  unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import { normalizePositiveU64 } from "@interest-protocol/blast-core/integers";
 import type { SharedObjectIdentity } from "@interest-protocol/blast-core/sui";
-import { timelockedBcs } from "@interest-protocol/blast-core/timelock";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
@@ -23,11 +24,11 @@ export const aclBcs = bcs.struct("ACL", {
   id: suiUidBcs,
   super_admin_cap_id: suiObjectIdBcs,
   admins: bcs.struct("Table", { id: suiUidBcs, size: u64Bcs }),
-  pending_super_admin: timelockedBcs(bcs.option(addressBcs)),
+  super_admin_transfer: delayedActionBcs(unitKeyBcs, addressBcs),
 });
 
-/** A nominated super admin, who may accept from `executeAfterMs`. */
-export type PendingSuperAdmin = { recipient: string; executeAfterMs: bigint };
+/** A nominated super admin, who may accept from `readyAtMs`. */
+export type PendingSuperAdmin = { recipient: string; readyAtMs: bigint };
 
 export type AclState = SharedObjectIdentity & {
   /** The one live `SuperAdminCap`. */
@@ -57,10 +58,13 @@ export function decodeAclObject(
   }
   const parsed = aclBcs.parse(object.content);
   const objectId = normalizeSuiObjectId(object.objectId);
-  if (normalizeSuiObjectId(parsed.id.id.bytes) !== objectId) {
+  if (
+    normalizeSuiObjectId(parsed.id.id.bytes) !== objectId ||
+    parsed.super_admin_transfer.owner !== objectId
+  ) {
     throw new TypeError(`ACL ${object.objectId} has a mismatched UID`);
   }
-  const nominee = parsed.pending_super_admin.after;
+  const proposal = parsed.super_admin_transfer.pending;
   return {
     objectId,
     initialSharedVersion: normalizePositiveU64(
@@ -71,12 +75,9 @@ export function decodeAclObject(
     adminsTableId: normalizeSuiObjectId(parsed.admins.id.id.bytes),
     adminCount: parsed.admins.size,
     pendingSuperAdmin:
-      nominee == null
-        ? null
-        : {
-            recipient: nominee,
-            executeAfterMs: parsed.pending_super_admin.atMs,
-          },
+      proposal?.value.kind === "Action"
+        ? { recipient: proposal.value.action, readyAtMs: proposal.ready_at_ms }
+        : null,
   };
 }
 
@@ -184,8 +185,8 @@ export const packageVersionBcs = bcs.struct("PackageVersion", {
 export const upgradeActionBcs = bcs.enum("UpgradeAction", {
   Upgrade: bcs.vector(bcs.u8()),
   MakeImmutable: null,
-  DelayOnly: null,
 });
+export type UpgradeAction = ReturnType<typeof upgradeActionBcs.parse>;
 
 /** Sealed native custody remains readable without exposing its capabilities. */
 export const packageAdminBcs = bcs.struct("PackageAdmin", {
@@ -205,8 +206,7 @@ export const packageAdminBcs = bcs.struct("PackageAdmin", {
       }),
     ),
   }),
-  delay_ms: u64Bcs,
-  pending: bcs.option(pendingBcs(upgradeActionBcs)),
+  upgrade: delayedActionBcs(unitKeyBcs, upgradeActionBcs),
 });
 
 export const migratorsVersionBcs = bcs.struct("PackageVersion", {
@@ -220,8 +220,10 @@ export type PackageVersionState = SharedObjectIdentity & {
 };
 export type PackageAdministrationState = SharedObjectIdentity & {
   custody: ReturnType<typeof packageAdminBcs.parse>["custody"];
+  /** The applied notice for upgrade actions and notice changes. */
   delayMs: bigint;
-  pending: ReturnType<typeof packageAdminBcs.parse>["pending"];
+  /** The proposed upgrade action or notice change, if any. */
+  pending: DelayedAction<null, UpgradeAction>["pending"];
 };
 
 /** Explicit product identity prevents a version object from another package being accepted. */
@@ -267,11 +269,13 @@ export function decodePackageAdministrationObject(
     "PackageAdmin",
   );
   const parsed = packageAdminBcs.parse(object.content);
+  if (parsed.upgrade.owner !== normalizeSuiObjectId(parsed.id.id.bytes))
+    throw new TypeError("administration object UID mismatch");
   return {
     ...adminIdentity(object, parsed.id.id.bytes),
     custody: parsed.custody,
-    delayMs: parsed.delay_ms,
-    pending: parsed.pending,
+    delayMs: parsed.upgrade.delay_ms,
+    pending: parsed.upgrade.pending,
   };
 }
 

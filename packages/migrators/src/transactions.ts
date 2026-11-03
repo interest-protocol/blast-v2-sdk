@@ -1104,6 +1104,23 @@ export class MigratorCalls {
   }
 }
 
+/** LP-fee settings `configureNow` applies at a zero notice. */
+export type MigratorsSettings = {
+  /** Where every collection pays Blast's LP-fee share. */
+  protocolDestination?: string;
+  defaultShares?: { memeBps: bigint; quoteBps: bigint };
+};
+
+/**
+ * The notice `armNotices` gives each named value, in milliseconds. A
+ * setting restates its applied value beside its new notice.
+ */
+export type MigratorsNotices = {
+  protocolDestination?: { destination: string; delayMs: bigint };
+  defaultShares?: { memeBps: bigint; quoteBps: bigint; delayMs: bigint };
+  upgrade?: { packageAdmin: SharedObjectReference<true>; delayMs: bigint };
+};
+
 export class MigratorTransactions {
   readonly call: MigratorCalls;
   readonly #useGasCoin: boolean;
@@ -1492,6 +1509,81 @@ export class MigratorTransactions {
     return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
       this.call.scheduleUpgradeDelay({ ...options, adminWitness }),
     );
+  }
+
+  /**
+   * Applies LP-fee settings at once on a fresh deployment whose notices are
+   * still zero: each is a schedule and its apply in this PTB, keeping a zero
+   * notice. Name only settings that change; an unchanged schedule aborts.
+   * Then call `armNotices`. The cap needs each setting's role.
+   */
+  configureNow(
+    options: { adminCapId: string } & MigratorsSettings,
+  ): Transaction {
+    const delayMs = 0n;
+    const { protocolDestination, defaultShares } = options;
+    return this.#atZeroNotice(options.adminCapId, {
+      ...(protocolDestination === undefined
+        ? {}
+        : {
+            protocolDestination: { destination: protocolDestination, delayMs },
+          }),
+      ...(defaultShares
+        ? { defaultShares: { ...defaultShares, delayMs } }
+        : {}),
+    });
+  }
+
+  /**
+   * Raises each named notice from zero in one PTB: a schedule and its apply.
+   * A setting restates its applied value, since its schedule proposes a value
+   * and next notice together. Run after `configureNow`; once armed, every
+   * later change waits its notice.
+   */
+  armNotices(options: { adminCapId: string } & MigratorsNotices): Transaction {
+    return this.#atZeroNotice(options.adminCapId, options);
+  }
+
+  #atZeroNotice(adminCapId: string, notices: MigratorsNotices): Transaction {
+    const tx = new Transaction();
+    const witnesses = new Map<BlastFunAdminRole, TransactionObjectArgument>();
+    const as = (role: BlastFunAdminRole) => {
+      let adminWitness = witnesses.get(role);
+      if (!adminWitness) {
+        adminWitness = tx.add(this.call.signIn({ adminCap: adminCapId, role }));
+        witnesses.set(role, adminWitness);
+      }
+      return adminWitness;
+    };
+    const { call } = this;
+    if (notices.protocolDestination) {
+      tx.add(
+        call.scheduleLpFeeProtocolDestination({
+          ...notices.protocolDestination,
+          adminWitness: as("TreasuryAdmin"),
+        }),
+      );
+      tx.add(call.applyLpFeeProtocolDestination());
+    }
+    if (notices.defaultShares) {
+      tx.add(
+        call.scheduleLpFeeDefaultShares({
+          ...notices.defaultShares,
+          adminWitness: as("FeeAdmin"),
+        }),
+      );
+      tx.add(call.applyLpFeeDefaultShares());
+    }
+    if (notices.upgrade) {
+      tx.add(
+        call.scheduleUpgradeDelay({
+          ...notices.upgrade,
+          adminWitness: as("UpgradeAdmin"),
+        }),
+      );
+      tx.add(call.applyUpgradeDelay(notices.upgrade));
+    }
+    return tx;
   }
 
   #asAdmin(

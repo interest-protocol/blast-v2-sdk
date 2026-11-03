@@ -675,3 +675,84 @@ function transferObjectCount(tx: Transaction): number {
     ? transfer.TransferObjects.objects.length
     : 0;
 }
+
+test("configures a fresh launchpad at zero notice, then arms each notice", () => {
+  const sdk = new LaunchpadTransactions(deployment);
+  const abi = readAbi("pr150-consumers.json", "launchpad");
+  const admin = normalizeSuiObjectId(deployment.admin.packageId);
+  // Each Move call, with its count of pure arguments.
+  const calls = (tx: Transaction) => {
+    const { commands, inputs } = tx.getData();
+    return commands.flatMap((command) => {
+      if (command.$kind !== "MoveCall") return [];
+      const { module, function: name, arguments: args } = command.MoveCall;
+      const pure = args.filter(
+        (arg) => arg.$kind === "Input" && inputs[arg.Input]?.$kind === "Pure",
+      ).length;
+      return [`${module}::${name}${pure ? `/${pure}` : ""}`];
+    });
+  };
+  const witness = "0xf::cetus::CETUS";
+  const configured = sdk.configureNow({
+    adminCapId: "0xca",
+    tradeFees: { quoteFeeBps: 100n, memeFeeBps: 0n },
+    creationFee: 5n,
+    treasury: "0x7ea5",
+    migrationWitnessTypes: [witness],
+  });
+  assertBuildersMatchAbi(configured, abi, deployment.packageId);
+  assert.deepEqual(calls(configured), [
+    "blast_acl::sign_in",
+    "bps::new/1",
+    "bps::new/1",
+    "launch_config::schedule_trade_fees/1",
+    "launch_config::apply_trade_fees",
+    "launch_config::schedule_creation_fee/2",
+    "launch_config::apply_creation_fee",
+    "blast_acl::sign_in",
+    "runtime_config::schedule_treasury/2",
+    "runtime_config::apply_treasury",
+    "blast_acl::sign_in",
+    "launch_config::schedule_migration_witness",
+    "launch_config::apply_migration_witness",
+  ]);
+  // Each role signs in once, and every schedule keeps a zero notice.
+  assert.equal(
+    configured
+      .getData()
+      .commands.filter(
+        (command) =>
+          command.$kind === "MoveCall" &&
+          normalizeSuiObjectId(command.MoveCall.package) === admin,
+      ).length,
+    3,
+  );
+  const zero = configured
+    .getData()
+    .inputs.filter(
+      (input) =>
+        input.$kind === "Pure" &&
+        input.Pure.bytes === Buffer.alloc(8).toString("base64"),
+    );
+  assert.ok(zero.length >= 3);
+
+  const packageAdmin = shared("0xaa", "5", true);
+  const armed = sdk.armNotices({
+    adminCapId: "0xca",
+    creationFee: { creationFee: 5n, delayMs: 172_800_000n },
+    migrationDelayMs: 172_800_000n,
+    upgrade: { packageAdmin, delayMs: 172_800_000n },
+  });
+  assertBuildersMatchAbi(armed, abi, deployment.packageId);
+  assert.deepEqual(calls(armed), [
+    "blast_acl::sign_in",
+    "launch_config::schedule_creation_fee/2",
+    "launch_config::apply_creation_fee",
+    "blast_acl::sign_in",
+    "launch_config::schedule_migration_delay/1",
+    "launch_config::apply_migration_delay",
+    "blast_acl::sign_in",
+    "package_admin::schedule_upgrade_delay/1",
+    "package_admin::apply_upgrade_delay",
+  ]);
+});

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import type { DelayedEventKind } from "@interest-protocol/blast-admin-sdk/events";
+import { delayedEventBcs } from "@interest-protocol/blast-admin-sdk/events";
 import type { LaunchpadEventKind } from "@interest-protocol/blast-launchpad-sdk/events";
 import {
   decodeLaunchpadEvent,
@@ -13,8 +15,10 @@ import type {
 } from "@interest-protocol/blast-migrators-sdk/events";
 import {
   decodeMigratorEvent,
+  decodeMigratorsDelayedEvent,
   migratorEventBcs,
   migratorEventSpecs,
+  migratorsDelayedKeys,
 } from "@interest-protocol/blast-migrators-sdk/events";
 import {
   createLaunchpadProductProjection,
@@ -28,6 +32,11 @@ import { orderedEventFields } from "./abi.ts";
 const launchpadPackages = { originalPackageId: "0x122" };
 const migratorPackages: MigratorEventPackageIdentity = {
   originalPackageId: "0x320",
+};
+const delayedPackages = {
+  ...migratorPackages,
+  adminPackageId: "0xad",
+  launchpadOriginalPackageId: launchpadPackages.originalPackageId,
 };
 const sampleSplit = {
   creatorBps: 10_000n,
@@ -51,7 +60,7 @@ test("decodes and idempotently reduces every frozen migrator event", () => {
     orderedEventFields(readFrozenMigratorEventSpecs()),
   );
   const kinds = Object.keys(migratorEventSpecs) as MigratorEventKind[];
-  assert.equal(kinds.length, 28);
+  assert.equal(kinds.length, 13);
 
   let projection = createLaunchpadProductProjection();
   for (const [eventIndex, kind] of kinds.entries()) {
@@ -143,12 +152,14 @@ test("replays vault custody, collections, auto-LP, split updates, and claims", (
       },
       6,
     ),
-    migratorDecoded(
-      "FeeSplitChanged",
+    delayedDecoded(
+      "DelayedApplied",
+      "FeeSplit",
       {
-        vault_id: "0x40",
-        old_fee_split: split,
-        new_fee_split: nextSplit,
+        owner: "0x40",
+        previous_value: split,
+        value: nextSplit,
+        delay_ms: 172_800_000n,
       },
       7,
     ),
@@ -326,54 +337,63 @@ test("holds a partnered vault's Blast LP fees until anyone claims them for its p
 test("replays LP-fee policy defaults, coin pairs, destination, and Cetus reservations", () => {
   const meme = normalizedType("0xa::meme::MEME");
   const projection = [
-    migratorDecoded(
-      "LpFeePolicyChanged",
-      {
-        meme: null,
-        old_meme_bps: 0n,
-        old_quote_bps: 0n,
-        new_meme_bps: 1_000n,
-        new_quote_bps: 2_000n,
-      },
+    delayedDecoded(
+      "DelayedCreated",
+      "DefaultShares",
+      { value: { meme_bps: 0n, quote_bps: 0n }, delay_ms: 0n },
       0,
     ),
-    migratorDecoded(
-      "LpFeePolicyChanged",
+    delayedDecoded(
+      "DelayedApplied",
+      "DefaultShares",
       {
-        meme: "0xa::meme::MEME",
-        old_meme_bps: null,
-        old_quote_bps: null,
-        new_meme_bps: 500n,
-        new_quote_bps: 600n,
+        previous_value: { meme_bps: 0n, quote_bps: 0n },
+        value: { meme_bps: 1_000n, quote_bps: 2_000n },
+        delay_ms: 0n,
       },
       1,
     ),
-    migratorDecoded(
-      "LpFeePolicyChanged",
+    delayedDecoded(
+      "DelayedApplied",
+      "CoinShares",
       {
-        meme: "0xb::meme::MEME",
-        old_meme_bps: null,
-        old_quote_bps: null,
-        new_meme_bps: 1n,
-        new_quote_bps: 1n,
+        key: "0xa::meme::MEME",
+        previous_value: null,
+        value: { meme_bps: 500n, quote_bps: 600n },
       },
       2,
     ),
-    migratorDecoded(
-      "LpFeePolicyChanged",
+    delayedDecoded(
+      "DelayedApplied",
+      "CoinShares",
       {
-        meme: "0xb::meme::MEME",
-        old_meme_bps: 1n,
-        old_quote_bps: 1n,
-        new_meme_bps: null,
-        new_quote_bps: null,
+        key: "0xb::meme::MEME",
+        previous_value: null,
+        value: { meme_bps: 1n, quote_bps: 1n },
       },
       3,
     ),
-    migratorDecoded(
-      "LpFeeDestinationChanged",
-      { old_destination: "0x1", new_destination: "0xb1a57" },
+    delayedDecoded(
+      "DelayedApplied",
+      "CoinShares",
+      {
+        key: "0xb::meme::MEME",
+        previous_value: { meme_bps: 1n, quote_bps: 1n },
+        value: null,
+      },
       4,
+    ),
+    delayedDecoded(
+      "DelayedCreated",
+      "ProtocolDestination",
+      { value: "0x1", delay_ms: 0n },
+      5,
+    ),
+    delayedDecoded(
+      "DelayedApplied",
+      "ProtocolDestination",
+      { previous_value: "0x1", value: "0xb1a57" },
+      6,
     ),
     migratorDecoded(
       "CetusPoolReserved",
@@ -383,7 +403,7 @@ test("replays LP-fee policy defaults, coin pairs, destination, and Cetus reserva
         pool_creation_cap_id: "0x60",
         tick_spacing: 200,
       },
-      5,
+      7,
     ),
   ].reduce(reduceLaunchpadProductInput, createLaunchpadProductProjection());
 
@@ -391,6 +411,13 @@ test("replays LP-fee policy defaults, coin pairs, destination, and Cetus reserva
     defaultShares: { memeBps: 1_000n, quoteBps: 2_000n },
     coinShares: { [meme]: { memeBps: 500n, quoteBps: 600n } },
     protocolDestination: normalizeSuiObjectId("0xb1a57"),
+  });
+  assert.deepEqual(projection.migrators.administration.policyDelays, {
+    DefaultShares: 0n,
+    [`CoinShares:${normalizedType("0xa::meme::MEME")}`]: 172_800_000n,
+    [`CoinShares:${normalizedType("0xb::meme::MEME")}`]: 172_800_000n,
+    // Applying a destination also applies its proposed next notice.
+    ProtocolDestination: 172_800_000n,
   });
   assert.deepEqual(projection.migrators.cetusPoolReservations[meme], {
     memeType: meme,
@@ -552,6 +579,60 @@ function launchpadDecoded(
       eventIndex,
     },
     launchpadPackages,
+  );
+}
+
+const DELAYED_SAMPLES: Record<string, unknown> = {
+  owner: "0x40",
+  delay_ms: 172_800_000n,
+  ready_at_ms: 1n,
+};
+
+/** A `delayed` event under one migrators key, with sample defaults. */
+function delayedSuiEvent(
+  kind: DelayedEventKind,
+  name: keyof typeof migratorsDelayedKeys,
+  overrides: Record<string, unknown>,
+  eventIndex: number,
+): SuiClientTypes.EventEntry {
+  const spec = migratorsDelayedKeys[name];
+  const migrators = normalizeSuiObjectId(migratorPackages.originalPackageId);
+  const launchpad = normalizeSuiObjectId(launchpadPackages.originalPackageId);
+  const valueType = spec.valueType
+    .replaceAll("{package}", migrators)
+    .replaceAll("{launchpad}", launchpad);
+  const schema = delayedEventBcs(kind, spec) as unknown as BcsType<
+    unknown,
+    Record<string, unknown>
+  >;
+  return {
+    packageId: "0x321",
+    module: "lp_fee_policy",
+    sender: "0xa",
+    eventType: `0xad::delayed::${kind}<${migrators}::${spec.key}, ${valueType}>`,
+    bcs: schema
+      .serialize({
+        key: name === "CoinShares" ? "0xa::meme::MEME" : null,
+        ...DELAYED_SAMPLES,
+        ...overrides,
+      })
+      .toBytes(),
+    json: null,
+    checkpoint: "9",
+    transactionDigest: `delayed-${eventIndex}`,
+    eventIndex,
+  };
+}
+
+function delayedDecoded(
+  kind: DelayedEventKind,
+  name: keyof typeof migratorsDelayedKeys,
+  overrides: Record<string, unknown>,
+  eventIndex: number,
+) {
+  return decodeMigratorsDelayedEvent(
+    delayedSuiEvent(kind, name, overrides, eventIndex),
+    delayedPackages,
   );
 }
 
@@ -740,10 +821,20 @@ test("replays pending split replacement, cancellation, explicit application and 
   const vaultId = normalizeSuiObjectId("0x40"),
     roundId = normalizeSuiObjectId("0x50");
   const nextSplit = { ...sampleSplit, creatorBps: 0n, rewardsBps: 10_000n };
+  const applyDelayed = (
+    kind: DelayedEventKind,
+    payload: Record<string, unknown>,
+    i: number,
+  ) => {
+    const event = delayedDecoded(kind, "FeeSplit", payload, i);
+    const next = reduceLaunchpadProductInput(state, event);
+    assert.equal(reduceLaunchpadProductInput(next, event), next);
+    state = next;
+  };
   apply("VaultCreated", { vault_id: vaultId, fee_split: sampleSplit }, 80);
-  apply(
-    "FeeSplitScheduled",
-    { vault_id: vaultId, proposed: nextSplit, ready_at_ms: 200n, delay_ms: 0n },
+  applyDelayed(
+    "DelayedScheduled",
+    { owner: vaultId, value: nextSplit, ready_at_ms: 200n, delay_ms: 0n },
     81,
   );
   assert.deepEqual(state.migrators.vaults[vaultId]?.feeSplit, sampleSplit);
@@ -751,36 +842,44 @@ test("replays pending split replacement, cancellation, explicit application and 
     state.migrators.vaults[vaultId]?.pendingFeeSplit?.ready_at_ms,
     200n,
   );
-  apply(
-    "FeeSplitScheduled",
-    {
-      vault_id: vaultId,
-      proposed: nextSplit,
-      ready_at_ms: 300n,
-      delay_ms: 50n,
-    },
+  applyDelayed(
+    "DelayedScheduled",
+    { owner: vaultId, value: nextSplit, ready_at_ms: 300n, delay_ms: 50n },
     82,
+  );
+  assert.equal(
+    state.migrators.administration.pendingPolicies[`FeeSplit:${vaultId}`]?.kind,
+    "DelayedScheduled",
   );
   assert.equal(
     state.migrators.vaults[vaultId]?.pendingFeeSplit?.ready_at_ms,
     300n,
   );
-  apply("FeeSplitCancelled", { vault_id: vaultId, proposed: nextSplit }, 83);
+  applyDelayed(
+    "DelayedCancelled",
+    { owner: vaultId, value: nextSplit, ready_at_ms: 300n, delay_ms: 50n },
+    83,
+  );
   assert.equal(state.migrators.vaults[vaultId]?.pendingFeeSplit, null);
-  apply(
-    "FeeSplitScheduled",
-    { vault_id: vaultId, proposed: nextSplit, ready_at_ms: 400n, delay_ms: 0n },
+  assert.deepEqual(state.migrators.administration.pendingPolicies, {});
+  applyDelayed(
+    "DelayedScheduled",
+    { owner: vaultId, value: nextSplit, ready_at_ms: 400n, delay_ms: 0n },
     84,
   );
-  apply(
-    "FeeSplitChanged",
+  applyDelayed(
+    "DelayedApplied",
     {
-      vault_id: vaultId,
-      old_fee_split: sampleSplit,
-      new_fee_split: nextSplit,
+      owner: vaultId,
+      previous_value: sampleSplit,
+      value: nextSplit,
       delay_ms: 0n,
     },
     85,
+  );
+  assert.equal(
+    state.migrators.administration.policyDelays[`FeeSplit:${vaultId}`],
+    0n,
   );
   assert.deepEqual(state.migrators.vaults[vaultId]?.feeSplit, nextSplit);
   assert.equal(state.migrators.vaults[vaultId]?.feeSplitDelayMs, 0n);
@@ -862,5 +961,99 @@ test("replays pending split replacement, cancellation, explicit application and 
   assert.equal(
     state.migrators.rounds[normalizeSuiObjectId("0x51")]?.gasReserveRemaining,
     null,
+  );
+});
+
+test("decodes a per-coin LP-fee schedule from its delayed event bytes", () => {
+  const migrators = normalizeSuiObjectId("0x320");
+  const typeName = new TextEncoder().encode(`${"0".repeat(63)}a::meme::MEME`);
+  const u64 = (value: bigint) => {
+    const bytes = new Uint8Array(8);
+    new DataView(bytes.buffer).setBigUint64(0, value, true);
+    return bytes;
+  };
+  // owner, CoinSharesKey(TypeName), Some(SharePair), delay_ms, ready_at_ms.
+  const golden = Uint8Array.from([
+    ...new Uint8Array(31),
+    0x50,
+    typeName.length,
+    ...typeName,
+    1,
+    ...u64(500n),
+    ...u64(600n),
+    ...u64(172_800_000n),
+    ...u64(1_000n),
+  ]);
+  const event = decodeMigratorsDelayedEvent(
+    {
+      packageId: "0x321",
+      module: "lp_fee_policy",
+      sender: "0xa",
+      eventType: `0xad::delayed::DelayedScheduled<${migrators}::lp_fee_policy::CoinSharesKey, 0x1::option::Option<${migrators}::lp_fee_policy::SharePair>>`,
+      bcs: golden,
+      json: null,
+      checkpoint: "9",
+      transactionDigest: "coin-shares",
+      eventIndex: 0,
+    },
+    delayedPackages,
+  );
+  assert.equal(event.product, "migrators");
+  assert.equal(event.name, "CoinShares");
+  assert.equal(event.kind, "DelayedScheduled");
+  assert.deepEqual(event.payload, {
+    owner: normalizeSuiObjectId("0x50"),
+    key: normalizedType("0xa::meme::MEME"),
+    value: { meme_bps: 500n, quote_bps: 600n },
+    delay_ms: 172_800_000n,
+    ready_at_ms: 1_000n,
+  });
+});
+
+test("authenticates migrators delayed events by key, value and family", () => {
+  const valid = delayedSuiEvent(
+    "DelayedCreated",
+    "FeeSplit",
+    { value: sampleSplit },
+    0,
+  );
+  assert.equal(
+    decodeMigratorsDelayedEvent(valid, delayedPackages).name,
+    "FeeSplit",
+  );
+  // The vault's FeeSplit is the launchpad's type, never the migrators'.
+  assert.throws(
+    () =>
+      decodeMigratorsDelayedEvent(
+        {
+          ...valid,
+          eventType: valid.eventType.replace(
+            normalizeSuiObjectId("0x122"),
+            normalizeSuiObjectId("0x320"),
+          ),
+        },
+        delayedPackages,
+      ),
+    /unexpected delayed event key/,
+  );
+  // A setting key never emits action events.
+  assert.throws(
+    () =>
+      decodeMigratorsDelayedEvent(
+        {
+          ...valid,
+          eventType: valid.eventType.replace("DelayedCreated", "ActionCreated"),
+        },
+        delayedPackages,
+      ),
+    /unexpected delayed event key/,
+  );
+  assert.throws(
+    () =>
+      decodeMigratorsDelayedEvent(valid, {
+        ...delayedPackages,
+        adminPackageId: "0xae",
+      }),
+    /unexpected delayed event type/,
   );
 });

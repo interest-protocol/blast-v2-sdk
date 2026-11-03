@@ -17,6 +17,7 @@ import {
   lpVaultBcs,
 } from "@interest-protocol/blast-migrators-sdk/state";
 import type { BcsType } from "@mysten/sui/bcs";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 type FrozenStruct = { name: string; fields: { name: string }[] };
 type Artifact = {
@@ -26,6 +27,13 @@ type Artifact = {
   >;
 };
 
+const owned = { owner: normalizeSuiAddress("0x1"), key: null };
+const delayed = <T>(value: T) => ({
+  ...owned,
+  value,
+  delay_ms: 172_800_000n,
+  pending: null,
+});
 const artifact = JSON.parse(
   readFileSync(new URL("../abi/pr150-consumers.json", import.meta.url), "utf8"),
 ) as Artifact;
@@ -85,21 +93,16 @@ test("SDK object layouts follow the frozen Move field order", () => {
         id: uid("0x1"),
         meme_decimals: [],
         quotes: { id: uid("0x2"), size: 0n },
-        trade_fees: {
-          value: { quote_fee_bps: 0n, meme_fee_bps: 0n },
+        trade_fees: delayed({ quote_fee_bps: 0n, meme_fee_bps: 0n }),
+        migration_witnesses: {
+          ...owned,
+          members: [],
           delay_ms: 172_800_000n,
-          pending: null,
+          admissions: [],
+          pending_delay: null,
         },
-        migration_witnesses: [],
-        witness_delay_ms: 172_800_000n,
-        pending_witness_delay: null,
-        pending_witnesses: [],
-        protocol_allocation: {
-          value: { meme_bps: 0n, quote_bps: 0n },
-          delay_ms: 172_800_000n,
-          pending: null,
-        },
-        creation_fee: { value: 0n, delay_ms: 172_800_000n, pending: null },
+        protocol_allocation: delayed({ memeBps: 0n, quoteBps: 0n }),
+        creation_fee: delayed(0n),
       },
     ],
     ["migrators", "vault", "LpVault", lpVaultBcs as never, vault()],
@@ -110,12 +113,8 @@ test("SDK object layouts follow the frozen Move field order", () => {
       lpFeePolicyBcs as never,
       {
         id: uid("0x1"),
-        destination: { value: "0x2", delay_ms: 172_800_000n, pending: null },
-        defaults: {
-          value: { meme_bps: 0n, quote_bps: 0n },
-          delay_ms: 172_800_000n,
-          pending: null,
-        },
+        destination: delayed("0x2"),
+        defaults: delayed({ meme_bps: 0n, quote_bps: 0n }),
         coins: { id: uid("0x3"), size: 0n },
       },
     ],
@@ -189,10 +188,16 @@ function launch() {
       protocol_sui: balance,
     },
     metadata_cap: { id: uid("0x2") },
-    curve_fee_cap_delay_ms: 172_800_000n,
-    pending_curve_fee_cap_recipient: null,
-    metadata_cap_delay_ms: 172_800_000n,
-    pending_metadata_cap_recipient: null,
+    curve_fee_cap_reassignment: {
+      ...owned,
+      delay_ms: 172_800_000n,
+      pending: null,
+    },
+    metadata_cap_reassignment: {
+      ...owned,
+      delay_ms: 172_800_000n,
+      pending: null,
+    },
     creator: null,
     curve_fee_cap_id: null,
     blast_metadata_cap_id: null,
@@ -209,7 +214,7 @@ function vault() {
     protocol_quote_residual: balance,
     unpaid_protocol_meme: balance,
     unpaid_protocol_quote: balance,
-    fee_split: { value: feeSplit, delay_ms: 172_800_000n, pending: null },
+    fee_split: delayed(feeSplit),
     creator_meme: balance,
     creator_quote: balance,
     auto_lp_meme: balance,

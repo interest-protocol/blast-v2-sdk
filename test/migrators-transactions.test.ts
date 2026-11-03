@@ -788,3 +788,69 @@ test("bonding gas settlement signs in as RewardsAdmin and close is permissionles
     /reimbursementAmount/,
   );
 });
+
+test("configures LP-fee settings at a zero notice, then arms each notice", () => {
+  const sdk = new MigratorTransactions(deployment);
+  const configure = sdk.configureNow({
+    adminCapId: "0xad1",
+    protocolDestination: "0xb",
+    defaultShares: { memeBps: 100n, quoteBps: 200n },
+  });
+  assert.deepEqual(moveFunctions(configure), [
+    "blast_acl::sign_in",
+    "lp_fee_policy::schedule_protocol_destination",
+    "lp_fee_policy::apply_protocol_destination",
+    "blast_acl::sign_in",
+    "bps::new",
+    "bps::new",
+    "lp_fee_policy::schedule_default_shares",
+    "lp_fee_policy::apply_default_shares",
+  ]);
+  const roles = moveCalls(configure)
+    .filter((call) => call.function === "sign_in")
+    .map((call) => call.typeArguments[0]?.split("::")[2]);
+  assert.deepEqual(roles, ["TreasuryAdmin", "FeeAdmin"]);
+  const destination = moveCall(
+    configure,
+    "lp_fee_policy::schedule_protocol_destination",
+  );
+  assert.equal(pureU64(configure, destination.arguments[4]), 0n);
+  const shares = moveCall(configure, "lp_fee_policy::schedule_default_shares");
+  assert.equal(pureU64(configure, shares.arguments[5]), 0n);
+  // Unnamed settings are left alone.
+  assert.deepEqual(
+    moveFunctions(sdk.configureNow({ adminCapId: "0xad1" })),
+    [],
+  );
+
+  const packageAdmin = shared("0x62", "16", true);
+  const arm = sdk.armNotices({
+    adminCapId: "0xad1",
+    defaultShares: { memeBps: 100n, quoteBps: 200n, delayMs: 172_800_000n },
+    upgrade: { packageAdmin, delayMs: 604_800_000n },
+  });
+  assert.deepEqual(moveFunctions(arm), [
+    "blast_acl::sign_in",
+    "bps::new",
+    "bps::new",
+    "lp_fee_policy::schedule_default_shares",
+    "lp_fee_policy::apply_default_shares",
+    "blast_acl::sign_in",
+    "package_admin::schedule_upgrade_delay",
+    "package_admin::apply_upgrade_delay",
+  ]);
+  assert.equal(
+    pureU64(
+      arm,
+      moveCall(arm, "lp_fee_policy::schedule_default_shares").arguments[5],
+    ),
+    172_800_000n,
+  );
+  assert.equal(
+    pureU64(
+      arm,
+      moveCall(arm, "package_admin::schedule_upgrade_delay").arguments[3],
+    ),
+    604_800_000n,
+  );
+});

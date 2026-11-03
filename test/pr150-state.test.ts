@@ -48,11 +48,11 @@ function aclClient(
             id: uid("0xac"),
             super_admin_cap_id: id("0xca"),
             admins: { id: uid("0x7a"), size: count },
-            pending_super_admin: {
-              before: null,
-              after: null,
-              atMs: 0n,
-              delayMs: 0n,
+            super_admin_transfer: {
+              owner: id("0xac"),
+              key: null,
+              delay_ms: 604_800_000n,
+              pending: null,
             },
           })
           .toBytes(),
@@ -233,11 +233,15 @@ test("fresh package administration readers preserve custody, delayed actions and
         policy: 0,
       },
     },
-    delay_ms: 172_800_000n,
-    pending: {
-      value: { DelayOnly: true as const },
-      delay_ms: 259_200_000n,
-      ready_at_ms: 100n,
+    upgrade: {
+      owner: id("0xaa"),
+      key: null,
+      delay_ms: 172_800_000n,
+      pending: {
+        value: { kind: "Delay" as const },
+        delay_ms: 259_200_000n,
+        ready_at_ms: 100n,
+      },
     },
   };
   const object = {
@@ -253,6 +257,24 @@ test("fresh package administration readers preserve custody, delayed actions and
     "a ready proposal still needs an apply transaction",
   );
   assert.equal(state.pending?.delay_ms, 259_200_000n);
+  assert.deepEqual(state.pending?.value, { kind: "Delay" });
+  // The slot must belong to this PackageAdmin.
+  assert.throws(
+    () =>
+      decodePackageAdministrationObject(
+        {
+          ...object,
+          content: packageAdminBcs
+            .serialize({
+              ...value,
+              upgrade: { ...value.upgrade, owner: id("0x1") },
+            })
+            .toBytes(),
+        },
+        "0x15",
+      ),
+    /UID/,
+  );
   assert.equal(state.custody.upgrade_cap?.version, 2n);
   assert.throws(
     () =>

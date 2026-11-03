@@ -2430,6 +2430,31 @@ export class PresaleCalls {
   }
 }
 
+/** Presale policy `configureNow` applies at a zero notice. */
+export type PresalePolicySettings = {
+  /** The `FeePolicy` rates new sales snapshot. */
+  fees?: ProtocolFees;
+  /** Where Blast's presale fees are paid. */
+  destination?: string;
+  /** Migration witnesses to admit, by venue or witness type. */
+  migrationWitnesses?: readonly (
+    | PresaleMigrator
+    | { migrationWitnessType: string }
+  )[];
+};
+
+/**
+ * The notice `armNotices` gives each named value, in milliseconds. A
+ * setting restates its applied value beside its new notice.
+ */
+export type PresaleNotices = {
+  fees?: { fees: ProtocolFees; delayMs: bigint };
+  destination?: { destination: string; delayMs: bigint };
+  /** The notice for each later migration witness admission. */
+  migrationDelayMs?: bigint;
+  upgrade?: { packageAdmin: SharedObjectReference<true>; delayMs: bigint };
+};
+
 export class PresaleTransactions {
   readonly call: PresaleCalls;
   readonly #useGasCoin: boolean;
@@ -3028,6 +3053,99 @@ export class PresaleTransactions {
     return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
       this.call.scheduleUpgradeDelay({ ...options, adminWitness }),
     );
+  }
+
+  /**
+   * Applies presale policy at once on a fresh deployment whose notices are
+   * still zero: each is a schedule and its apply in this PTB, keeping a zero
+   * notice. Name only settings that change; an unchanged schedule aborts.
+   * Then call `armNotices`. The cap needs each setting's role.
+   */
+  configureNow(
+    options: { adminCapId: string } & PresalePolicySettings,
+  ): Transaction {
+    const delayMs = 0n;
+    const { fees, destination, migrationWitnesses } = options;
+    return this.#atZeroNotice(options.adminCapId, {
+      ...(fees ? { fees: { fees, delayMs } } : {}),
+      ...(destination === undefined
+        ? {}
+        : { destination: { destination, delayMs } }),
+      ...(migrationWitnesses ? { migrationWitnesses } : {}),
+    });
+  }
+
+  /**
+   * Raises each named notice from zero in one PTB: a schedule and its apply.
+   * A setting restates its applied value, since its schedule proposes a value
+   * and next notice together. Run after `configureNow`; once armed, every
+   * later change waits its notice.
+   */
+  armNotices(options: { adminCapId: string } & PresaleNotices): Transaction {
+    return this.#atZeroNotice(options.adminCapId, options);
+  }
+
+  #atZeroNotice(
+    adminCapId: string,
+    notices: PresaleNotices & Pick<PresalePolicySettings, "migrationWitnesses">,
+  ): Transaction {
+    const tx = new Transaction();
+    const witnesses = new Map<PresaleAdminRole, TransactionObjectArgument>();
+    const as = (role: PresaleAdminRole) => {
+      let adminWitness = witnesses.get(role);
+      if (!adminWitness) {
+        adminWitness = tx.add(this.call.signIn({ adminCap: adminCapId, role }));
+        witnesses.set(role, adminWitness);
+      }
+      return adminWitness;
+    };
+    const { call } = this;
+    if (notices.fees) {
+      tx.add(
+        call.scheduleProtocolFees({
+          ...notices.fees,
+          adminWitness: as("FeeAdmin"),
+        }),
+      );
+      tx.add(call.applyProtocolFees());
+    }
+    if (notices.destination) {
+      tx.add(
+        call.scheduleProtocolDestination({
+          ...notices.destination,
+          adminWitness: as("TreasuryAdmin"),
+        }),
+      );
+      tx.add(call.applyProtocolDestination());
+    }
+    for (const migrator of notices.migrationWitnesses ?? []) {
+      tx.add(
+        call.scheduleMigrationWitness({
+          ...migrator,
+          adminWitness: as("AdapterAdmin"),
+        }),
+      );
+      tx.add(call.applyMigrationWitness(migrator));
+    }
+    if (notices.migrationDelayMs !== undefined) {
+      tx.add(
+        call.scheduleMigrationDelay({
+          delayMs: notices.migrationDelayMs,
+          adminWitness: as("AdapterAdmin"),
+        }),
+      );
+      tx.add(call.applyMigrationDelay());
+    }
+    if (notices.upgrade) {
+      tx.add(
+        call.scheduleUpgradeDelay({
+          ...notices.upgrade,
+          adminWitness: as("UpgradeAdmin"),
+        }),
+      );
+      tx.add(call.applyUpgradeDelay(notices.upgrade));
+    }
+    return tx;
   }
 
   #asAdmin(

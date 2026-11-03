@@ -301,6 +301,8 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
                 unpaid_protocol_meme: { value: 0n },
                 unpaid_protocol_quote: { value: 0n },
                 fee_split: {
+                  owner: address(vaultId),
+                  key: null,
                   value: {
                     creatorBps: 0n,
                     autoLpBps: 0n,
@@ -565,6 +567,8 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
                 presale_cap_id: { bytes: address("0x21") },
                 pool_id: { bytes: address("0x22") },
                 fee_split: {
+                  owner: address(vaultId),
+                  key: null,
                   value: {
                     fee_recipients: [],
                     holder_rewards_bps: 10_000n,
@@ -573,6 +577,8 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
                   pending: null,
                 },
                 protocol_fees: {
+                  owner: address(vaultId),
+                  key: null,
                   value: {
                     raiseBps: 0n,
                     tokenBps: 0n,

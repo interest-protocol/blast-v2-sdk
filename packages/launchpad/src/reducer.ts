@@ -6,7 +6,11 @@ import type {
   ProtocolAllocation,
 } from "./allocation.ts";
 import { apportionMeme } from "./allocation.ts";
-import type { DecodedLaunchpadEvent, LaunchpadEventKind } from "./events.ts";
+import type {
+  DecodedLaunchpadDelayedEvent,
+  DecodedLaunchpadEvent,
+  LaunchpadEventKind,
+} from "./events.ts";
 import { launchpadEventId, launchpadEventSpecs } from "./events.ts";
 import type { LaunchLifecycle } from "./state.ts";
 import { memeAtomicSupply } from "./template.ts";
@@ -100,6 +104,7 @@ export type LaunchTicketEventProjection = {
   sellBurnBps: bigint;
 };
 
+/** Values below are null until their `DelayedCreated` event. */
 export type LaunchpadConfigProjection = {
   protocolFeeShareBps: bigint | null;
   tradeFeeDefaults: {
@@ -120,10 +125,7 @@ export type LaunchpadConfigProjection = {
   creationFee: bigint;
   /** Partners new launches may name, and when each stops being accepted. */
   partners: Readonly<Record<string, bigint>>;
-  /**
-   * Where every protocol fee claim pays Blast. `RuntimeConfig` starts it at
-   * the publisher without an event, so `null` until `TreasuryChanged`.
-   */
+  /** Where every protocol fee claim pays Blast. */
   treasury: string | null;
 };
 
@@ -140,8 +142,12 @@ export type LaunchpadAdministrationProjection = {
     >
   >;
   creatorClaimSignerPublicKey: Uint8Array | null;
-  /** Latest proposals only. Crossing ready_at_ms never applies their values. */
-  pendingPolicies: Readonly<Record<string, DecodedLaunchpadEvent>>;
+  /**
+   * Latest proposals by `delayedPolicyKey`. Crossing ready_at_ms never
+   * applies their values.
+   */
+  pendingPolicies: Readonly<Record<string, DecodedLaunchpadDelayedEvent>>;
+  /** Applied notices by `delayedPolicyKey`, without a set member. */
   policyDelays: Readonly<Record<string, bigint>>;
   paused: number | null;
 };
@@ -184,12 +190,25 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
   };
 }
 
+/**
+ * Applies one launchpad event, or one `delayed` event decoded by
+ * `decodeLaunchpadDelayedEvent`, once. `eventCounts` counts launchpad events.
+ */
 export function reduceLaunchpadEvent(
   state: LaunchpadEventProjection,
-  event: DecodedLaunchpadEvent,
+  event: DecodedLaunchpadEvent | DecodedLaunchpadDelayedEvent,
 ): LaunchpadEventProjection {
   const eventId = launchpadEventId(event);
   if (state.appliedEventIds[eventId]) return state;
+  if (event.source === "delayed")
+    return reduceDelayed(
+      {
+        ...state,
+        administration: reduceDelayedPolicy(state.administration, event),
+        appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
+      },
+      event,
+    );
 
   const next: LaunchpadEventProjection = {
     ...state,
@@ -421,19 +440,6 @@ export function reduceLaunchpadEvent(
         },
       }));
     }
-    case "ProtocolFeeShareChanged":
-      return updateConfig(next, {
-        ...state.config,
-        protocolFeeShareBps: event.payload.pos0,
-      });
-    case "LaunchTradeFeesChanged":
-      return updateConfig(next, {
-        ...state.config,
-        tradeFeeDefaults: {
-          quoteFeeBps: event.payload.quote_fee_bps,
-          memeFeeBps: event.payload.meme_fee_bps,
-        },
-      });
     case "QuoteSet": {
       const { quote, allowed } = event.payload;
       return updateConfig(next, {
@@ -441,11 +447,6 @@ export function reduceLaunchpadEvent(
         quotes: withEntry(state.config.quotes, quote, allowed || undefined),
       });
     }
-    case "CreationFeeChanged":
-      return updateConfig(next, {
-        ...state.config,
-        creationFee: event.payload.pos0,
-      });
     case "PartnerAdded":
       return updateConfig(next, {
         ...state.config,
@@ -473,27 +474,6 @@ export function reduceLaunchpadEvent(
         memeDecimals: withEntry(
           state.config.memeDecimals,
           decimals,
-          allowed || undefined,
-        ),
-      });
-    }
-    case "ProtocolAllocationSet": {
-      const payload = event.payload;
-      return updateConfig(next, {
-        ...state.config,
-        protocolAllocation: {
-          memeBps: payload.meme_bps,
-          quoteBps: payload.quote_bps,
-        },
-      });
-    }
-    case "MigrationWitnessSet": {
-      const { migration_witness, allowed } = event.payload;
-      return updateConfig(next, {
-        ...state.config,
-        migrationWitnesses: withEntry(
-          state.config.migrationWitnesses,
-          migration_witness,
           allowed || undefined,
         ),
       });
@@ -543,11 +523,6 @@ export function reduceLaunchpadEvent(
         },
       }));
     }
-    case "TreasuryChanged":
-      return updateConfig(next, {
-        ...state.config,
-        treasury: event.payload.pos0,
-      });
     case "CreatorClaimSignerSet":
       return updateAdministration(next, {
         ...next.administration,
@@ -628,41 +603,131 @@ function updateAdministration(
   return { ...state, administration };
 }
 
-/** Proposal events are separate facts from the existing applied-policy events. */
+/** Applied launchpad settings and witness memberships from `delayed` events. */
+function reduceDelayed(
+  state: LaunchpadEventProjection,
+  event: DecodedLaunchpadDelayedEvent,
+): LaunchpadEventProjection {
+  const config = state.config;
+  if (event.kind === "DelayedCreated" || event.kind === "DelayedApplied") {
+    switch (event.name) {
+      case "TradeFees":
+        return updateConfig(state, {
+          ...config,
+          tradeFeeDefaults: {
+            quoteFeeBps: event.payload.value.quote_fee_bps,
+            memeFeeBps: event.payload.value.meme_fee_bps,
+          },
+        });
+      case "ProtocolAllocation":
+        return updateConfig(state, {
+          ...config,
+          protocolAllocation: { ...event.payload.value },
+        });
+      case "CreationFee":
+        return updateConfig(state, {
+          ...config,
+          creationFee: event.payload.value,
+        });
+      case "ProtocolFeeShare":
+        return updateConfig(state, {
+          ...config,
+          protocolFeeShareBps: event.payload.value,
+        });
+      case "Treasury":
+        return updateConfig(state, {
+          ...config,
+          treasury: event.payload.value,
+        });
+    }
+  }
+  if (event.name !== "MigrationWitnesses") return state;
+  if (event.kind === "ActionApplied" && event.payload.change.kind === "Action")
+    return updateConfig(state, {
+      ...config,
+      migrationWitnesses: withEntry(
+        config.migrationWitnesses,
+        event.payload.change.action,
+        true,
+      ),
+    });
+  if (event.kind === "MemberRemoved")
+    return updateConfig(state, {
+      ...config,
+      migrationWitnesses: withEntry(
+        config.migrationWitnesses,
+        event.payload.member,
+        undefined,
+      ),
+    });
+  return state;
+}
+
+/**
+ * The projection key of a delayed value: its registry name, then the owning
+ * `Launch` for cap reassignments, then the member for a witness admission.
+ */
+export function delayedPolicyKey(
+  event: Pick<DecodedLaunchpadDelayedEvent, "name" | "payload">,
+): string {
+  let key: string = event.name;
+  if (
+    event.name === "CurveFeeCapReassignment" ||
+    event.name === "MetadataCapReassignment"
+  )
+    key += `:${event.payload.owner}`;
+  if (
+    event.name === "MigrationWitnesses" &&
+    "change" in event.payload &&
+    event.payload.change.kind === "Action"
+  )
+    key += `:${event.payload.change.action}`;
+  return key;
+}
+
 function reduceAdministrationPolicy(
   state: LaunchpadAdministrationProjection,
   event: DecodedLaunchpadEvent,
 ): LaunchpadAdministrationProjection {
   if (event.kind === "Paused" || event.kind === "Unpaused")
     return { ...state, paused: event.payload.paused };
-  let key: string = event.kind.replace(
-    /(Scheduled|Cancelled|Changed|Set|Reassigned)$/,
-    "",
-  );
-  key = key
-    .replace(/^LaunchTradeFees$/, "TradeFees")
-    .replace(/^CurveFeeCap(Reassignment|Delay)?$/, "CurveFeeCapUpdate")
-    .replace(/^MetadataCap(Reassignment|Delay)?$/, "MetadataCapUpdate");
-  if ("launch_id" in event.payload) key += `:${event.payload.launch_id}`;
-  if ("witness" in event.payload) key += `:${event.payload.witness}`;
-  if (
-    "migration_witness" in event.payload &&
-    event.kind === "MigrationWitnessSet"
-  )
-    key += `:${event.payload.migration_witness}`;
-  const pending = { ...state.pendingPolicies };
-  if (event.kind.endsWith("Scheduled")) pending[key] = event;
-  else if (/(Cancelled|Changed|Set|Reassigned)$/.test(event.kind))
-    delete pending[key];
-  if (event.kind === "UpgradeDelayChanged") delete pending.UpgradeAction;
-  const delays = { ...state.policyDelays };
-  if (event.kind.endsWith("Changed") && "delay_ms" in event.payload)
-    delays[key] = event.payload.delay_ms;
-  // Applying a policy proposal emits the ordinary Changed/Set fact plus its new delay.
-  if (
-    event.kind.endsWith("Scheduled") ||
-    /(Cancelled|Changed|Set|Reassigned)$/.test(event.kind)
-  )
-    return { ...state, pendingPolicies: pending, policyDelays: delays };
   return state;
+}
+
+/** Proposals and applied notices; readiness alone changes nothing. */
+function reduceDelayedPolicy(
+  state: LaunchpadAdministrationProjection,
+  event: DecodedLaunchpadDelayedEvent,
+): LaunchpadAdministrationProjection {
+  const key = delayedPolicyKey(event);
+  const pending = { ...state.pendingPolicies };
+  const delays = { ...state.policyDelays };
+  switch (event.kind) {
+    case "DelayedScheduled":
+    case "ActionScheduled":
+      pending[key] = event;
+      break;
+    case "DelayedCancelled":
+    case "ActionCancelled":
+      delete pending[key];
+      break;
+    case "DelayedApplied":
+    case "ActionApplied":
+      delete pending[key];
+      // An admission's delay_ms is the notice it waited, not a new set notice.
+      if (
+        event.kind === "DelayedApplied" ||
+        event.name !== "MigrationWitnesses" ||
+        event.payload.change.kind === "Delay"
+      )
+        delays[key] = event.payload.delay_ms;
+      break;
+    case "DelayedCreated":
+    case "ActionCreated":
+      delays[key] = event.payload.delay_ms;
+      break;
+    default:
+      return state;
+  }
+  return { ...state, pendingPolicies: pending, policyDelays: delays };
 }

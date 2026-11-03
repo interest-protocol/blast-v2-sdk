@@ -235,9 +235,9 @@
       "returns": false
     },
     {
-      "method": "applyCurveFeeCapUpdate",
+      "method": "applyCurveFeeCapDelay",
       "module": "launch",
-      "function": "apply_curve_fee_cap_update",
+      "function": "apply_curve_fee_cap_delay",
       "role": null,
       "sample": {
         "memeType": "0x5::coin::MEME",
@@ -251,9 +251,41 @@
       "returns": false
     },
     {
-      "method": "applyMetadataCapUpdate",
+      "method": "applyCurveFeeCapReassignment",
       "module": "launch",
-      "function": "apply_metadata_cap_update",
+      "function": "apply_curve_fee_cap_reassignment",
+      "role": null,
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "launch": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "applyMetadataCapDelay",
+      "module": "launch",
+      "function": "apply_metadata_cap_delay",
+      "role": null,
+      "sample": {
+        "memeType": "0x5::coin::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "launch": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "applyMetadataCapReassignment",
+      "module": "launch",
+      "function": "apply_metadata_cap_reassignment",
       "role": null,
       "sample": {
         "memeType": "0x5::coin::MEME",

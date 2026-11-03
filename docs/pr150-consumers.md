@@ -1,6 +1,6 @@
 # PR150 consumer ABI
 
-These bindings target a fresh contract stack at `7b13bfcbb20d44952c162d706f32ac65bf9716b5`.
+These bindings target a fresh contract stack at `61b55508ce4dd2b2a6e81035eb029cef7994c26a`.
 The compiled public signatures and ordered fields are frozen separately in
 `abi/pr150-consumers.json`; run `npm run check:abi:pr150` with `BLAST_CONTRACTS_DIR`
 pointing to a contracts checkout containing that commit. Published mainnet ABI
@@ -47,9 +47,11 @@ Administrative bindings also target the fresh stack:
   and Quote delisting remain immediate.
 - `setPresaleProtocolFees` remains a pre-start override, capped by the applied
   `FeePolicy`; the builder supplies that policy reference.
-- `scheduleCurveFeeCapReassignment` / `scheduleMetadataCapReassignment` and their
-  delay-only proposals use `applyCurveFeeCapUpdate` / `applyMetadataCapUpdate`.
-  An outer null means no proposal; a pending null recipient means delay-only.
+- `scheduleCurveFeeCapReassignment` / `scheduleMetadataCapReassignment` apply
+  with `applyCurveFeeCapReassignment` / `applyMetadataCapReassignment`; their
+  notice proposals (`schedule*CapDelay`) apply with `applyCurveFeeCapDelay` /
+  `applyMetadataCapDelay`. `pending*CapReassignment.value.kind` is `Action`
+  for a recipient and `Delay` for a notice change.
 - `pause` / `unpause` use separate roles. Launchpad masks are Create=1,
   Trading=2, Migrate=4; presale masks are Create=1, Commit=2, Migrate=8.
 - Each package exposes delayed upgrade actions. Compose `authorizeUpgrade`,
@@ -64,7 +66,50 @@ const proposal = launchpad.tx.scheduleTradeFees({
 const application = launchpad.tx.applyTradeFees();
 ```
 
-`172_800_000` milliseconds is 48 hours. The compiler-signature matrix checks
+`172_800_000` milliseconds is 48 hours.
+
+### Keyed delayed values (contracts PR 157)
+
+Every delayed setting, one-shot action and allowlist is a `blast_admin::delayed`
+`Delayed<K, T>`, `DelayedAction<K, A>` or `DelayedSet<K, E>` that names its
+owning object and an owner-only key `K`. Products no longer emit schedule,
+cancel or apply events: `delayed` emits `DelayedCreated`, `DelayedScheduled`,
+`DelayedCancelled`, `DelayedApplied`, `DelayedDestroyed`, the matching
+`Action*` events and `MemberRemoved` under `K`.
+
+- Layouts: `delayedBcs`, `delayedActionBcs`, `delayedSetBcs`, `proposalBcs`,
+  `noticeBcs` and `unitKeyBcs` in `@interest-protocol/blast-core/bcs`. A
+  zero-field key encodes as one byte.
+- Events: `decodeDelayedEvent` checks the admin package, the key's package and
+  struct, the value type and the key's family. Each product lists its keys
+  (`aclDelayedKeys`, `launchpadDelayedKeys`, `migratorsDelayedKeys`,
+  `presaleDelayedKeys`) and wraps the decoder
+  (`decodeAclDelayedEvent`, `decodeLaunchpadDelayedEvent`,
+  `decodeMigratorsDelayedEvent`, `decodePresaleDelayedEvent`); the product
+  reducers take the decoded events beside their own. A migrators vault stores
+  the launchpad's `FeeSplit`, so `decodeMigratorsDelayedEvent` also takes the
+  launchpad's original package ID.
+- Readers: the `PackageAdmin` upgrade slot exposes `delayMs` and a `pending`
+  `Proposal<DelayedChange<UpgradeAction>>`; `UpgradeAction` no longer has
+  `DelayOnly`. The ACL exposes `pendingSuperAdmin.readyAtMs`.
+- Bootstrap: on a fresh deployment every notice that starts at zero can act as
+  a setter. `configureNow` schedules and applies each named setting in one PTB
+  with a zero notice; `armNotices` then schedules and applies each notice
+  (restating a setting's applied value). After that every change waits. The
+  launchpad, presale and migrators transactions each have both builders.
+
+```ts
+const configure = launchpad.tx.configureNow({
+  adminCapId, tradeFees: { quoteFeeBps: 100n, memeFeeBps: 0n },
+  migrationWitnessTypes: [cetusWitness],
+});
+const arm = launchpad.tx.armNotices({
+  adminCapId,
+  tradeFees: { quoteFeeBps: 100n, memeFeeBps: 0n, delayMs: 172_800_000n },
+  migrationDelayMs: 172_800_000n,
+  upgrade: { packageAdmin, delayMs: 172_800_000n },
+});
+``` The compiler-signature matrix checks
 roles, argument order and shared-object mutability. Fresh Move-generated golden
 bytes check launch, config and runtime decoders. Table ACL, delayed application,
 upgrade identity, masks and LP Quote guard have regression tests.

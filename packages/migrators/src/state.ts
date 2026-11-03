@@ -6,6 +6,7 @@ import {
   suiIdBcs,
   suiObjectIdBcs,
   suiUidBcs,
+  unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import { normalizePositiveU64 } from "@interest-protocol/blast-core/integers";
 import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
@@ -75,7 +76,7 @@ export const lpVaultBcs = bcs.struct("LpVault", {
   protocol_quote_residual: suiBalanceBcs,
   unpaid_protocol_meme: suiBalanceBcs,
   unpaid_protocol_quote: suiBalanceBcs,
-  fee_split: delayedBcs(feeSplitBcs),
+  fee_split: delayedBcs(unitKeyBcs, feeSplitBcs),
   creator_meme: suiBalanceBcs,
   creator_quote: suiBalanceBcs,
   auto_lp_meme: suiBalanceBcs,
@@ -93,14 +94,25 @@ export const lpFeeSharePairBcs = bcs.struct("SharePair", {
   quote_bps: bpsBcs,
 });
 
+/** `lp_fee_policy::CoinSharesKey(TypeName)`: the original Meme type it overrides. */
+export const lpFeeCoinSharesKeyBcs = bcs
+  .struct("CoinSharesKey", { pos0: moveTypeNameBcs })
+  .transform({
+    input: (meme: string) => ({ pos0: meme }),
+    output: (key) => key.pos0,
+  });
+
 /** Per-coin override, including a proposed clear (null) and its notice. */
-export const lpFeeCoinPolicyBcs = delayedBcs(bcs.option(lpFeeSharePairBcs));
+export const lpFeeCoinPolicyBcs = delayedBcs(
+  lpFeeCoinSharesKeyBcs,
+  bcs.option(lpFeeSharePairBcs),
+);
 
 /** BCS layout of `blast_fun_migrators::lp_fee_policy::LpFeePolicy`. */
 export const lpFeePolicyBcs = bcs.struct("LpFeePolicy", {
   id: suiUidBcs,
-  destination: delayedBcs(bcs.Address),
-  defaults: delayedBcs(lpFeeSharePairBcs),
+  destination: delayedBcs(unitKeyBcs, bcs.Address),
+  defaults: delayedBcs(unitKeyBcs, lpFeeSharePairBcs),
   coins: bcs.struct("Table", { id: suiUidBcs, size: bcs.u64() }),
 });
 
@@ -117,7 +129,7 @@ export type LpVaultState = SharedObjectReference<true> & {
   unpaidProtocolMeme: bigint;
   unpaidProtocolQuote: bigint;
   feeSplit: FeeSplit;
-  feeSplitPolicy: Delayed<FeeSplit>;
+  feeSplitPolicy: Delayed<null, FeeSplit>;
   /** Creator LP fees claimable by the launch's live `CurveFeeCap`. */
   creatorMeme: bigint;
   creatorQuote: bigint;
@@ -145,8 +157,8 @@ export type LpFeeShares = { memeBps: bigint; quoteBps: bigint };
 export type LpFeePolicyState = SharedObjectReference<false> & {
   /** Address every collection pays Blast's share to. */
   protocolDestination: string;
-  protocolDestinationPolicy: Delayed<string>;
-  defaultSharesPolicy: Delayed<{ meme_bps: bigint; quote_bps: bigint }>;
+  protocolDestinationPolicy: Delayed<null, string>;
+  defaultSharesPolicy: Delayed<null, { meme_bps: bigint; quote_bps: bigint }>;
   defaultShares: LpFeeShares;
   /** Table of per-coin share pairs, keyed by original Meme `TypeName`. */
   coinSharesTableId: string;
@@ -177,7 +189,10 @@ export function decodeLpVaultObject(
 
   const parsed = lpVaultBcs.parse(object.content);
   const objectId = normalizeSuiObjectId(object.objectId);
-  if (normalizeSuiObjectId(parsed.id.id.bytes) !== objectId) {
+  if (
+    normalizeSuiObjectId(parsed.id.id.bytes) !== objectId ||
+    parsed.fee_split.owner !== objectId
+  ) {
     throw new TypeError(`LP vault ${object.objectId} has a mismatched UID`);
   }
 
@@ -255,16 +270,18 @@ export async function getLpFeePolicy(
     throw new TypeError(`object ${object.objectId} is not the LP-fee policy`);
   }
   const parsed = lpFeePolicyBcs.parse(object.content);
+  const policyId = normalizeSuiObjectId(object.objectId);
   if (
-    normalizeSuiObjectId(parsed.id.id.bytes) !==
-    normalizeSuiObjectId(object.objectId)
+    normalizeSuiObjectId(parsed.id.id.bytes) !== policyId ||
+    parsed.destination.owner !== policyId ||
+    parsed.defaults.owner !== policyId
   ) {
     throw new TypeError(
       `LP-fee policy ${object.objectId} has a mismatched UID`,
     );
   }
   return {
-    objectId: normalizeSuiObjectId(object.objectId),
+    objectId: policyId,
     initialSharedVersion: normalizePositiveU64(
       "initialSharedVersion",
       object.owner.Shared.initialSharedVersion,
