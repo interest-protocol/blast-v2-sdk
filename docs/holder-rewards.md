@@ -119,15 +119,11 @@ Create a JSON config outside the public artifacts:
 }
 ```
 
-For a fresh presale vault, set `"product": "presale"`, pass the verified
-`PresaleDeployment` and `Vault` ID, and configure `presaleTreasuryPublication`
-with the treasury multisig address and its presale `TreasuryAdmin` cap.
-`publish-tx` exports an unsigned transaction for the multisig. Review the
-manifest and funding amounts before signing externally. The worker can retain
-only `RewardsAdmin` for gas settlement. For historical presale deployments
-that still require `RewardsAdmin` to fund rounds, omit
-`presaleTreasuryPublication` and supply the historical `adminCapId` and `sender`.
-Presale publication also requires `expectedTreasury` and an explicit
+For a presale vault, set `"product": "presale"`, pass the call-ready
+`PresaleDeployment` (`getPresaleDeployment("mainnet")`) as `deployment`, the
+`Vault` ID as `vaultId`, and a Blast `AdminCap` holding the presale's
+`blast_presale_domain::RewardsAdmin` role as `adminCapId`; `publish-tx` signs it
+in. Presale publication also requires `expectedTreasury` and an explicit
 `gasReserveAmount` (zero disables reimbursement). A changed governed treasury
 aborts publication before funds move. Presale rounds need `claimWindowMs`: `publish-tx` sets the
 round's claim deadline that far after it builds the transaction. Presale
@@ -140,19 +136,19 @@ manifests use `PRESALE_REWARD_LEAF_DOMAIN`, and `relay` reads the presale
   "network": "mainnet",
   "chainId": "EXPECTED-GENESIS-DIGEST",
   "product": "presale",
-  "deployment": { "packageId": "0x...", "originalPackageId": "0x...", "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1" }, "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1" }, "creationPolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "feePolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "admin": { "packageId": "0x...", "acl": { "objectId": "0x...", "initialSharedVersion": "1" } } },
+  "deployment": { "packageId": "0x...", "originalPackageId": "0x...", "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1" }, "creationPolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "feePolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "admin": { "packageId": "0x...", "acl": { "objectId": "0x...", "initialSharedVersion": "1" } } },
   "vaultId": "0xVERIFIED_PRESALE_VAULT",
-  "presaleTreasuryPublication": { "adminCapId": "0xTREASURY_ADMIN_CAP", "sender": "0xTREASURY_MULTISIG" },
+  "adminCapId": "0xBLAST_ADMIN_CAP",
   "claimWindowMs": "604800000",
   "gasReserveAmount": "0",
   "expectedTreasury": "0xVERIFIED_BLAST_TREASURY",
-  "sender": "0xRELAYER",
+  "sender": "0xADMIN_MULTISIG",
   "excludedAddresses": []
 }
 ```
 
-The top-level `sender` can also be set on unsigned relay transactions. For
-bonding-curve rounds, `deployment` is the call-ready `MigratorsDeployment` (`migratorsDeployment(blast)` produces it from
+`adminCapId` and `sender` are needed only for `publish-tx`. `deployment` is the
+call-ready `MigratorsDeployment` (`migratorsDeployment(blast)` produces it from
 a registered release). The vault ID must come from verified migration history
 (`VaultCreated`). The provider must serve checkpoints back to coin-package
 creation and the vault's initial shared object version. The operator checks
