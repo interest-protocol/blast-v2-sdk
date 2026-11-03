@@ -85,6 +85,7 @@ export const PRESALE_ABORTS = {
     "EZeroTreasury",
     "EZeroClaimWindow",
     "EWrongRoundProposal",
+    "EGasReserveTooLarge",
   ],
   fee_policy: ["EInvalidFees", "EInvalidDestination"],
   creation_policy: [
@@ -95,7 +96,7 @@ export const PRESALE_ABORTS = {
     "EPartnerNotAccepted",
   ],
   bps: ["EInvalidBps"],
-  package_admin: ["EWrongUpgradeAction", "EInvalidDigest"],
+  package_admin: ["EWrongUpgradeAction", "EInvalidDigest", "EUnguardedNotice"],
 } as const;
 
 export type PresaleAbortModule = keyof typeof PRESALE_ABORTS;

@@ -142,6 +142,39 @@ export type DelayedSet<K, E> = {
   pending_delay: Notice | null;
 };
 
+/**
+ * `blast_admin::delayed::max_delay_ms`: no delayed value, action, set or map
+ * accepts a longer notice, in milliseconds (30 days); one aborts with
+ * `blast_admin` error 19.
+ */
+export const MAX_DELAY_MS = 2_592_000_000n;
+
+/**
+ * `delayed::is_guarded`: the applied notice is nonzero and no proposal would
+ * set it to zero. `package_admin::unpause` requires every policy guarded.
+ */
+export function isDelayedGuarded(self: Delayed<unknown, unknown>): boolean {
+  return self.delay_ms > 0n && (self.pending?.delay_ms ?? 1n) > 0n;
+}
+
+/** `delayed_action::is_guarded`, as `isDelayedGuarded`. */
+export function isDelayedActionGuarded(
+  self: DelayedAction<unknown, unknown>,
+): boolean {
+  return self.delay_ms > 0n && (self.pending?.delay_ms ?? 1n) > 0n;
+}
+
+/** `delayed_set::is_guarded`: also no admission scheduled earlier is pending. */
+export function isDelayedSetGuarded(
+  self: DelayedSet<unknown, unknown>,
+): boolean {
+  return (
+    self.delay_ms > 0n &&
+    self.admissions.length === 0 &&
+    (self.pending_delay?.delay_ms ?? 1n) > 0n
+  );
+}
+
 export function delayedSetBcs<K, KeyInput, E, Input>(
   key: BcsType<K, KeyInput>,
   member: BcsType<E, Input>,

@@ -1,5 +1,5 @@
 {
-  "contractsCommit": "b841a811f1cb299543ce215efda586686f77383d",
+  "contractsCommit": "9b030cce7d1269520e1965185018a25f1a8dc5ef",
   "packages": {
     "admin": {
       "modules": {
@@ -1469,6 +1469,68 @@
               "returns": []
             },
             {
+              "name": "is_guarded",
+              "typeParameters": [
+                {
+                  "name": "K",
+                  "constraints": [
+                    "Copy",
+                    "Drop",
+                    "Store"
+                  ]
+                },
+                {
+                  "name": "T",
+                  "constraints": [
+                    "Copy",
+                    "Drop",
+                    "Store"
+                  ]
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "delayed"
+                        },
+                        "name": "Delayed",
+                        "type_arguments": [
+                          {
+                            "phantom": false,
+                            "argument": {
+                              "NamedTypeParameter": "K"
+                            }
+                          },
+                          {
+                            "phantom": false,
+                            "argument": {
+                              "NamedTypeParameter": "T"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                "bool"
+              ]
+            },
+            {
+              "name": "max_delay_ms",
+              "typeParameters": [],
+              "parameters": [],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
               "name": "new",
               "typeParameters": [
                 {
@@ -2618,6 +2680,60 @@
                 }
               ],
               "returns": []
+            },
+            {
+              "name": "is_guarded",
+              "typeParameters": [
+                {
+                  "name": "K",
+                  "constraints": [
+                    "Copy",
+                    "Drop",
+                    "Store"
+                  ]
+                },
+                {
+                  "name": "A",
+                  "constraints": [
+                    "Copy",
+                    "Drop",
+                    "Store"
+                  ]
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "delayed_action"
+                        },
+                        "name": "DelayedAction",
+                        "type_arguments": [
+                          {
+                            "phantom": false,
+                            "argument": {
+                              "NamedTypeParameter": "K"
+                            }
+                          },
+                          {
+                            "phantom": false,
+                            "argument": {
+                              "NamedTypeParameter": "A"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                "bool"
+              ]
             },
             {
               "name": "new",
@@ -5260,6 +5376,60 @@
               "returns": []
             },
             {
+              "name": "is_guarded",
+              "typeParameters": [
+                {
+                  "name": "K",
+                  "constraints": [
+                    "Copy",
+                    "Drop",
+                    "Store"
+                  ]
+                },
+                {
+                  "name": "E",
+                  "constraints": [
+                    "Copy",
+                    "Drop",
+                    "Store"
+                  ]
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "delayed_set"
+                        },
+                        "name": "DelayedSet",
+                        "type_arguments": [
+                          {
+                            "phantom": false,
+                            "argument": {
+                              "NamedTypeParameter": "K"
+                            }
+                          },
+                          {
+                            "phantom": false,
+                            "argument": {
+                              "NamedTypeParameter": "E"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                "bool"
+              ]
+            },
+            {
               "name": "members",
               "typeParameters": [
                 {
@@ -7317,58 +7487,6 @@
                                   "name": "blast_fun_domain"
                                 },
                                 "name": "PauseAdmin",
-                                "type_arguments": []
-                              }
-                            }
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "u8"
-              ],
-              "returns": []
-            },
-            {
-              "name": "unpause",
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_treasury",
-                          "name": "blast_fun"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "phantom": true,
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_treasury",
-                                  "name": "blast_fun_domain"
-                                },
-                                "name": "UnpauseAdmin",
                                 "type_arguments": []
                               }
                             }
@@ -15647,6 +15765,103 @@
                     }
                   ]
                 }
+              ],
+              "returns": []
+            },
+            {
+              "name": "unpause",
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_treasury",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_treasury",
+                          "name": "blast_fun"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "phantom": true,
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_treasury",
+                                  "name": "blast_fun_domain"
+                                },
+                                "name": "UnpauseAdmin",
+                                "type_arguments": []
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_treasury",
+                          "name": "runtime_config"
+                        },
+                        "name": "RuntimeConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_treasury",
+                          "name": "launch_config"
+                        },
+                        "name": "LaunchConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                "u8"
               ],
               "returns": []
             },
@@ -29525,58 +29740,6 @@
                 "u8"
               ],
               "returns": []
-            },
-            {
-              "name": "unpause",
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_treasury",
-                          "name": "blast_presale_package"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "phantom": true,
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_treasury",
-                                  "name": "blast_presale_domain"
-                                },
-                                "name": "UnpauseAdmin",
-                                "type_arguments": []
-                              }
-                            }
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "u8"
-              ],
-              "returns": []
             }
           ],
           "structs": [
@@ -34920,6 +35083,103 @@
                     }
                   ]
                 }
+              ],
+              "returns": []
+            },
+            {
+              "name": "unpause",
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_treasury",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_treasury",
+                          "name": "blast_presale_package"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "phantom": true,
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_treasury",
+                                  "name": "blast_presale_domain"
+                                },
+                                "name": "UnpauseAdmin",
+                                "type_arguments": []
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_treasury",
+                          "name": "fee_policy"
+                        },
+                        "name": "FeePolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_treasury",
+                          "name": "creation_policy"
+                        },
+                        "name": "CreationPolicy",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                "u8"
               ],
               "returns": []
             },

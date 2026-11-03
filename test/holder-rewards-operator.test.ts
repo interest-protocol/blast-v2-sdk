@@ -222,6 +222,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
   const requested: bigint[] = [];
   let failAt: bigint | undefined = 100n;
   let published: RewardManifest | undefined;
+  let scheduled: RewardManifest | undefined;
   t.mock.method(console, "log", () => {});
   t.mock.method(ledgerPrototype, "getServiceInfo", () => ({
     response: Promise.resolve({
@@ -322,13 +323,8 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
                 burn_quote: { value: 0n },
                 next_round: published ? 1n : 0n,
                 last_checkpoint: published ? 101n : null,
-                // A raised round notice: publish-tx only schedules; anyone publishes later.
-                round_publication: {
-                  owner: address(vaultId),
-                  key: null,
-                  delay_ms: 86_400_000n,
-                  pending: null,
-                },
+                // The default two-hour notice: publish-tx schedules, then publishes once scheduled.
+                round_publication: roundPublication(vaultId, scheduled),
               })
               .toBytes(),
           },
@@ -425,6 +421,16 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
     ["sign_in", "schedule_round"],
   );
   assert.equal(publishTx.getData().commands[1]?.MoveCall?.package, packageId);
+  // Once the round waits in the vault, rerunning publish-tx publishes it.
+  scheduled = prepared;
+  await run("publish-tx");
+  assert.deepEqual(
+    Transaction.from((await readJson(join(dir, "publish-tx.json"))).transaction)
+      .getData()
+      .commands.map((command) => command.MoveCall?.function),
+    ["publish_round"],
+  );
+  scheduled = undefined;
   published = prepared;
   await run("advance", "--round", roundId);
   await assert.rejects(() => readFile(pendingPath), { code: "ENOENT" });
@@ -736,4 +742,35 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
 for (const skippedDay of [false, true]) {
   test(`CLI runs a presale round ${skippedDay ? "after a skipped day" : "from activation"} with its own claim window`, (t) =>
     presaleRoundJourney(t, skippedDay));
+}
+
+/** A vault's round slot at the default two-hour notice, holding `scheduled` when given. */
+function roundPublication(vaultId: string, scheduled?: RewardManifest) {
+  return {
+    owner: normalizeSuiAddress(vaultId),
+    key: null,
+    delay_ms: 7_200_000n,
+    pending: scheduled
+      ? {
+          value: {
+            kind: "Action" as const,
+            action: {
+              number: BigInt(scheduled.number),
+              start_checkpoint: BigInt(scheduled.startCheckpoint),
+              end_checkpoint: BigInt(scheduled.endCheckpoint),
+              root: scheduled.root,
+              manifest_digest: scheduled.manifestDigest,
+              leaf_count: BigInt(scheduled.allocations.length),
+              meme_amount: BigInt(scheduled.memeAmount),
+              quote_amount: BigInt(scheduled.quoteAmount),
+              gas_reserve_amount: 0n,
+              claim_window_duration_ms: 604_800_000n,
+              expected_treasury: "0xb",
+            },
+          },
+          delay_ms: 7_200_000n,
+          ready_at_ms: 7_200_000n,
+        }
+      : null,
+  };
 }

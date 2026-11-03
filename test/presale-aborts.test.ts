@@ -63,6 +63,7 @@ test("names a presale abort by its module and code", () => {
   assert.equal(presaleAbortName("presale_vault", 3), "EWrongPartner");
   assert.equal(presaleAbortName("fee_policy", 1), "EInvalidDestination");
   assert.equal(presaleAbortName("package_admin", 1), "EInvalidDigest");
+  assert.equal(presaleAbortName("package_admin", 2), "EUnguardedNotice");
   assert.equal(presaleAbortName("creation_policy", 4), "EPartnerNotAccepted");
   assert.equal(presaleAbortName("holder_rewards", 1), "EOverlappingInterval");
   assert.equal(presaleAbortName("holder_rewards", 8), "EEmptyClaim");
@@ -77,7 +78,8 @@ test("names a presale abort by its module and code", () => {
   assert.equal(presaleAbortName("holder_rewards", 14), null);
   assert.equal(presaleAbortName("presale_vault", 10), "EZeroClaimWindow");
   assert.equal(presaleAbortName("presale_vault", 11), "EWrongRoundProposal");
-  assert.equal(presaleAbortName("presale_vault", 12), null);
+  assert.equal(presaleAbortName("presale_vault", 12), "EGasReserveTooLarge");
+  assert.equal(presaleAbortName("presale_vault", 13), null);
   assert.equal(presaleAbortName("bps", 0), "EInvalidBps");
   assert.equal(presaleAbortName("bluefin", 1), "EInvalidTier");
   assert.equal(
