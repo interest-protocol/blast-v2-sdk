@@ -83,19 +83,20 @@ export type HolderRewardsOperatorConfig = {
   deployment: MigratorsDeployment | PresaleDeployment;
   /** The migrated launch's `LpVault` or presale package's `Vault`, whose holder share funds every round. */
   vaultId: string;
-  /**
-   * Blast `blast_acl::AdminCap` that signs in to publish: holding the
-   * launchpad's `RewardsAdmin` role for migrators, or the presale's
-   * `blast_presale_domain::RewardsAdmin` role for a presale.
-   */
+  /** RewardsAdmin cap for bonding migrators and historical presale publication. */
   adminCapId?: string;
+  /** Fresh presale publication uses the treasury multisig's TreasuryAdmin cap and address. */
+  presaleTreasuryPublication?: {
+    adminCapId: string;
+    sender: string;
+  };
   /** Claims stay open this many milliseconds after `publishTransaction` builds the round. */
   claimWindowMs?: string;
   /** Explicit per-publication Quote gas reserve; zero chooses Blast-paid gas. */
   gasReserveAmount?: string;
   /** Explicit governed treasury expected by this publication. */
   expectedTreasury?: string;
-  /** Sender set on unsigned publication and relay transactions. */
+  /** Sender for unsigned relay and publication using the historical rewards role. */
   sender?: string;
   excludedAddresses?: string[];
 };
@@ -364,6 +365,23 @@ async function publishRound(
 ): Promise<Transaction> {
   const { config, product } = context;
   const manifest = await readManifest(context, supplied);
+  const treasuryPublication = config.presaleTreasuryPublication;
+  if (treasuryPublication !== undefined) {
+    if (config.product !== "presale") {
+      throw new Error(
+        "presaleTreasuryPublication requires the presale product",
+      );
+    }
+    if (!treasuryPublication?.adminCapId || !treasuryPublication.sender) {
+      throw new Error(
+        "presaleTreasuryPublication requires adminCapId and sender",
+      );
+    }
+    return withSender(
+      product.publish(manifest, treasuryPublication.adminCapId),
+      treasuryPublication,
+    );
+  }
   if (!config.adminCapId) throw new Error("adminCapId required");
   return withSender(product.publish(manifest, config.adminCapId), config);
 }
@@ -480,7 +498,7 @@ function assertState(
 }
 function withSender(
   tx: Transaction,
-  config: HolderRewardsOperatorConfig,
+  config: Pick<HolderRewardsOperatorConfig, "sender">,
 ): Transaction {
   if (config.sender) tx.setSender(rewardAddress(config.sender));
   return tx;
@@ -555,7 +573,7 @@ async function loadProduct(
         if (config.expectedTreasury === undefined)
           throw new Error("publish-tx needs explicit expectedTreasury");
 
-        return transactions.publishHolderRewardRound({
+        const options = {
           ...pair,
           vault,
           adminCapId,
@@ -563,7 +581,10 @@ async function loadProduct(
           claimDeadlineMs: BigInt(Date.now()) + BigInt(config.claimWindowMs),
           gasReserveAmount: BigInt(config.gasReserveAmount),
           expectedTreasury: config.expectedTreasury,
-        });
+        };
+        return config.presaleTreasuryPublication
+          ? transactions.publishTreasuryHolderRewardRound(options)
+          : transactions.publishHolderRewardRound(options);
       },
       claim: (round, allocations) =>
         transactions.claimHolderRewards({ ...pair, round, allocations }),
