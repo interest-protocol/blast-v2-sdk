@@ -1,3 +1,4 @@
+import { upgradeActionBcs } from "@interest-protocol/blast-admin-sdk/state";
 import {
   moveTypeNameBcs,
   suiObjectIdBcs,
@@ -26,11 +27,14 @@ import type {
 import {
   eligibilityPolicyBcs,
   hardCapBcs,
+  presaleFeeSplitBcs,
   uncappedPhaseBcs,
   vestingTermsBcs,
 } from "./state.ts";
 
 type PresaleEventFieldDescriptor =
+  | "u8"
+  | "upgradeAction"
   | "id"
   | "typeName"
   | "address"
@@ -48,7 +52,8 @@ type PresaleEventFieldDescriptor =
   | "optionAddress"
   | "optionId"
   | "optionVesting"
-  | "vestingVector";
+  | "vestingVector"
+  | "feeSplit";
 
 /** Every event `blast_presale` emits, by module, in Move field order. */
 export const presaleEventSpecs = {
@@ -162,6 +167,33 @@ export const presaleEventSpecs = {
     },
   },
   presale_vault: {
+    ProtocolLpFeesScheduled: {
+      vault_id: "id",
+      meme_bps: "u64",
+      quote_bps: "u64",
+      ready_at_ms: "u64",
+      delay_ms: "u64",
+    },
+
+    ProtocolLpFeesCancelled: {
+      vault_id: "id",
+      meme_bps: "u64",
+      quote_bps: "u64",
+    },
+
+    FeeSplitScheduled: {
+      vault_id: "id",
+      proposed: "feeSplit",
+      ready_at_ms: "u64",
+      delay_ms: "u64",
+    },
+    FeeSplitCancelled: { vault_id: "id", proposed: "feeSplit" },
+    FeeSplitChanged: {
+      vault_id: "id",
+      old_fee_split: "feeSplit",
+      new_fee_split: "feeSplit",
+      delay_ms: "u64",
+    },
     VaultCreated: {
       vault_id: "id",
       presale_id: "id",
@@ -278,6 +310,9 @@ type FlatSpecs = Specs["blast_presale"] &
 export type PresaleEventKind = keyof FlatSpecs;
 
 type DescriptorOutputs = {
+  u8: number;
+  upgradeAction: ReturnType<typeof upgradeActionBcs.parse>;
+  feeSplit: typeof presaleFeeSplitBcs.$inferType;
   id: string;
   typeName: string;
   address: string;
@@ -323,6 +358,9 @@ const address = bcs.Address.transform({
   output: (value) => normalizeSuiAddress(value),
 });
 const FIELD_BCS: Record<PresaleEventFieldDescriptor, BcsType<unknown>> = {
+  u8: bcs.u8() as BcsType<unknown>,
+  upgradeAction: upgradeActionBcs as BcsType<unknown>,
+  feeSplit: presaleFeeSplitBcs as BcsType<unknown>,
   id: suiObjectIdBcs as BcsType<unknown>,
   typeName: moveTypeNameBcs as BcsType<unknown>,
   address: address as BcsType<unknown>,
@@ -384,8 +422,20 @@ export type DecodedPresaleEvent = {
     kind: Kind;
     payload: PresaleEventPayloads[Kind];
     /** The event's `SaleToken` / `Meme` type argument. */
-    memeType: string;
-    quoteType: string;
+    memeType: Kind extends
+      | "FeeSplitScheduled"
+      | "FeeSplitCancelled"
+      | "ProtocolLpFeesScheduled"
+      | "ProtocolLpFeesCancelled"
+      ? null
+      : string;
+    quoteType: Kind extends
+      | "FeeSplitScheduled"
+      | "FeeSplitCancelled"
+      | "ProtocolLpFeesScheduled"
+      | "ProtocolLpFeesCancelled"
+      ? null
+      : string;
     /**
      * `VaultCreated` and `PoolTierReserved` only: the venue marker, e.g.
      * `<pkg>::cetus::Venue`.
@@ -416,12 +466,18 @@ export function decodePresaleEvent(
   const tag = parseStructTag(event.eventType);
   const kind = tag.name as PresaleEventKind;
   const [memeType, quoteType, venueType = null, ...extra] = tag.typeParams;
+  const untyped =
+    kind === "FeeSplitScheduled" ||
+    kind === "FeeSplitCancelled" ||
+    kind === "ProtocolLpFeesScheduled" ||
+    kind === "ProtocolLpFeesCancelled";
   if (
     tag.address !== normalizeSuiAddress(packages.originalPackageId) ||
     !Object.hasOwn(presaleEventModules, kind) ||
     presaleEventModules[kind] !== tag.module ||
-    memeType === undefined ||
-    quoteType === undefined ||
+    (untyped
+      ? tag.typeParams.length !== 0
+      : memeType === undefined || quoteType === undefined) ||
     (venueType === null) === VENUE_TYPED_KINDS.has(kind) ||
     extra.length > 0
   ) {
@@ -431,8 +487,8 @@ export function decodePresaleEvent(
     source: "presale",
     kind,
     payload: presaleEventBcs[kind].parse(event.bcs),
-    memeType: normalizeStructTag(memeType),
-    quoteType: normalizeStructTag(quoteType),
+    memeType: memeType === undefined ? null : normalizeStructTag(memeType),
+    quoteType: quoteType === undefined ? null : normalizeStructTag(quoteType),
     venueType: venueType && normalizeStructTag(venueType),
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
@@ -447,7 +503,43 @@ export function presaleEventId(event: DecodedPresaleEvent): string {
  * The `fee_policy` and `creation_policy` events, by module. Unlike every other presale event they have no type arguments.
  */
 export const presalePolicyEventSpecs = {
+  blast_presale_package: {
+    Paused: { bits: "u8", paused: "u8" },
+    Unpaused: { bits: "u8", paused: "u8" },
+  },
+
+  package_admin: {
+    UpgradeActionCancelled: { action: "upgradeAction" },
+    UpgradeActionScheduled: {
+      action: "upgradeAction",
+      ready_at_ms: "u64",
+      delay_ms: "u64",
+    },
+    UpgradeDelayChanged: { delay_ms: "u64" },
+  },
+
   fee_policy: {
+    DestinationCancelled: { destination: "address" },
+    DestinationScheduled: {
+      destination: "address",
+      ready_at_ms: "u64",
+      delay_ms: "u64",
+    },
+    FeesCancelled: {
+      raise_bps: "u64",
+      token_bps: "u64",
+      lp_fee_meme_bps: "u64",
+      lp_fee_quote_bps: "u64",
+    },
+    FeesScheduled: {
+      raise_bps: "u64",
+      token_bps: "u64",
+      lp_fee_meme_bps: "u64",
+      lp_fee_quote_bps: "u64",
+      ready_at_ms: "u64",
+      delay_ms: "u64",
+    },
+
     FeesChanged: {
       raise_bps: "u64",
       token_bps: "u64",
@@ -457,6 +549,16 @@ export const presalePolicyEventSpecs = {
     DestinationChanged: { destination: "address" },
   },
   creation_policy: {
+    MigrationDelayCancelled: { dummy_field: "bool" },
+    MigrationDelayChanged: { delay_ms: "u64" },
+    MigrationDelayScheduled: { delay_ms: "u64", ready_at_ms: "u64" },
+    MigrationWitnessCancelled: { witness: "typeName" },
+    MigrationWitnessScheduled: {
+      witness: "typeName",
+      ready_at_ms: "u64",
+      delay_ms: "u64",
+    },
+
     QuoteSet: { quote: "typeName", allowed: "bool" },
     MigrationWitnessSet: { migration_witness: "typeName", allowed: "bool" },
     PartnerAdded: { partner_id: "id" },
@@ -469,7 +571,9 @@ export const presalePolicyEventSpecs = {
 
 type PolicySpecs = typeof presalePolicyEventSpecs;
 type FlatPolicySpecs = PolicySpecs["fee_policy"] &
-  PolicySpecs["creation_policy"];
+  PolicySpecs["creation_policy"] &
+  PolicySpecs["package_admin"] &
+  PolicySpecs["blast_presale_package"];
 export type PresalePolicyEventKind = keyof FlatPolicySpecs;
 
 export type DecodedPresalePolicyEvent = {
@@ -493,7 +597,7 @@ const presalePolicyEventModules = Object.fromEntries(
   ),
 ) as Record<PresalePolicyEventKind, keyof PolicySpecs>;
 
-const presalePolicyEventBcs = Object.fromEntries(
+export const presalePolicyEventBcs = Object.fromEntries(
   Object.values(presalePolicyEventSpecs).flatMap((events) =>
     Object.entries(events).map(([kind, spec]) => [
       kind,

@@ -203,6 +203,9 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
     },
     vaultId,
     adminCapId: address("0x93"),
+    claimWindowMs: "604800000",
+    gasReserveAmount: "2020",
+    expectedTreasury: address("0xb"),
     sender: alice,
   });
   await writeOperatorJson(statePath, {
@@ -298,11 +301,15 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
                 unpaid_protocol_meme: { value: 0n },
                 unpaid_protocol_quote: { value: 0n },
                 fee_split: {
-                  creatorBps: 0n,
-                  autoLpBps: 0n,
-                  rewardsBps: 10_000n,
-                  burnBps: 0n,
-                  recipients: [],
+                  value: {
+                    creatorBps: 0n,
+                    autoLpBps: 0n,
+                    rewardsBps: 10_000n,
+                    burnBps: 0n,
+                    recipients: [],
+                  },
+                  delay_ms: 172_800_000n,
+                  pending: null,
                 },
                 creator_meme: { value: 0n },
                 creator_quote: { value: 0n },
@@ -333,6 +340,9 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
               claimed: [1n],
               meme: { value: 1266n },
               quote: { value: 2532n },
+              claim_deadline_at_ms: 2_000_000_000_000n,
+              treasury: "0xb",
+              gas_reserve: null,
             })
             .toBytes(),
         },
@@ -389,8 +399,8 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
       quoteAmount,
     })),
     [
-      { beneficiary: alice, memeAmount: "754", quoteAmount: "1508" },
-      { beneficiary: bob, memeAmount: "1266", quoteAmount: "2532" },
+      { beneficiary: alice, memeAmount: "754", quoteAmount: "754" },
+      { beneficiary: bob, memeAmount: "1266", quoteAmount: "1266" },
     ],
   );
   await assert.rejects(
@@ -555,14 +565,22 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
                 presale_cap_id: { bytes: address("0x21") },
                 pool_id: { bytes: address("0x22") },
                 fee_split: {
-                  fee_recipients: [],
-                  holder_rewards_bps: 10_000n,
+                  value: {
+                    fee_recipients: [],
+                    holder_rewards_bps: 10_000n,
+                  },
+                  delay_ms: 172_800_000n,
+                  pending: null,
                 },
                 protocol_fees: {
-                  raiseBps: 0n,
-                  tokenBps: 0n,
-                  lpFeeMemeBps: 0n,
-                  lpFeeQuoteBps: 0n,
+                  value: {
+                    raiseBps: 0n,
+                    tokenBps: 0n,
+                    lpFeeMemeBps: 0n,
+                    lpFeeQuoteBps: 0n,
+                  },
+                  delay_ms: 172_800_000n,
+                  pending: null,
                 },
                 partner_id: null,
                 unpaid_protocol_meme: { value: 0n },

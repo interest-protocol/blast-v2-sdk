@@ -5,7 +5,7 @@ import type { PendingSuperAdmin } from "./state.ts";
 /**
  * The ACL rebuilt from its events. Its `init` emits nothing, so
  * `superAdminCapId` stays null until the first accepted transfer; the publish
- * effects name the first root. `admins` matches `AclState.admins` once every
+ * effects name the first root. `admins` matches `getAcl(...).admins` once every
  * event is applied.
  */
 export type AclProjection = {

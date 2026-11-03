@@ -41,7 +41,6 @@ import {
   normalizeLaunchTypes,
 } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import type {
-  TransactionArgument,
   TransactionObjectArgument,
   TransactionObjectInput,
   TransactionResult,
@@ -331,76 +330,113 @@ export class MigratorCalls {
   }
 
   /**
-   * Settles the fees accrued under the current split, then commits `feeSplit`
-   * as the vault's split. Only the launch's live `CurveFeeCap` authorizes it.
-   * `launch` is read immutably by Move.
+   * Settles accrued fees under the applied split, then applies the ready proposal.
+   * Permissionless; the adapter enforces readiness before collecting.
    */
-  settleAndUpdateCetusFeeSplit(
+  settleAndApplyCetusFeeSplit(
     options: LaunchTypes &
       CetusObjects & {
         memeSide: CetusMemeSide;
         vault: SharedObjectReference<true>;
-        launch: SharedObjectReference;
-        curveFeeCap: TransactionObjectInput;
         memeCurrency: SharedObjectReference<true>;
         burnManager: SharedObjectReference<false>;
         pool: SharedObjectReference<true>;
-        feeSplit: FeeSplit;
       },
   ) {
     const types = normalizeLaunchTypes(options);
     const memeSide = normalizeMemeSide(options.memeSide);
-    const feeSplit = this.launchpad.feeSplit(options.feeSplit);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::settle_and_update_fee_split`,
+        target: `${this.deployment.packageId}::cetus::settle_and_apply_fee_split`,
         typeArguments: cetusTypeArguments(types, memeSide),
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
           this.#lpFeePolicy(tx),
-          sharedObject(tx, "launch", options.launch, options.launch.mutable),
-          tx.object(options.curveFeeCap),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "cetusConfig", options.cetusConfig, false),
           sharedObject(tx, "burnManager", options.burnManager, false),
           sharedObject(tx, "pool", options.pool, true),
-          tx.add(feeSplit),
           tx.object.clock(),
         ],
       });
     };
   }
 
-  /** Bluefin counterpart of `settleAndUpdateCetusFeeSplit`. */
-  settleAndUpdateBluefinFeeSplit(
+  /** Bluefin counterpart of `settleAndApplyCetusFeeSplit`. */
+  settleAndApplyBluefinFeeSplit(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
-      launch: SharedObjectReference;
-      curveFeeCap: TransactionObjectInput;
       memeCurrency: SharedObjectReference<true>;
       bluefinConfig: SharedObjectReference<false>;
       pool: SharedObjectReference<true>;
-      feeSplit: FeeSplit;
     },
   ) {
     const types = normalizeLaunchTypes(options);
-    const feeSplit = this.launchpad.feeSplit(options.feeSplit);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::bluefin::settle_and_update_fee_split`,
+        target: `${this.deployment.packageId}::bluefin::settle_and_apply_fee_split`,
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
           this.#lpFeePolicy(tx),
-          sharedObject(tx, "launch", options.launch, options.launch.mutable),
-          tx.object(options.curveFeeCap),
           sharedObject(tx, "memeCurrency", options.memeCurrency, true),
           sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
           sharedObject(tx, "pool", options.pool, true),
-          tx.add(feeSplit),
           tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /** Proposes a split and next notice; the currently applied notice governs this wait. */
+  scheduleFeeSplit(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      launch: SharedObjectReference;
+      curveFeeCap: TransactionObjectInput;
+      feeSplit: FeeSplit;
+      delayMs: bigint;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    const split = this.launchpad.feeSplit(options.feeSplit);
+    const delay = requireU64("delayMs", options.delayMs);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::vault::schedule_fee_split`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          sharedObject(tx, "launch", options.launch, false),
+          tx.object(options.curveFeeCap),
+          tx.add(split),
+          tx.pure.u64(delay),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  cancelFeeSplit(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      launch: SharedObjectReference;
+      curveFeeCap: TransactionObjectInput;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::vault::cancel_fee_split`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          sharedObject(tx, "launch", options.launch, false),
+          tx.object(options.curveFeeCap),
         ],
       });
     };
@@ -556,63 +592,6 @@ export class MigratorCalls {
       });
   }
 
-  /** Changes Blast's default Meme and Quote LP-fee shares for coins without their own pair (`FeeAdmin`). */
-  setLpFeeDefaultShares(options: {
-    adminWitness: TransactionObjectInput;
-    memeBps: bigint;
-    quoteBps: bigint;
-  }) {
-    return this.#lpFeePolicyAdmin("set_default_shares", [], options, (tx) => [
-      tx.add(this.launchpad.bps(options.memeBps)),
-      tx.add(this.launchpad.bps(options.quoteBps)),
-    ]);
-  }
-
-  /** Sets Blast's LP-fee shares for one original Meme type (`FeeAdmin`). */
-  setLpFeeCoinShares(options: {
-    memeType: string;
-    adminWitness: TransactionObjectInput;
-    memeBps: bigint;
-    quoteBps: bigint;
-  }) {
-    return this.#lpFeePolicyAdmin(
-      "set_coin_shares",
-      [normalizeStructTag(options.memeType)],
-      options,
-      (tx) => [
-        tx.add(this.launchpad.bps(options.memeBps)),
-        tx.add(this.launchpad.bps(options.quoteBps)),
-      ],
-    );
-  }
-
-  /** Removes one Meme type's own pair so its collections use the defaults again (`FeeAdmin`). */
-  clearLpFeeCoinShares(options: {
-    memeType: string;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return this.#lpFeePolicyAdmin(
-      "clear_coin_shares",
-      [normalizeStructTag(options.memeType)],
-      options,
-      () => [],
-    );
-  }
-
-  /** Redirects every later protocol LP-fee payout (`TreasuryAdmin`). */
-  setLpFeeProtocolDestination(options: {
-    adminWitness: TransactionObjectInput;
-    destination: string;
-  }) {
-    const destination = normalizeSuiAddress(options.destination);
-    return this.#lpFeePolicyAdmin(
-      "set_protocol_destination",
-      [],
-      options,
-      (tx) => [tx.pure.address(destination)],
-    );
-  }
-
   /**
    * Publishes a holder-reward round from a validated manifest, reserving its
    * budget from the vault's rewards balance, and shares the `Round`
@@ -623,6 +602,9 @@ export class MigratorCalls {
       vault: SharedObjectReference<true>;
       adminWitness: TransactionObjectInput;
       manifest: RewardManifest;
+      claimDeadlineMs: bigint;
+      gasReserveAmount: bigint;
+      expectedTreasury: string;
     },
   ) {
     const types = normalizeLaunchTypes(options);
@@ -635,6 +617,9 @@ export class MigratorCalls {
     ) {
       throw new TypeError("manifest belongs to another vault");
     }
+    const deadline = requireU64("claimDeadlineMs", options.claimDeadlineMs);
+    const reserve = requireU64("gasReserveAmount", options.gasReserveAmount);
+    const treasury = normalizeSuiAddress(options.expectedTreasury);
     return (tx: Transaction): void => {
       tx.moveCall({
         target: `${this.deployment.packageId}::blast_holder_rewards::publish_round`,
@@ -643,6 +628,8 @@ export class MigratorCalls {
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
           tx.object(options.adminWitness),
+          this.#lpFeePolicy(tx),
+          tx.pure.address(treasury),
           tx.pure.u64(manifest.number),
           tx.pure.u64(manifest.startCheckpoint),
           tx.pure.u64(manifest.endCheckpoint),
@@ -651,6 +638,9 @@ export class MigratorCalls {
           tx.pure.u64(manifest.allocations.length),
           tx.pure.u64(manifest.memeAmount),
           tx.pure.u64(manifest.quoteAmount),
+          tx.pure.u64(reserve),
+          tx.pure.u64(deadline),
+          tx.object.clock(),
         ],
       });
     };
@@ -692,26 +682,402 @@ export class MigratorCalls {
           tx.pure.u64(memeAmount),
           tx.pure.u64(quoteAmount),
           tx.pure.vector("vector<u8>", proof),
+          tx.object.clock(),
         ],
       });
     };
   }
 
-  #lpFeePolicyAdmin(
-    functionName: string,
-    typeArguments: string[],
-    options: { adminWitness: TransactionObjectInput },
-    extra: (tx: Transaction) => TransactionArgument[],
+  /** Settles optional gas custody once; holder claims remain independently funded. */
+  settleHolderRewardGasReserve(
+    options: LaunchTypes & {
+      round: SharedObjectReference<true>;
+      vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      reimbursementAmount: bigint;
+    },
   ) {
+    const types = normalizeLaunchTypes(options);
+    const amount = requireU64(
+      "reimbursementAmount",
+      options.reimbursementAmount,
+    );
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::lp_fee_policy::${functionName}`,
-        typeArguments,
+        target: `${this.deployment.packageId}::blast_holder_rewards::settle_gas_reserve`,
+        typeArguments: [types.memeType, types.quoteType],
         arguments: [
-          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          sharedObject(tx, "round", options.round, true),
           this.#migratorsVersion(tx),
           tx.object(options.adminWitness),
-          ...extra(tx),
+          sharedObject(tx, "vault", options.vault, true),
+          tx.pure.u64(amount),
+        ],
+      });
+    };
+  }
+
+  /** Permissionlessly destroys an expired round and returns all remaining custody to its vault. */
+  closeHolderRewardRound(
+    options: LaunchTypes & {
+      round: SharedObjectReference<true>;
+      vault: SharedObjectReference<true>;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::blast_holder_rewards::close_round`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "round", options.round, true),
+          this.#migratorsVersion(tx),
+          sharedObject(tx, "vault", options.vault, true),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /** `lp_fee_policy::apply_coin_shares`. Permissionless; the contract validates readiness and ownership. */
+  applyLpFeeCoinShares(options: { memeType: string }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::apply_coin_shares`,
+        typeArguments: [normalizeStructTag(options.memeType)],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `lp_fee_policy::apply_default_shares`. Permissionless; the contract validates readiness and ownership. */
+  applyLpFeeDefaultShares() {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::apply_default_shares`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `lp_fee_policy::apply_protocol_destination`. Permissionless; the contract validates readiness and ownership. */
+  applyLpFeeProtocolDestination() {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::apply_protocol_destination`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `lp_fee_policy::cancel_coin_shares`. Requires CancelAdmin. */
+  cancelLpFeeCoinShares(options: {
+    memeType: string;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::cancel_coin_shares`,
+        typeArguments: [normalizeStructTag(options.memeType)],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `lp_fee_policy::cancel_default_shares`. Requires CancelAdmin. */
+  cancelLpFeeDefaultShares(options: { adminWitness: TransactionObjectInput }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::cancel_default_shares`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `lp_fee_policy::cancel_protocol_destination`. Requires CancelAdmin. */
+  cancelLpFeeProtocolDestination(options: {
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::cancel_protocol_destination`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `lp_fee_policy::schedule_clear_coin_shares`. Requires FeeAdmin. */
+  scheduleClearLpFeeCoinShares(options: {
+    memeType: string;
+    adminWitness: TransactionObjectInput;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::schedule_clear_coin_shares`,
+        typeArguments: [normalizeStructTag(options.memeType)],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `lp_fee_policy::schedule_coin_shares`. Requires FeeAdmin. */
+  scheduleLpFeeCoinShares(options: {
+    memeType: string;
+    adminWitness: TransactionObjectInput;
+    memeBps: bigint;
+    quoteBps: bigint;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::schedule_coin_shares`,
+        typeArguments: [normalizeStructTag(options.memeType)],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+          tx.add(this.launchpad.bps(options.memeBps)),
+          tx.add(this.launchpad.bps(options.quoteBps)),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `lp_fee_policy::schedule_default_shares`. Requires FeeAdmin. */
+  scheduleLpFeeDefaultShares(options: {
+    adminWitness: TransactionObjectInput;
+    memeBps: bigint;
+    quoteBps: bigint;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::schedule_default_shares`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+          tx.add(this.launchpad.bps(options.memeBps)),
+          tx.add(this.launchpad.bps(options.quoteBps)),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `lp_fee_policy::schedule_protocol_destination`. Requires TreasuryAdmin. */
+  scheduleLpFeeProtocolDestination(options: {
+    adminWitness: TransactionObjectInput;
+    destination: string;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::schedule_protocol_destination`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.address(normalizeSuiAddress(options.destination)),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::apply_upgrade_delay`. Permissionless; the contract validates readiness and ownership. */
+  applyUpgradeDelay(options: { packageAdmin: SharedObjectReference<true> }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::apply_upgrade_delay`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::authorize_upgrade`. Requires UpgradeAdmin. */
+  authorizeUpgrade(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    digest: Uint8Array;
+  }) {
+    if (options.digest.length !== 32)
+      throw new RangeError("digest must contain 32 bytes");
+    return (tx: Transaction): TransactionResult => {
+      return tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::authorize_upgrade`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.vector("u8", Array.from(options.digest)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::cancel_upgrade_action`. Requires CancelAdmin. */
+  cancelUpgradeAction(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::cancel_upgrade_action`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+  /** `package_admin::commit_upgrade_and_advance`. Requires UpgradeAdmin. */
+  commitUpgradeAndAdvance(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    receipt: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::commit_upgrade_and_advance`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, true),
+          tx.object(options.adminWitness),
+          tx.object(options.receipt),
+        ],
+      });
+    };
+  }
+  /** `package_admin::make_immutable`. Requires UpgradeAdmin. */
+  makeImmutable(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::make_immutable`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::schedule_make_immutable`. Requires UpgradeAdmin. */
+  scheduleMakeImmutable(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::schedule_make_immutable`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::schedule_upgrade`. Requires UpgradeAdmin. */
+  scheduleUpgrade(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    digest: Uint8Array;
+  }) {
+    if (options.digest.length !== 32)
+      throw new RangeError("digest must contain 32 bytes");
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::schedule_upgrade`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.vector("u8", Array.from(options.digest)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::schedule_upgrade_delay`. Requires UpgradeAdmin. */
+  scheduleUpgradeDelay(options: {
+    packageAdmin: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::schedule_upgrade_delay`,
+        typeArguments: [],
+        arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+          tx.pure.u64(requireU64("delayMs", options.delayMs)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `package_admin::wrap`. Permissionless; the contract validates readiness and ownership. */
+  wrapPublication(options: {
+    publication: TransactionObjectInput;
+    upgradeCap: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::package_admin::wrap`,
+        typeArguments: [],
+        arguments: [
+          tx.object(options.publication),
+          tx.object(options.upgradeCap),
         ],
       });
     };
@@ -842,35 +1208,35 @@ export class MigratorTransactions {
     return tx;
   }
 
-  settleAndUpdateCetusFeeSplit(
-    options: Omit<
-      Parameters<MigratorCalls["settleAndUpdateCetusFeeSplit"]>[0],
-      "curveFeeCap"
-    > & { curveFeeCapId: string },
+  settleAndApplyCetusFeeSplit(
+    options: Parameters<MigratorCalls["settleAndApplyCetusFeeSplit"]>[0],
   ): Transaction {
     const tx = new Transaction();
-    tx.add(
-      this.call.settleAndUpdateCetusFeeSplit({
-        ...options,
-        curveFeeCap: options.curveFeeCapId,
-      }),
-    );
+    tx.add(this.call.settleAndApplyCetusFeeSplit(options));
     return tx;
   }
 
-  settleAndUpdateBluefinFeeSplit(
-    options: Omit<
-      Parameters<MigratorCalls["settleAndUpdateBluefinFeeSplit"]>[0],
-      "curveFeeCap"
-    > & { curveFeeCapId: string },
+  settleAndApplyBluefinFeeSplit(
+    options: Parameters<MigratorCalls["settleAndApplyBluefinFeeSplit"]>[0],
   ): Transaction {
     const tx = new Transaction();
-    tx.add(
-      this.call.settleAndUpdateBluefinFeeSplit({
-        ...options,
-        curveFeeCap: options.curveFeeCapId,
-      }),
-    );
+    tx.add(this.call.settleAndApplyBluefinFeeSplit(options));
+    return tx;
+  }
+
+  scheduleFeeSplit(
+    options: Parameters<MigratorCalls["scheduleFeeSplit"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.scheduleFeeSplit(options));
+    return tx;
+  }
+
+  cancelFeeSplit(
+    options: Parameters<MigratorCalls["cancelFeeSplit"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.cancelFeeSplit(options));
     return tx;
   }
 
@@ -917,45 +1283,6 @@ export class MigratorTransactions {
     return tx;
   }
 
-  setLpFeeDefaultShares(options: {
-    adminCapId: string;
-    memeBps: bigint;
-    quoteBps: bigint;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
-      this.call.setLpFeeDefaultShares({ ...options, adminWitness }),
-    );
-  }
-
-  setLpFeeCoinShares(options: {
-    memeType: string;
-    adminCapId: string;
-    memeBps: bigint;
-    quoteBps: bigint;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
-      this.call.setLpFeeCoinShares({ ...options, adminWitness }),
-    );
-  }
-
-  clearLpFeeCoinShares(options: {
-    memeType: string;
-    adminCapId: string;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
-      this.call.clearLpFeeCoinShares({ ...options, adminWitness }),
-    );
-  }
-
-  setLpFeeProtocolDestination(options: {
-    adminCapId: string;
-    destination: string;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
-      this.call.setLpFeeProtocolDestination({ ...options, adminWitness }),
-    );
-  }
-
   buybackAndBurnCetus(
     options: Omit<
       Parameters<MigratorCalls["buybackAndBurnCetus"]>[0],
@@ -989,6 +1316,25 @@ export class MigratorTransactions {
     );
   }
 
+  settleHolderRewardGasReserve(
+    options: Omit<
+      Parameters<MigratorCalls["settleHolderRewardGasReserve"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
+      this.call.settleHolderRewardGasReserve({ ...options, adminWitness }),
+    );
+  }
+
+  closeHolderRewardRound(
+    options: Parameters<MigratorCalls["closeHolderRewardRound"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.closeHolderRewardRound(options));
+    return tx;
+  }
+
   /** Relays up to `allocations.length` proofs of one round in a single PTB. */
   claimHolderRewards(
     options: LaunchTypes & {
@@ -1001,6 +1347,151 @@ export class MigratorTransactions {
       tx.add(this.call.claimHolderReward({ ...options, allocation }));
     }
     return tx;
+  }
+
+  applyLpFeeCoinShares(
+    options: Parameters<MigratorCalls["applyLpFeeCoinShares"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyLpFeeCoinShares(options));
+    return tx;
+  }
+  applyLpFeeDefaultShares(): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyLpFeeDefaultShares());
+    return tx;
+  }
+  applyLpFeeProtocolDestination(): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyLpFeeProtocolDestination());
+    return tx;
+  }
+  cancelLpFeeCoinShares(
+    options: Omit<
+      Parameters<MigratorCalls["cancelLpFeeCoinShares"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelLpFeeCoinShares({ ...options, adminWitness }),
+    );
+  }
+  cancelLpFeeDefaultShares(
+    options: Omit<
+      Parameters<MigratorCalls["cancelLpFeeDefaultShares"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelLpFeeDefaultShares({ ...options, adminWitness }),
+    );
+  }
+  cancelLpFeeProtocolDestination(
+    options: Omit<
+      Parameters<MigratorCalls["cancelLpFeeProtocolDestination"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelLpFeeProtocolDestination({ ...options, adminWitness }),
+    );
+  }
+  scheduleClearLpFeeCoinShares(
+    options: Omit<
+      Parameters<MigratorCalls["scheduleClearLpFeeCoinShares"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.scheduleClearLpFeeCoinShares({ ...options, adminWitness }),
+    );
+  }
+  scheduleLpFeeCoinShares(
+    options: Omit<
+      Parameters<MigratorCalls["scheduleLpFeeCoinShares"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.scheduleLpFeeCoinShares({ ...options, adminWitness }),
+    );
+  }
+  scheduleLpFeeDefaultShares(
+    options: Omit<
+      Parameters<MigratorCalls["scheduleLpFeeDefaultShares"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.scheduleLpFeeDefaultShares({ ...options, adminWitness }),
+    );
+  }
+  scheduleLpFeeProtocolDestination(
+    options: Omit<
+      Parameters<MigratorCalls["scheduleLpFeeProtocolDestination"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
+      this.call.scheduleLpFeeProtocolDestination({ ...options, adminWitness }),
+    );
+  }
+  applyUpgradeDelay(
+    options: Parameters<MigratorCalls["applyUpgradeDelay"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyUpgradeDelay(options));
+    return tx;
+  }
+  cancelUpgradeAction(
+    options: Omit<
+      Parameters<MigratorCalls["cancelUpgradeAction"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelUpgradeAction({ ...options, adminWitness }),
+    );
+  }
+  makeImmutable(
+    options: Omit<
+      Parameters<MigratorCalls["makeImmutable"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
+      this.call.makeImmutable({ ...options, adminWitness }),
+    );
+  }
+  scheduleMakeImmutable(
+    options: Omit<
+      Parameters<MigratorCalls["scheduleMakeImmutable"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
+      this.call.scheduleMakeImmutable({ ...options, adminWitness }),
+    );
+  }
+  scheduleUpgrade(
+    options: Omit<
+      Parameters<MigratorCalls["scheduleUpgrade"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
+      this.call.scheduleUpgrade({ ...options, adminWitness }),
+    );
+  }
+  scheduleUpgradeDelay(
+    options: Omit<
+      Parameters<MigratorCalls["scheduleUpgradeDelay"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
+      this.call.scheduleUpgradeDelay({ ...options, adminWitness }),
+    );
   }
 
   #asAdmin(

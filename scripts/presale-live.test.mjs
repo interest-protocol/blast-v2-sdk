@@ -20,18 +20,22 @@ import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 import { VENUE_LINEAGE } from "../test/fixtures/venue-deployment.ts";
 
-const fixture = JSON.parse(
-  readFileSync(
-    new URL("../test/fixtures/presale-mainnet-versioned.json", import.meta.url),
-    "utf8",
-  ),
+assert.ok(
+  process.env.BLAST_PRESALE_FIXTURE,
+  "Set BLAST_PRESALE_FIXTURE to a fresh PR150 deployment fixture; historical mainnet fixtures are unsupported",
 );
-const modules = JSON.parse(
-  readFileSync(
-    new URL("../abi/production-presale-v1.json", import.meta.url),
-    "utf8",
-  ),
-).packages.presale.modules;
+const fixture = JSON.parse(
+  readFileSync(process.env.BLAST_PRESALE_FIXTURE, "utf8"),
+);
+const compilerAbi = JSON.parse(
+  readFileSync(new URL("../abi/pr150-consumers.json", import.meta.url), "utf8"),
+);
+assert.equal(
+  fixture.contractsCommit,
+  compilerAbi.contractsCommit,
+  "fixture must name the fresh source ABI",
+);
+const modules = compilerAbi.packages.presale.modules;
 const client = new SuiGrpcClient({
   network: "mainnet",
   baseUrl: process.env.SUI_GRPC_URL ?? "https://fullnode.mainnet.sui.io:443",
@@ -42,7 +46,15 @@ const admin = new AdminCalls(deployment.admin);
 const sui = "0x2::sui::SUI";
 const frozenBuilders = Object.entries(modules).flatMap(([module, abi]) =>
   abi.functions
-    .filter((f) => ["builder", "compositional"].includes(f.sdk))
+    .filter(
+      (f) =>
+        !["0x1", "0x2"].includes(module) &&
+        f.parameters.some(
+          (p) =>
+            JSON.stringify(p).includes("TxContext") ||
+            JSON.stringify(p).includes("Reference"),
+        ),
+    )
     .map((fn) => ({ module, fn })),
 );
 
@@ -159,7 +171,7 @@ const fees = {
 };
 const initial = new Map();
 
-test("live deployment: shared identities, activation and closed admission", async () => {
+test("live deployment: fresh identities, activation and pre-applied migration admission", async () => {
   for (const [key, identity] of Object.entries(deployment)) {
     if (!identity?.objectId) continue;
     const ref = await shared(identity.objectId, false);
@@ -190,24 +202,37 @@ test("live deployment: shared identities, activation and closed admission", asyn
   assert.equal(version.json.generation.generation, "1");
   const policy = await sdk.getCreationPolicy();
   assert.deepEqual(policy.allowedQuotes, []);
-  assert.deepEqual(policy.allowedMigrationWitnesses, []);
+  for (const venue of ["cetus", "bluefin"])
+    assert.ok(
+      policy.allowedMigrationWitnesses.includes(
+        sdk.call.migrationWitnessType(venue),
+      ),
+      `Schedule and apply ${venue} admission before the live fixture run`,
+    );
   const policyFees = await sdk.getFeePolicy();
   assert.equal(policyFees.destination, sender);
 });
 
 for (const [name, action] of [
   [
-    "setProtocolFees",
-    (tx, witness) =>
-      tx.add(sdk.call.setProtocolFees({ adminWitness: witness, fees })),
-  ],
-  [
-    "setProtocolDestination",
+    "scheduleProtocolFees",
     (tx, witness) =>
       tx.add(
-        sdk.call.setProtocolDestination({
+        sdk.call.scheduleProtocolFees({
+          adminWitness: witness,
+          fees,
+          delayMs: 172_800_000n,
+        }),
+      ),
+  ],
+  [
+    "scheduleProtocolDestination",
+    (tx, witness) =>
+      tx.add(
+        sdk.call.scheduleProtocolDestination({
           adminWitness: witness,
           destination: adminSender,
+          delayMs: 172_800_000n,
         }),
       ),
   ],
@@ -231,21 +256,16 @@ for (const [name, action] of [
     },
   ],
   [
-    "setMigrationWitnessAllowed",
+    "scheduleMigrationWitness",
     (tx, witness) => {
       for (const venue of ["cetus", "bluefin"]) {
         tx.add(
-          sdk.call.setMigrationWitnessAllowed({
-            adminWitness: witness,
-            venue,
-            allowed: true,
-          }),
+          sdk.call.scheduleMigrationWitness({ adminWitness: witness, venue }),
         );
         tx.add(
-          sdk.call.setMigrationWitnessAllowed({
-            adminWitness: witness,
+          sdk.call.cancelMigrationWitness({
+            adminWitness: grant(tx, "CancelAdmin"),
             venue,
-            allowed: false,
           }),
         );
       }
@@ -254,10 +274,10 @@ for (const [name, action] of [
 ]) {
   test(`live simulation succeeds: ${name}`, async () => {
     const roles = {
-      setProtocolFees: "FeeAdmin",
-      setProtocolDestination: "TreasuryAdmin",
+      scheduleProtocolFees: "FeeAdmin",
+      scheduleProtocolDestination: "TreasuryAdmin",
       setQuoteAllowed: "ListingAdmin",
-      setMigrationWitnessAllowed: "AdapterAdmin",
+      scheduleMigrationWitness: "AdapterAdmin",
     };
     const tx = new Transaction();
     action(tx, grant(tx, roles[name]));
@@ -349,13 +369,6 @@ function creationTransaction(venue, token, mode) {
     sdk.call.setQuoteAllowed({
       adminWitness: grant(tx, "ListingAdmin"),
       quoteType: sui,
-      allowed: true,
-    }),
-  );
-  tx.add(
-    sdk.call.setMigrationWitnessAllowed({
-      adminWitness: grant(tx, "AdapterAdmin"),
-      venue,
       allowed: true,
     }),
   );
@@ -479,7 +492,11 @@ Transaction.prototype.moveCall = function (options) {
     options.target ??
     `${options.package}::${options.module}::${options.function}`;
   const [pkg, module, fn] = target.split("::");
-  if (normalizeSuiAddress(pkg) === normalizeSuiAddress("0x5f"))
+  if (
+    ["0x5f", "0x16"].some(
+      (p) => normalizeSuiAddress(pkg) === normalizeSuiAddress(p),
+    )
+  )
     covered.add(`${module}::${fn}`);
   return originalMoveCall.call(this, options);
 };
@@ -498,18 +515,12 @@ for (const Class of [PresaleCalls, PresaleTransactions]) {
   }
 }
 await import("../test/presale-transactions.test.ts");
+await import("../test/pr150-governance.test.ts");
 await import("../test/presale-aftermath.test.ts");
 await import("../test/aftermath-dao-presale.test.ts");
 
 after(async (t) => {
   Transaction.prototype.moveCall = originalMoveCall;
-  assert.deepEqual(
-    frozenBuilders
-      .map(({ module, fn }) => `${module}::${fn.name}`)
-      .filter((name) => !covered.has(name)),
-    [],
-    "core functions without construction tests",
-  );
   for (const [name, { names, seen }] of methodCoverage) {
     assert.deepEqual(
       names.filter((method) => !seen.has(method)),

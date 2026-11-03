@@ -467,7 +467,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
   );
   assert.ok(nonProduction.includes("environment-mismatch"));
   assert.ok(nonProduction.includes("foreign-lineage"));
-  assert.equal(nonProduction.includes("sdk-unreleased"), false);
+  assert.equal(nonProduction.includes("sdk-unreleased"), true);
 
   const relabeled = {
     ...manifest,
@@ -490,13 +490,12 @@ test("never lets a non-production or fixture identity sign in production", () =>
   );
 });
 
-test("the published MVR SDK still requires a released deployment and matching runtime", () => {
+test("the fresh ABI requires a coordinated SDK release and matching runtime", () => {
   assert.ok(BLAST_DEPLOYMENTS.mainnet);
   assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
   assert.equal(SDK_RELEASE.version, "0.1.4");
-  assert.equal(SDK_RELEASE.published, true);
-  assert.ok(SDK_RELEASE.commit);
-  assert.match(SDK_RELEASE.commit, /^[0-9a-f]{40}$/);
+  assert.equal(SDK_RELEASE.published, false);
+  assert.equal(SDK_RELEASE.commit, null);
   const packageJson = JSON.parse(
     readFileSync(
       new URL("../packages/blast-sdk/package.json", import.meta.url),
@@ -535,7 +534,7 @@ test("the published MVR SDK still requires a released deployment and matching ru
         runtime,
       }),
     ),
-    ["foreign-lineage", "sdk-mismatch"],
+    ["foreign-lineage", "sdk-unreleased", "sdk-mismatch"],
   );
   for (const sdk of [
     { ...released, published: false },
@@ -598,11 +597,11 @@ test("pins the frozen ABI identity to the committed artifacts", () => {
     createHash("sha256").update(bytes).digest("hex");
   assert.equal(
     FROZEN_ABI.contractsCommit,
-    "9255e78751b70b22d8f33cc6577df126a3434424",
+    "7b13bfcbb20d44952c162d706f32ac65bf9716b5",
   );
   assert.equal(
     FROZEN_ABI.artifacts.launchpad,
-    sha(artifact("production-launchpad-v1.json")),
+    sha(artifact("pr150-consumers.json")),
   );
   assert.equal(
     FROZEN_ABI.artifacts.blastSui,
@@ -616,7 +615,7 @@ test("pins the frozen ABI identity to the committed artifacts", () => {
   ]) {
     assert.equal(
       JSON.parse(artifact(name).toString("utf8")).baseline.contractsCommit,
-      FROZEN_ABI.contractsCommit,
+      "9255e78751b70b22d8f33cc6577df126a3434424",
     );
   }
   for (const name of [
@@ -713,7 +712,7 @@ function productionManifest() {
   } as const satisfies BlastDeploymentInput;
 }
 
-test("the registered canonical mainnet stack signs against a matching runtime", () => {
+test("the historical mainnet stack cannot sign using the fresh PR150 ABI", () => {
   const released = BLAST_DEPLOYMENTS.mainnet;
   assert.ok(released);
   const access = evaluateProtocolAccess({
@@ -721,10 +720,12 @@ test("the registered canonical mainnet stack signs against a matching runtime", 
     mode: "production",
     runtime: runtimeFor(released as unknown as BlastDeploymentInput),
   });
-  assert.equal(access.signing, "enabled");
+  assert.equal(access.signing, "disabled");
+  assert.ok(codes(access).includes("abi-mismatch"));
+  assert.ok(codes(access).includes("sdk-unreleased"));
   for (const venue of ["cetus", "bluefin"] as const) {
     const availability: VenueAvailability = access.venues[venue];
-    assert.deepEqual(availability, { available: true });
+    assert.equal(availability.available, false);
   }
   assert.notEqual(
     codes(

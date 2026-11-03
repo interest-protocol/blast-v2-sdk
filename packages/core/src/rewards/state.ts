@@ -16,11 +16,14 @@ export const rewardRoundBcs = bcs.struct("Round", {
   id: suiUidBcs,
   vault: suiIdBcs,
   number: bcs.u64(),
+  claim_deadline_at_ms: bcs.u64(),
   root: bcs.vector(bcs.u8()),
   leaf_count: bcs.u64(),
   claimed: bcs.vector(bcs.u256()),
   meme: suiBalanceBcs,
   quote: suiBalanceBcs,
+  treasury: bcs.Address,
+  gas_reserve: bcs.option(suiBalanceBcs),
 });
 
 export type RewardRoundObject = SharedObjectReference<true> & {
@@ -51,6 +54,11 @@ export function decodeRewardRound(
     throw new Error("invalid holder-reward round type");
   }
   const decoded = rewardRoundBcs.parse(object.content);
+  if (
+    rewardRoundBcs.serialize(decoded).toBytes().length !== object.content.length
+  ) {
+    throw new Error("invalid holder-reward round BCS length");
+  }
   if (rewardAddress(object.objectId) !== rewardAddress(decoded.id.id.bytes)) {
     throw new Error("object UID mismatch");
   }
@@ -70,6 +78,10 @@ export function decodeRewardRound(
     quoteType: normalizeStructTag(quoteType),
     vaultId: rewardAddress(decoded.vault.bytes),
     number: BigInt(decoded.number),
+    claimDeadlineMs: BigInt(decoded.claim_deadline_at_ms),
+    treasury: rewardAddress(decoded.treasury),
+    gasReserveRemaining:
+      decoded.gas_reserve === null ? null : BigInt(decoded.gas_reserve.value),
     root: toHex(Uint8Array.from(decoded.root)),
     leafCount,
     claimed: decoded.claimed.map(BigInt),

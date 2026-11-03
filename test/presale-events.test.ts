@@ -64,7 +64,10 @@ function suiEvent<Kind extends PresaleEventKind>(
     packageId: pkg,
     module,
     sender,
-    eventType: `${pkg}::${module}::${kind}<${meme}, ${quote}${venue}>`,
+    eventType:
+      kind === "FeeSplitScheduled" || kind === "FeeSplitCancelled"
+        ? `${pkg}::${module}::${kind}`
+        : `${pkg}::${module}::${kind}<${meme}, ${quote}${venue}>`,
     bcs: presaleEventBcs[kind].serialize(payload).toBytes(),
     json: null,
     checkpoint: "9",
@@ -84,14 +87,21 @@ function decode<Kind extends PresaleEventKind>(
 }
 
 test("event specs match every event frozen in the presale ABI", () => {
-  assert.deepEqual(
-    orderedModuleEventFields({
-      ...presaleEventSpecs,
-      ...presalePolicyEventSpecs,
-    }),
-    orderedModuleEventFields(readFrozenPresaleEventSpecs()),
-  );
-  assert.equal(Object.keys(presaleEventModules).length, 22);
+  const frozen = readFrozenPresaleEventSpecs();
+  const current = { ...presaleEventSpecs, ...presalePolicyEventSpecs };
+  for (const [module, events] of Object.entries(frozen)) {
+    for (const [kind, fields] of Object.entries(events)) {
+      assert.deepEqual(
+        orderedEventFields({
+          [kind]: (
+            current as Record<string, Record<string, Record<string, string>>>
+          )[module]![kind]!,
+        }),
+        orderedEventFields({ [kind]: fields }),
+        `${module}::${kind}`,
+      );
+    }
+  }
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
@@ -411,6 +421,11 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     "ProtocolLpFeesPaid",
     "HolderMemePaid",
     "GasReserveSettled",
+    "FeeSplitScheduled",
+    "FeeSplitCancelled",
+    "FeeSplitChanged",
+    "ProtocolLpFeesScheduled",
+    "ProtocolLpFeesCancelled",
   ];
   for (const kind of Object.keys(presaleEventModules) as PresaleEventKind[]) {
     const expected = twice.includes(kind) ? 2 : never.includes(kind) ? 0 : 1;
@@ -1362,6 +1377,32 @@ function readFrozenPresaleEventSpecs(): Record<
       ]),
     );
   }
+  const current = JSON.parse(
+    readFileSync(
+      new URL("../abi/pr150-consumers.json", import.meta.url),
+      "utf8",
+    ),
+  ) as {
+    packages: {
+      presale: {
+        modules: {
+          presale_vault: {
+            structs: {
+              name: string;
+              fields: { name: string; type: unknown }[];
+            }[];
+          };
+        };
+      };
+    };
+  };
+  for (const event of current.packages.presale.modules.presale_vault.structs.filter(
+    (s) => s.name.startsWith("FeeSplit"),
+  )) {
+    specs.presale_vault![event.name] = Object.fromEntries(
+      event.fields.map((f) => [f.name, descriptor(f.type)]),
+    );
+  }
   return specs;
 }
 
@@ -1382,6 +1423,7 @@ function descriptor(type: unknown): string {
     type_arguments: unknown[];
   };
   const name = datatype.name;
+  if (name === "FeeSplit") return "feeSplit";
   if (name === "ID") return "id";
   if (name === "TypeName") return "typeName";
   if (name === "EligibilityPolicy") return "eligibility";
@@ -1622,4 +1664,69 @@ test("keys pool tiers by sale token in either coin order; an Aftermath sale has 
       `${lp}, ${aftermathFirst}, ${quote}`,
     ),
   );
+});
+
+test("vault fee proposals remain pending until explicit application, with replay deduplication", () => {
+  let state = createPresaleEventProjection();
+  const apply = (event: DecodedPresaleEvent) => {
+    state = reducePresaleEvent(state, event);
+  };
+  apply(
+    decode("VaultCreated", {
+      vault_id: VAULT,
+      presale_id: PRESALE,
+      pool_id: id("0x90"),
+      position_id: id("0x91"),
+      liquidity: 1n,
+      fee_recipients: [ALICE],
+      fee_recipient_bps: [7000n],
+      holder_rewards_bps: 3000n,
+      protocol_lp_fee_meme_bps: 0n,
+      protocol_lp_fee_quote_bps: 0n,
+      migration_meme_residual: 0n,
+      migration_quote_residual: 0n,
+    }),
+  );
+  const oldSplit = {
+    fee_recipients: [{ recipient: ALICE, bps: 7000n, vesting: null }],
+    holder_rewards_bps: 3000n,
+  };
+  const proposed = {
+    fee_recipients: [{ recipient: BOB, bps: 5000n, vesting: null }],
+    holder_rewards_bps: 5000n,
+  };
+  const scheduled = decode("FeeSplitScheduled", {
+    vault_id: VAULT,
+    proposed,
+    ready_at_ms: 100n,
+    delay_ms: 5n,
+  });
+  apply(scheduled);
+  apply(scheduled);
+  assert.equal(state.vaults[VAULT]?.holderRewardsBps, 3000n);
+  assert.deepEqual(state.vaults[VAULT]?.pendingFeeSplit?.value, proposed);
+  apply(decode("FeeSplitCancelled", { vault_id: VAULT, proposed }));
+  assert.equal(state.vaults[VAULT]?.pendingFeeSplit, null);
+  apply(
+    decode("FeeSplitScheduled", {
+      vault_id: VAULT,
+      proposed,
+      ready_at_ms: 200n,
+      delay_ms: 0n,
+    }),
+  );
+  assert.equal(state.vaults[VAULT]?.holderRewardsBps, 3000n);
+  const changed = decode("FeeSplitChanged", {
+    vault_id: VAULT,
+    old_fee_split: oldSplit,
+    new_fee_split: proposed,
+    delay_ms: 0n,
+  });
+  apply(changed);
+  const committed = state;
+  apply(changed);
+  assert.deepEqual(state, committed);
+  assert.equal(state.vaults[VAULT]?.holderRewardsBps, 5000n);
+  assert.equal(state.vaults[VAULT]?.pendingFeeSplit, null);
+  assert.equal(state.vaults[VAULT]?.feeSplitDelayMs, 0n);
 });

@@ -1,4 +1,6 @@
+import type { Delayed } from "@interest-protocol/blast-core/bcs";
 import {
+  delayedBcs,
   moveTypeNameBcs,
   suiBalanceBcs,
   suiIdBcs,
@@ -73,7 +75,7 @@ export const lpVaultBcs = bcs.struct("LpVault", {
   protocol_quote_residual: suiBalanceBcs,
   unpaid_protocol_meme: suiBalanceBcs,
   unpaid_protocol_quote: suiBalanceBcs,
-  fee_split: feeSplitBcs,
+  fee_split: delayedBcs(feeSplitBcs),
   creator_meme: suiBalanceBcs,
   creator_quote: suiBalanceBcs,
   auto_lp_meme: suiBalanceBcs,
@@ -91,11 +93,14 @@ export const lpFeeSharePairBcs = bcs.struct("SharePair", {
   quote_bps: bpsBcs,
 });
 
+/** Per-coin override, including a proposed clear (null) and its notice. */
+export const lpFeeCoinPolicyBcs = delayedBcs(bcs.option(lpFeeSharePairBcs));
+
 /** BCS layout of `blast_fun_migrators::lp_fee_policy::LpFeePolicy`. */
 export const lpFeePolicyBcs = bcs.struct("LpFeePolicy", {
   id: suiUidBcs,
-  destination: bcs.Address,
-  defaults: lpFeeSharePairBcs,
+  destination: delayedBcs(bcs.Address),
+  defaults: delayedBcs(lpFeeSharePairBcs),
   coins: bcs.struct("Table", { id: suiUidBcs, size: bcs.u64() }),
 });
 
@@ -112,6 +117,7 @@ export type LpVaultState = SharedObjectReference<true> & {
   unpaidProtocolMeme: bigint;
   unpaidProtocolQuote: bigint;
   feeSplit: FeeSplit;
+  feeSplitPolicy: Delayed<FeeSplit>;
   /** Creator LP fees claimable by the launch's live `CurveFeeCap`. */
   creatorMeme: bigint;
   creatorQuote: bigint;
@@ -125,7 +131,7 @@ export type LpVaultState = SharedObjectReference<true> & {
   burnQuote: bigint;
   /** Number the next holder-reward round must carry. */
   nextRound: bigint;
-  /** Checkpoint the next round must start at; null before the first round. */
+  /** Earliest checkpoint the next round may start at; null before the first round. */
   lastCheckpoint: bigint | null;
 };
 
@@ -139,6 +145,8 @@ export type LpFeeShares = { memeBps: bigint; quoteBps: bigint };
 export type LpFeePolicyState = SharedObjectReference<false> & {
   /** Address every collection pays Blast's share to. */
   protocolDestination: string;
+  protocolDestinationPolicy: Delayed<string>;
+  defaultSharesPolicy: Delayed<{ meme_bps: bigint; quote_bps: bigint }>;
   defaultShares: LpFeeShares;
   /** Table of per-coin share pairs, keyed by original Meme `TypeName`. */
   coinSharesTableId: string;
@@ -188,7 +196,8 @@ export function decodeLpVaultObject(
     protocolQuoteResidual: BigInt(parsed.protocol_quote_residual.value),
     unpaidProtocolMeme: BigInt(parsed.unpaid_protocol_meme.value),
     unpaidProtocolQuote: BigInt(parsed.unpaid_protocol_quote.value),
-    feeSplit: parsed.fee_split,
+    feeSplit: parsed.fee_split.value,
+    feeSplitPolicy: parsed.fee_split,
     creatorMeme: BigInt(parsed.creator_meme.value),
     creatorQuote: BigInt(parsed.creator_quote.value),
     autoLpMeme: BigInt(parsed.auto_lp_meme.value),
@@ -261,10 +270,12 @@ export async function getLpFeePolicy(
       object.owner.Shared.initialSharedVersion,
     ),
     mutable: false,
-    protocolDestination: normalizeSuiAddress(parsed.destination),
+    protocolDestination: normalizeSuiAddress(parsed.destination.value),
+    protocolDestinationPolicy: parsed.destination,
+    defaultSharesPolicy: parsed.defaults,
     defaultShares: {
-      memeBps: parsed.defaults.meme_bps,
-      quoteBps: parsed.defaults.quote_bps,
+      memeBps: parsed.defaults.value.meme_bps,
+      quoteBps: parsed.defaults.value.quote_bps,
     },
     coinSharesTableId: normalizeSuiObjectId(parsed.coins.id.id.bytes),
     coinSharesCount: BigInt(parsed.coins.size),
@@ -290,7 +301,8 @@ export async function getLpFeeShares(
           .toBytes(),
       },
     });
-    const pair = lpFeeSharePairBcs.parse(dynamicField.value.bcs);
+    const pair = lpFeeCoinPolicyBcs.parse(dynamicField.value.bcs).value;
+    if (pair === null) return { ...policy.defaultShares, source: "default" };
     return { memeBps: pair.meme_bps, quoteBps: pair.quote_bps, source: "coin" };
   } catch (error) {
     if (!(error instanceof ObjectError) || error.reason !== "notFound") {

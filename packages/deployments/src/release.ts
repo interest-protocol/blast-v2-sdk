@@ -4,10 +4,10 @@
  * ABI mismatch.
  */
 export const FROZEN_ABI = Object.freeze({
-  contractsCommit: "9255e78751b70b22d8f33cc6577df126a3434424",
+  contractsCommit: "7b13bfcbb20d44952c162d706f32ac65bf9716b5",
   artifacts: Object.freeze({
     launchpad:
-      "7ca399dd441aeaa8f63df5e67e44cb7d93a678a47410e4c86193baede5661887",
+      "73117fbef4c56dcaca99c27297052f9a89f5e906645eb3fbb084588eb73fdcdd",
     blastSui:
       "943236915134897494c1a1eb7f18d2a0ea8a012e6e657321abc5fc274ee3587f",
   }),
@@ -25,13 +25,12 @@ export type SdkRelease = Readonly<{
 }>;
 
 /**
- * Release identity of 0.1.4: handle Core API package markers in
- * transaction receipt readers. Production signing still
- * requires a matching runtime observation.
+ * Unreleased PR150 source build. A fresh deployment and coordinated SDK release
+ * must register their own package IDs and release identity.
  */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
   version: "0.1.4",
-  published: true,
-  commit: "3e554d7ce8c0604ef1e79da5ffe02a90c7d4fc24",
+  published: false,
+  commit: null,
 });

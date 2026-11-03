@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { delayedBcs } from "@interest-protocol/blast-core/bcs";
 import { getOpeningRoundBid } from "@interest-protocol/blast-launchpad-sdk/state";
 import {
   decodeLpVaultObject,
@@ -40,7 +41,7 @@ function serializeVault(id = objectId): Uint8Array {
       protocol_quote_residual: balance(6n),
       unpaid_protocol_meme: balance(10n),
       unpaid_protocol_quote: balance(11n),
-      fee_split: feeSplit,
+      fee_split: { value: feeSplit, delay_ms: 172_800_000n, pending: null },
       creator_meme: balance(1n),
       creator_quote: balance(2n),
       auto_lp_meme: balance(3n),
@@ -159,8 +160,16 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
           content: lpFeePolicyBcs
             .serialize({
               id: uid(policyId),
-              destination: "0xb1a57",
-              defaults: { meme_bps: 1_000n, quote_bps: 2_000n },
+              destination: {
+                value: "0xb1a57",
+                delay_ms: 172_800_000n,
+                pending: null,
+              },
+              defaults: {
+                value: { meme_bps: 1_000n, quote_bps: 2_000n },
+                delay_ms: 172_800_000n,
+                pending: null,
+              },
               coins: { id: uid(tableId), size: 1n },
             })
             .toBytes(),
@@ -172,8 +181,12 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
         return {
           dynamicField: {
             value: {
-              bcs: lpFeeSharePairBcs
-                .serialize({ meme_bps: 500n, quote_bps: 600n })
+              bcs: delayedBcs(bcs.option(lpFeeSharePairBcs))
+                .serialize({
+                  value: { meme_bps: 500n, quote_bps: 600n },
+                  delay_ms: 0n,
+                  pending: null,
+                })
                 .toBytes(),
             },
           },
@@ -185,6 +198,14 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
   const policy = await getLpFeePolicy(client, policyId, originalPackageId);
   assert.equal(policy.protocolDestination, normalizeSuiAddress("0xb1a57"));
   assert.deepEqual(policy.defaultShares, { memeBps: 1_000n, quoteBps: 2_000n });
+  assert.equal(
+    policy.protocolDestinationPolicy.value,
+    policy.protocolDestination,
+  );
+  assert.equal(
+    policy.defaultSharesPolicy.value.meme_bps,
+    policy.defaultShares.memeBps,
+  );
   assert.equal(policy.coinSharesTableId, tableId);
   assert.deepEqual(await getLpFeeShares(client, policy, memeType), {
     memeBps: 500n,

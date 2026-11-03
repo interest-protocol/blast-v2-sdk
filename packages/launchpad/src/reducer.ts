@@ -114,7 +114,7 @@ export type LaunchpadConfigProjection = {
    * emitting an event, so the projection starts there too.
    */
   memeDecimals: Readonly<Record<number, true>>;
-  /** Blast's one-time migration fee; `LaunchConfig` starts it at zero. */
+  /** Blast's one-time migration fee; `LaunchConfig` starts at 250 Meme / 150 Quote bps. */
   protocolAllocation: ProtocolAllocation;
   /** SUI, in MIST, each launch pays at creation; zero initially. */
   creationFee: bigint;
@@ -140,6 +140,10 @@ export type LaunchpadAdministrationProjection = {
     >
   >;
   creatorClaimSignerPublicKey: Uint8Array | null;
+  /** Latest proposals only. Crossing ready_at_ms never applies their values. */
+  pendingPolicies: Readonly<Record<string, DecodedLaunchpadEvent>>;
+  policyDelays: Readonly<Record<string, bigint>>;
+  paused: number | null;
 };
 
 export type LaunchpadEventProjection = {
@@ -165,7 +169,7 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
       quotes: {},
       migrationWitnesses: {},
       memeDecimals: { 6: true, 9: true },
-      protocolAllocation: { memeBps: 0n, quoteBps: 0n },
+      protocolAllocation: { memeBps: 250n, quoteBps: 150n },
       creationFee: 0n,
       partners: {},
       treasury: null,
@@ -173,6 +177,9 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
     administration: {
       creatorCapClaims: {},
       creatorClaimSignerPublicKey: null,
+      pendingPolicies: {},
+      policyDelays: {},
+      paused: null,
     },
   };
 }
@@ -186,6 +193,7 @@ export function reduceLaunchpadEvent(
 
   const next: LaunchpadEventProjection = {
     ...state,
+    administration: reduceAdministrationPolicy(state.administration, event),
     appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
     eventCounts: {
       ...state.eventCounts,
@@ -498,9 +506,9 @@ export function reduceLaunchpadEvent(
         blastMetadataCapId: payload.blast_metadata_cap_id,
       }));
       return updateAdministration(claimed, {
-        ...state.administration,
+        ...next.administration,
         creatorCapClaims: {
-          ...state.administration.creatorCapClaims,
+          ...next.administration.creatorCapClaims,
           [payload.meme]: {
             memeType: payload.meme,
             claimant: event.sender,
@@ -542,11 +550,12 @@ export function reduceLaunchpadEvent(
       });
     case "CreatorClaimSignerSet":
       return updateAdministration(next, {
-        ...state.administration,
+        ...next.administration,
         creatorClaimSignerPublicKey:
           event.payload.pos0.length === 0 ? null : event.payload.pos0,
       });
   }
+  return next;
 }
 
 function accrueTradeFees(
@@ -617,4 +626,43 @@ function updateAdministration(
   administration: LaunchpadAdministrationProjection,
 ): LaunchpadEventProjection {
   return { ...state, administration };
+}
+
+/** Proposal events are separate facts from the existing applied-policy events. */
+function reduceAdministrationPolicy(
+  state: LaunchpadAdministrationProjection,
+  event: DecodedLaunchpadEvent,
+): LaunchpadAdministrationProjection {
+  if (event.kind === "Paused" || event.kind === "Unpaused")
+    return { ...state, paused: event.payload.paused };
+  let key: string = event.kind.replace(
+    /(Scheduled|Cancelled|Changed|Set|Reassigned)$/,
+    "",
+  );
+  key = key
+    .replace(/^LaunchTradeFees$/, "TradeFees")
+    .replace(/^CurveFeeCap(Reassignment|Delay)?$/, "CurveFeeCapUpdate")
+    .replace(/^MetadataCap(Reassignment|Delay)?$/, "MetadataCapUpdate");
+  if ("launch_id" in event.payload) key += `:${event.payload.launch_id}`;
+  if ("witness" in event.payload) key += `:${event.payload.witness}`;
+  if (
+    "migration_witness" in event.payload &&
+    event.kind === "MigrationWitnessSet"
+  )
+    key += `:${event.payload.migration_witness}`;
+  const pending = { ...state.pendingPolicies };
+  if (event.kind.endsWith("Scheduled")) pending[key] = event;
+  else if (/(Cancelled|Changed|Set|Reassigned)$/.test(event.kind))
+    delete pending[key];
+  if (event.kind === "UpgradeDelayChanged") delete pending.UpgradeAction;
+  const delays = { ...state.policyDelays };
+  if (event.kind.endsWith("Changed") && "delay_ms" in event.payload)
+    delays[key] = event.payload.delay_ms;
+  // Applying a policy proposal emits the ordinary Changed/Set fact plus its new delay.
+  if (
+    event.kind.endsWith("Scheduled") ||
+    /(Cancelled|Changed|Set|Reassigned)$/.test(event.kind)
+  )
+    return { ...state, pendingPolicies: pending, policyDelays: delays };
+  return state;
 }

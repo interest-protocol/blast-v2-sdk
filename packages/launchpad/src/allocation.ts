@@ -149,8 +149,14 @@ export function normalizeAllocationPlan(
   plan: CreatorAllocationPlan,
 ): CreatorAllocationPlan {
   const normalized = normalizeCreatorShares(plan);
-  if (normalized.curveMemeBps === 0n || normalized.lpMemeBps === 0n) {
-    throw new RangeError("the curve and the pool need positive Meme shares");
+  if (
+    normalized.curveMemeBps === 0n ||
+    normalized.lpMemeBps === 0n ||
+    normalized.lpQuoteBps === 0n
+  ) {
+    throw new RangeError(
+      "the curve and the pool need positive Meme shares and the pool needs positive Quote",
+    );
   }
   if (normalized.recipients.length > MAX_ALLOCATION_RECIPIENTS) {
     throw new RangeError("an allocation plan names at most sixteen recipients");

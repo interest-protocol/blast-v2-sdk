@@ -1,4 +1,7 @@
+import type { Delayed, Pending } from "@interest-protocol/blast-core/bcs";
 import {
+  delayedBcs,
+  migrationAdmissionFields,
   moveTypeNameBcs,
   suiBalanceBcs,
   suiIdBcs,
@@ -346,8 +349,8 @@ export const presaleVaultBcs = bcs.struct("Vault", {
   presale_id: suiIdBcs,
   presale_cap_id: suiIdBcs,
   pool_id: suiIdBcs,
-  fee_split: presaleFeeSplitBcs,
-  protocol_fees: protocolFeesBcs,
+  fee_split: delayedBcs(presaleFeeSplitBcs),
+  protocol_fees: delayedBcs(protocolFeesBcs),
   partner_id: bcs.option(suiObjectIdBcs),
   unpaid_protocol_meme: suiBalanceBcs,
   unpaid_protocol_quote: suiBalanceBcs,
@@ -362,8 +365,8 @@ export const presaleVaultBcs = bcs.struct("Vault", {
 /** BCS layout of `fee_policy::FeePolicy`, the package's one shared fee policy. */
 export const feePolicyBcs = bcs.struct("FeePolicy", {
   id: suiUidBcs,
-  destination: address,
-  fees: protocolFeesBcs,
+  destination: delayedBcs(address),
+  fees: delayedBcs(protocolFeesBcs),
 });
 
 /** BCS layout of `creation_policy::CreationPolicy`, the package's one shared creation policy. */
@@ -371,6 +374,7 @@ export const creationPolicyBcs = bcs.struct("CreationPolicy", {
   id: suiUidBcs,
   allowed_quotes: typeNameSet,
   allowed_migration_witnesses: typeNameSet,
+  ...migrationAdmissionFields,
 });
 
 /** BCS layout of `holder_rewards::Round<Meme, Quote>`. */
@@ -502,6 +506,11 @@ export type PresaleVaultState = SharedObjectReference<true> & {
    * vault without a presale; only the LP-fee shares apply to the vault.
    */
   protocolFees: ProtocolFees;
+  feeSplitPolicy: Delayed<{
+    fee_recipients: BpsShare[];
+    holder_rewards_bps: bigint;
+  }>;
+  protocolFeesPolicy: Delayed<ProtocolFees>;
   /**
    * The partner the sale, or the owner of a vault without a presale, named,
    * paid its cut of Blast's LP fees; null for none.
@@ -545,6 +554,8 @@ export type PresaleRewardRoundState = SharedObjectReference<true> & {
 export type PresaleFeePolicyState = SharedObjectReference<true> & {
   destination: string;
   fees: ProtocolFees;
+  destinationPolicy: Delayed<string>;
+  feesPolicy: Delayed<ProtocolFees>;
 };
 
 /**
@@ -553,6 +564,9 @@ export type PresaleFeePolicyState = SharedObjectReference<true> & {
  * type strings. Checked once, at creation; existing sales are unaffected.
  */
 export type PresaleCreationPolicyState = SharedObjectReference<true> & {
+  witnessDelayMs: bigint;
+  pendingWitnessDelay: Pending<boolean> | null;
+  pendingWitnesses: Readonly<Record<string, Pending<boolean>>>;
   allowedQuotes: string[];
   allowedMigrationWitnesses: string[];
 };
@@ -662,9 +676,11 @@ export function decodePresaleVaultObject(
     presaleId: normalizeSuiObjectId(parsed.presale_id.bytes),
     presaleCapId: normalizeSuiObjectId(parsed.presale_cap_id.bytes),
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
-    feeRecipients: parsed.fee_split.fee_recipients,
-    holderRewardsBps: parsed.fee_split.holder_rewards_bps,
-    protocolFees: parsed.protocol_fees,
+    feeRecipients: parsed.fee_split.value.fee_recipients,
+    holderRewardsBps: parsed.fee_split.value.holder_rewards_bps,
+    protocolFees: parsed.protocol_fees.value,
+    feeSplitPolicy: parsed.fee_split,
+    protocolFeesPolicy: parsed.protocol_fees,
     partnerId: parsed.partner_id,
     unpaidProtocolMeme: BigInt(parsed.unpaid_protocol_meme.value),
     unpaidProtocolQuote: BigInt(parsed.unpaid_protocol_quote.value),
@@ -714,8 +730,10 @@ export function decodePresaleFeePolicyObject(
   const parsed = feePolicyBcs.parse(object.content);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
-    destination: parsed.destination,
-    fees: parsed.fees,
+    destination: parsed.destination.value,
+    fees: parsed.fees.value,
+    destinationPolicy: parsed.destination,
+    feesPolicy: parsed.fees,
   };
 }
 
@@ -732,6 +750,11 @@ export function decodePresaleCreationPolicyObject(
   const parsed = creationPolicyBcs.parse(object.content);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
+    witnessDelayMs: parsed.witness_delay_ms,
+    pendingWitnessDelay: parsed.pending_witness_delay,
+    pendingWitnesses: Object.fromEntries(
+      parsed.pending_witnesses.map(({ key, value }) => [key, value]),
+    ),
     allowedQuotes: parsed.allowed_quotes.contents,
     allowedMigrationWitnesses: parsed.allowed_migration_witnesses.contents,
   };

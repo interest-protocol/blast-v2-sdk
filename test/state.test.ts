@@ -15,20 +15,21 @@ import {
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
-import type { LaunchpadFixture } from "./fixtures/launchpad-442116a.ts";
+import type { LaunchpadFixture } from "./fixtures/launchpad-pr150.ts";
 import {
+  FIXTURE_PACKAGE_ID,
   LAUNCHPAD_FIXTURE_HEX,
   launchpadFixture,
-} from "./fixtures/launchpad-442116a.ts";
+} from "./fixtures/launchpad-pr150.ts";
 
 const launchId =
   "0x489d325645528066bd5fc2fd6e54cedebd2d7e98aa6095740a6b892e1b1c09f7";
 const ticketId =
   "0xb6d2ab0253927f724cb33c7641ee60b89ee15056df84f442f1396b40139a44d6";
 const partnerId = `0x${LAUNCHPAD_FIXTURE_HEX.partnerId}`;
-const memeType = "0x0::sdk_fixture_tests::SDK_FIXTURE_TESTS";
-const quoteType = "0x0::sdk_fixture_tests::TEST_QUOTE";
-const launchType = `0x0::launch::Launch<${memeType}, ${quoteType}>`;
+const memeType = `${FIXTURE_PACKAGE_ID}::sdk_fixture_tests::SDK_FIXTURE_TESTS`;
+const quoteType = `${FIXTURE_PACKAGE_ID}::sdk_fixture_tests::TEST_QUOTE`;
+const launchType = `${FIXTURE_PACKAGE_ID}::launch::Launch<${memeType}, ${quoteType}>`;
 
 function launch(fixture: LaunchpadFixture) {
   return decodeLaunchObject(
@@ -39,7 +40,7 @@ function launch(fixture: LaunchpadFixture) {
       type: launchType,
       content: launchpadFixture(fixture),
     },
-    "0x0",
+    FIXTURE_PACKAGE_ID,
   );
 }
 
@@ -64,7 +65,9 @@ test("decodes a finalized opening-round launch from literal contract bytes", () 
   assert.equal(state.memeFeeBps, 250n);
   assert.equal(
     state.migrationWitnessType,
-    normalizeStructTag("0x0::sdk_fixture_tests::TEST_MIGRATION_WITNESS"),
+    normalizeStructTag(
+      `${FIXTURE_PACKAGE_ID}::sdk_fixture_tests::TEST_MIGRATION_WITNESS`,
+    ),
   );
   assert.equal(state.poolTickSpacing, 200);
   assert.equal(state.poolFeeRate, 10_000n);
@@ -112,6 +115,10 @@ test("decodes a finalized opening-round launch from literal contract bytes", () 
     kind: "address",
     address: normalizeSuiAddress("0xc0ffee"),
   });
+  assert.equal(state.curveFeeCapDelayMs, 172_800_000n);
+  assert.equal(state.metadataCapDelayMs, 172_800_000n);
+  assert.equal(state.pendingCurveFeeCapRecipient, null);
+  assert.equal(state.pendingMetadataCapRecipient, null);
   assert.equal(state.curveFeeCapId, null);
   assert.equal(state.blastMetadataCapId, null);
   assert.equal(state.partnerId, partnerId);
@@ -180,10 +187,10 @@ test("decodes a launch ticket from literal contract bytes", () => {
   const ticket = decodeLaunchTicketObject(
     {
       objectId: ticketId,
-      type: `0x0::launch_ticket::LaunchTicket<${memeType}>`,
+      type: `${FIXTURE_PACKAGE_ID}::launch_ticket::LaunchTicket<${memeType}>`,
       content: launchpadFixture("launchTicket"),
     },
-    "0x0",
+    FIXTURE_PACKAGE_ID,
   );
 
   assert.deepEqual(ticket, {
@@ -211,7 +218,7 @@ test("decodes a launch ticket from literal contract bytes", () => {
           type: `0x1::launch_ticket::LaunchTicket<${memeType}>`,
           content: launchpadFixture("launchTicket"),
         },
-        "0x0",
+        FIXTURE_PACKAGE_ID,
       ),
     /unexpected package/,
   );
@@ -231,7 +238,7 @@ test("preserves the initial shared version returned by the Core API", async () =
     },
   } as unknown as ClientWithCoreApi;
 
-  const state = await getLaunch(client, launchId, "0x0");
+  const state = await getLaunch(client, launchId, FIXTURE_PACKAGE_ID);
 
   assert.deepEqual(
     [state.objectId, state.initialSharedVersion, state.mutable],
@@ -257,14 +264,17 @@ test("reads a bidder's undelivered opening-round Quote", async () => {
   } as unknown as ClientWithCoreApi;
 
   assert.equal(
-    await getOpeningRoundBid(client, launchId, "0xa11ce", "0x0"),
+    await getOpeningRoundBid(client, launchId, "0xa11ce", FIXTURE_PACKAGE_ID),
     2_000_000_000n,
   );
-  assert.equal(await getOpeningRoundBid(client, launchId, "0xb0b", "0x0"), 0n);
+  assert.equal(
+    await getOpeningRoundBid(client, launchId, "0xb0b", FIXTURE_PACKAGE_ID),
+    0n,
+  );
   assert.deepEqual(requests[0], {
     parentId: launchId,
     name: {
-      type: `${normalizeSuiAddress("0x0")}::launch::OpeningRoundBidKey`,
+      type: `${normalizeSuiAddress(FIXTURE_PACKAGE_ID)}::launch::OpeningRoundBidKey`,
       bcs: Uint8Array.from(
         Buffer.from(normalizeSuiAddress("0xa11ce").slice(2), "hex"),
       ),
@@ -291,7 +301,7 @@ test("decodes launch and runtime configuration from literal contract bytes", () 
     objectId:
       "0xa4137e2ed945e7f4e8c307001c32e97472fb3eebb8f7b4ab7534b447d22da89b",
     initialSharedVersion: "3",
-    type: "0x0::launch_config::LaunchConfig",
+    type: `${FIXTURE_PACKAGE_ID}::launch_config::LaunchConfig`,
     content: launchpadFixture("launchConfig"),
   });
   assert.deepEqual(config.memeDecimals, [6, 9]);
@@ -303,7 +313,9 @@ test("decodes launch and runtime configuration from literal contract bytes", () 
   assert.equal(config.quoteFeeBps, 100n);
   assert.equal(config.memeFeeBps, 250n);
   assert.deepEqual(config.migrationWitnessTypes, [
-    normalizeStructTag("0x0::sdk_fixture_tests::TEST_MIGRATION_WITNESS"),
+    normalizeStructTag(
+      `${FIXTURE_PACKAGE_ID}::sdk_fixture_tests::TEST_MIGRATION_WITNESS`,
+    ),
   ]);
   assert.deepEqual(config.protocolAllocation, {
     memeBps: 750n,
@@ -315,7 +327,7 @@ test("decodes launch and runtime configuration from literal contract bytes", () 
     objectId:
       "0xa058cccb1180e0c063232bed5fcf330614d57c74f056f8b3db0317812e129eb2",
     initialSharedVersion: "4",
-    type: "0x0::runtime_config::RuntimeConfig",
+    type: `${FIXTURE_PACKAGE_ID}::runtime_config::RuntimeConfig`,
     content: launchpadFixture("runtimeConfig"),
   });
   assert.deepEqual(runtime.creatorClaimSignerPublicKey, new Uint8Array());

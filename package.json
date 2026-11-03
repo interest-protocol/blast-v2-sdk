@@ -36,7 +36,8 @@
     "typecheck": "npm run build && tsc && tsc -p e2e/presale-mainnet/tsconfig.json --noEmit && npm run typecheck --workspaces",
     "test": "npm run build && node --test --test-concurrency=1 test/*.test.ts && npm test --workspace @interest-protocol/blast-partner-client",
     "check:package": "npm run build && npm run check:package --workspaces && node scripts/check-workspace-packages.mjs",
-    "check:mainnet": "npm run build && node scripts/check-mainnet-abi.mjs"
+    "check:mainnet": "npm run build && node scripts/check-mainnet-abi.mjs",
+    "check:abi:pr150": "node scripts/check-pr150-abi.mjs"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

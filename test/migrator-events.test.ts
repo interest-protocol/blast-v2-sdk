@@ -51,7 +51,7 @@ test("decodes and idempotently reduces every frozen migrator event", () => {
     orderedEventFields(readFrozenMigratorEventSpecs()),
   );
   const kinds = Object.keys(migratorEventSpecs) as MigratorEventKind[];
-  assert.equal(kinds.length, 14);
+  assert.equal(kinds.length, 28);
 
   let projection = createLaunchpadProductProjection();
   for (const [eventIndex, kind] of kinds.entries()) {
@@ -653,7 +653,7 @@ function readFrozenMigratorEventSpecs(): Record<
 > {
   const artifact = JSON.parse(
     readFileSync(
-      new URL("../abi/production-launchpad-v1.json", import.meta.url),
+      new URL("../abi/pr150-consumers.json", import.meta.url),
       "utf8",
     ),
   ) as {
@@ -661,7 +661,7 @@ function readFrozenMigratorEventSpecs(): Record<
       migrators: {
         modules: {
           blast_events: {
-            events: Array<{
+            structs: Array<{
               name: string;
               fields: Array<{ name: string; type: unknown }>;
             }>;
@@ -671,7 +671,7 @@ function readFrozenMigratorEventSpecs(): Record<
     };
   };
   return Object.fromEntries(
-    artifact.packages.migrators.modules.blast_events.events.map((event) => [
+    artifact.packages.migrators.modules.blast_events.structs.map((event) => [
       event.name,
       Object.fromEntries(
         event.fields.map((field) => [field.name, abiDescriptor(field.type)]),
@@ -706,6 +706,7 @@ function optionDescriptor(typeArguments: unknown): string {
   const inner = isRecord(argument) ? argument.argument : undefined;
   if (inner === "u64") return "optionU64";
   if (inner === "address") return "optionAddress";
+  if (isRecord(inner) && inner.vector === "u8") return "optionBytes";
   const name =
     isRecord(inner) && isRecord(inner.Datatype) ? inner.Datatype.name : null;
   if (name === "ID") return "optionId";
@@ -723,3 +724,143 @@ function normalizedType(type: string): string {
     (_match, address: string) => `0x${address.padStart(64, "0")}::`,
   );
 }
+
+test("replays pending split replacement, cancellation, explicit application and independent gas custody", () => {
+  let state = createLaunchpadProductProjection();
+  const apply = (
+    kind: MigratorEventKind,
+    payload: Record<string, unknown>,
+    i: number,
+  ) => {
+    const event = migratorDecoded(kind, payload, i);
+    const next = reduceLaunchpadProductInput(state, event);
+    assert.equal(reduceLaunchpadProductInput(next, event), next);
+    state = next;
+  };
+  const vaultId = normalizeSuiObjectId("0x40"),
+    roundId = normalizeSuiObjectId("0x50");
+  const nextSplit = { ...sampleSplit, creatorBps: 0n, rewardsBps: 10_000n };
+  apply("VaultCreated", { vault_id: vaultId, fee_split: sampleSplit }, 80);
+  apply(
+    "FeeSplitScheduled",
+    { vault_id: vaultId, proposed: nextSplit, ready_at_ms: 200n, delay_ms: 0n },
+    81,
+  );
+  assert.deepEqual(state.migrators.vaults[vaultId]?.feeSplit, sampleSplit);
+  assert.equal(
+    state.migrators.vaults[vaultId]?.pendingFeeSplit?.ready_at_ms,
+    200n,
+  );
+  apply(
+    "FeeSplitScheduled",
+    {
+      vault_id: vaultId,
+      proposed: nextSplit,
+      ready_at_ms: 300n,
+      delay_ms: 50n,
+    },
+    82,
+  );
+  assert.equal(
+    state.migrators.vaults[vaultId]?.pendingFeeSplit?.ready_at_ms,
+    300n,
+  );
+  apply("FeeSplitCancelled", { vault_id: vaultId, proposed: nextSplit }, 83);
+  assert.equal(state.migrators.vaults[vaultId]?.pendingFeeSplit, null);
+  apply(
+    "FeeSplitScheduled",
+    { vault_id: vaultId, proposed: nextSplit, ready_at_ms: 400n, delay_ms: 0n },
+    84,
+  );
+  apply(
+    "FeeSplitChanged",
+    {
+      vault_id: vaultId,
+      old_fee_split: sampleSplit,
+      new_fee_split: nextSplit,
+      delay_ms: 0n,
+    },
+    85,
+  );
+  assert.deepEqual(state.migrators.vaults[vaultId]?.feeSplit, nextSplit);
+  assert.equal(state.migrators.vaults[vaultId]?.feeSplitDelayMs, 0n);
+  assert.equal(state.migrators.vaults[vaultId]?.pendingFeeSplit, null);
+  apply(
+    "RoundPublished",
+    {
+      vault_id: vaultId,
+      round_id: roundId,
+      number: 0n,
+      start_checkpoint: 10n,
+      end_checkpoint: 20n,
+      claim_deadline_at_ms: 999n,
+      treasury: "0xb",
+      gas_reserve_amount: 20n,
+      meme_amount: 5n,
+      quote_amount: 100n,
+      meme_unallocated: 10n,
+      quote_unallocated: 880n,
+    },
+    86,
+  );
+  apply(
+    "GasReserveSettled",
+    {
+      vault_id: vaultId,
+      round_id: roundId,
+      number: 0n,
+      treasury: "0xb",
+      reimbursement_amount: 7n,
+      reserve_returned: 13n,
+      quote_unallocated: 893n,
+    },
+    87,
+  );
+  assert.equal(state.migrators.rounds[roundId]?.quoteRemaining, 100n);
+  assert.equal(state.migrators.rounds[roundId]?.gasReimbursed, 7n);
+  apply(
+    "RewardPaid",
+    {
+      round_id: roundId,
+      index: 0n,
+      meme_amount: 2n,
+      quote_amount: 25n,
+      meme_remaining: 3n,
+      quote_remaining: 75n,
+    },
+    88,
+  );
+  apply(
+    "RoundClosed",
+    {
+      vault_id: vaultId,
+      round_id: roundId,
+      number: 0n,
+      meme_returned: 3n,
+      quote_returned: 75n,
+      gas_reserve_returned: 0n,
+    },
+    89,
+  );
+  assert.equal(state.migrators.rounds[roundId]?.closed, true);
+  assert.equal(state.migrators.vaults[vaultId]?.rewardsQuote, 968n);
+  assert.equal(state.migrators.vaults[vaultId]?.rewardsMeme, 13n);
+  apply(
+    "RoundPublished",
+    {
+      vault_id: vaultId,
+      round_id: "0x51",
+      number: 1n,
+      start_checkpoint: 40n,
+      end_checkpoint: 50n,
+      claim_deadline_at_ms: 1999n,
+      treasury: "0xb",
+      gas_reserve_amount: 0n,
+    },
+    90,
+  );
+  assert.equal(
+    state.migrators.rounds[normalizeSuiObjectId("0x51")]?.gasReserveRemaining,
+    null,
+  );
+});

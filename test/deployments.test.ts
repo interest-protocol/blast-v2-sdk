@@ -19,7 +19,6 @@ import {
   migratorsDeployment,
   partnersDeployment,
   presaleDeployment,
-  SDK_RELEASE,
 } from "@interest-protocol/blast-deployments-sdk";
 import { LaunchpadCalls } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import { MigratorCalls } from "@interest-protocol/blast-migrators-sdk/transactions";
@@ -248,7 +247,7 @@ test("accepts only mainnet, bound to its genesis digest", () => {
   );
 });
 
-test("registers the canonical mainnet stack as the released deployment", () => {
+test("preserves the historical mainnet identity without relabeling its ABI", () => {
   const released = getBlastDeployment("mainnet");
   assert.equal(BLAST_DEPLOYMENTS.mainnet, released);
   assert.equal(released.environment, "production");
@@ -267,12 +266,16 @@ test("registers the canonical mainnet stack as the released deployment", () => {
     );
   }
   assert.deepEqual(released.source, {
-    contractsCommit: FROZEN_ABI.contractsCommit,
-    abi: FROZEN_ABI.artifacts,
+    contractsCommit: "9255e78751b70b22d8f33cc6577df126a3434424",
+    abi: {
+      ...FROZEN_ABI.artifacts,
+      launchpad:
+        "7ca399dd441aeaa8f63df5e67e44cb7d93a678a47410e4c86193baede5661887",
+    },
   });
   assert.deepEqual(released.sdk, {
-    version: SDK_RELEASE.version,
-    commit: SDK_RELEASE.commit,
+    version: "0.1.4",
+    commit: "3e554d7ce8c0604ef1e79da5ffe02a90c7d4fc24",
   });
   assert.ok(released.evidence.length > 0);
   assert.deepEqual(getPresaleDeployment("mainnet"), {
