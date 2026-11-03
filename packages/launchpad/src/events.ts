@@ -32,6 +32,7 @@ import {
 } from "./allocation.ts";
 import type { CreatorRecipient } from "./state.ts";
 import {
+  claimSignerKeyBcs,
   creatorRecipientBcs,
   decodeCreatorRecipient,
   tradeFeesBcs,
@@ -187,7 +188,6 @@ export const launchpadEventSpecs = {
     meme_reserve: "u64",
     real_quote_reserve: "u64",
   },
-  CreatorClaimSignerSet: { pos0: "bytes" },
 } as const satisfies Record<string, Record<string, EventFieldDescriptor>>;
 
 export type LaunchpadEventKind = keyof typeof launchpadEventSpecs;
@@ -398,6 +398,14 @@ export const launchpadDelayedKeys = {
     keyBcs: unitKeyBcs,
     valueBcs: addressBcs,
     valueType: "address",
+  },
+  /** Hex Ed25519 keys that may sign account claims; revocation is `MemberRemoved`. */
+  ClaimSigners: {
+    key: "runtime_config::ClaimSignerKey",
+    family: "set",
+    keyBcs: unitKeyBcs,
+    valueBcs: claimSignerKeyBcs,
+    valueType: "vector<u8>",
   },
   CurveFeeCapReassignment: {
     key: "launch::CurveFeeCapReassignment",

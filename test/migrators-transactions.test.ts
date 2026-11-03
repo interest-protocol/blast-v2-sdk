@@ -424,7 +424,6 @@ test("claims a partnered vault's held LP fees after each collection", () => {
     "shared:0x61",
     "shared:0x40",
     "shared:0x9a27",
-    CLOCK,
   ]);
 
   // A collection on a partnered vault claims what it held in the same PTB.
@@ -575,33 +574,47 @@ test("publishes a holder-reward round and relays its claims", () => {
     ],
   });
   const sdk = new MigratorTransactions(deployment);
-  const publish = sdk.publishHolderRewardRound({
+  const round = {
     ...types,
     vault,
     adminCapId: "0xad1",
     manifest,
-    claimDeadlineMs: 2_000_000_000_000n,
+    claimWindowMs: 604_800_000n,
     gasReserveAmount: 7n,
     expectedTreasury: "0xb",
-  });
-  assert.equal(signInRole(publish), "RewardsAdmin");
-  const call = moveCall(publish, "blast_holder_rewards::publish_round");
-  assert.deepEqual(argumentKinds(publish, call).slice(0, 3), [
+  };
+  const schedule = sdk.scheduleHolderRewardRound(round);
+  assert.equal(signInRole(schedule), "RewardsAdmin");
+  const call = moveCall(schedule, "blast_holder_rewards::schedule_round");
+  assert.deepEqual(argumentKinds(schedule, call).slice(0, 3), [
     "shared-mut:0xd",
     "shared:0x61",
-    `Result:${commandIndex(publish, "blast_acl::sign_in")}`,
+    `Result:${commandIndex(schedule, "blast_acl::sign_in")}`,
   ]);
-  assert.equal(call.arguments.length, 16);
+  assert.equal(call.arguments.length, 15);
+  // Publication takes no terms and no admin: the vault's scheduled round is the input.
+  const publish = sdk.publishHolderRewardRound({ ...types, vault });
+  assert.deepEqual(moveFunctions(publish), [
+    "blast_holder_rewards::publish_round",
+  ]);
+  assert.equal(
+    moveCall(publish, "blast_holder_rewards::publish_round").arguments.length,
+    4,
+  );
+  // At the default zero notice, one PTB schedules and publishes.
+  assert.deepEqual(
+    moveFunctions(sdk.scheduleAndPublishHolderRewardRound(round)),
+    [
+      "blast_acl::sign_in",
+      "blast_holder_rewards::schedule_round",
+      "blast_holder_rewards::publish_round",
+    ],
+  );
   assert.throws(
     () =>
-      sdk.publishHolderRewardRound({
-        ...types,
+      sdk.scheduleHolderRewardRound({
+        ...round,
         vault: shared("0xe", "20", true),
-        adminCapId: "0xad1",
-        manifest,
-        claimDeadlineMs: 2_000_000_000_000n,
-        gasReserveAmount: 7n,
-        expectedTreasury: "0xb",
       }),
     /another vault/,
   );
@@ -834,8 +847,11 @@ test("configures LP-fee settings at a zero notice, then arms each notice", () =>
     adminCapId: "0xad1",
     defaultShares: { memeBps: 100n, quoteBps: 200n, delayMs: 172_800_000n },
     coinSharesDelayMs: 604_800_000n,
+    roundNotices: [
+      { ...types, vault: shared("0xd", "20", true), delayMs: 86_400_000n },
+    ],
   });
-  // Both use FeeAdmin, which signs in once.
+  // Both LP-fee notices use FeeAdmin, which signs in once.
   assert.deepEqual(moveFunctions(arm), [
     "blast_acl::sign_in",
     "bps::new",
@@ -844,7 +860,25 @@ test("configures LP-fee settings at a zero notice, then arms each notice", () =>
     "lp_fee_policy::apply_default_shares",
     "lp_fee_policy::schedule_coin_shares_delay",
     "lp_fee_policy::apply_coin_shares_delay",
+    "blast_acl::sign_in",
+    "blast_holder_rewards::schedule_round_delay",
+    "blast_holder_rewards::apply_round_delay",
   ]);
+  const signIns = arm
+    .getData()
+    .commands.flatMap((command) =>
+      command.$kind === "MoveCall" && command.MoveCall.function === "sign_in"
+        ? [command.MoveCall.typeArguments[0]?.split("::")[2]]
+        : [],
+    );
+  assert.deepEqual(signIns, ["FeeAdmin", "RewardsAdmin"]);
+  assert.equal(
+    pureU64(
+      arm,
+      moveCall(arm, "blast_holder_rewards::schedule_round_delay").arguments[3],
+    ),
+    86_400_000n,
+  );
   assert.equal(
     pureU64(
       arm,

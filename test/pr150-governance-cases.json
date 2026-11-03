@@ -206,6 +206,68 @@
       "function": "revoke_creator_claim_signer",
       "role": "ClaimSignerAdmin",
       "sample": {
+        "adminWitness": "0x991",
+        "signerPublicKey": "BYTES32"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleCreatorClaimSigner",
+      "module": "runtime_config",
+      "function": "schedule_creator_claim_signer",
+      "role": "ClaimSignerAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "signerPublicKey": "BYTES32"
+      },
+      "returns": false
+    },
+    {
+      "method": "applyCreatorClaimSigner",
+      "module": "runtime_config",
+      "function": "apply_creator_claim_signer",
+      "role": null,
+      "sample": {
+        "signerPublicKey": "BYTES32"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelCreatorClaimSigner",
+      "module": "runtime_config",
+      "function": "cancel_creator_claim_signer",
+      "role": "CancelAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "signerPublicKey": "BYTES32"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleCreatorClaimSignerDelay",
+      "module": "runtime_config",
+      "function": "schedule_creator_claim_signer_delay",
+      "role": "ClaimSignerAdmin",
+      "sample": {
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "applyCreatorClaimSignerDelay",
+      "module": "runtime_config",
+      "function": "apply_creator_claim_signer_delay",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
+      "method": "cancelCreatorClaimSignerDelay",
+      "module": "runtime_config",
+      "function": "cancel_creator_claim_signer_delay",
+      "role": "CancelAdmin",
+      "sample": {
         "adminWitness": "0x991"
       },
       "returns": false
@@ -907,6 +969,90 @@
         "upgradeCap": "0x994"
       },
       "returns": false
+    },
+    {
+      "method": "publishHolderRewardRound",
+      "module": "holder_rewards",
+      "function": "publish_round",
+      "role": null,
+      "sample": {
+        "memeType": "0xa::meme::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x81",
+          "initialSharedVersion": "3",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelHolderRewardRound",
+      "module": "holder_rewards",
+      "function": "cancel_round",
+      "role": "CancelAdmin",
+      "sample": {
+        "memeType": "0xa::meme::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x81",
+          "initialSharedVersion": "3",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleHolderRewardRoundDelay",
+      "module": "holder_rewards",
+      "function": "schedule_round_delay",
+      "role": "RewardsAdmin",
+      "sample": {
+        "memeType": "0xa::meme::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x81",
+          "initialSharedVersion": "3",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "applyHolderRewardRoundDelay",
+      "module": "holder_rewards",
+      "function": "apply_round_delay",
+      "role": null,
+      "sample": {
+        "memeType": "0xa::meme::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x81",
+          "initialSharedVersion": "3",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelHolderRewardRoundDelay",
+      "module": "holder_rewards",
+      "function": "cancel_round_delay",
+      "role": "CancelAdmin",
+      "sample": {
+        "memeType": "0xa::meme::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x81",
+          "initialSharedVersion": "3",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
     }
   ],
   "migrators": [
@@ -1176,6 +1322,90 @@
       "sample": {
         "publication": "0x994",
         "upgradeCap": "0x994"
+      },
+      "returns": false
+    },
+    {
+      "method": "publishHolderRewardRound",
+      "module": "blast_holder_rewards",
+      "function": "publish_round",
+      "role": null,
+      "sample": {
+        "memeType": "0xa::meme::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x81",
+          "initialSharedVersion": "3",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelHolderRewardRound",
+      "module": "blast_holder_rewards",
+      "function": "cancel_round",
+      "role": "CancelAdmin",
+      "sample": {
+        "memeType": "0xa::meme::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x81",
+          "initialSharedVersion": "3",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleHolderRewardRoundDelay",
+      "module": "blast_holder_rewards",
+      "function": "schedule_round_delay",
+      "role": "RewardsAdmin",
+      "sample": {
+        "memeType": "0xa::meme::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x81",
+          "initialSharedVersion": "3",
+          "mutable": true
+        },
+        "adminWitness": "0x991",
+        "delayMs": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "applyHolderRewardRoundDelay",
+      "module": "blast_holder_rewards",
+      "function": "apply_round_delay",
+      "role": null,
+      "sample": {
+        "memeType": "0xa::meme::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x81",
+          "initialSharedVersion": "3",
+          "mutable": true
+        }
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelHolderRewardRoundDelay",
+      "module": "blast_holder_rewards",
+      "function": "cancel_round_delay",
+      "role": "CancelAdmin",
+      "sample": {
+        "memeType": "0xa::meme::MEME",
+        "quoteType": "0x2::sui::SUI",
+        "vault": {
+          "objectId": "0x81",
+          "initialSharedVersion": "3",
+          "mutable": true
+        },
+        "adminWitness": "0x991"
       },
       "returns": false
     }

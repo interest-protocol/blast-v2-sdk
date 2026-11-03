@@ -11,7 +11,6 @@ import {
   getOpeningRoundBid,
   openingRoundEndMs,
   previewProtocolFeeClaim,
-  timelockedValue,
 } from "@interest-protocol/blast-launchpad-sdk/state";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
@@ -338,7 +337,10 @@ test("decodes launch and runtime configuration from literal contract bytes", () 
     type: `${FIXTURE_PACKAGE_ID}::runtime_config::RuntimeConfig`,
     content: launchpadFixture("runtimeConfig"),
   });
-  assert.deepEqual(runtime.creatorClaimSignerPublicKey, new Uint8Array());
+  assert.deepEqual(runtime.creatorClaimSigners, ["09".repeat(32)]);
+  assert.equal(runtime.claimSignerDelayMs, 172_800_000n);
+  assert.equal(runtime.pendingClaimSignerDelay, null);
+  assert.deepEqual(runtime.pendingClaimSigners, {});
   assert.equal(runtime.protocolFeeShareBps, 3_000n);
   assert.equal(runtime.protocolFeeSharePolicy.owner, runtime.objectId);
 });
@@ -416,17 +418,15 @@ test("decodes a partner and previews the partner's share of a protocol claim", (
     content: launchpadFixture("partner"),
   });
   assert.equal(partner.recipient, normalizeSuiAddress("0xbeef"));
+  // The fixed seven-day partner notice; payouts read the applied value.
   assert.deepEqual(partner.shareBps, {
-    before: 2_000n,
-    after: 2_000n,
-    atMs: 0n,
-    delayMs: 604_800_000n,
+    owner: normalizeSuiAddress(partnerId),
+    key: null,
+    value: 2_000n,
+    delay_ms: 604_800_000n,
+    pending: null,
   });
-  assert.equal(timelockedValue(partner.shareBps, 61_000n), 2_000n);
-  assert.equal(
-    timelockedValue({ before: 1n, after: 2n, atMs: 10n, delayMs: 5n }, 9n),
-    1n,
-  );
+  assert.equal(partner.capId.value, normalizeSuiAddress("0x0"));
 
   // The literal claim: the ledger held these totals before the claim.
   assert.deepEqual(

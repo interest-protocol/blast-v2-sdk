@@ -709,8 +709,8 @@ function reduceDelayed(
 
 /**
  * The projection key of a delayed value: its registry name, then the coin
- * type for a per-coin change or the `LpVault` for a fee split. The shared
- * per-coin notice is `CoinShares`.
+ * type for a per-coin change or the `LpVault` for a fee split or round
+ * publication. The shared per-coin notice is `CoinShares`.
  */
 export function migratorsDelayedPolicyKey(
   event: Pick<DecodedMigratorsDelayedEvent, "name" | "payload">,
@@ -721,7 +721,8 @@ export function migratorsDelayedPolicyKey(
     event.payload.change.kind === "Entry"
   )
     return `${event.name}:${event.payload.change.entry}`;
-  if (event.name === "FeeSplit") return `FeeSplit:${event.payload.owner}`;
+  if (event.name === "FeeSplit" || event.name === "RoundPublication")
+    return `${event.name}:${event.payload.owner}`;
   return event.name;
 }
 

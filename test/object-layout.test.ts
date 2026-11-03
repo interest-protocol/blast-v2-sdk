@@ -230,6 +230,7 @@ function vault() {
     burn_quote: balance,
     next_round: 0n,
     last_checkpoint: null,
+    round_publication: { ...owned, delay_ms: 0n, pending: null },
   };
 }
 

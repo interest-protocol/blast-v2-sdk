@@ -80,7 +80,7 @@ The contract enforces this admission check; SDK previews do not certify currency
 | Vault without a presale | `newCetusVault`, `newBluefinVault` | Anyone may lock their own Cetus or Bluefin `position` in a new `Vault` with their own LP-fee split and an optional accepted `partnerId` (contracts ADR 0109). Cetus burns the position through LP Burn and takes either coin order (`cetusMemeSide`); Bluefin's pool must be `Pool<Meme, Quote>`. The `CreationPolicy` must allow Quote and the venue's migrator. The vault's presale and `PresaleCap` IDs are zero (`isVaultWithoutPresale`), so it has no residuals; fees and holder rewards work as on any vault. |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
 | Own position | `newCetusVault`, `newBluefinVault` | Anyone, for their own position: locks it in a new `Vault` with zero presale IDs, the given fee split, and an optional accepted partner (contracts ADR 0109). |
-| Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication signs in as `RewardsAdmin` (`adminCapId`). |
+| Holder rewards | `scheduleHolderRewardRound`, `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Scheduling signs in as `RewardsAdmin` (`adminCapId`); anyone publishes once the vault's round notice has passed (zero by default, so `scheduleAndPublishHolderRewardRound` does both in one PTB). `cancelHolderRewardRound` signs in as `CancelAdmin`. |
 | Cap | `destroyCap` | After cancellation only. |
 | Blast's rates | `scheduleProtocolFees` | Signs in as `FeeAdmin`; call `applyProtocolFees` after the notice. Affects later presales. |
 | Blast's rates on one sale | `setPresaleProtocolFees` | Signs in as `FeeAdmin`. In the creation PTB before `share` (pass the `Presale` result and an `adminWitness` from `call.signIn`), or once shared until the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
@@ -352,7 +352,7 @@ must hold that role:
 | `TreasuryAdmin` | `scheduleProtocolDestination` |
 | `ListingAdmin` | `setQuoteAllowed` |
 | `AdapterAdmin` | `scheduleMigrationWitness` |
-| `RewardsAdmin` | `publishHolderRewardRound`, `settleHolderRewardGasReserve` |
+| `RewardsAdmin` | `scheduleHolderRewardRound`, `scheduleHolderRewardRoundDelay`, `settleHolderRewardGasReserve` |
 | `UpgradeAdmin` | none: upgrade custody stays with the CLI publish tooling |
 
 `PresaleCalls.roleType(role)` names a role's Move type for
@@ -435,7 +435,7 @@ The partner earns its `blast_partners` cut of Blast's raise fee and, after
 migration, of Blast's LP fees (contracts ADR 0107); Blast's token fee is never
 divided with a partner. A partnered sale's migration releases the same raise and LP as any sale but holds
 Blast's fees (`PresaleState.unpaidProtocolQuote`).
-`pay_protocol_fees_with_partner` then pays the partner its cut in force, rounded
+`pay_protocol_fees_with_partner` then pays the partner its applied cut, rounded
 down, and Blast the rest and all its tokens. It emits `ProtocolFeesPaid` with
 `partner_quote`, and `blast_partners` emits `PartnerPaid`. A sale without a
 partner pays Blast at migration as before, with `partner_quote` zero. Pass the
@@ -447,7 +447,7 @@ The sale's vault inherits its partner (`PresaleVaultState.partnerId`). Each
 collection on it splits the fees exactly as on any vault but holds Blast's LP
 fees (`PresaleVaultState.unpaidProtocolMeme` and `unpaidProtocolQuote`), and
 its `FeesCollected.protocol_destination` is null.
-`pay_protocol_lp_fees_with_partner` pays the partner its cut in force of each
+`pay_protocol_lp_fees_with_partner` pays the partner its applied cut of each
 held asset, rounded down, and the fee policy's current destination the rest,
 emitting `ProtocolLpFeesPaid`. Anyone may call it; a vault holding nothing pays
 and emits nothing, so pass the vault's `partner` to `collectCetusFees` or
@@ -541,21 +541,27 @@ manifest with the leaf domain `PRESALE_REWARD_LEAF_DOMAIN`
 const manifest = buildRewardManifest({ ...round, leafDomain: PRESALE_REWARD_LEAF_DOMAIN });
 ```
 
-`publishHolderRewardRound` rejects a manifest from any other domain or vault.
+`scheduleHolderRewardRound` rejects a manifest from any other domain or vault.
 
 Presale publication permits `previous published end <= start < end`; a
 confirmed skipped day creates no funded object or published number. The
-holding interval and claim deadline are independent. Mainnet daily publication
-prepares the full seven-day deadline from current publication preparation
-time, including when recovering an older holding period.
+holding interval and claim window are independent. The round carries a claim
+window (`claimWindowMs`), not a deadline: publication opens claims for that long
+from its own time, including when recovering an older holding period.
 
-`publishHolderRewardRound` takes a manifest or verified paged summary, a required
-`gasReserveAmount` in Quote atoms, `expectedTreasury`, and `claimDeadlineMs`. The administrator
+`scheduleHolderRewardRound` takes a manifest or verified paged summary, a required
+`gasReserveAmount` in Quote atoms, `expectedTreasury`, and `claimWindowMs`. It
+stores the terms in the vault's `round_publication` slot
+(`PresaleVaultState.roundPublication`), replacing any scheduled round; nothing
+is reserved until `publishHolderRewardRound`, which takes no terms. Each vault's
+round notice starts at zero (`scheduleHolderRewardRoundDelay`, or
+`armNotices({ roundNotices })`, raises it). The administrator
 chooses the reserve for each publication: zero disables reimbursement and Blast
 pays gas; a positive amount funds separate gas custody inside the canonical
 `Round`. Holder leaf balances and proofs never include that reserve. Treasury
 comes from the governed FeePolicy and is fixed in the round. Publication checks
-that it still equals the explicit `expectedTreasury` before withdrawing funds.
+that it still equals the explicit `expectedTreasury` before withdrawing funds,
+and rechecks the round number, interval and budget against the vault.
 
 `settleHolderRewardGasReserve` reimburses the fixed treasury once, capped by the
 positive original reserve, and returns the remainder to the vault. A zero

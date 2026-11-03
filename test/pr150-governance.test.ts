@@ -212,9 +212,17 @@ test("PR150 upgrade scheduling rejects wrong digest lengths and invalid delays",
   const calls = products.launchpad.calls;
   assert.throws(
     () =>
-      calls.setCreatorClaimSigner({
+      calls.scheduleCreatorClaimSigner({
         adminWitness: "0xca",
         signerPublicKey: new Uint8Array(),
+      }),
+    /32 bytes/,
+  );
+  assert.throws(
+    () =>
+      calls.revokeCreatorClaimSigner({
+        adminWitness: "0xca",
+        signerPublicKey: "0x09",
       }),
     /32 bytes/,
   );

@@ -1724,7 +1724,7 @@ export class PresaleCalls {
 
   /**
    * `blast_presale::pay_protocol_fees_with_partner`: once a partnered sale migrates, pays its
-   * partner its cut in force of Blast's raise fee, rounded down, and
+   * partner its applied cut of Blast's raise fee, rounded down, and
    * Blast the rest and its token share. Anyone may call it, once.
    */
   payProtocolFeesWithPartner(
@@ -1742,7 +1742,6 @@ export class PresaleCalls {
           this.#version(tx),
           this.#feePolicy(tx),
           sharedObject(tx, "partner", options.partner, false),
-          tx.object.clock(),
         ],
         options,
       );
@@ -1751,7 +1750,7 @@ export class PresaleCalls {
 
   /**
    * `presale_vault::pay_protocol_lp_fees_with_partner`: pays a partnered
-   * vault's held Blast LP fees, the partner its cut in force of each asset,
+   * vault's held Blast LP fees, the partner its applied cut of each asset,
    * rounded down, and Blast the rest. Anyone may call it; holding nothing
    * pays nothing.
    */
@@ -1770,7 +1769,6 @@ export class PresaleCalls {
           this.#version(tx),
           this.#feePolicy(tx),
           sharedObject(tx, "partner", options.partner, false),
-          tx.object.clock(),
         ],
         options,
         "presale_vault",
@@ -2137,20 +2135,20 @@ export class PresaleCalls {
   }
 
   /**
-   * `holder_rewards::publish_round` from a manifest built with
-   * `PRESALE_REWARD_LEAF_DOMAIN`; reserves its budget from the vault's holder
-   * share and shares the `Round`, claimable until `claimDeadlineMs`.
+   * `holder_rewards::schedule_round` (`RewardsAdmin`): schedules a round from
+   * a manifest built with `PRESALE_REWARD_LEAF_DOMAIN`, replacing any
+   * scheduled round or notice change. Nothing is reserved until
+   * `publishHolderRewardRound`, which anyone may call once the vault's round
+   * notice has passed; claims stay open for `claimWindowMs` from publication.
    */
-
-  /** Funds holder leaves and gas custody only if the governed treasury still matches the prepared destination. */
-  publishHolderRewardRound(
+  scheduleHolderRewardRound(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
       adminWitness: TransactionObjectInput;
       manifest: RewardManifest | RewardManifestSummary;
       gasReserveAmount: bigint;
       expectedTreasury: string;
-      claimDeadlineMs: bigint;
+      claimWindowMs: bigint;
     },
   ) {
     const manifest =
@@ -2175,20 +2173,15 @@ export class PresaleCalls {
       "gasReserveAmount",
       options.gasReserveAmount,
     );
-    const claimDeadlineMs = requireU64(
-      "claimDeadlineMs",
-      options.claimDeadlineMs,
-    );
+    const claimWindowMs = requireU64("claimWindowMs", options.claimWindowMs);
     return (tx: Transaction): void => {
       this.#presaleCall(
         tx,
-        "publish_round",
+        "schedule_round",
         [
           sharedObject(tx, "vault", options.vault, true),
           this.#version(tx),
           tx.object(options.adminWitness),
-          this.#feePolicy(tx),
-          tx.pure.address(expectedTreasury),
           tx.pure.u64(manifest.number),
           tx.pure.u64(manifest.startCheckpoint),
           tx.pure.u64(manifest.endCheckpoint),
@@ -2198,13 +2191,81 @@ export class PresaleCalls {
           tx.pure.u64(manifest.memeAmount),
           tx.pure.u64(manifest.quoteAmount),
           tx.pure.u64(gasReserveAmount),
-          tx.pure.u64(claimDeadlineMs),
+          tx.pure.u64(claimWindowMs),
+          tx.pure.address(expectedTreasury),
           tx.object.clock(),
         ],
         options,
         "holder_rewards",
       );
     };
+  }
+
+  /**
+   * `holder_rewards::publish_round`: anyone publishes the vault's ready
+   * round, reserving its budget and sharing the `Round`. It aborts unless
+   * the `FeePolicy` destination is still the round's expected treasury.
+   */
+  publishHolderRewardRound(
+    options: LaunchTypes & { vault: SharedObjectReference<true> },
+  ) {
+    return this.#roundCall("publish_round", options, (tx) => [
+      this.#feePolicy(tx),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `holder_rewards::cancel_round` (`CancelAdmin`): discards the scheduled round, even a ready one. */
+  cancelHolderRewardRound(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+    },
+  ) {
+    return this.#roundCall("cancel_round", options, (tx) => [
+      tx.object(options.adminWitness),
+    ]);
+  }
+
+  /**
+   * `holder_rewards::schedule_round_delay` (`RewardsAdmin`): proposes the
+   * vault's next round notice after the applied one, replacing any scheduled
+   * round.
+   */
+  scheduleHolderRewardRoundDelay(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      delayMs: bigint;
+    },
+  ) {
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#roundCall("schedule_round_delay", options, (tx) => [
+      tx.object(options.adminWitness),
+      tx.pure.u64(delayMs),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `holder_rewards::apply_round_delay`: anyone applies a ready round notice. */
+  applyHolderRewardRoundDelay(
+    options: LaunchTypes & { vault: SharedObjectReference<true> },
+  ) {
+    return this.#roundCall("apply_round_delay", options, (tx) => [
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `holder_rewards::cancel_round_delay` (`CancelAdmin`). */
+  cancelHolderRewardRoundDelay(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+    },
+  ) {
+    return this.#roundCall("cancel_round_delay", options, (tx) => [
+      tx.object(options.adminWitness),
+    ]);
   }
 
   /** `holder_rewards::claim`: relays one proof; the round pays its beneficiary. */
@@ -2407,6 +2468,26 @@ export class PresaleCalls {
     });
   }
 
+  #roundCall(
+    functionName: string,
+    options: LaunchTypes & { vault: SharedObjectReference<true> },
+    extra: (tx: Transaction) => TransactionArgument[],
+  ) {
+    return (tx: Transaction): void => {
+      this.#presaleCall(
+        tx,
+        functionName,
+        [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#version(tx),
+          ...extra(tx),
+        ],
+        options,
+        "holder_rewards",
+      );
+    };
+  }
+
   #presale(
     tx: Transaction,
     options: { presale: SharedObjectReference<true> },
@@ -2455,6 +2536,14 @@ export type PresaleNotices = {
   destination?: { destination: string; delayMs: bigint };
   /** The notice for each later migration witness admission. */
   migrationDelayMs?: bigint;
+  /**
+   * Holder-reward round notices to raise, one per vault. Each vault starts at
+   * zero, so a round schedules and publishes in one PTB until raised.
+   */
+  roundNotices?: readonly (LaunchTypes & {
+    vault: SharedObjectReference<true>;
+    delayMs: bigint;
+  })[];
 };
 
 export class PresaleTransactions {
@@ -2772,12 +2861,69 @@ export class PresaleTransactions {
     return tx;
   }
 
-  /** Signs in as `RewardsAdmin` and publishes a holder-reward round. */
-  publishHolderRewardRound(
-    options: AsAdmin<Parameters<PresaleCalls["publishHolderRewardRound"]>[0]>,
+  /** Signs in as `RewardsAdmin` and schedules a holder-reward round. */
+  scheduleHolderRewardRound(
+    options: AsAdmin<Parameters<PresaleCalls["scheduleHolderRewardRound"]>[0]>,
   ): Transaction {
     return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
-      this.call.publishHolderRewardRound({ ...options, adminWitness }),
+      this.call.scheduleHolderRewardRound({ ...options, adminWitness }),
+    );
+  }
+
+  /** Anyone publishes the vault's ready round. */
+  publishHolderRewardRound(
+    options: Parameters<PresaleCalls["publishHolderRewardRound"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.publishHolderRewardRound(options));
+    return tx;
+  }
+
+  /**
+   * Schedules a round and publishes it in one PTB. Only valid while the
+   * vault's round notice is zero, its default; otherwise the publish aborts.
+   */
+  scheduleAndPublishHolderRewardRound(
+    options: AsAdmin<Parameters<PresaleCalls["scheduleHolderRewardRound"]>[0]>,
+  ): Transaction {
+    const tx = this.scheduleHolderRewardRound(options);
+    tx.add(this.call.publishHolderRewardRound(options));
+    return tx;
+  }
+
+  cancelHolderRewardRound(
+    options: AsAdmin<Parameters<PresaleCalls["cancelHolderRewardRound"]>[0]>,
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelHolderRewardRound({ ...options, adminWitness }),
+    );
+  }
+
+  scheduleHolderRewardRoundDelay(
+    options: AsAdmin<
+      Parameters<PresaleCalls["scheduleHolderRewardRoundDelay"]>[0]
+    >,
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
+      this.call.scheduleHolderRewardRoundDelay({ ...options, adminWitness }),
+    );
+  }
+
+  applyHolderRewardRoundDelay(
+    options: Parameters<PresaleCalls["applyHolderRewardRoundDelay"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyHolderRewardRoundDelay(options));
+    return tx;
+  }
+
+  cancelHolderRewardRoundDelay(
+    options: AsAdmin<
+      Parameters<PresaleCalls["cancelHolderRewardRoundDelay"]>[0]
+    >,
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelHolderRewardRoundDelay({ ...options, adminWitness }),
     );
   }
 
@@ -3137,6 +3283,15 @@ export class PresaleTransactions {
         }),
       );
       tx.add(call.applyMigrationDelay());
+    }
+    for (const notice of notices.roundNotices ?? []) {
+      tx.add(
+        call.scheduleHolderRewardRoundDelay({
+          ...notice,
+          adminWitness: as("RewardsAdmin"),
+        }),
+      );
+      tx.add(call.applyHolderRewardRoundDelay(notice));
     }
     return tx;
   }

@@ -30,6 +30,7 @@ import type {
 } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
 import {
+  fromHex,
   MOVE_STDLIB_ADDRESS,
   normalizeStructTag,
   normalizeSuiAddress,
@@ -544,9 +545,7 @@ export class LaunchpadCalls {
           sharedObject(tx, "launch", options.launch, true),
           this.#packageVersion(tx),
           this.#runtimeConfig(tx),
-          ...(partner
-            ? [sharedObject(tx, "partner", partner, false), tx.object.clock()]
-            : []),
+          ...(partner ? [sharedObject(tx, "partner", partner, false)] : []),
         ],
       });
     };
@@ -629,19 +628,103 @@ export class LaunchpadCalls {
   }
 
   /**
-   * `runtime_config::set_creator_claim_signer` (`ClaimSignerAdmin`): the
-   * Ed25519 key that signs account claims; use revokeCreatorClaimSigner to revoke.
+   * `runtime_config::schedule_creator_claim_signer` (`ClaimSignerAdmin`):
+   * proposes admitting an Ed25519 key that may sign account claims, after the
+   * signer notice. At most four keys may be live or pending at once.
    */
-  setCreatorClaimSigner(options: {
+  scheduleCreatorClaimSigner(options: {
     adminWitness: TransactionObjectInput;
-    signerPublicKey: Uint8Array;
+    signerPublicKey: ClaimSignerPublicKey;
   }) {
-    if (options.signerPublicKey.length !== 32)
-      throw new RangeError("signerPublicKey must contain 32 bytes");
+    const key = claimSignerKey(options.signerPublicKey);
     return this.#configCall(
-      "runtime_config::set_creator_claim_signer",
+      "runtime_config::schedule_creator_claim_signer",
       options,
-      (tx) => [tx.pure.vector("u8", Array.from(options.signerPublicKey))],
+      (tx) => [tx.pure.vector("u8", key), tx.object.clock()],
+    );
+  }
+
+  /** `runtime_config::apply_creator_claim_signer`: anyone admits a ready signer key. */
+  applyCreatorClaimSigner(options: { signerPublicKey: ClaimSignerPublicKey }) {
+    const key = claimSignerKey(options.signerPublicKey);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::runtime_config::apply_creator_claim_signer`,
+        arguments: [
+          this.#runtimeConfig(tx, true),
+          this.#packageVersion(tx),
+          tx.pure.vector("u8", key),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /** `runtime_config::cancel_creator_claim_signer` (`CancelAdmin`): discards a pending admission. */
+  cancelCreatorClaimSigner(options: {
+    adminWitness: TransactionObjectInput;
+    signerPublicKey: ClaimSignerPublicKey;
+  }) {
+    const key = claimSignerKey(options.signerPublicKey);
+    return this.#configCall(
+      "runtime_config::cancel_creator_claim_signer",
+      options,
+      (tx) => [tx.pure.vector("u8", key)],
+    );
+  }
+
+  /**
+   * `runtime_config::revoke_creator_claim_signer` (`ClaimSignerAdmin`):
+   * removes a live or pending key at once; attestations it signed stop
+   * verifying.
+   */
+  revokeCreatorClaimSigner(options: {
+    adminWitness: TransactionObjectInput;
+    signerPublicKey: ClaimSignerPublicKey;
+  }) {
+    const key = claimSignerKey(options.signerPublicKey);
+    return this.#configCall(
+      "runtime_config::revoke_creator_claim_signer",
+      options,
+      (tx) => [tx.pure.vector("u8", key)],
+    );
+  }
+
+  /** `runtime_config::schedule_creator_claim_signer_delay` (`ClaimSignerAdmin`): the next signer notice. */
+  scheduleCreatorClaimSignerDelay(options: {
+    adminWitness: TransactionObjectInput;
+    delayMs: bigint;
+  }) {
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#configCall(
+      "runtime_config::schedule_creator_claim_signer_delay",
+      options,
+      (tx) => [tx.pure.u64(delayMs), tx.object.clock()],
+    );
+  }
+
+  /** `runtime_config::apply_creator_claim_signer_delay`: anyone applies a ready signer notice. */
+  applyCreatorClaimSignerDelay() {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::runtime_config::apply_creator_claim_signer_delay`,
+        arguments: [
+          this.#runtimeConfig(tx, true),
+          this.#packageVersion(tx),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /** `runtime_config::cancel_creator_claim_signer_delay` (`CancelAdmin`). */
+  cancelCreatorClaimSignerDelay(options: {
+    adminWitness: TransactionObjectInput;
+  }) {
+    return this.#configCall(
+      "runtime_config::cancel_creator_claim_signer_delay",
+      options,
+      () => [],
     );
   }
 
@@ -956,20 +1039,6 @@ export class LaunchpadCalls {
     return (tx: Transaction): void => {
       tx.moveCall({
         target: `${this.deployment.packageId}::runtime_config::cancel_treasury`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.runtimeConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `runtime_config::revoke_creator_claim_signer`. Requires ClaimSignerAdmin. */
-  revokeCreatorClaimSigner(options: { adminWitness: TransactionObjectInput }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::runtime_config::revoke_creator_claim_signer`,
         typeArguments: [],
         arguments: [
           deploymentObject(tx, this.deployment.runtimeConfig, true),
@@ -1578,6 +1647,16 @@ export class LaunchpadCalls {
   }
 }
 
+/** A 32-byte Ed25519 public key, as bytes or hex (with or without `0x`). */
+export type ClaimSignerPublicKey = Uint8Array | string;
+
+function claimSignerKey(value: ClaimSignerPublicKey): number[] {
+  const bytes = typeof value === "string" ? fromHex(value) : value;
+  if (bytes.length !== 32)
+    throw new RangeError("signerPublicKey must contain 32 bytes");
+  return Array.from(bytes);
+}
+
 /** Launchpad settings `configureNow` applies at a zero notice. */
 export type LaunchpadSettings = {
   tradeFees?: { quoteFeeBps: bigint; memeFeeBps: bigint };
@@ -1602,6 +1681,15 @@ export type LaunchpadNotices = {
   treasury?: { treasury: string; delayMs: bigint };
   /** The notice for each later migration witness admission. */
   migrationDelayMs?: bigint;
+  /** The notice for each later account-claim signer admission. */
+  claimSignerDelayMs?: bigint;
+};
+
+/** Admissions `configureNow` makes while their notices are zero. */
+type ZeroNoticeAdmissions = {
+  migrationWitnessTypes?: readonly string[];
+  /** Keys that may sign account claims; both notices start at zero. */
+  creatorClaimSigners?: readonly ClaimSignerPublicKey[];
 };
 
 export class LaunchpadTransactions {
@@ -1883,15 +1971,56 @@ export class LaunchpadTransactions {
     );
   }
 
-  setCreatorClaimSigner(options: {
+  scheduleCreatorClaimSigner(options: {
     adminCapId: string;
-    signerPublicKey: Uint8Array;
+    signerPublicKey: ClaimSignerPublicKey;
   }): Transaction {
     return this.#asAdmin(
       options.adminCapId,
       "ClaimSignerAdmin",
       (adminWitness) =>
-        this.call.setCreatorClaimSigner({ ...options, adminWitness }),
+        this.call.scheduleCreatorClaimSigner({ ...options, adminWitness }),
+    );
+  }
+
+  applyCreatorClaimSigner(options: {
+    signerPublicKey: ClaimSignerPublicKey;
+  }): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyCreatorClaimSigner(options));
+    return tx;
+  }
+
+  cancelCreatorClaimSigner(options: {
+    adminCapId: string;
+    signerPublicKey: ClaimSignerPublicKey;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelCreatorClaimSigner({ ...options, adminWitness }),
+    );
+  }
+
+  scheduleCreatorClaimSignerDelay(options: {
+    adminCapId: string;
+    delayMs: bigint;
+  }): Transaction {
+    return this.#asAdmin(
+      options.adminCapId,
+      "ClaimSignerAdmin",
+      (adminWitness) =>
+        this.call.scheduleCreatorClaimSignerDelay({ ...options, adminWitness }),
+    );
+  }
+
+  applyCreatorClaimSignerDelay(): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyCreatorClaimSignerDelay());
+    return tx;
+  }
+
+  cancelCreatorClaimSignerDelay(options: { adminCapId: string }): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelCreatorClaimSignerDelay({ adminWitness }),
     );
   }
 
@@ -2267,13 +2396,12 @@ export class LaunchpadTransactions {
    * Then call `armNotices`. The cap needs each setting's role.
    */
   configureNow(
-    options: { adminCapId: string } & LaunchpadSettings & {
-        migrationWitnessTypes?: readonly string[];
-      },
+    options: { adminCapId: string } & LaunchpadSettings & ZeroNoticeAdmissions,
   ): Transaction {
     const delayMs = 0n;
     const { tradeFees, protocolAllocation, creationFee, treasury } = options;
     const { protocolFeeShareBps, migrationWitnessTypes } = options;
+    const { creatorClaimSigners } = options;
     return this.#atZeroNotice(options.adminCapId, {
       ...(tradeFees ? { tradeFees: { ...tradeFees, delayMs } } : {}),
       ...(protocolAllocation
@@ -2287,6 +2415,7 @@ export class LaunchpadTransactions {
         : { protocolFeeShare: { protocolFeeShareBps, delayMs } }),
       ...(treasury === undefined ? {} : { treasury: { treasury, delayMs } }),
       ...(migrationWitnessTypes ? { migrationWitnessTypes } : {}),
+      ...(creatorClaimSigners ? { creatorClaimSigners } : {}),
     });
   }
 
@@ -2302,7 +2431,7 @@ export class LaunchpadTransactions {
 
   #atZeroNotice(
     adminCapId: string,
-    notices: LaunchpadNotices & { migrationWitnessTypes?: readonly string[] },
+    notices: LaunchpadNotices & ZeroNoticeAdmissions,
   ): Transaction {
     const tx = new Transaction();
     const witnesses = new Map<BlastFunAdminRole, TransactionObjectArgument>();
@@ -2377,6 +2506,24 @@ export class LaunchpadTransactions {
         }),
       );
       tx.add(call.applyMigrationDelay());
+    }
+    for (const signerPublicKey of notices.creatorClaimSigners ?? []) {
+      tx.add(
+        call.scheduleCreatorClaimSigner({
+          signerPublicKey,
+          adminWitness: as("ClaimSignerAdmin"),
+        }),
+      );
+      tx.add(call.applyCreatorClaimSigner({ signerPublicKey }));
+    }
+    if (notices.claimSignerDelayMs !== undefined) {
+      tx.add(
+        call.scheduleCreatorClaimSignerDelay({
+          delayMs: notices.claimSignerDelayMs,
+          adminWitness: as("ClaimSignerAdmin"),
+        }),
+      );
+      tx.add(call.applyCreatorClaimSignerDelay());
     }
     return tx;
   }

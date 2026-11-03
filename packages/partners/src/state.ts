@@ -1,8 +1,11 @@
+import type { Delayed } from "@interest-protocol/blast-core/bcs";
 import {
   addressBcs,
+  delayedBcs,
   suiObjectIdBcs,
   suiUidBcs,
   u64Bcs,
+  unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import {
   BASIS_POINTS_DENOMINATOR,
@@ -10,31 +13,32 @@ import {
   normalizePositiveU64,
 } from "@interest-protocol/blast-core/integers";
 import type { SharedObjectIdentity } from "@interest-protocol/blast-core/sui";
-import type { Timelocked } from "@interest-protocol/blast-core/timelock";
-import {
-  timelockedBcs,
-  timelockedValue,
-} from "@interest-protocol/blast-core/timelock";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { normalizeSuiObjectId, parseStructTag } from "@mysten/sui/utils";
 
-/** `blast_partners::delay_ms`: every change Blast makes to a partner waits this long. */
+/**
+ * `blast_partners::delay_ms`: the fixed notice before a share or cap Blast
+ * proposes can be applied.
+ */
 export const PARTNER_DELAY_MS = 604_800_000n;
 
-/** The partner's recipient, scheduled share, and managing cap, as Move stores them. */
+/**
+ * The partner's recipient, share and managing cap, as Move stores them. A
+ * share or cap proposal changes nothing until someone applies it.
+ */
 export type PartnerTerms = {
   recipient: string;
   /** Basis points of Blast's fee on each trade naming the partner. */
-  shareBps: Timelocked<bigint>;
+  shareBps: Delayed<null, bigint>;
   /** The only `PartnerCap` that may set `recipient`. */
-  capId: Timelocked<string>;
+  capId: Delayed<null, string>;
 };
 
 export const partnerTermsBcs = {
   recipient: addressBcs,
-  share_bps: timelockedBcs(u64Bcs),
-  cap_id: timelockedBcs(suiObjectIdBcs),
+  share_bps: delayedBcs(unitKeyBcs, u64Bcs),
+  cap_id: delayedBcs(unitKeyBcs, suiObjectIdBcs),
 };
 
 /** BCS layout of `blast_partners::blast_partners::Partner`. */
@@ -64,7 +68,11 @@ export function decodePartnerObject(
   }
   const parsed = partnerBcs.parse(object.content);
   const objectId = normalizeSuiObjectId(object.objectId);
-  if (normalizeSuiObjectId(parsed.id.id.bytes) !== objectId) {
+  if (
+    normalizeSuiObjectId(parsed.id.id.bytes) !== objectId ||
+    parsed.share_bps.owner !== objectId ||
+    parsed.cap_id.owner !== objectId
+  ) {
     throw new TypeError(`partner ${object.objectId} has a mismatched UID`);
   }
   return {
@@ -103,18 +111,13 @@ export async function getPartner(
 }
 
 /**
- * Mirrors `blast_partners::pay`: the partner's share of `fee` (Blast's fee on
- * one trade, in that coin's atoms) at `nowMs`, rounded down; Blast keeps the
- * remainder.
+ * Mirrors `blast_partners::pay`: the partner's applied share of `fee`
+ * (Blast's fee on one trade, in that coin's atoms), rounded down; Blast keeps
+ * the remainder.
  */
 export function partnerPayment(
   partner: Pick<PartnerTerms, "shareBps">,
   fee: bigint,
-  nowMs: bigint,
 ): bigint {
-  return mulDivDown(
-    fee,
-    timelockedValue(partner.shareBps, nowMs),
-    BASIS_POINTS_DENOMINATOR,
-  );
+  return mulDivDown(fee, partner.shareBps.value, BASIS_POINTS_DENOMINATOR);
 }

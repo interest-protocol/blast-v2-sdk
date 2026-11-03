@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  delayedEventBcs,
+  delayedEventModule,
+} from "@interest-protocol/blast-admin-sdk/events";
 import type {
   PartnerEventKind,
   PartnerEventPayloads,
 } from "@interest-protocol/blast-partners-sdk/events";
 import {
+  decodePartnerDelayedEvent,
   decodePartnerEvent,
+  partnerDelayedKeys,
   partnerEventBcs,
 } from "@interest-protocol/blast-partners-sdk/events";
 import {
@@ -47,21 +53,24 @@ const partner = {
   initialSharedVersion: "5",
   mutable: true as const,
 };
-const abi = readAbi("production-partners-v1.json", "partners");
+// The fresh stack's compiler ABI; events are structs there.
+const abi = readAbi("pr150-consumers.json", "partners");
 const SUI = normalizeStructTag("0x2::sui::SUI");
-const terms = (share: bigint, cap: string) => ({
+const terms = (share: bigint, cap: string, owner = id("0xb1")) => ({
   recipient: id("0xfee"),
   share_bps: {
-    before: share,
-    after: share,
-    atMs: 0n,
-    delayMs: PARTNER_DELAY_MS,
+    owner,
+    key: null,
+    value: share,
+    delay_ms: PARTNER_DELAY_MS,
+    pending: null,
   },
   cap_id: {
-    before: id(cap),
-    after: id(cap),
-    atMs: 0n,
-    delayMs: PARTNER_DELAY_MS,
+    owner,
+    key: null,
+    value: id(cap),
+    delay_ms: PARTNER_DELAY_MS,
+    pending: null,
   },
 });
 
@@ -84,11 +93,19 @@ test("builds every blast_partners call against the frozen ABI", () => {
     calls.setRecipient({ partner, partnerCap: "0xca", recipient: "0xb0b" }),
   );
   tx.add(calls.destroyCap({ partnerCap: "0xcc" }));
+  tx.add(calls.applyShare({ partner }));
+  tx.add(calls.applyCap({ partner }));
+  tx.add(calls.cancelShare({ partner, adminWitness }));
+  tx.add(calls.cancelCap({ partner, adminWitness }));
 
+  // `pay` composes into product payouts and `delay_ms` is a read.
   assert.deepEqual(
     assertBuildersMatchAbi(tx, abi, PARTNERS).sort(),
     abi.blast_partners?.functions
-      .filter((candidate) => candidate.sdk === "builder")
+      .filter(
+        (candidate) =>
+          candidate.name !== "pay" && candidate.name !== "delay_ms",
+      )
       .map((candidate) => `blast_partners::${candidate.name}`)
       .sort(),
   );
@@ -111,8 +128,9 @@ test("builds every blast_partners call against the frozen ABI", () => {
     "shared-mut:0xb1",
     "object:0xca",
     "pure",
-    "clock",
   ]);
+  assert.deepEqual(moveCallArguments(tx, 7), ["shared-mut:0xb1", "clock"]);
+  assert.deepEqual(moveCallArguments(tx, 9), ["shared-mut:0xb1", "result:0"]);
   assert.throws(
     () =>
       calls.register({
@@ -163,41 +181,52 @@ test("decodes a partner and previews its payment like blast_partners::pay", () =
     PARTNERS,
   );
   assert.equal(state.recipient, id("0xfee"));
-  assert.equal(state.capId.after, id("0xca"));
+  assert.equal(state.capId.value, id("0xca"));
 
-  // `a_partner_is_paid_its_share_from_registration_and_a_new_one_only_once_in_force`.
-  const start = 1_000n;
+  // A proposal pays nothing until it is applied: `pay` reads the applied share.
   const scheduled = {
     shareBps: {
-      before: 5_000n,
-      after: 8_000n,
-      atMs: start + PARTNER_DELAY_MS,
-      delayMs: PARTNER_DELAY_MS,
+      ...state.shareBps,
+      pending: {
+        value: 8_000n,
+        delay_ms: PARTNER_DELAY_MS,
+        ready_at_ms: PARTNER_DELAY_MS,
+      },
     },
   };
-  assert.equal(partnerPayment(state, 1_000n, start), 500n);
-  assert.equal(
-    partnerPayment(scheduled, 500n, start + PARTNER_DELAY_MS - 1n),
-    250n,
-  );
-  assert.equal(partnerPayment(scheduled, 250n, start + PARTNER_DELAY_MS), 200n);
+  assert.equal(partnerPayment(state, 1_000n), 500n);
+  assert.equal(partnerPayment(scheduled, 500n), 250n);
   // `payment_matches_the_rounded_down_reference`.
+  const fixed = (share: bigint) => ({
+    shareBps: { ...state.shareBps, value: share },
+  });
   for (const share of [0n, 1n, 3_333n, 5_000n, 7_999n, 8_000n]) {
     for (let amount = 0n; amount <= 200n; amount++) {
-      const fixed = {
-        shareBps: { before: share, after: share, atMs: 0n, delayMs: 1n },
-      };
       assert.equal(
-        partnerPayment(fixed, amount, 0n),
+        partnerPayment(fixed(share), amount),
         (amount * share) / 10_000n,
       );
     }
   }
   const max = (1n << 64n) - 1n;
-  const top = {
-    shareBps: { before: 8_000n, after: 8_000n, atMs: 0n, delayMs: 1n },
-  };
-  assert.equal(partnerPayment(top, max, 0n), (max * 8_000n) / 10_000n);
+  assert.equal(partnerPayment(fixed(8_000n), max), (max * 8_000n) / 10_000n);
+  assert.throws(
+    () =>
+      decodePartnerObject(
+        {
+          ...state,
+          type: `${PARTNERS}::blast_partners::Partner`,
+          content: partnerBcs
+            .serialize({
+              id: { id: { bytes: id("0xb1") } },
+              ...terms(5_000n, "0xca", id("0xb2")),
+            })
+            .toBytes(),
+        },
+        PARTNERS,
+      ),
+    /mismatched UID/,
+  );
   assert.throws(
     () =>
       decodePartnerObject(
@@ -238,35 +267,68 @@ test("Partner and its events follow the frozen Move field order", () => {
   for (const kind of Object.keys(partnerEventBcs) as PartnerEventKind[]) {
     assert.deepEqual(
       Object.keys(SAMPLES[kind]),
-      fields(kind, frozen.events),
+      fields(kind, frozen.structs),
       kind,
     );
   }
 });
 
 test("replays partner terms and payouts from events", () => {
+  const ready = 1_000n + PARTNER_DELAY_MS;
   const events = [
-    event("PartnerUpdated", {
-      partner_id: id("0xb1"),
-      ...terms(2_500n, "0xca"),
+    delayed("Share", "DelayedCreated", {
+      value: 2_500n,
+      delay_ms: PARTNER_DELAY_MS,
     }),
+    delayed("Cap", "DelayedCreated", {
+      value: id("0xca"),
+      delay_ms: PARTNER_DELAY_MS,
+    }),
+    event("PartnerUpdated", { partner_id: id("0xb1"), recipient: id("0xfee") }),
     event("PartnerPaid", { partner_id: id("0xb1"), amount: 7n }, SUI),
     event("PartnerPaid", { partner_id: id("0xb1"), amount: 3n }, SUI),
-    event("PartnerUpdated", {
-      partner_id: id("0xb1"),
-      ...terms(1_000n, "0xcb"),
+    delayed("Share", "DelayedScheduled", {
+      value: 1_000n,
+      delay_ms: PARTNER_DELAY_MS,
+      ready_at_ms: ready,
+    }),
+    delayed("Cap", "DelayedScheduled", {
+      value: id("0xcb"),
+      delay_ms: PARTNER_DELAY_MS,
+      ready_at_ms: ready,
     }),
     event("PartnerPaid", { partner_id: id("0xb9"), amount: 1n }, SUI),
   ];
-  const state = [...events, ...events].reduce(
+  const pending = [...events, ...events].reduce(
     reducePartnerEvent,
     createPartnersEventProjection(),
   );
+  // Readiness alone changes nothing.
+  assert.equal(pending.partners[id("0xb1")]?.shareBps, 2_500n);
+  assert.deepEqual(pending.partners[id("0xb1")]?.pendingShare, {
+    value: 1_000n,
+    readyAtMs: ready,
+  });
+  const state = [
+    delayed("Share", "DelayedApplied", {
+      previous_value: 2_500n,
+      value: 1_000n,
+      delay_ms: PARTNER_DELAY_MS,
+    }),
+    delayed("Cap", "DelayedCancelled", {
+      value: id("0xcb"),
+      delay_ms: PARTNER_DELAY_MS,
+      ready_at_ms: ready,
+    }),
+  ].reduce(reducePartnerEvent, pending);
   assert.deepEqual(Object.keys(state.partners), [id("0xb1")]);
   const replayed = state.partners[id("0xb1")];
   assert.ok(replayed);
-  assert.equal(replayed.shareBps.after, 1_000n);
-  assert.equal(replayed.capId.after, id("0xcb"));
+  assert.equal(replayed.recipient, id("0xfee"));
+  assert.equal(replayed.shareBps, 1_000n);
+  assert.equal(replayed.pendingShare, null);
+  assert.equal(replayed.capId, id("0xca"));
+  assert.equal(replayed.pendingCap, null);
   assert.deepEqual(replayed.paid, { [SUI]: 10n });
   assert.equal(state.eventCounts.PartnerPaid, 3);
   assert.throws(
@@ -280,7 +342,7 @@ test("replays partner terms and payouts from events", () => {
 });
 
 const SAMPLES: { [Kind in PartnerEventKind]: PartnerEventPayloads[Kind] } = {
-  PartnerUpdated: { partner_id: id("0xb1"), ...terms(1n, "0xca") },
+  PartnerUpdated: { partner_id: id("0xb1"), recipient: id("0xfee") },
   PartnerPaid: { partner_id: id("0xb1"), amount: 1n },
 };
 
@@ -316,4 +378,33 @@ function event<Kind extends PartnerEventKind>(
   assert.equal(decoded.coinType, coinType);
   assert.deepEqual(decoded.payload, payload);
   return decoded;
+}
+
+function delayed(
+  name: keyof typeof partnerDelayedKeys,
+  kind:
+    | "DelayedCreated"
+    | "DelayedScheduled"
+    | "DelayedCancelled"
+    | "DelayedApplied",
+  payload: Record<string, unknown>,
+) {
+  eventIndex += 1;
+  const spec = partnerDelayedKeys[name];
+  return decodePartnerDelayedEvent(
+    {
+      packageId: ADMIN,
+      module: "delayed",
+      sender: id("0x5e"),
+      eventType: `${ADMIN}::${delayedEventModule(kind)}::${kind}<${PARTNERS}::${spec.key}, ${spec.valueType}>`,
+      bcs: delayedEventBcs(kind, spec)
+        .serialize({ owner: id("0xb1"), key: null, ...payload } as never)
+        .toBytes(),
+      json: null,
+      checkpoint: "9",
+      transactionDigest: `tx-${eventIndex}`,
+      eventIndex,
+    },
+    { adminPackageId: ADMIN, partnersPackageId: PARTNERS },
+  );
 }

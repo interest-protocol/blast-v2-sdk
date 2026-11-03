@@ -78,7 +78,11 @@ export class PartnersCalls {
     };
   }
 
-  /** `schedule_share` (`PartnerAdmin`): the share takes effect after the partner delay. */
+  /**
+   * `schedule_share` (`PartnerAdmin`): proposes the share, which `applyShare`
+   * applies once `PARTNER_DELAY_MS` has passed. A new proposal replaces a
+   * pending one and restarts the notice.
+   */
   scheduleShare(options: {
     partner: SharedObjectReference<true>;
     adminWitness: TransactionObjectInput;
@@ -98,7 +102,10 @@ export class PartnersCalls {
     };
   }
 
-  /** `schedule_cap` (`PartnerAdmin`): moves the partner to the cap `capId` after the delay. */
+  /**
+   * `schedule_cap` (`PartnerAdmin`): proposes moving the partner to the cap
+   * `capId`, which `applyCap` applies once `PARTNER_DELAY_MS` has passed.
+   */
   scheduleCap(options: {
     partner: SharedObjectReference<true>;
     adminWitness: TransactionObjectInput;
@@ -118,7 +125,59 @@ export class PartnersCalls {
     };
   }
 
-  /** `set_recipient`: the partner's live cap sets where it is paid, at once. */
+  /** `apply_share`: anyone applies the proposed share once its notice has passed. */
+  applyShare(options: { partner: SharedObjectReference<true> }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: this.#target("apply_share"),
+        arguments: [partner(tx, options.partner), tx.object.clock()],
+      });
+    };
+  }
+
+  /** `apply_cap`: anyone applies the proposed managing cap once its notice has passed. */
+  applyCap(options: { partner: SharedObjectReference<true> }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: this.#target("apply_cap"),
+        arguments: [partner(tx, options.partner), tx.object.clock()],
+      });
+    };
+  }
+
+  /** `cancel_share` (`PartnerAdmin`): discards the proposed share, even a ready one. */
+  cancelShare(options: {
+    partner: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: this.#target("cancel_share"),
+        arguments: [
+          partner(tx, options.partner),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+
+  /** `cancel_cap` (`PartnerAdmin`): discards the proposed managing cap, even a ready one. */
+  cancelCap(options: {
+    partner: SharedObjectReference<true>;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: this.#target("cancel_cap"),
+        arguments: [
+          partner(tx, options.partner),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
+
+  /** `set_recipient`: the partner's applied cap sets where it is paid, at once. */
   setRecipient(options: {
     partner: SharedObjectReference<true>;
     partnerCap: TransactionObjectInput;
@@ -132,7 +191,6 @@ export class PartnersCalls {
           partner(tx, options.partner),
           tx.object(options.partnerCap),
           tx.pure.address(recipient),
-          tx.object.clock(),
         ],
       });
     };
@@ -195,6 +253,36 @@ export class PartnersTransactions {
   }): Transaction {
     return this.#asPartnerAdmin(options.adminCapId, (adminWitness) =>
       this.call.scheduleCap({ ...options, adminWitness }),
+    );
+  }
+
+  applyShare(options: { partner: SharedObjectReference<true> }): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyShare(options));
+    return tx;
+  }
+
+  applyCap(options: { partner: SharedObjectReference<true> }): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyCap(options));
+    return tx;
+  }
+
+  cancelShare(options: {
+    adminCapId: string;
+    partner: SharedObjectReference<true>;
+  }): Transaction {
+    return this.#asPartnerAdmin(options.adminCapId, (adminWitness) =>
+      this.call.cancelShare({ ...options, adminWitness }),
+    );
+  }
+
+  cancelCap(options: {
+    adminCapId: string;
+    partner: SharedObjectReference<true>;
+  }): Transaction {
+    return this.#asPartnerAdmin(options.adminCapId, (adminWitness) =>
+      this.call.cancelCap({ ...options, adminWitness }),
     );
   }
 

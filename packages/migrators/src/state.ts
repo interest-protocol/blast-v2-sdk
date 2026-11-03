@@ -1,9 +1,11 @@
 import type {
   Delayed,
+  DelayedAction,
   EntryProposal,
   Notice,
 } from "@interest-protocol/blast-core/bcs";
 import {
+  delayedActionBcs,
   delayedBcs,
   delayedMapBcs,
   moveTypeNameBcs,
@@ -14,6 +16,8 @@ import {
   unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import { normalizePositiveU64 } from "@interest-protocol/blast-core/integers";
+import type { RewardRoundTerms } from "@interest-protocol/blast-core/rewards/state";
+import { rewardRoundTermsBcs } from "@interest-protocol/blast-core/rewards/state";
 import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
 import type { FeeSplit } from "@interest-protocol/blast-launchpad-sdk/allocation";
 import {
@@ -91,6 +95,7 @@ export const lpVaultBcs = bcs.struct("LpVault", {
   burn_quote: suiBalanceBcs,
   next_round: bcs.u64(),
   last_checkpoint: bcs.option(bcs.u64()),
+  round_publication: delayedActionBcs(unitKeyBcs, rewardRoundTermsBcs),
 });
 
 /** BCS layout of `blast_fun_migrators::lp_fee_policy::SharePair`. */
@@ -137,6 +142,11 @@ export type LpVaultState = SharedObjectReference<true> & {
   nextRound: bigint;
   /** Earliest checkpoint the next round may start at; null before the first round. */
   lastCheckpoint: bigint | null;
+  /**
+   * The vault's round notice and any scheduled round (`Action`) or notice
+   * change (`Delay`); anyone publishes a ready round.
+   */
+  roundPublication: DelayedAction<null, RewardRoundTerms>;
 };
 
 export type LpVaultObject = SharedObjectReference<true> & {
@@ -190,7 +200,8 @@ export function decodeLpVaultObject(
   const objectId = normalizeSuiObjectId(object.objectId);
   if (
     normalizeSuiObjectId(parsed.id.id.bytes) !== objectId ||
-    parsed.fee_split.owner !== objectId
+    parsed.fee_split.owner !== objectId ||
+    parsed.round_publication.owner !== objectId
   ) {
     throw new TypeError(`LP vault ${object.objectId} has a mismatched UID`);
   }
@@ -222,6 +233,7 @@ export function decodeLpVaultObject(
     nextRound: BigInt(parsed.next_round),
     lastCheckpoint:
       parsed.last_checkpoint === null ? null : BigInt(parsed.last_checkpoint),
+    roundPublication: parsed.round_publication,
   };
 }
 

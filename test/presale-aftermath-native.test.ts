@@ -79,6 +79,8 @@ const terms: NativeAftermathPresaleTerms = {
   holderRewardsBps: 4_000n,
 };
 const abi = readAbi("production-presale-v1.json", "presale");
+// The fresh stack: partner payouts read the applied share, without Clock.
+const freshAbi = readAbi("pr150-consumers.json", "presale");
 const sdk = new PresaleTransactions(deployment);
 const calls = new PresaleCalls(deployment);
 const reservationType = `${deployment.originalPackageId}::aftermath::PoolCreationReserved<${lpCoin.lpType},${types.memeType},${types.quoteType}>`;
@@ -290,7 +292,7 @@ test("native migration and collection append partner payouts and use receiving i
     },
   });
   assert.deepEqual(
-    assertBuildersMatchAbi(migration, abi, deployment.packageId),
+    assertBuildersMatchAbi(migration, freshAbi, deployment.packageId),
     ["aftermath::migrate", "blast_presale::pay_protocol_fees_with_partner"],
   );
   assert.deepEqual(moveCallArguments(migration, 0).slice(-3), [
@@ -311,7 +313,7 @@ test("native migration and collection append partner payouts and use receiving i
     partner,
   });
   assert.deepEqual(
-    assertBuildersMatchAbi(collection, abi, deployment.packageId),
+    assertBuildersMatchAbi(collection, freshAbi, deployment.packageId),
     [
       "aftermath::collect_fees",
       "presale_vault::pay_protocol_lp_fees_with_partner",

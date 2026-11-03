@@ -1,16 +1,34 @@
-import type { DecodedPartnerEvent, PartnerEventKind } from "./events.ts";
+import type {
+  DecodedPartnerDelayedEvent,
+  DecodedPartnerEvent,
+  PartnerEventKind,
+} from "./events.ts";
 import { partnerEventBcs, partnerEventId } from "./events.ts";
-import type { PartnerTerms } from "./state.ts";
 
-export type PartnerProjection = PartnerTerms & {
+/** A proposed share or cap: it applies only when someone applies it, at or after `readyAtMs`. */
+export type PartnerProposal<T> = { value: T; readyAtMs: bigint };
+
+export type PartnerProjection = {
   partnerId: string;
+  /** Null until the partner's `PartnerUpdated`. */
+  recipient: string | null;
+  /** The applied share in basis points; null until its `DelayedCreated`. */
+  shareBps: bigint | null;
+  /** The applied managing cap; null until its `DelayedCreated`. */
+  capId: string | null;
+  pendingShare: PartnerProposal<bigint> | null;
+  pendingCap: PartnerProposal<string> | null;
   /** Everything sent to the partner, by coin type. */
   paid: Readonly<Record<string, bigint>>;
 };
 
-/** Partners rebuilt from their events; terms match `PartnerState` once replayed. */
+/**
+ * Partners rebuilt from their events and their `blast_admin::delayed` events
+ * (`decodePartnerDelayedEvent`); terms match `PartnerState` once replayed.
+ */
 export type PartnersEventProjection = {
   appliedEventIds: Readonly<Record<string, true>>;
+  /** Counts `blast_partners` events only. */
   eventCounts: Readonly<Record<PartnerEventKind, number>>;
   partners: Readonly<Record<string, PartnerProjection>>;
 };
@@ -28,13 +46,21 @@ export function createPartnersEventProjection(): PartnersEventProjection {
 /** Applies one event once; replaying an applied event returns `state` unchanged. */
 export function reducePartnerEvent(
   state: PartnersEventProjection,
-  event: DecodedPartnerEvent,
+  event: DecodedPartnerEvent | DecodedPartnerDelayedEvent,
 ): PartnersEventProjection {
   const eventId = partnerEventId(event);
   if (state.appliedEventIds[eventId]) return state;
+  const applied = { ...state.appliedEventIds, [eventId]: true as const };
+  if (event.source === "delayed") {
+    const partnerId = event.payload.owner;
+    return withPartner(
+      { ...state, appliedEventIds: applied },
+      reduceTerms(state.partners[partnerId] ?? empty(partnerId), event),
+    );
+  }
   const next: PartnersEventProjection = {
     ...state,
-    appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
+    appliedEventIds: applied,
     eventCounts: {
       ...state.eventCounts,
       [event.kind]: state.eventCounts[event.kind] + 1,
@@ -42,17 +68,12 @@ export function reducePartnerEvent(
   };
   const partnerId = event.payload.partner_id;
   const current = state.partners[partnerId];
-  if (event.kind === "PartnerUpdated") {
-    const { recipient, share_bps, cap_id } = event.payload;
+  if (event.kind === "PartnerUpdated")
     return withPartner(next, {
-      partnerId,
-      recipient,
-      shareBps: share_bps,
-      capId: cap_id,
-      paid: current?.paid ?? {},
+      ...(current ?? empty(partnerId)),
+      recipient: event.payload.recipient,
     });
-  }
-  // A partner is registered, with an update, before it can be paid.
+  // A partner is registered before it can be paid.
   if (!current) return next;
   const coinType = event.coinType;
   return withPartner(next, {
@@ -62,6 +83,46 @@ export function reducePartnerEvent(
       [coinType]: (current.paid[coinType] ?? 0n) + event.payload.amount,
     },
   });
+}
+
+/** Applied and proposed terms; readiness alone changes nothing. */
+function reduceTerms(
+  partner: PartnerProjection,
+  event: DecodedPartnerDelayedEvent,
+): PartnerProjection {
+  const [applied, pending] =
+    event.name === "Share"
+      ? (["shareBps", "pendingShare"] as const)
+      : (["capId", "pendingCap"] as const);
+  switch (event.kind) {
+    case "DelayedCreated":
+    case "DelayedApplied":
+      return { ...partner, [applied]: event.payload.value, [pending]: null };
+    case "DelayedScheduled":
+      return {
+        ...partner,
+        [pending]: {
+          value: event.payload.value,
+          readyAtMs: event.payload.ready_at_ms,
+        },
+      };
+    case "DelayedCancelled":
+      return { ...partner, [pending]: null };
+    default:
+      return partner;
+  }
+}
+
+function empty(partnerId: string): PartnerProjection {
+  return {
+    partnerId,
+    recipient: null,
+    shareBps: null,
+    capId: null,
+    pendingShare: null,
+    pendingCap: null,
+    paid: {},
+  };
 }
 
 function withPartner(
