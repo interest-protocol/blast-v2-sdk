@@ -1590,7 +1590,9 @@ export type LaunchpadSettings = {
 
 /**
  * The notice `armNotices` gives each named value, in milliseconds. A
- * setting restates its applied value beside its new notice.
+ * setting restates its applied value beside its new notice. Upgrade custody
+ * is not here: `wrap` starts it at a 48-hour notice, which
+ * `scheduleUpgradeDelay` changes only after that notice.
  */
 export type LaunchpadNotices = {
   tradeFees?: { quoteFeeBps: bigint; memeFeeBps: bigint; delayMs: bigint };
@@ -1600,7 +1602,6 @@ export type LaunchpadNotices = {
   treasury?: { treasury: string; delayMs: bigint };
   /** The notice for each later migration witness admission. */
   migrationDelayMs?: bigint;
-  upgrade?: { packageAdmin: SharedObjectReference<true>; delayMs: bigint };
 };
 
 export class LaunchpadTransactions {
@@ -2376,15 +2377,6 @@ export class LaunchpadTransactions {
         }),
       );
       tx.add(call.applyMigrationDelay());
-    }
-    if (notices.upgrade) {
-      tx.add(
-        call.scheduleUpgradeDelay({
-          ...notices.upgrade,
-          adminWitness: as("UpgradeAdmin"),
-        }),
-      );
-      tx.add(call.applyUpgradeDelay(notices.upgrade));
     }
     return tx;
   }

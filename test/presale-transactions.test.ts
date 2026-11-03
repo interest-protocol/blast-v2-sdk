@@ -963,13 +963,11 @@ test("configures a fresh deployment at zero notice, then arms each notice", () =
   ]);
   const schedule = moveCall(configured, "fee_policy::schedule_fees");
   assert.equal(pureU64(configured, schedule.arguments[7]), 0n);
-  const packageAdmin = shared("0xa0", true);
   const armed = tx.armNotices({
     adminCapId: "0xadc",
     fees: { fees, delayMs: 172_800_000n },
     destination: { destination: "0x7ea5", delayMs: 172_800_000n },
     migrationDelayMs: 172_800_000n,
-    upgrade: { packageAdmin, delayMs: 604_800_000n },
   });
   assert.deepEqual(flow(armed), [
     "blast_acl::sign_in",
@@ -981,16 +979,11 @@ test("configures a fresh deployment at zero notice, then arms each notice", () =
     "blast_acl::sign_in",
     "creation_policy::schedule_migration_delay",
     "creation_policy::apply_migration_delay",
-    "blast_acl::sign_in",
-    "package_admin::schedule_upgrade_delay",
-    "package_admin::apply_upgrade_delay",
   ]);
   assert.equal(
     pureU64(armed, moveCall(armed, "fee_policy::schedule_fees").arguments[7]),
     172_800_000n,
   );
-  const upgrade = moveCall(armed, "package_admin::schedule_upgrade_delay");
-  assert.equal(pureU64(armed, upgrade.arguments[3]), 604_800_000n);
   for (const ptb of [configured, armed])
     for (const command of ptb.getData().commands)
       if (

@@ -736,12 +736,10 @@ test("configures a fresh launchpad at zero notice, then arms each notice", () =>
     );
   assert.ok(zero.length >= 3);
 
-  const packageAdmin = shared("0xaa", "5", true);
   const armed = sdk.armNotices({
     adminCapId: "0xca",
     creationFee: { creationFee: 5n, delayMs: 172_800_000n },
     migrationDelayMs: 172_800_000n,
-    upgrade: { packageAdmin, delayMs: 172_800_000n },
   });
   assertBuildersMatchAbi(armed, abi, deployment.packageId);
   assert.deepEqual(calls(armed), [
@@ -751,8 +749,5 @@ test("configures a fresh launchpad at zero notice, then arms each notice", () =>
     "blast_acl::sign_in",
     "launch_config::schedule_migration_delay/1",
     "launch_config::apply_migration_delay",
-    "blast_acl::sign_in",
-    "package_admin::schedule_upgrade_delay/1",
-    "package_admin::apply_upgrade_delay",
   ]);
 });

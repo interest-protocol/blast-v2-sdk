@@ -6,6 +6,7 @@ import { setTimeout } from "node:timers/promises";
 import { decodeAftermathDaoPresaleEvent } from "@interest-protocol/blast-presale-sdk/aftermath-dao";
 import { PresaleClient } from "@interest-protocol/blast-presale-sdk/client";
 import {
+  decodePresaleDelayedEvent,
   decodePresaleEvent,
   decodePresalePolicyEvent,
 } from "@interest-protocol/blast-presale-sdk/events";
@@ -96,6 +97,19 @@ for (const receipt of fixture.transactions) {
           event.eventType.includes("<")
             ? decodePresaleEvent(event, fixture.deployment)
             : decodePresalePolicyEvent(event, fixture.deployment),
+        );
+      }
+      // Delayed fee, witness and vault values emit `blast_admin::delayed` events.
+      if (
+        event.eventType.startsWith(
+          `${fixture.deployment.admin.packageId}::delayed::`,
+        )
+      ) {
+        events.push(
+          decodePresaleDelayedEvent(event, {
+            originalPackageId: fixture.deployment.originalPackageId,
+            adminPackageId: fixture.deployment.admin.packageId,
+          }),
         );
       }
       if (

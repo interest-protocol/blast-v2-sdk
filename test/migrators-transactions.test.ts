@@ -823,11 +823,9 @@ test("configures LP-fee settings at a zero notice, then arms each notice", () =>
     [],
   );
 
-  const packageAdmin = shared("0x62", "16", true);
   const arm = sdk.armNotices({
     adminCapId: "0xad1",
     defaultShares: { memeBps: 100n, quoteBps: 200n, delayMs: 172_800_000n },
-    upgrade: { packageAdmin, delayMs: 604_800_000n },
   });
   assert.deepEqual(moveFunctions(arm), [
     "blast_acl::sign_in",
@@ -835,9 +833,6 @@ test("configures LP-fee settings at a zero notice, then arms each notice", () =>
     "bps::new",
     "lp_fee_policy::schedule_default_shares",
     "lp_fee_policy::apply_default_shares",
-    "blast_acl::sign_in",
-    "package_admin::schedule_upgrade_delay",
-    "package_admin::apply_upgrade_delay",
   ]);
   assert.equal(
     pureU64(
@@ -845,12 +840,5 @@ test("configures LP-fee settings at a zero notice, then arms each notice", () =>
       moveCall(arm, "lp_fee_policy::schedule_default_shares").arguments[5],
     ),
     172_800_000n,
-  );
-  assert.equal(
-    pureU64(
-      arm,
-      moveCall(arm, "package_admin::schedule_upgrade_delay").arguments[3],
-    ),
-    604_800_000n,
   );
 });

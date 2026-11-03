@@ -97,6 +97,9 @@ cancel or apply events: `delayed` emits `DelayedCreated`, `DelayedScheduled`,
   with a zero notice; `armNotices` then schedules and applies each notice
   (restating a setting's applied value). After that every change waits. The
   launchpad, presale and migrators transactions each have both builders.
+  Upgrade custody is not bootstrapped this way: `wrap` starts each
+  `PackageAdmin` at a 48-hour notice, so `scheduleUpgradeDelay` and every
+  upgrade action wait it from publication.
 
 ```ts
 const configure = launchpad.tx.configureNow({
@@ -107,7 +110,6 @@ const arm = launchpad.tx.armNotices({
   adminCapId,
   tradeFees: { quoteFeeBps: 100n, memeFeeBps: 0n, delayMs: 172_800_000n },
   migrationDelayMs: 172_800_000n,
-  upgrade: { packageAdmin, delayMs: 172_800_000n },
 });
 ``` The compiler-signature matrix checks
 roles, argument order and shared-object mutability. Fresh Move-generated golden

@@ -1113,12 +1113,13 @@ export type MigratorsSettings = {
 
 /**
  * The notice `armNotices` gives each named value, in milliseconds. A
- * setting restates its applied value beside its new notice.
+ * setting restates its applied value beside its new notice. Upgrade custody
+ * is not here: `wrap` starts it at a 48-hour notice, which
+ * `scheduleUpgradeDelay` changes only after that notice.
  */
 export type MigratorsNotices = {
   protocolDestination?: { destination: string; delayMs: bigint };
   defaultShares?: { memeBps: bigint; quoteBps: bigint; delayMs: bigint };
-  upgrade?: { packageAdmin: SharedObjectReference<true>; delayMs: bigint };
 };
 
 export class MigratorTransactions {
@@ -1573,15 +1574,6 @@ export class MigratorTransactions {
         }),
       );
       tx.add(call.applyLpFeeDefaultShares());
-    }
-    if (notices.upgrade) {
-      tx.add(
-        call.scheduleUpgradeDelay({
-          ...notices.upgrade,
-          adminWitness: as("UpgradeAdmin"),
-        }),
-      );
-      tx.add(call.applyUpgradeDelay(notices.upgrade));
     }
     return tx;
   }
