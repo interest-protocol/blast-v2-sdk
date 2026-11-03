@@ -2745,11 +2745,20 @@ export class PresaleTransactions {
     return tx;
   }
 
-  /** Signs in as `RewardsAdmin` and publishes a holder-reward round. */
+  /** Publishes with `RewardsAdmin` for historical presale deployments. */
   publishHolderRewardRound(
     options: AsAdmin<Parameters<PresaleCalls["publishHolderRewardRound"]>[0]>,
   ): Transaction {
     return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
+      this.call.publishHolderRewardRound({ ...options, adminWitness }),
+    );
+  }
+
+  /** Funds a holder-reward round with TreasuryAdmin on the fresh presale lineage. */
+  publishTreasuryHolderRewardRound(
+    options: AsAdmin<Parameters<PresaleCalls["publishHolderRewardRound"]>[0]>,
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
       this.call.publishHolderRewardRound({ ...options, adminWitness }),
     );
   }

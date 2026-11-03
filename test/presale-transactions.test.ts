@@ -1190,9 +1190,10 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
   assert.throws(() =>
     tx.publishHolderRewardRound({ ...options, expectedTreasury: "invalid" }),
   );
-  Reflect.deleteProperty(options, "expectedTreasury");
+  const missingTreasury = { ...options };
+  Reflect.deleteProperty(missingTreasury, "expectedTreasury");
   assert.throws(
-    () => tx.publishHolderRewardRound(options),
+    () => tx.publishHolderRewardRound(missingTreasury),
     "treasury has no implicit fallback",
   );
   const { allocations: proofs, ...header } = manifest;
@@ -1281,6 +1282,19 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     assert.equal(call.arguments.length, abiArity(module, fn), name);
     assert.equal(call.typeArguments.length, abiTypeArity(module, fn), name);
   }
+  const freshPublication = tx.publishTreasuryHolderRewardRound(options);
+  assert.deepEqual(
+    moveCall(freshPublication, "blast_acl::sign_in").typeArguments,
+    [normalizeStructTag("0x5e::blast_presale_domain::TreasuryAdmin")],
+  );
+  assert.deepEqual(
+    moveCall(freshPublication, "holder_rewards::publish_round"),
+    publishCall,
+  );
+  assert.deepEqual(
+    freshPublication.getData().inputs,
+    publication.getData().inputs,
+  );
   for (const ptb of [publication, settle]) {
     assert.deepEqual(moveCall(ptb, "blast_acl::sign_in").typeArguments, [
       normalizeStructTag("0x5e::blast_presale_domain::RewardsAdmin"),

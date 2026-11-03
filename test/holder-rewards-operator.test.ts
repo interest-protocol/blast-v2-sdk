@@ -438,7 +438,11 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
   );
 });
 
-async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
+async function presaleRoundJourney(
+  t: TestContext,
+  skippedDay: boolean,
+  fresh: boolean,
+) {
   const dir = await mkdtemp(join(tmpdir(), "blast-holder-rewards-presale-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const address = normalizeSuiAddress;
@@ -468,6 +472,10 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
       dir,
       ...args,
     ]);
+  const treasuryPublication = {
+    adminCapId: address("0x96"),
+    sender: address("0x97"),
+  };
   const config = {
     grpcUrl: "http://127.0.0.1:0",
     network: "mainnet",
@@ -485,6 +493,7 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
     vaultId,
     adminCapId: address("0x94"),
     sender: alice,
+    ...(fresh ? { presaleTreasuryPublication: treasuryPublication } : {}),
   };
   await writeOperatorJson(configPath, config);
   await writeOperatorJson(join(dir, "state.json"), {
@@ -679,6 +688,22 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
     publishTx.getData().commands.map((command) => command.MoveCall?.function),
     ["sign_in", "publish_round"],
   );
+  const signIn = publishTx.getData().commands[0]?.MoveCall;
+  const role = fresh ? "TreasuryAdmin" : "RewardsAdmin";
+  assert.deepEqual(signIn?.typeArguments, [
+    `${originalPackageId}::blast_presale_domain::${role}`,
+  ]);
+  assert.equal(
+    publishTx.getData().sender,
+    fresh ? treasuryPublication.sender : alice,
+  );
+  const capArgument = signIn?.arguments[1];
+  assert.ok(capArgument?.$kind === "Input");
+  const capInput = publishTx.getData().inputs[capArgument.Input];
+  assert.equal(
+    capInput?.UnresolvedObject?.objectId,
+    fresh ? treasuryPublication.adminCapId : config.adminCapId,
+  );
   assert.equal(call?.package, packageId);
   assert.equal(call?.module, "holder_rewards");
   const deadlineArgument = call?.arguments[14];
@@ -704,6 +729,7 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
     (await readJson(join(dir, "rounds", number.toString(), "relay-1.json")))
       .transaction,
   );
+  assert.equal(relayTx.getData().sender, alice);
   assert.deepEqual(
     relayTx
       .getData()
@@ -717,5 +743,8 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
 
 for (const skippedDay of [false, true]) {
   test(`CLI runs a presale round ${skippedDay ? "after a skipped day" : "from activation"} with its own claim window`, (t) =>
-    presaleRoundJourney(t, skippedDay));
+    presaleRoundJourney(t, skippedDay, false));
 }
+
+test("CLI funds a fresh presale round from the treasury multisig and advances it", (t) =>
+  presaleRoundJourney(t, false, true));

@@ -80,7 +80,7 @@ The contract enforces this admission check; SDK previews do not certify currency
 | Vault without a presale | `newCetusVault`, `newBluefinVault` | Anyone may lock their own Cetus or Bluefin `position` in a new `Vault` with their own LP-fee split and an optional accepted `partnerId` (contracts ADR 0109). Cetus burns the position through LP Burn and takes either coin order (`cetusMemeSide`); Bluefin's pool must be `Pool<Meme, Quote>`. The `CreationPolicy` must allow Quote and the venue's migrator. The vault's presale and `PresaleCap` IDs are zero (`isVaultWithoutPresale`), so it has no residuals; fees and holder rewards work as on any vault. |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
 | Own position | `newCetusVault`, `newBluefinVault` | Anyone, for their own position: locks it in a new `Vault` with zero presale IDs, the given fee split, and an optional accepted partner (contracts ADR 0109). |
-| Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Publication signs in as `RewardsAdmin` (`adminCapId`). |
+| Holder rewards | `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Use `publishTreasuryHolderRewardRound` for fresh deployments. Historical publication uses `RewardsAdmin`. |
 | Cap | `destroyCap` | After cancellation only. |
 | Blast's rates | `scheduleProtocolFees` | Signs in as `FeeAdmin`; call `applyProtocolFees` after the notice. Affects later presales. |
 | Blast's rates on one sale | `setPresaleProtocolFees` | Signs in as `FeeAdmin`. In the creation PTB before `share` (pass the `Presale` result and an `adminWitness` from `call.signIn`), or once shared until the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
@@ -349,10 +349,10 @@ must hold that role:
 | Role | Transactions |
 | --- | --- |
 | `FeeAdmin` | `scheduleProtocolFees`, `setPresaleProtocolFees`, `scheduleProtocolLpFees`, `addPartner`, `removePartner` |
-| `TreasuryAdmin` | `scheduleProtocolDestination` |
+| `TreasuryAdmin` | `scheduleProtocolDestination`, `publishTreasuryHolderRewardRound` on the fresh lineage |
 | `ListingAdmin` | `setQuoteAllowed` |
 | `AdapterAdmin` | `scheduleMigrationWitness` |
-| `RewardsAdmin` | `publishHolderRewardRound`, `settleHolderRewardGasReserve` |
+| `RewardsAdmin` | `settleHolderRewardGasReserve`, `publishHolderRewardRound` on historical lineages |
 | `UpgradeAdmin` | none: upgrade custody stays with the CLI publish tooling |
 
 `PresaleCalls.roleType(role)` names a role's Move type for
@@ -540,7 +540,7 @@ manifest with the leaf domain `PRESALE_REWARD_LEAF_DOMAIN`
 const manifest = buildRewardManifest({ ...round, leafDomain: PRESALE_REWARD_LEAF_DOMAIN });
 ```
 
-`publishHolderRewardRound` rejects a manifest from any other domain or vault.
+Both round publication builders reject a manifest from any other domain or vault.
 
 Presale publication permits `previous published end <= start < end`; a
 confirmed skipped day creates no funded object or published number. The
@@ -548,7 +548,7 @@ holding interval and claim deadline are independent. Mainnet daily publication
 prepares the full seven-day deadline from current publication preparation
 time, including when recovering an older holding period.
 
-`publishHolderRewardRound` takes a manifest or verified paged summary, a required
+Both publication builders take a manifest or verified paged summary, a required
 `gasReserveAmount` in Quote atoms, `expectedTreasury`, and `claimDeadlineMs`. The administrator
 chooses the reserve for each publication: zero disables reimbursement and Blast
 pays gas; a positive amount funds separate gas custody inside the canonical
