@@ -192,20 +192,20 @@ export function assertIdentifierSlots(
 }
 
 /**
- * Derives the module and one-time-witness names from a symbol, the same
- * transformation as Blast V1: the witness is the uppercased symbol and the
- * module its lowercase form, spaces becoming underscores.
+ * Defaults the module to the lowercased symbol, with spaces becoming underscores.
+ * Sui requires its one-time witness to be the uppercase module name, including
+ * when the caller overrides the module name.
  */
 export function deriveTemplateIdentifiers(
   symbol: string,
   requestedModuleName?: string,
 ): { moduleName: string; witnessName: string } {
   const normalizedSymbol = requireNonEmptyString("symbol", symbol);
-  const witnessName = normalizedSymbol.toUpperCase().replaceAll(" ", "_");
+  const symbolIdentifier = normalizedSymbol.toUpperCase().replaceAll(" ", "_");
   const moduleName =
     requestedModuleName ?? normalizedSymbol.toLowerCase().replaceAll(" ", "_");
 
-  if (!/^[A-Z][A-Z0-9_]*$/.test(witnessName)) {
+  if (!/^[A-Z][A-Z0-9_]*$/.test(symbolIdentifier)) {
     throw new RangeError(
       "symbol must produce an uppercase Move witness identifier",
     );
@@ -215,7 +215,7 @@ export function deriveTemplateIdentifiers(
       "moduleName must start with a lowercase letter and contain only lowercase letters, digits, or underscores",
     );
   }
-  return { moduleName, witnessName };
+  return { moduleName, witnessName: moduleName.toUpperCase() };
 }
 
 export function requireString(name: string, value: string): string {

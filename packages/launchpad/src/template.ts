@@ -78,6 +78,7 @@ export type MemeTemplateOptions = {
   burnable: boolean;
   sellBurnBps: bigint;
   creatorRecipient: MemeCreatorRecipientInput;
+  /** Defaults to the lowercased symbol; the witness is the uppercased module name. */
   moduleName?: string;
 };
 
@@ -212,7 +213,7 @@ export function memeAtomicSupply(decimals: number): bigint {
   );
 }
 
-/** Derives the type identifiers using the same transformation as Blast V1. */
+/** Derives the launch module name and its uppercase one-time-witness name. */
 export function deriveMemeTemplateIdentifiers(
   symbol: string,
   requestedModuleName?: string,

@@ -104,6 +104,26 @@ test("locks the embedded artifact to the nine source constants", async () => {
   ]);
 });
 
+test("custom launch module names determine the one-time witness", async () => {
+  const bytecode = await buildMemePackageBytecode(
+    {
+      ...options,
+      moduleName: "custom_launch",
+    },
+    blastPackageId,
+  );
+  const compiled = deserialize(bytecode) as { identifiers: string[] };
+  assert.deepEqual(
+    deriveMemeTemplateIdentifiers(options.symbol, "custom_launch"),
+    {
+      moduleName: "custom_launch",
+      witnessName: "CUSTOM_LAUNCH",
+    },
+  );
+  assert.ok(compiled.identifiers.includes("custom_launch"));
+  assert.ok(compiled.identifiers.includes("CUSTOM_LAUNCH"));
+});
+
 test("patches identifiers, constants, and the Blast dependency", async () => {
   const bytecode = await buildMemePackageBytecode(options, blastPackageId);
   const compiled = deserialize(bytecode) as {
