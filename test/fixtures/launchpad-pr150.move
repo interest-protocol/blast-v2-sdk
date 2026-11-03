@@ -1,5 +1,5 @@
 // Fixture generator for test/fixtures/launchpad-pr150.ts. It is not compiled by the SDK.
-// To regenerate: extract contracts commit 89c36d4925550f23a1d4120056a6f02667a3e986 with
+// To regenerate: extract contracts commit b841a811f1cb299543ce215efda586686f77383d with
 // `git archive`, copy this file to sui/launchpad/tests/ in that copy only, and run
 // `sui move test sdk_fixture_tests` from sui/launchpad. Never add it to the contracts repository.
 #[test_only]
@@ -14,6 +14,7 @@ const BOB: address = @0xB0B;
 const RECIPIENT: address = @0xFEED;
 const ROUTE: address = @0xF00D;
 const PARTNER_RECIPIENT: address = @0xBEEF;
+const CLAIM_SIGNER: vector<u8> = x"0909090909090909090909090909090909090909090909090909090909090909";
 
 public struct SDK_FIXTURE_TESTS has drop {}
 public struct TEST_QUOTE() has drop;
@@ -71,6 +72,11 @@ fun print_fixtures() {
     governance_clock.set_for_testing(next_governance_time);
     runtime.apply_protocol_fee_share(&pv, &governance_clock);
     print_delayed<DelayedApplied<ProtocolFeeShareKey, Bps>>(b"event ProtocolFeeShareApplied");
+    runtime.schedule_creator_claim_signer(&pv, &blast_acl::witness_for_testing<ClaimSignerAdmin>(), CLAIM_SIGNER, &governance_clock);
+    let next_governance_time = governance_clock.timestamp_ms() + 172_800_000;
+    governance_clock.set_for_testing(next_governance_time);
+    runtime.apply_creator_claim_signer(&pv, CLAIM_SIGNER, &governance_clock);
+    print_delayed<SetApplied<ClaimSignerKey, vector<u8>>>(b"event ClaimSignerApplied");
     label(b"object LaunchConfig");
     debug::print(&bcs::to_bytes(&config));
     label(b"object RuntimeConfig");
@@ -216,7 +222,6 @@ fun print_fixtures() {
         &pv,
         &runtime,
         &partner,
-        &clock,
         scenario.ctx(),
     );
     print_event<ProtocolFeesClaimed>(b"event ProtocolFeesClaimed");
@@ -262,7 +267,7 @@ use blast_admin::{blast_acl, delayed::DelayedApplied, delayed_set::SetApplied};
 use blast_fun::{
     allocation::{Self, ProtocolAllocation},
     blast_events::Event,
-    blast_fun_domain::{AdapterAdmin, FeeAdmin, ListingAdmin, TreasuryAdmin},
+    blast_fun_domain::{AdapterAdmin, ClaimSignerAdmin, FeeAdmin, ListingAdmin, TreasuryAdmin},
     bps::{Self, Bps},
     creator_authority,
     events::{
@@ -296,7 +301,7 @@ use blast_fun::{
     },
     launch_ticket,
     blast_fun as package_version,
-    runtime_config::{Self, ProtocolFeeShareKey},
+    runtime_config::{Self, ClaimSignerKey, ProtocolFeeShareKey},
 };
 use blast_partners::blast_partners;
 use std::{bcs, debug, type_name::TypeName, unit_test::destroy};

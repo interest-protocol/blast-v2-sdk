@@ -1,14 +1,14 @@
 # PR150 consumer ABI
 
-These bindings target a fresh contract stack at `89c36d4925550f23a1d4120056a6f02667a3e986`.
+These bindings target a fresh contract stack at `b841a811f1cb299543ce215efda586686f77383d`.
 The compiled public signatures and ordered fields are frozen separately in
 `abi/pr150-consumers.json`; run `npm run check:abi:pr150` with `BLAST_CONTRACTS_DIR`
 pointing to a contracts checkout containing that commit. Published mainnet ABI
 artifacts and deployment identities retain their historical meaning. Do not use
 these new object readers or builders with an older deployment.
 
-Bonding rounds now publish with an explicit `claimDeadlineMs`, `gasReserveAmount`
-(including zero) and `expectedTreasury`. Quote reserved for reimbursement is
+Bonding rounds are scheduled with an explicit `claimWindowMs`, `gasReserveAmount`
+(including zero) and `expectedTreasury`, then published (see below). Quote reserved for reimbursement is
 removed before committing holder allocations. Claims include Clock. A
 RewardsAdmin can settle the independent reserve once; anyone can close after the
 deadline and return unused holder funds and unused gas reserve. Both launch kinds
@@ -115,6 +115,49 @@ lifecycle under `K`: `Delayed*`, `Action*`, `Set*` plus `MemberRemoved`, and
 - Presale: once a sale is shared, `setPresaleProtocolFees` may only lower each
   rate (`EProtocolFeesIncreased`).
 
+### Claim signers, reward rounds and partners (contracts #161–#164)
+
+- Claim signers: `RuntimeConfig.creator_claim_signers` is a
+  `DelayedSet<ClaimSignerKey, vector<u8>>`; any admitted key verifies an
+  account claim, and an empty set rejects them. `RuntimeConfigState` exposes
+  `creatorClaimSigners` (lowercase hex), `pendingClaimSigners`,
+  `claimSignerDelayMs` and `pendingClaimSignerDelay`. `setCreatorClaimSigner`
+  is gone: `scheduleCreatorClaimSigner` (`ClaimSignerAdmin`, at most four live
+  plus pending keys, abort 43 `ETooManyClaimSigners`), `applyCreatorClaimSigner`
+  (anyone) and `cancelCreatorClaimSigner` (`CancelAdmin`) admit a key;
+  `revokeCreatorClaimSigner` takes the key and removes it at once, live or
+  pending. `schedule/apply/cancelCreatorClaimSignerDelay` change the signer
+  notice, which starts at zero. Keys accept bytes or hex. The lifecycle is the
+  `ClaimSigners` delayed key (`Set*`, `MemberRemoved`); `CreatorClaimSignerSet`
+  is gone and the launchpad projection keeps `creatorClaimSigners`.
+- Reward rounds: `LpVault` and the presale `Vault` end with
+  `round_publication: DelayedAction<RoundPublicationKey, RoundTerms>`
+  (`roundPublication`, terms decoded by `rewardRoundTermsBcs`).
+  `scheduleHolderRewardRound` (`RewardsAdmin`) takes `claimWindowMs`, a
+  duration that publication starts; `publishHolderRewardRound` is
+  permissionless and takes no terms; `scheduleAndPublishHolderRewardRound`
+  does both while the vault's round notice is zero (its default);
+  `cancelHolderRewardRound` (`CancelAdmin`) and
+  `schedule/apply/cancelHolderRewardRoundDelay` complete the slot. The
+  `RoundPublication` delayed key decodes `Action*` events; `ActionScheduled`
+  carries the full terms and `RoundPublished` the computed deadline. The
+  presale `holder_rewards` and `presale_vault` abort maps follow the
+  renumbered errors.
+- Partners: `Partner.share_bps` and `cap_id` are `Delayed<ShareKey, u64>` and
+  `Delayed<CapKey, ID>` with a fixed seven-day notice. Payouts read the applied
+  share and take no Clock (`claimProtocolFees` with a partner,
+  `claimProtocolLpFeesWithPartner`, `payProtocolFeesWithPartner`,
+  `payProtocolLpFeesWithPartner`, `partnerPayment`); `setRecipient` takes no
+  Clock. `applyShare`/`applyCap` (anyone) and `cancelShare`/`cancelCap`
+  (`PartnerAdmin`) are new. `PartnerUpdated` carries only the recipient;
+  `decodePartnerDelayedEvent` decodes the `Share` and `Cap` lifecycle and
+  `reducePartnerEvent` projects applied and pending terms. `abi/pr150-consumers.json`
+  now freezes the partners package too.
+- Bootstrap: launchpad `configureNow` admits `creatorClaimSigners`;
+  `armNotices` raises `claimSignerDelayMs`, and the migrators and presale
+  `armNotices` raise each named vault's round notice (`roundNotices`). Round
+  notices stay zero unless the operator names a vault.
+
 ```ts
 const configure = launchpad.tx.configureNow({
   adminCapId, tradeFees: { quoteFeeBps: 100n, memeFeeBps: 0n },
@@ -124,9 +167,11 @@ const arm = launchpad.tx.armNotices({
   adminCapId,
   tradeFees: { quoteFeeBps: 100n, memeFeeBps: 0n, delayMs: 172_800_000n },
   migrationDelayMs: 172_800_000n,
+  claimSignerDelayMs: 172_800_000n,
 });
 const armLpFees = migrators.tx.armNotices({
   adminCapId, coinSharesDelayMs: 172_800_000n,
+  roundNotices: [{ memeType, quoteType, vault, delayMs: 86_400_000n }],
 });
 ``` The compiler-signature matrix checks
 roles, argument order and shared-object mutability. Fresh Move-generated golden

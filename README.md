@@ -205,8 +205,8 @@ It provides:
   `LaunchConfig` and `RuntimeConfig` setters, creator-cap reassignment,
   LP-fee policy, buybacks, and the blastSUI redeem fee, each signed in with its
   typed role in the same transaction; and
-- the `blast_partners` package: partner caps, registration, timelocked share
-  and cap schedules, recipients, payment previews, and replay; and
+- the `blast_partners` package: partner caps, registration, delayed share
+  and cap proposals, recipients, payment previews, and replay; and
 - standalone coins from the coin template (`@interest-protocol/blast-sdk/coin`):
   a plain Sui coin with no Blast dependency.
 
@@ -517,8 +517,9 @@ Quote, as `<Meme, Quote, CoinA, CoinB>`, to Cetus's single route per operation
 - Administrators change Blast's share per coin or by default and its
   destination (`scheduleLpFeeDefaultShares`, `scheduleLpFeeCoinShares`,
   `scheduleClearLpFeeCoinShares`, `scheduleLpFeeProtocolDestination`), claim migration
-  residuals (`claimProtocolFees`), and publish holder-reward rounds
-  (`publishHolderRewardRound`). Each composes
+  residuals (`claimProtocolFees`), and schedule holder-reward rounds
+  (`scheduleHolderRewardRound`), which anyone publishes once the vault's round
+  notice has passed (`publishHolderRewardRound`). Each composes
   `blast_admin::blast_acl::sign_in<Role>` in the same transaction with the one
   typed `blast_fun_domain` role its Move function takes (contracts ADR 0097):
   `FeeAdmin` for LP-fee shares, `TreasuryAdmin` for the destination and every
@@ -619,20 +620,20 @@ must hold that role:
 | launchpad `LaunchConfig` | `setQuoteAllowed`, `setMemeDecimalsAllowed` | `ListingAdmin` |
 | launchpad `LaunchConfig` | `scheduleMigrationWitness` | `AdapterAdmin` |
 | launchpad `RuntimeConfig` | `scheduleProtocolFeeShare` | `FeeAdmin` |
-| launchpad `RuntimeConfig` | `setCreatorClaimSigner` | `ClaimSignerAdmin` |
+| launchpad `RuntimeConfig` | `scheduleCreatorClaimSigner`, `revokeCreatorClaimSigner`, `scheduleCreatorClaimSignerDelay` | `ClaimSignerAdmin` |
 | launchpad `RuntimeConfig` | `scheduleTreasury` | `TreasuryAdmin` |
 | launchpad `Launch` | `scheduleCurveFeeCapReassignment`, `scheduleMetadataCapReassignment` | `CreatorAdmin` |
 | migrators | `scheduleLpFeeDefaultShares`, `scheduleLpFeeCoinShares`, `scheduleClearLpFeeCoinShares` | `FeeAdmin` |
 | migrators | `scheduleLpFeeProtocolDestination`, `claimProtocolFees` | `TreasuryAdmin` |
 | migrators | `buybackAndBurnCetus`, `buybackAndBurnBluefin` | `BuybackAdmin` |
-| migrators | `publishHolderRewardRound` | `RewardsAdmin` |
+| migrators | `scheduleHolderRewardRound`, `scheduleHolderRewardRoundDelay` | `RewardsAdmin` |
 | presale | `scheduleProtocolFees`, `setPresaleProtocolFees`, `scheduleProtocolLpFees`, `addPartner`, `removePartner` | `blast_presale_domain::FeeAdmin` |
 | presale | `scheduleProtocolDestination` | `blast_presale_domain::TreasuryAdmin` |
 | presale | `setQuoteAllowed` | `blast_presale_domain::ListingAdmin` |
 | presale | `scheduleMigrationWitness` | `blast_presale_domain::AdapterAdmin` |
-| presale | `publishHolderRewardRound`, `publishHolderRewardReserveRound`, `settleHolderRewardGasReserve`, `reconcileUnallocatedHolderMeme` | `blast_presale_domain::RewardsAdmin` |
+| presale | `scheduleHolderRewardRound`, `scheduleHolderRewardRoundDelay`, `settleHolderRewardGasReserve` | `blast_presale_domain::RewardsAdmin` |
 | blast SUI | `setRedeemFee` | `blast_sui_domain::FeeAdmin` |
-| partners | `register`, `scheduleShare`, `scheduleCap` | `blast_partners::PartnerAdmin` |
+| partners | `register`, `scheduleShare`, `scheduleCap`, `cancelShare`, `cancelCap` | `blast_partners::PartnerAdmin` |
 
 `decodeAclObject` reads Table metadata; `getAclAdminRoles` reads a cap, and `getAcl`
 enumerates the Table with bounded pagination. and `decodeAclEvent` with
@@ -648,12 +649,16 @@ Sui publish/upgrade commands. Read custody and generation using
 
 `@interest-protocol/blast-sdk/partners` covers `blast_partners`. Anyone mints a
 `PartnerCap` (`newCap`); the `PartnerAdmin` registers a partner under a cap
-with its share of Blast's fee and schedules later share and cap changes, which
-take effect after `PARTNER_DELAY_MS` (seven days); the live cap's holder sets
-the recipient at once (`setRecipient`). `decodePartnerObject`/`getPartner`
-read the timelocked terms, `partnerPayment` mirrors `blast_partners::pay`
-(rounded down; Blast keeps the remainder), and `reducePartnerEvent` replays
-`PartnerUpdated` terms and `PartnerPaid` totals per coin type. `LaunchConfig`
+with its share of Blast's fee and proposes later share and cap changes
+(`scheduleShare`, `scheduleCap`, or `cancelShare`, `cancelCap`). Anyone applies
+a proposal once the fixed `PARTNER_DELAY_MS` (seven days) has passed
+(`applyShare`, `applyCap`); until then the applied value stays in force. The
+applied cap's holder sets the recipient at once (`setRecipient`).
+`decodePartnerObject`/`getPartner` read the applied terms and any proposal,
+`partnerPayment` mirrors `blast_partners::pay` on the applied share (rounded
+down; Blast keeps the remainder), and `reducePartnerEvent` replays
+`PartnerUpdated` recipients, `PartnerPaid` totals per coin type, and the share
+and cap `blast_admin::delayed` events (`decodePartnerDelayedEvent`). `LaunchConfig`
 accepts a partner for new launches through `addPartner` and `removePartner`.
 
 ## Generated Meme package

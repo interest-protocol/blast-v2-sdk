@@ -862,13 +862,18 @@ function applyFeeSplit(
 
 /**
  * The projection key of a delayed value: its registry name, then the owning
- * vault for a vault setting, then the member for a witness admission.
+ * vault for a vault setting or round publication, then the member for a
+ * witness admission.
  */
 export function presaleDelayedPolicyKey(
   event: Pick<DecodedPresaleDelayedEvent, "name" | "payload">,
 ): string {
   let key: string = event.name;
-  if (event.name === "FeeSplit" || event.name === "ProtocolLpFees")
+  if (
+    event.name === "FeeSplit" ||
+    event.name === "ProtocolLpFees" ||
+    event.name === "RoundPublication"
+  )
     key += `:${event.payload.owner}`;
   if (
     event.name === "MigrationWitnesses" &&

@@ -59,7 +59,7 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
     orderedEventFields(frozenSpecs),
   );
   const kinds = Object.keys(frozenSpecs) as LaunchpadEventKind[];
-  assert.equal(kinds.length, 24);
+  assert.equal(kinds.length, 23);
 
   let projection = createLaunchpadEventProjection();
   for (const [eventIndex, kind] of orderedForReplay(kinds).entries()) {
@@ -451,7 +451,9 @@ test("replays launch configuration policy", () => {
 });
 
 test("replays creator claims and signer changes", () => {
-  const beforeRevocation = [
+  const first = "09".repeat(32);
+  const second = "0a".repeat(32);
+  const admitted = [
     decoded(
       "CreatorCapsClaimed",
       {
@@ -461,23 +463,38 @@ test("replays creator claims and signer changes", () => {
       },
       30,
     ),
-    decoded(
-      "CreatorClaimSignerSet",
-      {
-        pos0: new Uint8Array([9]),
-      },
+    delayed(
+      "ClaimSigners",
+      "SetApplied",
+      { change: { kind: "Admission", member: first }, delay_ms: 0n },
       31,
+    ),
+    delayed(
+      "ClaimSigners",
+      "SetScheduled",
+      {
+        change: { kind: "Admission", member: second },
+        delay_ms: 172_800_000n,
+        ready_at_ms: 172_800_000n,
+      },
+      32,
     ),
   ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
 
-  assert.deepEqual(
-    beforeRevocation.administration.creatorClaimSignerPublicKey,
-    new Uint8Array([9]),
-  );
-  const projection = reduceLaunchpadEvent(
-    beforeRevocation,
-    decoded("CreatorClaimSignerSet", { pos0: new Uint8Array() }, 32),
-  );
+  // A pending admission does not sign until it is applied.
+  assert.deepEqual(admitted.administration.creatorClaimSigners, {
+    [first]: true,
+  });
+  assert.ok(admitted.administration.pendingPolicies[`ClaimSigners:${second}`]);
+  const projection = [
+    delayed(
+      "ClaimSigners",
+      "SetApplied",
+      { change: { kind: "Admission", member: second }, delay_ms: 172_800_000n },
+      33,
+    ),
+    delayed("ClaimSigners", "MemberRemoved", { member: first }, 34),
+  ].reduce(reduceLaunchpadEvent, admitted);
   assert.deepEqual(
     projection.administration.creatorCapClaims[
       normalizedType("0xa::meme::MEME")
@@ -489,7 +506,13 @@ test("replays creator claims and signer changes", () => {
       blastMetadataCapId: normalizeSuiObjectId("0x21"),
     },
   );
-  assert.equal(projection.administration.creatorClaimSignerPublicKey, null);
+  assert.deepEqual(projection.administration.creatorClaimSigners, {
+    [second]: true,
+  });
+  assert.equal(
+    projection.administration.pendingPolicies[`ClaimSigners:${second}`],
+    undefined,
+  );
 });
 
 test("replays creator capability claims, reassignments, and metadata", () => {

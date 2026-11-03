@@ -322,6 +322,13 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
                 burn_quote: { value: 0n },
                 next_round: published ? 1n : 0n,
                 last_checkpoint: published ? 101n : null,
+                // A raised round notice: publish-tx only schedules; anyone publishes later.
+                round_publication: {
+                  owner: address(vaultId),
+                  key: null,
+                  delay_ms: 86_400_000n,
+                  pending: null,
+                },
               })
               .toBytes(),
           },
@@ -415,7 +422,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
   );
   assert.deepEqual(
     publishTx.getData().commands.map((command) => command.MoveCall?.function),
-    ["sign_in", "publish_round"],
+    ["sign_in", "schedule_round"],
   );
   assert.equal(publishTx.getData().commands[1]?.MoveCall?.package, packageId);
   published = prepared;
@@ -597,6 +604,12 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
                 holder_rewards_quote: { value: published ? 0n : 800n },
                 next_round: published ? number + 1n : number,
                 last_checkpoint: published ? 2n : previousEnd,
+                round_publication: {
+                  owner: address(vaultId),
+                  key: null,
+                  delay_ms: 0n,
+                  pending: null,
+                },
               })
               .toBytes(),
           },
@@ -675,27 +688,26 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
     gasReserveAmount: "0",
     expectedTreasury: address("0xc0"),
   });
-  const preparedAt = Date.now();
   await run("publish-tx");
   const publishTx = Transaction.from(
     (await readJson(join(dir, "publish-tx.json"))).transaction,
   );
   const call = publishTx.getData().commands[1]?.MoveCall;
+  // The vault's round notice is zero, so one PTB schedules and publishes.
   assert.deepEqual(
     publishTx.getData().commands.map((command) => command.MoveCall?.function),
-    ["sign_in", "publish_round"],
+    ["sign_in", "schedule_round", "publish_round"],
   );
   assert.equal(call?.package, packageId);
   assert.equal(call?.module, "holder_rewards");
-  const deadlineArgument = call?.arguments[14];
-  assert.ok(deadlineArgument?.$kind === "Input");
-  const deadlineInput = publishTx.getData().inputs[deadlineArgument.Input];
-  assert.ok(deadlineInput?.$kind === "Pure");
-  const deadline = BigInt(
-    bcs.u64().parse(fromBase64(deadlineInput.Pure.bytes)),
+  const windowArgument = call?.arguments[12];
+  assert.ok(windowArgument?.$kind === "Input");
+  const windowInput = publishTx.getData().inputs[windowArgument.Input];
+  assert.ok(windowInput?.$kind === "Pure");
+  assert.equal(
+    BigInt(bcs.u64().parse(fromBase64(windowInput.Pure.bytes))),
+    604_800_000n,
   );
-  assert.ok(deadline >= BigInt(preparedAt) + 604_800_000n);
-  assert.ok(deadline <= BigInt(Date.now()) + 604_800_000n);
 
   published = prepared;
   await run("advance", "--round", roundId);

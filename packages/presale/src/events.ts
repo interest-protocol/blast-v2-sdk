@@ -17,6 +17,7 @@ import {
   normalizeSuiEventPosition,
   suiEventId,
 } from "@interest-protocol/blast-core/events";
+import { rewardRoundTermsBcs } from "@interest-protocol/blast-core/rewards/state";
 import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
@@ -586,6 +587,14 @@ export const presaleDelayedKeys = {
     keyBcs: unitKeyBcs,
     valueBcs: protocolFeesBcs,
     valueType: "{package}::fee_policy::ProtocolFees",
+  },
+  /** One vault's holder-reward round slot; `ActionScheduled` carries the full terms. */
+  RoundPublication: {
+    key: "presale_vault::RoundPublicationKey",
+    family: "action",
+    keyBcs: unitKeyBcs,
+    valueBcs: rewardRoundTermsBcs,
+    valueType: "{package}::presale_vault::RoundTerms",
   },
   Upgrade: upgradeDelayedKey,
 } as const satisfies DelayedKeySpecs;

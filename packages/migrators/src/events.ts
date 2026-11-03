@@ -21,6 +21,7 @@ import {
   requireU64,
   requireU128,
 } from "@interest-protocol/blast-core/integers";
+import { rewardRoundTermsBcs } from "@interest-protocol/blast-core/rewards/state";
 import type { FeeSplit } from "@interest-protocol/blast-launchpad-sdk/allocation";
 import { feeSplitBcs } from "@interest-protocol/blast-launchpad-sdk/allocation";
 import type { BcsType } from "@mysten/sui/bcs";
@@ -329,6 +330,14 @@ export const migratorsDelayedKeys = {
     keyBcs: unitKeyBcs,
     valueBcs: feeSplitBcs,
     valueType: "{launchpad}::allocation::FeeSplit",
+  },
+  /** One vault's holder-reward round slot; `ActionScheduled` carries the full terms. */
+  RoundPublication: {
+    key: "vault::RoundPublicationKey",
+    family: "action",
+    keyBcs: unitKeyBcs,
+    valueBcs: rewardRoundTermsBcs,
+    valueType: "{package}::vault::RoundTerms",
   },
   Upgrade: upgradeDelayedKey,
 } as const satisfies DelayedKeySpecs;

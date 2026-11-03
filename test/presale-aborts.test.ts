@@ -64,12 +64,20 @@ test("names a presale abort by its module and code", () => {
   assert.equal(presaleAbortName("fee_policy", 1), "EInvalidDestination");
   assert.equal(presaleAbortName("package_admin", 1), "EInvalidDigest");
   assert.equal(presaleAbortName("creation_policy", 4), "EPartnerNotAccepted");
-  assert.equal(presaleAbortName("holder_rewards", 12), "EEmptyClaim");
-  assert.equal(presaleAbortName("holder_rewards", 13), "EInsufficientBudget");
-  assert.equal(presaleAbortName("holder_rewards", 14), "EReserveSettled");
-  assert.equal(presaleAbortName("holder_rewards", 15), "EOverReserve");
-  assert.equal(presaleAbortName("holder_rewards", 16), "ETreasuryChanged");
-  assert.equal(presaleAbortName("presale_vault", 4), null);
+  assert.equal(presaleAbortName("holder_rewards", 1), "EOverlappingInterval");
+  assert.equal(presaleAbortName("holder_rewards", 8), "EEmptyClaim");
+  assert.equal(presaleAbortName("holder_rewards", 9), "EInsufficientBudget");
+  assert.equal(presaleAbortName("holder_rewards", 10), "EReserveSettled");
+  assert.equal(presaleAbortName("holder_rewards", 11), "EOverReserve");
+  assert.equal(presaleAbortName("holder_rewards", 12), "ETreasuryChanged");
+  assert.equal(
+    presaleAbortName("holder_rewards", 13),
+    "EClaimDeadlineOverflow",
+  );
+  assert.equal(presaleAbortName("holder_rewards", 14), null);
+  assert.equal(presaleAbortName("presale_vault", 10), "EZeroClaimWindow");
+  assert.equal(presaleAbortName("presale_vault", 11), "EWrongRoundProposal");
+  assert.equal(presaleAbortName("presale_vault", 12), null);
   assert.equal(presaleAbortName("bps", 0), "EInvalidBps");
   assert.equal(presaleAbortName("bluefin", 1), "EInvalidTier");
   assert.equal(

@@ -488,13 +488,7 @@ test("builds a permissionless protocol fee claim that pays the treasury", () => 
       partnered,
       "launch::claim_protocol_fees_with_partner",
     ).arguments.map(argumentKind(partnered)),
-    [
-      "shared:0xc",
-      "shared:0x2",
-      "shared:0x4",
-      "shared:0x9a",
-      `shared:${SUI_CLOCK_OBJECT_ID}`,
-    ],
+    ["shared:0xc", "shared:0x2", "shared:0x4", "shared:0x9a"],
   );
   assert.equal(transferObjectCount(partnered), 0);
 });
@@ -699,6 +693,7 @@ test("configures a fresh launchpad at zero notice, then arms each notice", () =>
     creationFee: 5n,
     treasury: "0x7ea5",
     migrationWitnessTypes: [witness],
+    creatorClaimSigners: [`0x${"09".repeat(32)}`],
   });
   assertBuildersMatchAbi(configured, abi, deployment.packageId);
   assert.deepEqual(calls(configured), [
@@ -715,6 +710,9 @@ test("configures a fresh launchpad at zero notice, then arms each notice", () =>
     "blast_acl::sign_in",
     "launch_config::schedule_migration_witness",
     "launch_config::apply_migration_witness",
+    "blast_acl::sign_in",
+    "runtime_config::schedule_creator_claim_signer/1",
+    "runtime_config::apply_creator_claim_signer/1",
   ]);
   // Each role signs in once, and every schedule keeps a zero notice.
   assert.equal(
@@ -725,7 +723,7 @@ test("configures a fresh launchpad at zero notice, then arms each notice", () =>
           command.$kind === "MoveCall" &&
           normalizeSuiObjectId(command.MoveCall.package) === admin,
       ).length,
-    3,
+    4,
   );
   const zero = configured
     .getData()
@@ -740,6 +738,7 @@ test("configures a fresh launchpad at zero notice, then arms each notice", () =>
     adminCapId: "0xca",
     creationFee: { creationFee: 5n, delayMs: 172_800_000n },
     migrationDelayMs: 172_800_000n,
+    claimSignerDelayMs: 172_800_000n,
   });
   assertBuildersMatchAbi(armed, abi, deployment.packageId);
   assert.deepEqual(calls(armed), [
@@ -749,5 +748,8 @@ test("configures a fresh launchpad at zero notice, then arms each notice", () =>
     "blast_acl::sign_in",
     "launch_config::schedule_migration_delay/1",
     "launch_config::apply_migration_delay",
+    "blast_acl::sign_in",
+    "runtime_config::schedule_creator_claim_signer_delay/1",
+    "runtime_config::apply_creator_claim_signer_delay",
   ]);
 });

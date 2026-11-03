@@ -147,6 +147,12 @@ function fixture(
         holder_rewards_quote: { value: 0n },
         next_round: 0n,
         last_checkpoint: null,
+        round_publication: {
+          owner: VAULT,
+          key: null,
+          delay_ms: 0n,
+          pending: null,
+        },
       })
       .toBytes(),
   );

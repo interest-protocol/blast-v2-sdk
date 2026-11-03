@@ -1,15 +1,49 @@
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import {
+  fromHex,
   normalizeStructTag,
   normalizeSuiAddress,
   parseStructTag,
   toHex,
 } from "@mysten/sui/utils";
 import { itemAt } from "../arrays.ts";
-import { suiBalanceBcs, suiIdBcs, suiUidBcs } from "../bcs.ts";
+import {
+  addressBcs,
+  suiBalanceBcs,
+  suiIdBcs,
+  suiUidBcs,
+  u64Bcs,
+} from "../bcs.ts";
 import type { SharedObjectReference } from "../sui.ts";
 import { MAX_REWARD_LEAVES, rewardAddress } from "./allocations.ts";
+
+const hexBytesBcs = bcs.byteVector().transform({
+  input: (hex: string) => fromHex(hex),
+  output: (bytes) => toHex(bytes),
+});
+
+/**
+ * `RoundTerms` of both `blast_fun_migrators::vault` and
+ * `blast_presale::presale_vault`: a scheduled holder-reward round, waiting in
+ * its vault's `round_publication`. `claim_window_duration_ms` starts at
+ * publication. Digests decode to lowercase hex without a prefix.
+ */
+export const rewardRoundTermsBcs = bcs.struct("RoundTerms", {
+  number: u64Bcs,
+  start_checkpoint: u64Bcs,
+  end_checkpoint: u64Bcs,
+  root: hexBytesBcs,
+  manifest_digest: hexBytesBcs,
+  leaf_count: u64Bcs,
+  meme_amount: u64Bcs,
+  quote_amount: u64Bcs,
+  gas_reserve_amount: u64Bcs,
+  claim_window_duration_ms: u64Bcs,
+  expected_treasury: addressBcs,
+});
+
+export type RewardRoundTerms = ReturnType<typeof rewardRoundTermsBcs.parse>;
 
 /** BCS layout of `blast_fun_migrators::blast_holder_rewards::Round<Meme, Quote>`. */
 export const rewardRoundBcs = bcs.struct("Round", {

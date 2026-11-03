@@ -1,4 +1,14 @@
-import { suiObjectIdBcs, u64Bcs } from "@interest-protocol/blast-core/bcs";
+import type {
+  DecodedDelayedEvent,
+  DelayedKeySpecs,
+} from "@interest-protocol/blast-admin-sdk/events";
+import { decodeDelayedEvent } from "@interest-protocol/blast-admin-sdk/events";
+import {
+  addressBcs,
+  suiObjectIdBcs,
+  u64Bcs,
+  unitKeyBcs,
+} from "@interest-protocol/blast-core/bcs";
 import type { SuiEventPosition } from "@interest-protocol/blast-core/events";
 import {
   normalizeSuiEventPosition,
@@ -11,14 +21,16 @@ import {
   normalizeSuiAddress,
   parseStructTag,
 } from "@mysten/sui/utils";
-import { partnerTermsBcs } from "./state.ts";
 
 /** The `blast_partners` events, in Move field order. */
 export const partnerEventBcs = {
-  /** After every change, registration included: the partner's complete terms. */
+  /**
+   * At registration and on every recipient change: the partner's recipient.
+   * Share and cap terms are `blast_admin::delayed` events (`partnerDelayedKeys`).
+   */
   PartnerUpdated: bcs.struct("PartnerUpdated", {
     partner_id: suiObjectIdBcs,
-    ...partnerTermsBcs,
+    recipient: addressBcs,
   }),
   /** `amount` of the event's coin type sent to the partner's recipient. */
   PartnerPaid: bcs.struct("PartnerPaid", {
@@ -74,6 +86,45 @@ export function decodePartnerEvent(
   } as DecodedPartnerEvent;
 }
 
-export function partnerEventId(event: DecodedPartnerEvent): string {
+export function partnerEventId(event: { position: SuiEventPosition }): string {
   return suiEventId(event.position);
+}
+
+/**
+ * `blast_partners` keys of `blast_admin::delayed` settings, each owned by the
+ * partner: its share in basis points and its managing cap's ID. Registration
+ * emits `DelayedCreated` for both; a proposal changes nothing until
+ * `DelayedApplied`.
+ */
+export const partnerDelayedKeys = {
+  Share: {
+    key: "blast_partners::ShareKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: u64Bcs,
+    valueType: "u64",
+  },
+  Cap: {
+    key: "blast_partners::CapKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: suiObjectIdBcs,
+    valueType: "0x2::object::ID",
+  },
+} as const satisfies DelayedKeySpecs;
+
+export type DecodedPartnerDelayedEvent = DecodedDelayedEvent<
+  typeof partnerDelayedKeys
+>;
+
+/** Decodes a `<adminPackageId>::delayed` event keyed by `blast_partners`. */
+export function decodePartnerDelayedEvent(
+  event: SuiClientTypes.EventEntry,
+  packages: { adminPackageId: string; partnersPackageId: string },
+): DecodedPartnerDelayedEvent {
+  return decodeDelayedEvent(event, {
+    adminPackageId: packages.adminPackageId,
+    packageId: packages.partnersPackageId,
+    keys: partnerDelayedKeys,
+  });
 }

@@ -4,14 +4,20 @@ Holder rewards live in the migrators package (`blast_holder_rewards`, contracts
 ADR 0089) and, for presales, in the presale package (`holder_rewards`); the separate distributor package, its enrollment, `PublisherCap`,
 and pause switch are gone. Every LP-fee collection credits the creator's
 `FeeSplit` rewards share to the launch's `LpVault`. A Blast administrator
-publishes a Merkle allocation of those funds as a shared `Round`, and anyone can
-relay a proof; each leaf pays its committed beneficiary once.
+schedules a Merkle allocation of those funds on the vault; once the vault's
+round notice has passed (zero by default), anyone publishes it as a shared
+`Round`, and anyone can relay a proof; each leaf pays its committed beneficiary
+once.
 
 `@interest-protocol/blast-sdk/holder-rewards` supplies integer holder
 accounting, Merkle manifests, round reads, permissionless payout helpers, and
 `holderRewardsOperator`: the index, prepare, publish, advance, and relay
 workflow over a `HolderRewardsStore` that you supply. The transaction builders
-are `MigratorTransactions.publishHolderRewardRound` and `claimHolderRewards`.
+are `MigratorTransactions.scheduleHolderRewardRound`,
+`publishHolderRewardRound` (permissionless, no terms),
+`scheduleAndPublishHolderRewardRound` (one PTB while the notice is zero),
+`cancelHolderRewardRound`, the `*HolderRewardRoundDelay` notice builders, and
+`claimHolderRewards`.
 The Node operator is `npm run holder-rewards -- <command> ...` from this
 repository; it runs the same workflow over a file store (`operator/`). The
 builders require verified deployment IDs. Presale's registered October 9
@@ -38,12 +44,15 @@ const manifest = buildRewardManifest({
   endCheckpoint,
   allocations,
 });
-const publish = client.blastMigrators.tx.publishHolderRewardRound({
+const publish = client.blastMigrators.tx.scheduleAndPublishHolderRewardRound({
   memeType,
   quoteType,
   vault, // the shared LpVault, mutable
   adminCapId,
   manifest,
+  claimWindowMs: 604_800_000n, // claims stay open seven days from publication
+  gasReserveAmount: 0n,
+  expectedTreasury,
 });
 const relay = client.blastMigrators.tx.claimHolderRewards({
   memeType,
@@ -78,7 +87,7 @@ Snapshot identity, hashes, durable progress, locks and readiness evidence belong
 to the caller's persistence layer. Keep proofs publicly available through a
 paged endpoint; a summary alone cannot recover them.
 
-`PresaleTransactions.publishHolderRewardRound` accepts the completed
+`PresaleTransactions.scheduleHolderRewardRound` accepts the completed
 summary without loading all proofs. Its summary checks cover canonical fields,
 the presale leaf domain, bounded leaf count, positive funding and full digest
 lengths. They cannot prove allocations or eligibility from a summary alone:
@@ -125,8 +134,8 @@ For a presale vault, set `"product": "presale"`, pass the call-ready
 `blast_presale_domain::RewardsAdmin` role as `adminCapId`; `publish-tx` signs it
 in. Presale publication also requires `expectedTreasury` and an explicit
 `gasReserveAmount` (zero disables reimbursement). A changed governed treasury
-aborts publication before funds move. Presale rounds need `claimWindowMs`: `publish-tx` sets the
-round's claim deadline that far after it builds the transaction. Presale
+aborts publication before funds move. Presale rounds need `claimWindowMs`: claims stay open
+that long from publication. Presale
 manifests use `PRESALE_REWARD_LEAF_DOMAIN`, and `relay` reads the presale
 `holder_rewards::Round`; the commands are otherwise the same.
 

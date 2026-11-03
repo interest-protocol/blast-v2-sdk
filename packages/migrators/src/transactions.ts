@@ -41,6 +41,7 @@ import {
   normalizeLaunchTypes,
 } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import type {
+  TransactionArgument,
   TransactionObjectArgument,
   TransactionObjectInput,
   TransactionResult,
@@ -546,7 +547,7 @@ export class MigratorCalls {
 
   /**
    * `vault::claim_protocol_lp_fees_with_partner`: pays a partnered vault's held
-   * Blast LP fees, the launch's partner its cut in force of each asset, rounded
+   * Blast LP fees, the launch's partner its applied cut of each asset, rounded
    * down, and the `LpFeePolicy` destination the rest. Anyone may call it;
    * holding nothing pays nothing.
    */
@@ -566,7 +567,6 @@ export class MigratorCalls {
           this.#migratorsVersion(tx),
           this.#lpFeePolicy(tx),
           sharedObject(tx, "partner", options.partner, false),
-          tx.object.clock(),
         ],
       });
     };
@@ -593,16 +593,18 @@ export class MigratorCalls {
   }
 
   /**
-   * Publishes a holder-reward round from a validated manifest, reserving its
-   * budget from the vault's rewards balance, and shares the `Round`
-   * (`RewardsAdmin`).
+   * `blast_holder_rewards::schedule_round` (`RewardsAdmin`): schedules a
+   * round from a validated manifest, replacing any scheduled round or notice
+   * change. Nothing is reserved until `publishHolderRewardRound`, which
+   * anyone may call once the vault's round notice has passed; claims stay
+   * open for `claimWindowMs` from publication.
    */
-  publishHolderRewardRound(
+  scheduleHolderRewardRound(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
       adminWitness: TransactionObjectInput;
       manifest: RewardManifest;
-      claimDeadlineMs: bigint;
+      claimWindowMs: bigint;
       gasReserveAmount: bigint;
       expectedTreasury: string;
     },
@@ -617,19 +619,17 @@ export class MigratorCalls {
     ) {
       throw new TypeError("manifest belongs to another vault");
     }
-    const deadline = requireU64("claimDeadlineMs", options.claimDeadlineMs);
+    const window = requireU64("claimWindowMs", options.claimWindowMs);
     const reserve = requireU64("gasReserveAmount", options.gasReserveAmount);
     const treasury = normalizeSuiAddress(options.expectedTreasury);
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::blast_holder_rewards::publish_round`,
+        target: `${this.deployment.packageId}::blast_holder_rewards::schedule_round`,
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "vault", options.vault, true),
           this.#migratorsVersion(tx),
           tx.object(options.adminWitness),
-          this.#lpFeePolicy(tx),
-          tx.pure.address(treasury),
           tx.pure.u64(manifest.number),
           tx.pure.u64(manifest.startCheckpoint),
           tx.pure.u64(manifest.endCheckpoint),
@@ -639,8 +639,95 @@ export class MigratorCalls {
           tx.pure.u64(manifest.memeAmount),
           tx.pure.u64(manifest.quoteAmount),
           tx.pure.u64(reserve),
-          tx.pure.u64(deadline),
+          tx.pure.u64(window),
+          tx.pure.address(treasury),
           tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /**
+   * `blast_holder_rewards::publish_round`: anyone publishes the vault's ready
+   * round, reserving its budget and sharing the `Round`. It aborts unless the
+   * `LpFeePolicy` destination is still the round's expected treasury.
+   */
+  publishHolderRewardRound(
+    options: LaunchTypes & { vault: SharedObjectReference<true> },
+  ) {
+    return this.#roundCall("publish_round", options, (tx) => [
+      this.#lpFeePolicy(tx),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `blast_holder_rewards::cancel_round` (`CancelAdmin`): discards the scheduled round, even a ready one. */
+  cancelHolderRewardRound(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+    },
+  ) {
+    return this.#roundCall("cancel_round", options, (tx) => [
+      tx.object(options.adminWitness),
+    ]);
+  }
+
+  /**
+   * `blast_holder_rewards::schedule_round_delay` (`RewardsAdmin`): proposes
+   * the vault's next round notice after the applied one, replacing any
+   * scheduled round.
+   */
+  scheduleHolderRewardRoundDelay(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+      delayMs: bigint;
+    },
+  ) {
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#roundCall("schedule_round_delay", options, (tx) => [
+      tx.object(options.adminWitness),
+      tx.pure.u64(delayMs),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `blast_holder_rewards::apply_round_delay`: anyone applies a ready round notice. */
+  applyHolderRewardRoundDelay(
+    options: LaunchTypes & { vault: SharedObjectReference<true> },
+  ) {
+    return this.#roundCall("apply_round_delay", options, (tx) => [
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `blast_holder_rewards::cancel_round_delay` (`CancelAdmin`). */
+  cancelHolderRewardRoundDelay(
+    options: LaunchTypes & {
+      vault: SharedObjectReference<true>;
+      adminWitness: TransactionObjectInput;
+    },
+  ) {
+    return this.#roundCall("cancel_round_delay", options, (tx) => [
+      tx.object(options.adminWitness),
+    ]);
+  }
+
+  #roundCall(
+    functionName: string,
+    options: LaunchTypes & { vault: SharedObjectReference<true> },
+    extra: (tx: Transaction) => TransactionArgument[],
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::blast_holder_rewards::${functionName}`,
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "vault", options.vault, true),
+          this.#migratorsVersion(tx),
+          ...extra(tx),
         ],
       });
     };
@@ -1167,6 +1254,14 @@ export type MigratorsNotices = {
   defaultShares?: { memeBps: bigint; quoteBps: bigint; delayMs: bigint };
   /** The shared notice each later per-coin override change waits. */
   coinSharesDelayMs?: bigint;
+  /**
+   * Holder-reward round notices to raise, one per vault. Each vault starts at
+   * zero, so a round schedules and publishes in one PTB until raised.
+   */
+  roundNotices?: readonly (LaunchTypes & {
+    vault: SharedObjectReference<true>;
+    delayMs: bigint;
+  })[];
 };
 
 export class MigratorTransactions {
@@ -1370,14 +1465,79 @@ export class MigratorTransactions {
     );
   }
 
-  publishHolderRewardRound(
+  scheduleHolderRewardRound(
     options: Omit<
-      Parameters<MigratorCalls["publishHolderRewardRound"]>[0],
+      Parameters<MigratorCalls["scheduleHolderRewardRound"]>[0],
       "adminWitness"
     > & { adminCapId: string },
   ): Transaction {
     return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
-      this.call.publishHolderRewardRound({ ...options, adminWitness }),
+      this.call.scheduleHolderRewardRound({ ...options, adminWitness }),
+    );
+  }
+
+  /** Anyone publishes the vault's ready round. */
+  publishHolderRewardRound(
+    options: Parameters<MigratorCalls["publishHolderRewardRound"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.publishHolderRewardRound(options));
+    return tx;
+  }
+
+  /**
+   * Schedules a round and publishes it in one PTB. Only valid while the
+   * vault's round notice is zero, its default; otherwise the publish aborts.
+   */
+  scheduleAndPublishHolderRewardRound(
+    options: Omit<
+      Parameters<MigratorCalls["scheduleHolderRewardRound"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    const tx = this.scheduleHolderRewardRound(options);
+    tx.add(this.call.publishHolderRewardRound(options));
+    return tx;
+  }
+
+  cancelHolderRewardRound(
+    options: Omit<
+      Parameters<MigratorCalls["cancelHolderRewardRound"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelHolderRewardRound({ ...options, adminWitness }),
+    );
+  }
+
+  scheduleHolderRewardRoundDelay(
+    options: Omit<
+      Parameters<MigratorCalls["scheduleHolderRewardRoundDelay"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
+      this.call.scheduleHolderRewardRoundDelay({ ...options, adminWitness }),
+    );
+  }
+
+  applyHolderRewardRoundDelay(
+    options: Parameters<MigratorCalls["applyHolderRewardRoundDelay"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyHolderRewardRoundDelay(options));
+    return tx;
+  }
+
+  cancelHolderRewardRoundDelay(
+    options: Omit<
+      Parameters<MigratorCalls["cancelHolderRewardRoundDelay"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelHolderRewardRoundDelay({ ...options, adminWitness }),
     );
   }
 
@@ -1650,6 +1810,15 @@ export class MigratorTransactions {
         }),
       );
       tx.add(call.applyLpFeeCoinSharesDelay());
+    }
+    for (const notice of notices.roundNotices ?? []) {
+      tx.add(
+        call.scheduleHolderRewardRoundDelay({
+          ...notice,
+          adminWitness: as("RewardsAdmin"),
+        }),
+      );
+      tx.add(call.applyHolderRewardRoundDelay(notice));
     }
     return tx;
   }

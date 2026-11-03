@@ -12,6 +12,7 @@ import {
   moveTypeNameBcs,
   suiBalanceBcs,
   suiIdBcs,
+  suiObjectIdBcs,
   suiUidBcs,
   u64Bcs,
   unitKeyBcs,
@@ -23,15 +24,16 @@ import {
   requireU64,
 } from "@interest-protocol/blast-core/integers";
 import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
-import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
 import {
+  fromHex,
   normalizeStructTag,
   normalizeSuiAddress,
   normalizeSuiObjectId,
   parseStructTag,
+  toHex,
 } from "@mysten/sui/utils";
 import type { AllocationPlan, FeeSplit } from "./allocation.ts";
 import {
@@ -439,10 +441,19 @@ export const launchConfigBcs = bcs.struct("LaunchConfig", {
   creation_fee: delayedBcs(unitKeyBcs, u64Bcs),
 });
 
+/**
+ * One account-claim signer: a 32-byte Ed25519 public key, as Move's
+ * `vector<u8>`, decoded to lowercase hex without a prefix.
+ */
+export const claimSignerKeyBcs = bcs.byteVector().transform({
+  input: (hex: string) => fromHex(hex),
+  output: (bytes) => toHex(bytes),
+});
+
 /** BCS layout of `blast_fun::runtime_config::RuntimeConfig`. */
 export const runtimeConfigBcs = bcs.struct("RuntimeConfig", {
   id: suiUidBcs,
-  creator_claim_signer_public_key: bcs.vector(bcs.u8()),
+  creator_claim_signers: delayedSetBcs(unitKeyBcs, claimSignerKeyBcs),
   protocol_fee_share_bps: delayedBcs(unitKeyBcs, bpsBcs),
   treasury: delayedBcs(unitKeyBcs, addressBcs),
 });
@@ -455,23 +466,12 @@ export type Timelocked<T> = {
   delayMs: bigint;
 };
 
-const timelockedBcs = <Input, Output>(
-  name: string,
-  value: BcsType<Output, Input>,
-) =>
-  bcs.struct(name, {
-    before: value,
-    after: value,
-    at_ms: bcs.u64(),
-    delay_ms: bcs.u64(),
-  });
-
 /** BCS layout of `blast_partners::blast_partners::Partner`. */
 export const partnerBcs = bcs.struct("Partner", {
   id: suiUidBcs,
-  recipient: bcs.Address,
-  share_bps: timelockedBcs("Timelocked<u64>", bcs.u64()),
-  cap_id: timelockedBcs("Timelocked<ID>", suiIdBcs),
+  recipient: addressBcs,
+  share_bps: delayedBcs(unitKeyBcs, u64Bcs),
+  cap_id: delayedBcs(unitKeyBcs, suiObjectIdBcs),
 });
 
 /** Decoded shared `launch_config::LaunchConfig`, the admission policy for new launches. */
@@ -508,8 +508,17 @@ export type LaunchConfigState = {
 export type RuntimeConfigState = {
   objectId: string;
   initialSharedVersion: string;
-  /** Empty when account claims are revoked. */
-  creatorClaimSignerPublicKey: Uint8Array;
+  /**
+   * Hex Ed25519 keys that may sign account claims; any one verifies. Empty
+   * when account claims are disabled.
+   */
+  creatorClaimSigners: string[];
+  /** The applied notice for new signer admissions. */
+  claimSignerDelayMs: bigint;
+  /** A proposed next signer notice. */
+  pendingClaimSignerDelay: Notice | null;
+  /** Pending signer admissions by hex key; each keeps the notice it was scheduled under. */
+  pendingClaimSigners: Readonly<Record<string, Notice>>;
   /** Blast's share of each trade fee, rounded up to Blast. */
   protocolFeeShareBps: bigint;
   protocolFeeSharePolicy: Delayed<null, bigint>;
@@ -522,9 +531,10 @@ export type PartnerState = {
   objectId: string;
   initialSharedVersion: string;
   recipient: string;
-  /** The partner's share of Blast's fee, in basis points. */
-  shareBps: Timelocked<bigint>;
-  capId: Timelocked<string>;
+  /** The partner's share of Blast's fee, in basis points; payouts read the applied value. */
+  shareBps: Delayed<null, bigint>;
+  /** The only `PartnerCap` that may set `recipient`. */
+  capId: Delayed<null, string>;
 };
 
 type SharedObjectContent = {
@@ -569,8 +579,14 @@ export function decodeRuntimeConfigObject(
   const parsed = runtimeConfigBcs.parse(object.content);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
-    creatorClaimSignerPublicKey: Uint8Array.from(
-      parsed.creator_claim_signer_public_key,
+    creatorClaimSigners: [...parsed.creator_claim_signers.members],
+    claimSignerDelayMs: parsed.creator_claim_signers.delay_ms,
+    pendingClaimSignerDelay: parsed.creator_claim_signers.pending_delay,
+    pendingClaimSigners: Object.fromEntries(
+      parsed.creator_claim_signers.admissions.map(({ member, notice }) => [
+        member,
+        notice,
+      ]),
     ),
     protocolFeeShareBps: parsed.protocol_fee_share_bps.value,
     protocolFeeSharePolicy: parsed.protocol_fee_share_bps,
@@ -587,19 +603,9 @@ export function decodePartnerObject(
   const parsed = partnerBcs.parse(object.content);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
-    recipient: normalizeSuiAddress(parsed.recipient),
-    shareBps: {
-      before: BigInt(parsed.share_bps.before),
-      after: BigInt(parsed.share_bps.after),
-      atMs: BigInt(parsed.share_bps.at_ms),
-      delayMs: BigInt(parsed.share_bps.delay_ms),
-    },
-    capId: {
-      before: normalizeSuiObjectId(parsed.cap_id.before.bytes),
-      after: normalizeSuiObjectId(parsed.cap_id.after.bytes),
-      atMs: BigInt(parsed.cap_id.at_ms),
-      delayMs: BigInt(parsed.cap_id.delay_ms),
-    },
+    recipient: parsed.recipient,
+    shareBps: parsed.share_bps,
+    capId: parsed.cap_id,
   };
 }
 

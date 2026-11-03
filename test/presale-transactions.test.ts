@@ -530,24 +530,28 @@ test("builds every lifecycle call with the ABI's argument count", () => {
       ["shared-mut:0xba", "shared:0x64", "object:0xca"],
     ],
     [
-      tx.publishHolderRewardRound({
+      tx.scheduleHolderRewardRound({
         ...types,
         vault,
         adminCapId: "0xadc",
         manifest,
         gasReserveAmount: 0n,
         expectedTreasury: "0xc0",
-        claimDeadlineMs: 9_000n,
+        claimWindowMs: 9_000n,
       }),
-      "holder_rewards::publish_round",
+      "holder_rewards::schedule_round",
       [
         "shared-mut:0xba",
         "shared:0x64",
         ...ADMIN,
-        "shared:0x61",
         ...Array(11).fill("pure"),
         CLOCK,
       ],
+    ],
+    [
+      tx.publishHolderRewardRound({ ...types, vault }),
+      "holder_rewards::publish_round",
+      ["shared-mut:0xba", "shared:0x64", "shared:0x61", CLOCK],
     ],
     [
       tx.claimHolderRewards({
@@ -661,12 +665,12 @@ test("builds every lifecycle call with the ABI's argument count", () => {
     [
       tx.payProtocolFeesWithPartner({ ...types, presale, partner }),
       "blast_presale::pay_protocol_fees_with_partner",
-      ["shared-mut:0xab", "shared:0x64", "shared:0x61", "shared:0x9a27", CLOCK],
+      ["shared-mut:0xab", "shared:0x64", "shared:0x61", "shared:0x9a27"],
     ],
     [
       tx.payProtocolLpFeesWithPartner({ ...types, vault, partner }),
       "presale_vault::pay_protocol_lp_fees_with_partner",
-      ["shared-mut:0xba", "shared:0x64", "shared:0x61", "shared:0x9a27", CLOCK],
+      ["shared-mut:0xba", "shared:0x64", "shared:0x61", "shared:0x9a27"],
     ],
     [
       tx.newCetusVault({
@@ -968,6 +972,7 @@ test("configures a fresh deployment at zero notice, then arms each notice", () =
     fees: { fees, delayMs: 172_800_000n },
     destination: { destination: "0x7ea5", delayMs: 172_800_000n },
     migrationDelayMs: 172_800_000n,
+    roundNotices: [{ ...types, vault: shared("0xba", true), delayMs: 1n }],
   });
   assert.deepEqual(flow(armed), [
     "blast_acl::sign_in",
@@ -979,6 +984,9 @@ test("configures a fresh deployment at zero notice, then arms each notice", () =
     "blast_acl::sign_in",
     "creation_policy::schedule_migration_delay",
     "creation_policy::apply_migration_delay",
+    "blast_acl::sign_in",
+    "holder_rewards::schedule_round_delay",
+    "holder_rewards::apply_round_delay",
   ]);
   assert.equal(
     pureU64(armed, moveCall(armed, "fee_policy::schedule_fees").arguments[7]),
@@ -1175,14 +1183,14 @@ test("rejects a manifest from the migrators' leaf domain or another vault", () =
     manifest: ReturnType<typeof buildRewardManifest>,
     vault = "0xba",
   ) =>
-    call.publishHolderRewardRound({
+    call.scheduleHolderRewardRound({
       ...types,
       vault: shared(vault, true),
       adminWitness: "0xadc",
       manifest,
       gasReserveAmount: 0n,
       expectedTreasury: "0xc0",
-      claimDeadlineMs: 1n,
+      claimWindowMs: 1n,
     });
   assert.throws(
     () =>
@@ -1212,31 +1220,30 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     allocations: [{ beneficiary: "0xb0b", memeAmount: 0n, quoteAmount: 970n }],
     leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
   });
-  const publication = tx.publishHolderRewardRound({
+  const publication = tx.scheduleHolderRewardRound({
     ...types,
     vault,
     adminCapId: "0xadc",
     manifest,
     gasReserveAmount: 30n,
     expectedTreasury: "0xc0",
-    claimDeadlineMs: 605_800_000n,
+    claimWindowMs: 604_800_000n,
   });
-  const publishCall = moveCall(publication, "holder_rewards::publish_round");
+  const publishCall = moveCall(publication, "holder_rewards::schedule_round");
   assert.deepEqual(argumentKinds(publication, publishCall), [
     "shared-mut:0xba",
     "shared:0x64",
     ...ADMIN,
-    "shared:0x61",
     ...Array.from({ length: 11 }, () => "pure"),
     CLOCK,
   ]);
   assert.deepEqual(
-    [5, 6, 7, 11, 12, 13, 14].map((i) =>
+    [3, 4, 5, 9, 10, 11, 12].map((i) =>
       pureU64(publication, publishCall.arguments[i]),
     ),
-    [2n, 21n, 30n, 0n, 970n, 30n, 605_800_000n],
+    [2n, 21n, 30n, 0n, 970n, 30n, 604_800_000n],
   );
-  const treasuryArgument = publishCall.arguments[4];
+  const treasuryArgument = publishCall.arguments[13];
   assert.ok(treasuryArgument?.$kind === "Input");
   const treasuryInput = publication.getData().inputs[treasuryArgument.Input];
   assert.ok(treasuryInput?.$kind === "Pure");
@@ -1251,14 +1258,14 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     manifest,
     gasReserveAmount: 30n,
     expectedTreasury: "0xc0",
-    claimDeadlineMs: 605_800_000n,
+    claimWindowMs: 604_800_000n,
   };
   assert.throws(() =>
-    tx.publishHolderRewardRound({ ...options, expectedTreasury: "invalid" }),
+    tx.scheduleHolderRewardRound({ ...options, expectedTreasury: "invalid" }),
   );
   Reflect.deleteProperty(options, "expectedTreasury");
   assert.throws(
-    () => tx.publishHolderRewardRound(options),
+    () => tx.scheduleHolderRewardRound(options),
     "treasury has no implicit fallback",
   );
   const { allocations: proofs, ...header } = manifest;
@@ -1268,14 +1275,14 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
   };
   const publishSummary = (input: typeof summary) =>
-    tx.publishHolderRewardRound({
+    tx.scheduleHolderRewardRound({
       ...types,
       vault,
       adminCapId: "0xadc",
       manifest: input,
       gasReserveAmount: 30n,
       expectedTreasury: "0xc0",
-      claimDeadlineMs: 605_800_000n,
+      claimWindowMs: 604_800_000n,
     });
   assert.deepEqual(publishSummary(summary).getData(), publication.getData());
   for (const invalid of [
@@ -1290,14 +1297,14 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
     assert.throws(() => publishSummary(invalid));
   assert.throws(
     () =>
-      tx.publishHolderRewardRound({
+      tx.scheduleHolderRewardRound({
         ...types,
         vault,
         adminCapId: "0xadc",
         manifest: { ...summary, leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN },
         gasReserveAmount: 30n,
         expectedTreasury: "0xc0",
-        claimDeadlineMs: 1n,
+        claimWindowMs: 1n,
       }),
     /leaf domain mismatch/,
   );
@@ -1317,7 +1324,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
   const cases: [Transaction, string, string[]][] = [
     [
       publication,
-      "holder_rewards::publish_round",
+      "holder_rewards::schedule_round",
       argumentKinds(publication, publishCall),
     ],
     [
@@ -1362,34 +1369,34 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
   for (const gasReserveAmount of [-1n, 1n << 64n]) {
     assert.throws(
       () =>
-        tx.publishHolderRewardRound({
+        tx.scheduleHolderRewardRound({
           ...types,
           vault,
           adminCapId: "0xadc",
           manifest,
           gasReserveAmount,
           expectedTreasury: "0xc0",
-          claimDeadlineMs: 1n,
+          claimWindowMs: 1n,
         }),
       /gasReserveAmount/,
     );
   }
   assert.throws(
     () =>
-      tx.publishHolderRewardRound({
+      tx.scheduleHolderRewardRound({
         ...types,
         vault: shared("0xbb", true),
         adminCapId: "0xadc",
         manifest,
         gasReserveAmount: 30n,
         expectedTreasury: "0xc0",
-        claimDeadlineMs: 1n,
+        claimWindowMs: 1n,
       }),
     /another vault/,
   );
   assert.throws(
     () =>
-      tx.publishHolderRewardRound({
+      tx.scheduleHolderRewardRound({
         ...types,
         vault,
         adminCapId: "0xadc",
@@ -1405,7 +1412,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
         }),
         gasReserveAmount: 30n,
         expectedTreasury: "0xc0",
-        claimDeadlineMs: 1n,
+        claimWindowMs: 1n,
       }),
     /root mismatch/,
   );

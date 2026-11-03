@@ -89,7 +89,12 @@ export type HolderRewardsOperatorConfig = {
    * `blast_presale_domain::RewardsAdmin` role for a presale.
    */
   adminCapId?: string;
-  /** Claims stay open this many milliseconds after `publishTransaction` builds the round. */
+  /**
+   * Claims stay open this many milliseconds after the round is published.
+   * `publish-tx` schedules the round and, while the vault's round notice is
+   * zero, publishes it in the same PTB; otherwise anyone publishes it once
+   * the notice has passed.
+   */
   claimWindowMs?: string;
   /** Explicit per-publication Quote gas reserve; zero chooses Blast-paid gas. */
   gasReserveAmount?: string;
@@ -555,15 +560,18 @@ async function loadProduct(
         if (config.expectedTreasury === undefined)
           throw new Error("publish-tx needs explicit expectedTreasury");
 
-        return transactions.publishHolderRewardRound({
+        const round = {
           ...pair,
           vault,
           adminCapId,
           manifest,
-          claimDeadlineMs: BigInt(Date.now()) + BigInt(config.claimWindowMs),
+          claimWindowMs: BigInt(config.claimWindowMs),
           gasReserveAmount: BigInt(config.gasReserveAmount),
           expectedTreasury: config.expectedTreasury,
-        });
+        };
+        return state.roundPublication.delay_ms === 0n
+          ? transactions.scheduleAndPublishHolderRewardRound(round)
+          : transactions.scheduleHolderRewardRound(round);
       },
       claim: (round, allocations) =>
         transactions.claimHolderRewards({ ...pair, round, allocations }),
@@ -594,15 +602,18 @@ async function loadProduct(
         );
       if (config.expectedTreasury === undefined)
         throw new Error("publish-tx needs explicit expectedTreasury");
-      return transactions.publishHolderRewardRound({
+      const round = {
         ...pair,
         vault: state,
         adminCapId,
         manifest,
-        claimDeadlineMs: BigInt(Date.now()) + BigInt(config.claimWindowMs),
+        claimWindowMs: BigInt(config.claimWindowMs),
         gasReserveAmount: BigInt(config.gasReserveAmount),
         expectedTreasury: config.expectedTreasury,
-      });
+      };
+      return state.roundPublication.delay_ms === 0n
+        ? transactions.scheduleAndPublishHolderRewardRound(round)
+        : transactions.scheduleHolderRewardRound(round);
     },
     claim: (round, allocations) =>
       transactions.claimHolderRewards({ ...pair, round, allocations }),

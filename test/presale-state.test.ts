@@ -271,6 +271,24 @@ test("decodes a Vault from bytes laid out in Move field order", () => {
     ...u64(2n), // next_round
     ...u8(1), // last_checkpoint: Some
     ...u64(99n),
+    ...addr("0xba"), // round_publication.owner
+    ...u8(0), // round_publication.key: RoundPublicationKey()
+    ...u64(0n), // applied round notice
+    ...u8(1), // pending: Some
+    ...u8(0), // Change::Action(RoundTerms)
+    ...u64(2n), // number
+    ...u64(99n), // start_checkpoint
+    ...u64(120n), // end_checkpoint
+    ...bytes(Array(32).fill(0x11)), // root
+    ...bytes(Array(32).fill(0x22)), // manifest_digest
+    ...u64(1n), // leaf_count
+    ...u64(3n), // meme_amount
+    ...u64(2n), // quote_amount
+    ...u64(1n), // gas_reserve_amount
+    ...u64(604_800_000n), // claim_window_duration_ms
+    ...addr("0xc0"), // expected_treasury
+    ...u64(0n), // proposal delay_ms
+    ...u64(5n), // ready_at_ms
   ]);
   const vault = decodePresaleVaultObject(
     object(
@@ -317,6 +335,31 @@ test("decodes a Vault from bytes laid out in Move field order", () => {
     tokenBps: 0n,
     lpFeeMemeBps: 1_000n,
     lpFeeQuoteBps: 2_500n,
+  });
+  assert.deepEqual(vault.roundPublication, {
+    owner: normalizeSuiAddress("0xba"),
+    key: null,
+    delay_ms: 0n,
+    pending: {
+      value: {
+        kind: "Action",
+        action: {
+          number: 2n,
+          start_checkpoint: 99n,
+          end_checkpoint: 120n,
+          root: "11".repeat(32),
+          manifest_digest: "22".repeat(32),
+          leaf_count: 1n,
+          meme_amount: 3n,
+          quote_amount: 2n,
+          gas_reserve_amount: 1n,
+          claim_window_duration_ms: 604_800_000n,
+          expected_treasury: normalizeSuiAddress("0xc0"),
+        },
+      },
+      delay_ms: 0n,
+      ready_at_ms: 5n,
+    },
   });
 });
 

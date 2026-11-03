@@ -141,7 +141,8 @@ export type LaunchpadAdministrationProjection = {
       }
     >
   >;
-  creatorClaimSignerPublicKey: Uint8Array | null;
+  /** Hex Ed25519 keys that may sign account claims; any one verifies. */
+  creatorClaimSigners: Readonly<Record<string, true>>;
   /**
    * Latest proposals by `delayedPolicyKey`. Crossing ready_at_ms never
    * applies their values.
@@ -182,7 +183,7 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
     },
     administration: {
       creatorCapClaims: {},
-      creatorClaimSignerPublicKey: null,
+      creatorClaimSigners: {},
       pendingPolicies: {},
       policyDelays: {},
       paused: null,
@@ -523,12 +524,6 @@ export function reduceLaunchpadEvent(
         },
       }));
     }
-    case "CreatorClaimSignerSet":
-      return updateAdministration(next, {
-        ...next.administration,
-        creatorClaimSignerPublicKey:
-          event.payload.pos0.length === 0 ? null : event.payload.pos0,
-      });
   }
   return next;
 }
@@ -641,31 +636,40 @@ function reduceDelayed(
         });
     }
   }
-  if (event.name !== "MigrationWitnesses") return state;
+  const change = membershipChange(event);
+  if (change === null) return state;
+  const [member, admitted] = change;
+  if (event.name === "ClaimSigners")
+    return updateAdministration(state, {
+      ...state.administration,
+      creatorClaimSigners: withEntry(
+        state.administration.creatorClaimSigners,
+        member,
+        admitted,
+      ),
+    });
+  return updateConfig(state, {
+    ...config,
+    migrationWitnesses: withEntry(config.migrationWitnesses, member, admitted),
+  });
+}
+
+/** A set member applied (`true`) or removed (`undefined`); null for any other event. */
+function membershipChange(
+  event: DecodedLaunchpadDelayedEvent,
+): [string, true | undefined] | null {
+  if (event.name !== "ClaimSigners" && event.name !== "MigrationWitnesses")
+    return null;
+  if (event.kind === "MemberRemoved") return [event.payload.member, undefined];
   if (event.kind === "SetApplied" && event.payload.change.kind === "Admission")
-    return updateConfig(state, {
-      ...config,
-      migrationWitnesses: withEntry(
-        config.migrationWitnesses,
-        event.payload.change.member,
-        true,
-      ),
-    });
-  if (event.kind === "MemberRemoved")
-    return updateConfig(state, {
-      ...config,
-      migrationWitnesses: withEntry(
-        config.migrationWitnesses,
-        event.payload.member,
-        undefined,
-      ),
-    });
-  return state;
+    return [event.payload.change.member, true];
+  return null;
 }
 
 /**
  * The projection key of a delayed value: its registry name, then the owning
- * `Launch` for cap reassignments, then the member for a witness admission.
+ * `Launch` for cap reassignments, then the member for a witness or signer
+ * admission.
  */
 export function delayedPolicyKey(
   event: Pick<DecodedLaunchpadDelayedEvent, "name" | "payload">,
@@ -677,7 +681,7 @@ export function delayedPolicyKey(
   )
     key += `:${event.payload.owner}`;
   if (
-    event.name === "MigrationWitnesses" &&
+    (event.name === "MigrationWitnesses" || event.name === "ClaimSigners") &&
     "change" in event.payload &&
     event.payload.change.kind === "Admission"
   )

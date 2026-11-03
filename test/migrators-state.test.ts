@@ -27,6 +27,19 @@ const feeSplit = {
   burnBps: 1_000n,
   recipients: [],
 };
+const roundTerms = {
+  number: 3n,
+  start_checkpoint: 99n,
+  end_checkpoint: 120n,
+  root: "11".repeat(32),
+  manifest_digest: "22".repeat(32),
+  leaf_count: 2n,
+  meme_amount: 5n,
+  quote_amount: 6n,
+  gas_reserve_amount: 1n,
+  claim_window_duration_ms: 604_800_000n,
+  expected_treasury: normalizeSuiAddress("0xc0"),
+};
 const notFound = () =>
   new ObjectError("notExists", "missing", { reason: "notFound" });
 
@@ -56,6 +69,16 @@ function serializeVault(id = objectId, owner = id): Uint8Array {
       burn_quote: balance(9n),
       next_round: 3n,
       last_checkpoint: 99n,
+      round_publication: {
+        owner,
+        key: null,
+        delay_ms: 0n,
+        pending: {
+          value: { kind: "Action", action: roundTerms },
+          delay_ms: 0n,
+          ready_at_ms: 1_000n,
+        },
+      },
     })
     .toBytes();
 }
@@ -93,6 +116,7 @@ test("decodes LP-vault custody, fee split, and every balance", () => {
       burnQuote: vault.burnQuote,
       nextRound: vault.nextRound,
       lastCheckpoint: vault.lastCheckpoint,
+      roundPublication: vault.roundPublication,
     },
     {
       partnerId: normalizeSuiObjectId("0x9a27"),
@@ -110,6 +134,16 @@ test("decodes LP-vault custody, fee split, and every balance", () => {
       burnQuote: 9n,
       nextRound: 3n,
       lastCheckpoint: 99n,
+      roundPublication: {
+        owner: normalizeSuiObjectId(objectId),
+        key: null,
+        delay_ms: 0n,
+        pending: {
+          value: { kind: "Action", action: roundTerms },
+          delay_ms: 0n,
+          ready_at_ms: 1_000n,
+        },
+      },
     },
   );
 });

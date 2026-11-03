@@ -85,7 +85,8 @@ const vendorAbi = readAbi(
   "production-aftermath-dao-presale-v1.json",
   "aftermathDaoPresale",
 );
-const presaleAbi = readAbi("production-presale-v1.json", "presale");
+// The fresh stack: partner payouts read the applied share, without Clock.
+const presaleAbi = readAbi("pr150-consumers.json", "presale");
 const presale = shared(PRESALE, true);
 const poolCreation = shared(POOL_CREATION, true);
 const partner = shared("0x9a27", false);

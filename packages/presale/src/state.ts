@@ -1,5 +1,10 @@
-import type { Delayed, Notice } from "@interest-protocol/blast-core/bcs";
+import type {
+  Delayed,
+  DelayedAction,
+  Notice,
+} from "@interest-protocol/blast-core/bcs";
 import {
+  delayedActionBcs,
   delayedBcs,
   delayedSetBcs,
   migrationAdmission,
@@ -11,6 +16,8 @@ import {
   unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import { normalizePositiveU64 } from "@interest-protocol/blast-core/integers";
+import type { RewardRoundTerms } from "@interest-protocol/blast-core/rewards/state";
+import { rewardRoundTermsBcs } from "@interest-protocol/blast-core/rewards/state";
 import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
@@ -362,6 +369,7 @@ export const presaleVaultBcs = bcs.struct("Vault", {
   holder_rewards_quote: suiBalanceBcs,
   next_round: u64,
   last_checkpoint: bcs.option(u64),
+  round_publication: delayedActionBcs(unitKeyBcs, rewardRoundTermsBcs),
 });
 
 /** BCS layout of `fee_policy::FeePolicy`, the package's one shared fee policy. */
@@ -528,6 +536,11 @@ export type PresaleVaultState = SharedObjectReference<true> & {
   nextRound: bigint;
   /** Earliest checkpoint the next round may start at; null before the first round. */
   lastCheckpoint: bigint | null;
+  /**
+   * The vault's round notice and any scheduled round (`Action`) or notice
+   * change (`Delay`); anyone publishes a ready round.
+   */
+  roundPublication: DelayedAction<null, RewardRoundTerms>;
 };
 
 export type PresaleRewardRoundState = SharedObjectReference<true> & {
@@ -677,6 +690,7 @@ export function decodePresaleVaultObject(
     ...sharedIdentity(object, parsed.id.id.bytes, [
       parsed.fee_split.owner,
       parsed.protocol_fees.owner,
+      parsed.round_publication.owner,
     ]),
     memeType,
     quoteType,
@@ -697,6 +711,7 @@ export function decodePresaleVaultObject(
     holderRewardsQuote: BigInt(parsed.holder_rewards_quote.value),
     nextRound: parsed.next_round,
     lastCheckpoint: parsed.last_checkpoint,
+    roundPublication: parsed.round_publication,
   };
 }
 
