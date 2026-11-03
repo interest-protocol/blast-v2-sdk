@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { delayedBcs } from "@interest-protocol/blast-core/bcs";
 import { getOpeningRoundBid } from "@interest-protocol/blast-launchpad-sdk/state";
 import {
   decodeLpVaultObject,
@@ -31,7 +30,7 @@ const feeSplit = {
 const notFound = () =>
   new ObjectError("notExists", "missing", { reason: "notFound" });
 
-function serializeVault(id = objectId): Uint8Array {
+function serializeVault(id = objectId, owner = id): Uint8Array {
   return lpVaultBcs
     .serialize({
       id: uid(id),
@@ -41,7 +40,13 @@ function serializeVault(id = objectId): Uint8Array {
       protocol_quote_residual: balance(6n),
       unpaid_protocol_meme: balance(10n),
       unpaid_protocol_quote: balance(11n),
-      fee_split: { value: feeSplit, delay_ms: 172_800_000n, pending: null },
+      fee_split: {
+        owner,
+        key: null,
+        value: feeSplit,
+        delay_ms: 172_800_000n,
+        pending: null,
+      },
       creator_meme: balance(1n),
       creator_quote: balance(2n),
       auto_lp_meme: balance(3n),
@@ -121,6 +126,15 @@ test("rejects a vault from another package or with a mismatched UID", () => {
     () => decodeLpVaultObject(object, originalPackageId),
     /mismatched UID/,
   );
+  // The fee split's `delayed` owner must be the vault itself.
+  assert.throws(
+    () =>
+      decodeLpVaultObject(
+        { ...object, content: serializeVault(objectId, "0xf") },
+        originalPackageId,
+      ),
+    /mismatched UID/,
+  );
   assert.throws(
     () => decodeLpVaultObject({ ...object, content: serializeVault() }, "0x9"),
     /unexpected package/,
@@ -161,16 +175,35 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
             .serialize({
               id: uid(policyId),
               destination: {
+                owner: policyId,
+                key: null,
                 value: "0xb1a57",
                 delay_ms: 172_800_000n,
                 pending: null,
               },
               defaults: {
+                owner: policyId,
+                key: null,
                 value: { meme_bps: 1_000n, quote_bps: 2_000n },
                 delay_ms: 172_800_000n,
                 pending: null,
               },
-              coins: { id: uid(tableId), size: 1n },
+              coins: {
+                owner: policyId,
+                key: null,
+                entries: { id: tableId, size: 1n },
+                delay_ms: 172_800_000n,
+                pending: [
+                  {
+                    entry: "0xb::meme::MEME",
+                    proposal: {
+                      value: null,
+                      notice: { delay_ms: 172_800_000n, ready_at_ms: 9n },
+                    },
+                  },
+                ],
+                pending_delay: null,
+              },
             })
             .toBytes(),
         },
@@ -181,12 +214,8 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
         return {
           dynamicField: {
             value: {
-              bcs: delayedBcs(bcs.option(lpFeeSharePairBcs))
-                .serialize({
-                  value: { meme_bps: 500n, quote_bps: 600n },
-                  delay_ms: 0n,
-                  pending: null,
-                })
+              bcs: lpFeeSharePairBcs
+                .serialize({ meme_bps: 500n, quote_bps: 600n })
                 .toBytes(),
             },
           },
@@ -207,6 +236,11 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
     policy.defaultShares.memeBps,
   );
   assert.equal(policy.coinSharesTableId, tableId);
+  assert.equal(policy.coinSharesDelayMs, 172_800_000n);
+  // A pending clear names its coin; the applied pair stays until it applies.
+  assert.deepEqual(Object.values(policy.pendingCoinShares), [
+    { value: null, notice: { delay_ms: 172_800_000n, ready_at_ms: 9n } },
+  ]);
   assert.deepEqual(await getLpFeeShares(client, policy, memeType), {
     memeBps: 500n,
     quoteBps: 600n,

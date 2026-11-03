@@ -3,7 +3,10 @@ import type { NativeTransactionPosition } from "@interest-protocol/blast-core/ev
 import { normalizeNativeTransactionPosition } from "@interest-protocol/blast-core/events";
 import { requireU64 } from "@interest-protocol/blast-core/integers";
 import type { FeeSplit } from "@interest-protocol/blast-launchpad-sdk/allocation";
-import type { DecodedLaunchpadEvent } from "@interest-protocol/blast-launchpad-sdk/events";
+import type {
+  DecodedLaunchpadDelayedEvent,
+  DecodedLaunchpadEvent,
+} from "@interest-protocol/blast-launchpad-sdk/events";
 import type { LaunchpadEventProjection } from "@interest-protocol/blast-launchpad-sdk/reducer";
 import {
   createLaunchpadEventProjection,
@@ -14,7 +17,11 @@ import {
   normalizeSuiObjectId,
   toHex,
 } from "@mysten/sui/utils";
-import type { DecodedMigratorEvent, MigratorEventKind } from "./events.ts";
+import type {
+  DecodedMigratorEvent,
+  DecodedMigratorsDelayedEvent,
+  MigratorEventKind,
+} from "./events.ts";
 import { migratorEventId, migratorEventSpecs } from "./events.ts";
 
 export type LpVaultEventProjection = {
@@ -30,7 +37,7 @@ export type LpVaultEventProjection = {
   quoteType: string;
   feeSplit: FeeSplit;
   feeSplitDelayMs: bigint;
-  pendingFeeSplit: Delayed<FeeSplit>["pending"];
+  pendingFeeSplit: Delayed<null, FeeSplit>["pending"];
   creatorMeme: bigint;
   creatorQuote: bigint;
   autoLpMeme: bigint;
@@ -77,13 +84,23 @@ export type HolderRewardRoundProjection = {
   closed: boolean;
 };
 
+/** Applied values from `delayed` events; null until the policy's `DelayedCreated`. */
 export type LpFeePolicyProjection = {
-  /** Default Meme/Quote shares, once a change is replayed; initialization sets zero/zero. */
+  /** Default Meme/Quote shares; zero/zero before the policy's creation. */
   defaultShares: { memeBps: bigint; quoteBps: bigint };
   /** Original Meme type keyed pairs that override the defaults. */
   coinShares: Readonly<Record<string, { memeBps: bigint; quoteBps: bigint }>>;
-  /** Protocol destination once redirected; initialization pays the publisher. */
   protocolDestination: string | null;
+};
+
+export type MigratorAdministrationProjection = {
+  /**
+   * Latest proposals by `migratorsDelayedPolicyKey`. Crossing ready_at_ms
+   * never applies their values.
+   */
+  pendingPolicies: Readonly<Record<string, DecodedMigratorsDelayedEvent>>;
+  /** Applied notices by `migratorsDelayedPolicyKey`. */
+  policyDelays: Readonly<Record<string, bigint>>;
 };
 
 export type CetusPoolReservationProjection = {
@@ -95,10 +112,12 @@ export type CetusPoolReservationProjection = {
 
 export type MigratorEventProjection = {
   appliedEventIds: Readonly<Record<string, true>>;
+  /** Migrator events by kind; `delayed` events are not counted. */
   eventCounts: Readonly<Record<MigratorEventKind, number>>;
   vaults: Readonly<Record<string, LpVaultEventProjection>>;
   rounds: Readonly<Record<string, HolderRewardRoundProjection>>;
   lpFeePolicy: LpFeePolicyProjection;
+  administration: MigratorAdministrationProjection;
   /** Cetus pool-creation reservations, keyed by Meme type. */
   cetusPoolReservations: Readonly<
     Record<string, CetusPoolReservationProjection>
@@ -163,7 +182,9 @@ export type LaunchpadProductProjection = {
 
 export type LaunchpadProductInput =
   | DecodedLaunchpadEvent
+  | DecodedLaunchpadDelayedEvent
   | DecodedMigratorEvent
+  | DecodedMigratorsDelayedEvent
   | NativeReconstructionFact;
 
 export function createMigratorEventProjection(): MigratorEventProjection {
@@ -179,6 +200,7 @@ export function createMigratorEventProjection(): MigratorEventProjection {
       coinShares: {},
       protocolDestination: null,
     },
+    administration: { pendingPolicies: {}, policyDelays: {} },
     cetusPoolReservations: {},
   };
 }
@@ -196,12 +218,25 @@ export function createLaunchpadProductProjection(): LaunchpadProductProjection {
   };
 }
 
+/**
+ * Applies one migrator event, or one `delayed` event decoded by
+ * `decodeMigratorsDelayedEvent`, once.
+ */
 export function reduceMigratorEvent(
   state: MigratorEventProjection,
-  event: DecodedMigratorEvent,
+  event: DecodedMigratorEvent | DecodedMigratorsDelayedEvent,
 ): MigratorEventProjection {
   const eventId = migratorEventId(event);
   if (state.appliedEventIds[eventId]) return state;
+  if (event.source === "delayed")
+    return reduceDelayed(
+      {
+        ...state,
+        administration: reduceDelayedPolicy(state.administration, event),
+        appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
+      },
+      event,
+    );
   const next: MigratorEventProjection = {
     ...state,
     appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
@@ -309,29 +344,6 @@ export function reduceMigratorEvent(
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
         autoLpPositionId: payload.position_id,
-      }));
-    }
-    case "FeeSplitScheduled":
-      return updateVault(next, event.payload.vault_id, (vault) => ({
-        ...vault,
-        pendingFeeSplit: {
-          value: event.payload.proposed,
-          delay_ms: event.payload.delay_ms,
-          ready_at_ms: event.payload.ready_at_ms,
-        },
-      }));
-    case "FeeSplitCancelled":
-      return updateVault(next, event.payload.vault_id, (vault) => ({
-        ...vault,
-        pendingFeeSplit: null,
-      }));
-    case "FeeSplitChanged": {
-      const payload = event.payload;
-      return updateVault(next, payload.vault_id, (vault) => ({
-        ...vault,
-        feeSplit: payload.new_fee_split,
-        feeSplitDelayMs: payload.delay_ms,
-        pendingFeeSplit: null,
       }));
     }
     case "CreatorFeesClaimed":
@@ -453,16 +465,6 @@ export function reduceMigratorEvent(
         },
       };
     }
-    case "LpFeePolicyChanged":
-      return updateLpFeePolicy(next, event);
-    case "LpFeeDestinationChanged":
-      return {
-        ...next,
-        lpFeePolicy: {
-          ...state.lpFeePolicy,
-          protocolDestination: event.payload.new_destination,
-        },
-      };
     case "CetusPoolReserved": {
       const payload = event.payload;
       return {
@@ -487,6 +489,8 @@ export function reduceLaunchpadProductInput(
   state: LaunchpadProductProjection,
   input: LaunchpadProductInput,
 ): LaunchpadProductProjection {
+  if (input.source === "delayed")
+    return reduceDelayedProductInput(state, input);
   if (input.source === "launchpad") {
     const launchpad = reduceLaunchpadEvent(state.launchpad, input);
     return launchpad === state.launchpad ? state : { ...state, launchpad };
@@ -502,6 +506,19 @@ export function reduceLaunchpadProductInput(
   }
   const native = reduceNativeFact(state.native, input);
   return native === state.native ? state : { ...state, native };
+}
+
+/** Only a migrators `delayed` event carries `product`; both key an `Upgrade`. */
+function reduceDelayedProductInput(
+  state: LaunchpadProductProjection,
+  input: DecodedLaunchpadDelayedEvent | DecodedMigratorsDelayedEvent,
+): LaunchpadProductProjection {
+  if ("product" in input) {
+    const migrators = reduceMigratorEvent(state.migrators, input);
+    return migrators === state.migrators ? state : { ...state, migrators };
+  }
+  const launchpad = reduceLaunchpadEvent(state.launchpad, input);
+  return launchpad === state.launchpad ? state : { ...state, launchpad };
 }
 
 function reduceNativeFact(
@@ -632,24 +649,116 @@ function nativeFactId(fact: NativeReconstructionFact): string {
   return `${fact.position.transactionDigest}:${fact.kind}:${fact.packageId}`;
 }
 
-function updateLpFeePolicy(
-  next: MigratorEventProjection,
-  event: Extract<DecodedMigratorEvent, { kind: "LpFeePolicyChanged" }>,
+/** Applied LP-fee policy and vault fee splits from `delayed` events. */
+function reduceDelayed(
+  state: MigratorEventProjection,
+  event: DecodedMigratorsDelayedEvent,
 ): MigratorEventProjection {
-  const payload = event.payload;
-  const pair =
-    payload.new_meme_bps === null || payload.new_quote_bps === null
-      ? null
-      : { memeBps: payload.new_meme_bps, quoteBps: payload.new_quote_bps };
-  if (payload.meme === null) {
-    if (!pair) return next;
-    return {
-      ...next,
-      lpFeePolicy: { ...next.lpFeePolicy, defaultShares: pair },
-    };
+  if (event.kind === "DelayedScheduled" || event.kind === "DelayedCancelled") {
+    if (event.name !== "FeeSplit") return state;
+    const { owner, value, delay_ms, ready_at_ms } = event.payload;
+    return updateVault(state, owner, (vault) => ({
+      ...vault,
+      pendingFeeSplit:
+        event.kind === "DelayedScheduled"
+          ? { value, delay_ms, ready_at_ms }
+          : null,
+    }));
   }
-  const coinShares = { ...next.lpFeePolicy.coinShares };
-  if (pair) coinShares[payload.meme] = pair;
-  else delete coinShares[payload.meme];
-  return { ...next, lpFeePolicy: { ...next.lpFeePolicy, coinShares } };
+  const policy = state.lpFeePolicy;
+  if (event.kind === "MapApplied" && event.payload.change.kind === "Entry") {
+    const { entry, value } = event.payload.change;
+    const coinShares = { ...policy.coinShares };
+    if (value === null) delete coinShares[entry];
+    else
+      coinShares[entry] = {
+        memeBps: value.meme_bps,
+        quoteBps: value.quote_bps,
+      };
+    return { ...state, lpFeePolicy: { ...policy, coinShares } };
+  }
+  if (event.kind !== "DelayedCreated" && event.kind !== "DelayedApplied")
+    return state;
+  switch (event.name) {
+    case "ProtocolDestination":
+      return {
+        ...state,
+        lpFeePolicy: { ...policy, protocolDestination: event.payload.value },
+      };
+    case "DefaultShares": {
+      const { meme_bps, quote_bps } = event.payload.value;
+      return {
+        ...state,
+        lpFeePolicy: {
+          ...policy,
+          defaultShares: { memeBps: meme_bps, quoteBps: quote_bps },
+        },
+      };
+    }
+    case "FeeSplit": {
+      const { owner, value, delay_ms } = event.payload;
+      return updateVault(state, owner, (vault) => ({
+        ...vault,
+        feeSplit: value,
+        feeSplitDelayMs: delay_ms,
+        pendingFeeSplit: null,
+      }));
+    }
+  }
+}
+
+/**
+ * The projection key of a delayed value: its registry name, then the coin
+ * type for a per-coin change or the `LpVault` for a fee split. The shared
+ * per-coin notice is `CoinShares`.
+ */
+export function migratorsDelayedPolicyKey(
+  event: Pick<DecodedMigratorsDelayedEvent, "name" | "payload">,
+): string {
+  if (
+    "change" in event.payload &&
+    "entry" in event.payload.change &&
+    event.payload.change.kind === "Entry"
+  )
+    return `${event.name}:${event.payload.change.entry}`;
+  if (event.name === "FeeSplit") return `FeeSplit:${event.payload.owner}`;
+  return event.name;
+}
+
+/** Proposals and applied notices; readiness alone changes nothing. */
+function reduceDelayedPolicy(
+  state: MigratorAdministrationProjection,
+  event: DecodedMigratorsDelayedEvent,
+): MigratorAdministrationProjection {
+  const key = migratorsDelayedPolicyKey(event);
+  const pending = { ...state.pendingPolicies };
+  const delays = { ...state.policyDelays };
+  switch (event.kind) {
+    case "DelayedScheduled":
+    case "ActionScheduled":
+    case "MapScheduled":
+      pending[key] = event;
+      break;
+    case "DelayedCancelled":
+    case "ActionCancelled":
+    case "MapCancelled":
+      delete pending[key];
+      break;
+    case "DelayedApplied":
+    case "ActionApplied":
+    case "MapApplied":
+      delete pending[key];
+      // An entry change's delay_ms is the notice it waited, not a new one.
+      if (event.kind !== "MapApplied" || event.payload.change.kind === "Delay")
+        delays[key] = event.payload.delay_ms;
+      break;
+    case "DelayedCreated":
+    case "ActionCreated":
+    case "MapCreated":
+      delays[key] = event.payload.delay_ms;
+      break;
+    default:
+      return state;
+  }
+  return { pendingPolicies: pending, policyDelays: delays };
 }

@@ -1021,15 +1021,15 @@ export class LaunchpadCalls {
       });
     };
   }
-  /** `launch::apply_curve_fee_cap_update`. Permissionless; the contract validates readiness and ownership. */
-  applyCurveFeeCapUpdate(options: {
+  /** `launch::apply_curve_fee_cap_delay`. Permissionless; applies a ready notice change. */
+  applyCurveFeeCapDelay(options: {
     memeType: string;
     quoteType: string;
     launch: SharedObjectReference<true>;
   }) {
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::launch::apply_curve_fee_cap_update`,
+        target: `${this.deployment.packageId}::launch::apply_curve_fee_cap_delay`,
         typeArguments: [
           normalizeStructTag(options.memeType),
           normalizeStructTag(options.quoteType),
@@ -1042,15 +1042,57 @@ export class LaunchpadCalls {
       });
     };
   }
-  /** `launch::apply_metadata_cap_update`. Permissionless; the contract validates readiness and ownership. */
-  applyMetadataCapUpdate(options: {
+  /** `launch::apply_curve_fee_cap_reassignment`. Permissionless; hands the cap to the ready recipient. */
+  applyCurveFeeCapReassignment(options: {
     memeType: string;
     quoteType: string;
     launch: SharedObjectReference<true>;
   }) {
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::launch::apply_metadata_cap_update`,
+        target: `${this.deployment.packageId}::launch::apply_curve_fee_cap_reassignment`,
+        typeArguments: [
+          normalizeStructTag(options.memeType),
+          normalizeStructTag(options.quoteType),
+        ],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch::apply_metadata_cap_delay`. Permissionless; applies a ready notice change. */
+  applyMetadataCapDelay(options: {
+    memeType: string;
+    quoteType: string;
+    launch: SharedObjectReference<true>;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::apply_metadata_cap_delay`,
+        typeArguments: [
+          normalizeStructTag(options.memeType),
+          normalizeStructTag(options.quoteType),
+        ],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          deploymentObject(tx, this.deployment.packageVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `launch::apply_metadata_cap_reassignment`. Permissionless; hands the cap to the ready recipient. */
+  applyMetadataCapReassignment(options: {
+    memeType: string;
+    quoteType: string;
+    launch: SharedObjectReference<true>;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::launch::apply_metadata_cap_reassignment`,
         typeArguments: [
           normalizeStructTag(options.memeType),
           normalizeStructTag(options.quoteType),
@@ -1535,6 +1577,32 @@ export class LaunchpadCalls {
     return deploymentObject(tx, this.deployment.runtimeConfig, mutable);
   }
 }
+
+/** Launchpad settings `configureNow` applies at a zero notice. */
+export type LaunchpadSettings = {
+  tradeFees?: { quoteFeeBps: bigint; memeFeeBps: bigint };
+  protocolAllocation?: { memeBps: bigint; quoteBps: bigint };
+  /** SUI, in MIST, each launch pays at creation. */
+  creationFee?: bigint;
+  protocolFeeShareBps?: bigint;
+  treasury?: string;
+};
+
+/**
+ * The notice `armNotices` gives each named value, in milliseconds. A
+ * setting restates its applied value beside its new notice. Upgrade custody
+ * is not here: `wrap` starts it at a 48-hour notice, which
+ * `scheduleUpgradeDelay` changes only after that notice.
+ */
+export type LaunchpadNotices = {
+  tradeFees?: { quoteFeeBps: bigint; memeFeeBps: bigint; delayMs: bigint };
+  protocolAllocation?: { memeBps: bigint; quoteBps: bigint; delayMs: bigint };
+  creationFee?: { creationFee: bigint; delayMs: bigint };
+  protocolFeeShare?: { protocolFeeShareBps: bigint; delayMs: bigint };
+  treasury?: { treasury: string; delayMs: bigint };
+  /** The notice for each later migration witness admission. */
+  migrationDelayMs?: bigint;
+};
 
 export class LaunchpadTransactions {
   readonly call: LaunchpadCalls;
@@ -2028,18 +2096,32 @@ export class LaunchpadTransactions {
       this.call.scheduleTreasury({ ...options, adminWitness }),
     );
   }
-  applyCurveFeeCapUpdate(
-    options: Parameters<LaunchpadCalls["applyCurveFeeCapUpdate"]>[0],
+  applyCurveFeeCapDelay(
+    options: Parameters<LaunchpadCalls["applyCurveFeeCapDelay"]>[0],
   ): Transaction {
     const tx = new Transaction();
-    tx.add(this.call.applyCurveFeeCapUpdate(options));
+    tx.add(this.call.applyCurveFeeCapDelay(options));
     return tx;
   }
-  applyMetadataCapUpdate(
-    options: Parameters<LaunchpadCalls["applyMetadataCapUpdate"]>[0],
+  applyCurveFeeCapReassignment(
+    options: Parameters<LaunchpadCalls["applyCurveFeeCapReassignment"]>[0],
   ): Transaction {
     const tx = new Transaction();
-    tx.add(this.call.applyMetadataCapUpdate(options));
+    tx.add(this.call.applyCurveFeeCapReassignment(options));
+    return tx;
+  }
+  applyMetadataCapDelay(
+    options: Parameters<LaunchpadCalls["applyMetadataCapDelay"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyMetadataCapDelay(options));
+    return tx;
+  }
+  applyMetadataCapReassignment(
+    options: Parameters<LaunchpadCalls["applyMetadataCapReassignment"]>[0],
+  ): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyMetadataCapReassignment(options));
     return tx;
   }
   cancelCurveFeeCapReassignment(
@@ -2176,6 +2258,127 @@ export class LaunchpadTransactions {
     return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
       this.call.scheduleUpgradeDelay({ ...options, adminWitness }),
     );
+  }
+
+  /**
+   * Applies launchpad settings at once on a fresh deployment whose notices
+   * are still zero: each is a schedule and its apply in this PTB, keeping a
+   * zero notice. Name only settings that change; an unchanged schedule aborts.
+   * Then call `armNotices`. The cap needs each setting's role.
+   */
+  configureNow(
+    options: { adminCapId: string } & LaunchpadSettings & {
+        migrationWitnessTypes?: readonly string[];
+      },
+  ): Transaction {
+    const delayMs = 0n;
+    const { tradeFees, protocolAllocation, creationFee, treasury } = options;
+    const { protocolFeeShareBps, migrationWitnessTypes } = options;
+    return this.#atZeroNotice(options.adminCapId, {
+      ...(tradeFees ? { tradeFees: { ...tradeFees, delayMs } } : {}),
+      ...(protocolAllocation
+        ? { protocolAllocation: { ...protocolAllocation, delayMs } }
+        : {}),
+      ...(creationFee === undefined
+        ? {}
+        : { creationFee: { creationFee, delayMs } }),
+      ...(protocolFeeShareBps === undefined
+        ? {}
+        : { protocolFeeShare: { protocolFeeShareBps, delayMs } }),
+      ...(treasury === undefined ? {} : { treasury: { treasury, delayMs } }),
+      ...(migrationWitnessTypes ? { migrationWitnessTypes } : {}),
+    });
+  }
+
+  /**
+   * Raises each named notice from zero in one PTB: a schedule and its apply.
+   * A setting restates its applied value, since its schedule proposes a value
+   * and next notice together. Run after `configureNow`; once armed, every
+   * later change waits its notice.
+   */
+  armNotices(options: { adminCapId: string } & LaunchpadNotices): Transaction {
+    return this.#atZeroNotice(options.adminCapId, options);
+  }
+
+  #atZeroNotice(
+    adminCapId: string,
+    notices: LaunchpadNotices & { migrationWitnessTypes?: readonly string[] },
+  ): Transaction {
+    const tx = new Transaction();
+    const witnesses = new Map<BlastFunAdminRole, TransactionObjectArgument>();
+    const as = (role: BlastFunAdminRole) => {
+      let adminWitness = witnesses.get(role);
+      if (!adminWitness) {
+        adminWitness = tx.add(this.call.signIn({ adminCap: adminCapId, role }));
+        witnesses.set(role, adminWitness);
+      }
+      return adminWitness;
+    };
+    const { call } = this;
+    if (notices.tradeFees) {
+      tx.add(
+        call.scheduleTradeFees({
+          ...notices.tradeFees,
+          adminWitness: as("FeeAdmin"),
+        }),
+      );
+      tx.add(call.applyTradeFees());
+    }
+    if (notices.protocolAllocation) {
+      tx.add(
+        call.scheduleProtocolAllocation({
+          ...notices.protocolAllocation,
+          adminWitness: as("TreasuryAdmin"),
+        }),
+      );
+      tx.add(call.applyProtocolAllocation());
+    }
+    if (notices.creationFee) {
+      tx.add(
+        call.scheduleCreationFee({
+          ...notices.creationFee,
+          adminWitness: as("FeeAdmin"),
+        }),
+      );
+      tx.add(call.applyCreationFee());
+    }
+    if (notices.protocolFeeShare) {
+      tx.add(
+        call.scheduleProtocolFeeShare({
+          ...notices.protocolFeeShare,
+          adminWitness: as("FeeAdmin"),
+        }),
+      );
+      tx.add(call.applyProtocolFeeShare());
+    }
+    if (notices.treasury) {
+      tx.add(
+        call.scheduleTreasury({
+          ...notices.treasury,
+          adminWitness: as("TreasuryAdmin"),
+        }),
+      );
+      tx.add(call.applyTreasury());
+    }
+    for (const migrationWitnessType of notices.migrationWitnessTypes ?? []) {
+      tx.add(
+        call.scheduleMigrationWitness({
+          migrationWitnessType,
+          adminWitness: as("AdapterAdmin"),
+        }),
+      );
+      tx.add(call.applyMigrationWitness({ migrationWitnessType }));
+    }
+    if (notices.migrationDelayMs !== undefined) {
+      tx.add(
+        call.scheduleMigrationDelay({
+          delayMs: notices.migrationDelayMs,
+          adminWitness: as("AdapterAdmin"),
+        }),
+      );
+      tx.add(call.applyMigrationDelay());
+    }
+    return tx;
   }
 
   #asAdmin(

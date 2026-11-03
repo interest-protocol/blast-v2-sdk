@@ -1,6 +1,16 @@
+import type {
+  DecodedDelayedEvent,
+  DelayedKeySpecs,
+} from "@interest-protocol/blast-admin-sdk/events";
 import {
+  decodeDelayedEvent,
+  upgradeDelayedKey,
+} from "@interest-protocol/blast-admin-sdk/events";
+import {
+  addressBcs,
   moveTypeNameBcs,
   suiObjectIdBcs,
+  unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import type { SuiEventPosition } from "@interest-protocol/blast-core/events";
 import {
@@ -17,6 +27,7 @@ import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { normalizeSuiAddress, parseStructTag } from "@mysten/sui/utils";
+import { lpFeeSharePairBcs } from "./state.ts";
 
 type MigratorEventFieldDescriptor =
   | "id"
@@ -28,61 +39,9 @@ type MigratorEventFieldDescriptor =
   | "bytes"
   | "u64Vector"
   | "optionAddress"
-  | "optionTypeName"
-  | "optionU64"
-  | "feeSplit"
-  | "optionBytes";
+  | "feeSplit";
 
 export const migratorEventSpecs = {
-  ProtocolDestinationCancelled: {
-    destination: "address",
-  },
-  ProtocolDestinationScheduled: {
-    destination: "address",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  DefaultSharesCancelled: {
-    meme_bps: "u64",
-    quote_bps: "u64",
-  },
-  DefaultSharesScheduled: {
-    meme_bps: "u64",
-    quote_bps: "u64",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  CoinSharesCancelled: {
-    meme: "typeName",
-    meme_bps: "optionU64",
-    quote_bps: "optionU64",
-  },
-  CoinSharesScheduled: {
-    meme: "typeName",
-    meme_bps: "optionU64",
-    quote_bps: "optionU64",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  UpgradeActionCancelled: {
-    digest: "optionBytes",
-  },
-  UpgradeActionScheduled: {
-    digest: "optionBytes",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  LpFeePolicyChanged: {
-    meme: "optionTypeName",
-    old_meme_bps: "optionU64",
-    old_quote_bps: "optionU64",
-    new_meme_bps: "optionU64",
-    new_quote_bps: "optionU64",
-  },
-  LpFeeDestinationChanged: {
-    old_destination: "address",
-    new_destination: "address",
-  },
   VaultCreated: {
     vault_id: "id",
     pool_id: "id",
@@ -129,22 +88,6 @@ export const migratorEventSpecs = {
   AutoLpPositionOpened: {
     vault_id: "id",
     position_id: "id",
-  },
-  FeeSplitScheduled: {
-    vault_id: "id",
-    proposed: "feeSplit",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  FeeSplitCancelled: {
-    vault_id: "id",
-    proposed: "feeSplit",
-  },
-  FeeSplitChanged: {
-    vault_id: "id",
-    old_fee_split: "feeSplit",
-    new_fee_split: "feeSplit",
-    delay_ms: "u64",
   },
   CreatorFeesClaimed: {
     vault_id: "id",
@@ -216,13 +159,6 @@ export const migratorEventSpecs = {
     pool_creation_cap_id: "id",
     tick_spacing: "u32",
   },
-  UpgradeDelayScheduled: {
-    delay_ms: "u64",
-    ready_at_ms: "u64",
-  },
-  UpgradeDelayChanged: {
-    delay_ms: "u64",
-  },
 } as const satisfies Record<
   string,
   Record<string, MigratorEventFieldDescriptor>
@@ -241,10 +177,7 @@ type DescriptorOutputs = {
   u64Vector: bigint[];
   /** Null when a partnered vault holds Blast's share for the partner claim. */
   optionAddress: string | null;
-  optionTypeName: string | null;
-  optionU64: bigint | null;
   feeSplit: FeeSplit;
-  optionBytes: Uint8Array | null;
 };
 
 export type MigratorEventPayloads = {
@@ -285,10 +218,7 @@ const MIGRATOR_EVENT_FIELD_BCS: Record<
   bytes: BytesBcs as BcsType<unknown, unknown>,
   u64Vector: bcs.vector(U64Bcs) as BcsType<unknown, unknown>,
   optionAddress: bcs.option(AddressBcs) as BcsType<unknown, unknown>,
-  optionTypeName: bcs.option(moveTypeNameBcs) as BcsType<unknown, unknown>,
-  optionU64: bcs.option(U64Bcs) as BcsType<unknown, unknown>,
   feeSplit: feeSplitBcs as BcsType<unknown, unknown>,
-  optionBytes: bcs.option(BytesBcs) as BcsType<unknown, unknown>,
 };
 
 type MigratorEventBcsMap = {
@@ -359,6 +289,84 @@ export function decodeMigratorEvent(
   } as DecodedMigratorEvent;
 }
 
-export function migratorEventId(event: DecodedMigratorEvent): string {
+export function migratorEventId(event: { position: SuiEventPosition }): string {
   return suiEventId(event.position);
+}
+
+/**
+ * Migrators keys of `blast_admin::delayed` values. `owner` names the
+ * `LpFeePolicy`, `LpVault` or `PackageAdmin` storing the value. In a
+ * `valueType`, `{launchpad}` stands for the launchpad's original package.
+ */
+export const migratorsDelayedKeys = {
+  ProtocolDestination: {
+    key: "lp_fee_policy::ProtocolDestinationKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: addressBcs,
+    valueType: "address",
+  },
+  DefaultShares: {
+    key: "lp_fee_policy::DefaultSharesKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: lpFeeSharePairBcs,
+    valueType: "{package}::lp_fee_policy::SharePair",
+  },
+  /** Per-coin overrides, one entry per original Meme type, under one notice. */
+  CoinShares: {
+    key: "lp_fee_policy::CoinSharesKey",
+    family: "map",
+    keyBcs: unitKeyBcs,
+    entryBcs: moveTypeNameBcs,
+    entryType: "0x1::type_name::TypeName",
+    valueBcs: lpFeeSharePairBcs,
+    valueType: "{package}::lp_fee_policy::SharePair",
+  },
+  FeeSplit: {
+    key: "vault::FeeSplitKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: feeSplitBcs,
+    valueType: "{launchpad}::allocation::FeeSplit",
+  },
+  Upgrade: upgradeDelayedKey,
+} as const satisfies DelayedKeySpecs;
+
+/**
+ * `product` tells it apart from a launchpad `delayed` event: both packages
+ * key an `Upgrade` slot.
+ */
+export type DecodedMigratorsDelayedEvent = DecodedDelayedEvent<
+  typeof migratorsDelayedKeys
+> & { product: "migrators" };
+
+/**
+ * Decodes a `<adminPackageId>::delayed` event keyed by the migrators
+ * package. A vault's fee split is the launchpad's `FeeSplit`, so the
+ * launchpad's original package is part of its identity.
+ */
+export function decodeMigratorsDelayedEvent(
+  event: SuiClientTypes.EventEntry,
+  packages: MigratorEventPackageIdentity & {
+    adminPackageId: string;
+    launchpadOriginalPackageId: string;
+  },
+): DecodedMigratorsDelayedEvent {
+  const launchpad = normalizeSuiAddress(packages.launchpadOriginalPackageId);
+  const keys = Object.fromEntries(
+    Object.entries(migratorsDelayedKeys).map(([name, spec]) => [
+      name,
+      {
+        ...spec,
+        valueType: spec.valueType.replaceAll("{launchpad}", launchpad),
+      },
+    ]),
+  ) as typeof migratorsDelayedKeys;
+  const decoded = decodeDelayedEvent(event, {
+    adminPackageId: packages.adminPackageId,
+    packageId: packages.originalPackageId,
+    keys,
+  });
+  return { ...decoded, product: "migrators" };
 }

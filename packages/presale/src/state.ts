@@ -1,12 +1,14 @@
-import type { Delayed, Pending } from "@interest-protocol/blast-core/bcs";
+import type { Delayed, Notice } from "@interest-protocol/blast-core/bcs";
 import {
   delayedBcs,
-  migrationAdmissionFields,
+  delayedSetBcs,
+  migrationAdmission,
   moveTypeNameBcs,
   suiBalanceBcs,
   suiIdBcs,
   suiObjectIdBcs,
   suiUidBcs,
+  unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import { normalizePositiveU64 } from "@interest-protocol/blast-core/integers";
 import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
@@ -349,8 +351,8 @@ export const presaleVaultBcs = bcs.struct("Vault", {
   presale_id: suiIdBcs,
   presale_cap_id: suiIdBcs,
   pool_id: suiIdBcs,
-  fee_split: delayedBcs(presaleFeeSplitBcs),
-  protocol_fees: delayedBcs(protocolFeesBcs),
+  fee_split: delayedBcs(unitKeyBcs, presaleFeeSplitBcs),
+  protocol_fees: delayedBcs(unitKeyBcs, protocolFeesBcs),
   partner_id: bcs.option(suiObjectIdBcs),
   unpaid_protocol_meme: suiBalanceBcs,
   unpaid_protocol_quote: suiBalanceBcs,
@@ -365,16 +367,15 @@ export const presaleVaultBcs = bcs.struct("Vault", {
 /** BCS layout of `fee_policy::FeePolicy`, the package's one shared fee policy. */
 export const feePolicyBcs = bcs.struct("FeePolicy", {
   id: suiUidBcs,
-  destination: delayedBcs(address),
-  fees: delayedBcs(protocolFeesBcs),
+  destination: delayedBcs(unitKeyBcs, address),
+  fees: delayedBcs(unitKeyBcs, protocolFeesBcs),
 });
 
 /** BCS layout of `creation_policy::CreationPolicy`, the package's one shared creation policy. */
 export const creationPolicyBcs = bcs.struct("CreationPolicy", {
   id: suiUidBcs,
   allowed_quotes: typeNameSet,
-  allowed_migration_witnesses: typeNameSet,
-  ...migrationAdmissionFields,
+  migration_witnesses: delayedSetBcs(unitKeyBcs, moveTypeNameBcs),
 });
 
 /** BCS layout of `holder_rewards::Round<Meme, Quote>`. */
@@ -506,11 +507,11 @@ export type PresaleVaultState = SharedObjectReference<true> & {
    * vault without a presale; only the LP-fee shares apply to the vault.
    */
   protocolFees: ProtocolFees;
-  feeSplitPolicy: Delayed<{
-    fee_recipients: BpsShare[];
-    holder_rewards_bps: bigint;
-  }>;
-  protocolFeesPolicy: Delayed<ProtocolFees>;
+  feeSplitPolicy: Delayed<
+    null,
+    { fee_recipients: BpsShare[]; holder_rewards_bps: bigint }
+  >;
+  protocolFeesPolicy: Delayed<null, ProtocolFees>;
   /**
    * The partner the sale, or the owner of a vault without a presale, named,
    * paid its cut of Blast's LP fees; null for none.
@@ -554,8 +555,8 @@ export type PresaleRewardRoundState = SharedObjectReference<true> & {
 export type PresaleFeePolicyState = SharedObjectReference<true> & {
   destination: string;
   fees: ProtocolFees;
-  destinationPolicy: Delayed<string>;
-  feesPolicy: Delayed<ProtocolFees>;
+  destinationPolicy: Delayed<null, string>;
+  feesPolicy: Delayed<null, ProtocolFees>;
 };
 
 /**
@@ -564,9 +565,12 @@ export type PresaleFeePolicyState = SharedObjectReference<true> & {
  * type strings. Checked once, at creation; existing sales are unaffected.
  */
 export type PresaleCreationPolicyState = SharedObjectReference<true> & {
+  /** The applied notice for new witness admissions. */
   witnessDelayMs: bigint;
-  pendingWitnessDelay: Pending<boolean> | null;
-  pendingWitnesses: Readonly<Record<string, Pending<boolean>>>;
+  /** A proposed next admission notice. */
+  pendingWitnessDelay: Notice | null;
+  /** Pending admissions; each keeps the notice it was scheduled under. */
+  pendingWitnesses: Readonly<Record<string, Notice>>;
   allowedQuotes: string[];
   allowedMigrationWitnesses: string[];
 };
@@ -670,7 +674,10 @@ export function decodePresaleVaultObject(
   );
   const parsed = presaleVaultBcs.parse(object.content);
   return {
-    ...sharedIdentity(object, parsed.id.id.bytes),
+    ...sharedIdentity(object, parsed.id.id.bytes, [
+      parsed.fee_split.owner,
+      parsed.protocol_fees.owner,
+    ]),
     memeType,
     quoteType,
     presaleId: normalizeSuiObjectId(parsed.presale_id.bytes),
@@ -729,7 +736,10 @@ export function decodePresaleFeePolicyObject(
   assertSingletonType(object, "fee_policy", "FeePolicy", originalPackageId);
   const parsed = feePolicyBcs.parse(object.content);
   return {
-    ...sharedIdentity(object, parsed.id.id.bytes),
+    ...sharedIdentity(object, parsed.id.id.bytes, [
+      parsed.destination.owner,
+      parsed.fees.owner,
+    ]),
     destination: parsed.destination.value,
     fees: parsed.fees.value,
     destinationPolicy: parsed.destination,
@@ -748,15 +758,16 @@ export function decodePresaleCreationPolicyObject(
     originalPackageId,
   );
   const parsed = creationPolicyBcs.parse(object.content);
+  const { migrationWitnessTypes, ...admission } = migrationAdmission(
+    parsed.migration_witnesses,
+  );
   return {
-    ...sharedIdentity(object, parsed.id.id.bytes),
-    witnessDelayMs: parsed.witness_delay_ms,
-    pendingWitnessDelay: parsed.pending_witness_delay,
-    pendingWitnesses: Object.fromEntries(
-      parsed.pending_witnesses.map(({ key, value }) => [key, value]),
-    ),
+    ...sharedIdentity(object, parsed.id.id.bytes, [
+      parsed.migration_witnesses.owner,
+    ]),
+    ...admission,
     allowedQuotes: parsed.allowed_quotes.contents,
-    allowedMigrationWitnesses: parsed.allowed_migration_witnesses.contents,
+    allowedMigrationWitnesses: migrationWitnessTypes,
   };
 }
 
@@ -914,12 +925,17 @@ function assertSingletonType(
   }
 }
 
+/** `owners` are the object's `delayed` values' owners, which must be the object. */
 function sharedIdentity(
   object: PresaleObject,
   uid: string,
+  owners: readonly string[] = [],
 ): SharedObjectReference<true> {
   const objectId = normalizeSuiObjectId(object.objectId);
-  if (normalizeSuiObjectId(uid) !== objectId) {
+  if (
+    normalizeSuiObjectId(uid) !== objectId ||
+    owners.some((owner) => owner !== objectId)
+  ) {
     throw new TypeError(`object ${object.objectId} has a mismatched UID`);
   }
   return {

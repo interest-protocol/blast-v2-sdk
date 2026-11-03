@@ -1,7 +1,17 @@
-import { upgradeActionBcs } from "@interest-protocol/blast-admin-sdk/state";
+import type {
+  DecodedDelayedEvent,
+  DelayedKeySpecs,
+} from "@interest-protocol/blast-admin-sdk/events";
 import {
+  decodeDelayedEvent,
+  upgradeDelayedKey,
+} from "@interest-protocol/blast-admin-sdk/events";
+import {
+  addressBcs,
   moveTypeNameBcs,
   suiObjectIdBcs,
+  u64Bcs,
+  unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import type { SuiEventPosition } from "@interest-protocol/blast-core/events";
 import {
@@ -12,18 +22,22 @@ import { requireU64 } from "@interest-protocol/blast-core/integers";
 import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import {
-  normalizeStructTag,
-  normalizeSuiAddress,
-  parseStructTag,
-} from "@mysten/sui/utils";
+import { normalizeSuiAddress, parseStructTag } from "@mysten/sui/utils";
 import type { AllocationPlan, FeeSplit } from "./allocation.ts";
-import { allocationPlanBcs, feeSplitBcs } from "./allocation.ts";
+import {
+  allocationPlanBcs,
+  bpsBcs,
+  feeSplitBcs,
+  protocolAllocationBcs,
+} from "./allocation.ts";
 import type { CreatorRecipient } from "./state.ts";
-import { creatorRecipientBcs, decodeCreatorRecipient } from "./state.ts";
+import {
+  creatorRecipientBcs,
+  decodeCreatorRecipient,
+  tradeFeesBcs,
+} from "./state.ts";
 
 type EventFieldDescriptor =
-  | "upgradeAction"
   | "id"
   | "typeName"
   | "address"
@@ -46,84 +60,8 @@ const tradeFees = {
 } as const;
 
 export const launchpadEventSpecs = {
-  CreationFeeCancelled: { creation_fee: "u64" },
-  CreationFeeScheduled: {
-    creation_fee: "u64",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  CurveFeeCapDelayCancelled: { launch_id: "id" },
-  CurveFeeCapDelayChanged: { launch_id: "id", delay_ms: "u64" },
-  CurveFeeCapDelayScheduled: {
-    launch_id: "id",
-    delay_ms: "u64",
-    ready_at_ms: "u64",
-  },
-  CurveFeeCapReassignmentCancelled: { launch_id: "id", recipient: "address" },
-  CurveFeeCapReassignmentScheduled: {
-    launch_id: "id",
-    recipient: "address",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  MetadataCapDelayCancelled: { launch_id: "id" },
-  MetadataCapDelayChanged: { launch_id: "id", delay_ms: "u64" },
-  MetadataCapDelayScheduled: {
-    launch_id: "id",
-    delay_ms: "u64",
-    ready_at_ms: "u64",
-  },
-  MetadataCapReassignmentCancelled: { launch_id: "id", recipient: "address" },
-  MetadataCapReassignmentScheduled: {
-    launch_id: "id",
-    recipient: "address",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  MigrationDelayCancelled: { dummy_field: "bool" },
-  MigrationDelayChanged: { delay_ms: "u64" },
-  MigrationDelayScheduled: { delay_ms: "u64", ready_at_ms: "u64" },
-  MigrationWitnessCancelled: { witness: "typeName" },
-  MigrationWitnessScheduled: {
-    witness: "typeName",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
   Paused: { bits: "u8", paused: "u8" },
-  ProtocolAllocationCancelled: { meme_bps: "u64", quote_bps: "u64" },
-  ProtocolAllocationScheduled: {
-    meme_bps: "u64",
-    quote_bps: "u64",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  ProtocolFeeShareCancelled: { protocol_fee_share_bps: "u64" },
-  ProtocolFeeShareScheduled: {
-    protocol_fee_share_bps: "u64",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  TradeFeesCancelled: { quote_fee_bps: "u64", meme_fee_bps: "u64" },
-  TradeFeesScheduled: {
-    quote_fee_bps: "u64",
-    meme_fee_bps: "u64",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  TreasuryCancelled: { treasury: "address" },
-  TreasuryScheduled: {
-    treasury: "address",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
   Unpaused: { bits: "u8", paused: "u8" },
-  UpgradeActionCancelled: { action: "upgradeAction" },
-  UpgradeActionScheduled: {
-    action: "upgradeAction",
-    ready_at_ms: "u64",
-    delay_ms: "u64",
-  },
-  UpgradeDelayChanged: { delay_ms: "u64" },
 
   Bought: {
     launch_id: "id",
@@ -180,10 +118,6 @@ export const launchpadEventSpecs = {
     burnable: "bool",
     sell_burn_bps: "u64",
   },
-  LaunchTradeFeesChanged: {
-    quote_fee_bps: "u64",
-    meme_fee_bps: "u64",
-  },
   MemeDecimalsSet: { decimals: "u8", allowed: "bool" },
   Migrated: {
     launch_id: "id",
@@ -209,7 +143,6 @@ export const launchpadEventSpecs = {
     blast_metadata_cap_id: "id",
     recipient: "address",
   },
-  MigrationWitnessSet: { migration_witness: "typeName", allowed: "bool" },
   OpeningRoundJoined: { launch_id: "id", quote: "u64", bids: "u64" },
   OpeningRoundSettled: {
     launch_id: "id",
@@ -226,11 +159,6 @@ export const launchpadEventSpecs = {
   },
   PartnerAdded: { partner_id: "id" },
   PartnerRemoved: { partner_id: "id", accepted_until_ms: "u64" },
-  CreationFeeChanged: { pos0: "u64" },
-  ProtocolAllocationSet: {
-    meme_bps: "u64",
-    quote_bps: "u64",
-  },
   ProtocolFeesAccrued: {
     launch_id: "id",
     meme_amount: "u64",
@@ -246,7 +174,6 @@ export const launchpadEventSpecs = {
     partner_quote_amount: "u64",
     partner_sui_amount: "u64",
   },
-  ProtocolFeeShareChanged: { pos0: "u64" },
   QuoteSet: {
     quote: "typeName",
     allowed: "bool",
@@ -261,13 +188,11 @@ export const launchpadEventSpecs = {
     real_quote_reserve: "u64",
   },
   CreatorClaimSignerSet: { pos0: "bytes" },
-  TreasuryChanged: { pos0: "address" },
 } as const satisfies Record<string, Record<string, EventFieldDescriptor>>;
 
 export type LaunchpadEventKind = keyof typeof launchpadEventSpecs;
 
 type DescriptorOutputs = {
-  upgradeAction: ReturnType<typeof upgradeActionBcs.parse>;
   id: string;
   typeName: string;
   address: string;
@@ -319,7 +244,6 @@ const EVENT_FIELD_BCS: Record<
   EventFieldDescriptor,
   BcsType<unknown, unknown>
 > = {
-  upgradeAction: upgradeActionBcs as BcsType<unknown, unknown>,
   id: suiObjectIdBcs as BcsType<unknown, unknown>,
   typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
   address: AddressBcs as BcsType<unknown, unknown>,
@@ -403,14 +327,7 @@ export function decodeLaunchpadEvent(
     typeof payloadTag === "string" ||
     payloadTag.address !== originalPackageId ||
     payloadTag.module !== "events" ||
-    (payloadTag.name === "UpgradeActionScheduled" ||
-    payloadTag.name === "UpgradeActionCancelled"
-      ? payloadTag.typeParams.length !== 1 ||
-        normalizeStructTag(payloadTag.typeParams[0]!) !==
-          normalizeStructTag(
-            `${originalPackageId}::package_admin::UpgradeAction`,
-          )
-      : payloadTag.typeParams.length !== 0) ||
+    payloadTag.typeParams.length !== 0 ||
     !Object.hasOwn(launchpadEventSpecs, payloadTag.name)
   ) {
     throw new TypeError("launchpad event has an unexpected payload type");
@@ -427,6 +344,90 @@ export function decodeLaunchpadEvent(
   } as DecodedLaunchpadEvent;
 }
 
-export function launchpadEventId(event: DecodedLaunchpadEvent): string {
+export function launchpadEventId(event: {
+  position: LaunchpadEventPosition;
+}): string {
   return suiEventId(event.position);
+}
+
+/**
+ * Launchpad keys of `blast_admin::delayed` values. Every schedule, cancel,
+ * apply and creation fact is emitted by `delayed` under one of these keys;
+ * `owner` names the `LaunchConfig`, `RuntimeConfig`, `Launch` or
+ * `PackageAdmin` that stores the value.
+ */
+export const launchpadDelayedKeys = {
+  TradeFees: {
+    key: "launch_config::TradeFeesKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: tradeFeesBcs,
+    valueType: "{package}::launch_config::TradeFees",
+  },
+  MigrationWitnesses: {
+    key: "launch_config::MigrationWitnessKey",
+    family: "set",
+    keyBcs: unitKeyBcs,
+    valueBcs: moveTypeNameBcs,
+    valueType: "0x1::type_name::TypeName",
+  },
+  ProtocolAllocation: {
+    key: "launch_config::ProtocolAllocationKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: protocolAllocationBcs,
+    valueType: "{package}::allocation::ProtocolAllocation",
+  },
+  CreationFee: {
+    key: "launch_config::CreationFeeKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: u64Bcs,
+    valueType: "u64",
+  },
+  ProtocolFeeShare: {
+    key: "runtime_config::ProtocolFeeShareKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: bpsBcs,
+    valueType: "{package}::bps::Bps",
+  },
+  Treasury: {
+    key: "runtime_config::TreasuryKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: addressBcs,
+    valueType: "address",
+  },
+  CurveFeeCapReassignment: {
+    key: "launch::CurveFeeCapReassignment",
+    family: "action",
+    keyBcs: unitKeyBcs,
+    valueBcs: addressBcs,
+    valueType: "address",
+  },
+  MetadataCapReassignment: {
+    key: "launch::MetadataCapReassignment",
+    family: "action",
+    keyBcs: unitKeyBcs,
+    valueBcs: addressBcs,
+    valueType: "address",
+  },
+  Upgrade: upgradeDelayedKey,
+} as const satisfies DelayedKeySpecs;
+
+export type DecodedLaunchpadDelayedEvent = DecodedDelayedEvent<
+  typeof launchpadDelayedKeys
+>;
+
+/** Decodes a `<adminPackageId>::delayed` event keyed by the launchpad. */
+export function decodeLaunchpadDelayedEvent(
+  event: SuiClientTypes.EventEntry,
+  packages: LaunchpadEventPackageIdentity & { adminPackageId: string },
+): DecodedLaunchpadDelayedEvent {
+  return decodeDelayedEvent(event, {
+    adminPackageId: packages.adminPackageId,
+    packageId: packages.originalPackageId,
+    keys: launchpadDelayedKeys,
+  });
 }

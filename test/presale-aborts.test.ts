@@ -20,15 +20,17 @@ import {
 } from "@interest-protocol/blast-presale-sdk/aborts";
 import type { PresaleAbortCode } from "@interest-protocol/blast-presale-sdk/math";
 
-// `check:abi` freezes each ABI at its artifact's commit; this test reads the
-// sources at the same commit with `git archive`, never from the working tree.
-const frozenCommit = (artifact: string): string =>
-  (
-    JSON.parse(
-      readFileSync(new URL(`../abi/${artifact}`, import.meta.url), "utf8"),
-    ) as { baseline: { contractsCommit: string } }
-  ).baseline.contractsCommit;
-const PRESALE_COMMIT = frozenCommit("production-presale-v1.json");
+// Each ABI is frozen at its artifact's commit; this test reads the sources at
+// the same commit with `git archive`, never from the working tree. The map
+// follows the fresh stack's source snapshot, not the historical publication.
+const artifact = (name: string) =>
+  JSON.parse(readFileSync(new URL(`../abi/${name}`, import.meta.url), "utf8"));
+const frozenCommit = (name: string): string =>
+  (artifact(name) as { baseline: { contractsCommit: string } }).baseline
+    .contractsCommit;
+const PRESALE_COMMIT = (
+  artifact("pr150-consumers.json") as { contractsCommit: string }
+).contractsCommit;
 const AFTERMATH_COMMIT = frozenCommit(
   "production-aftermath-dao-presale-v1.json",
 );
@@ -56,18 +58,18 @@ test("names a presale abort by its module and code", () => {
     presaleAbortName("blast_presale", 35),
     "ESaleTokenNotUnregulated",
   );
-  assert.equal(
-    presaleAbortName("presale_vault", 3),
-    "EProtocolLpFeesUnchanged",
-  );
-  assert.equal(presaleAbortName("presale_vault", 4), "EWrongPartner");
+  assert.equal(presaleAbortName("blast_presale", 36), "EAboveFeePolicy");
+  assert.equal(presaleAbortName("blast_presale", 37), "EProtocolFeesIncreased");
+  assert.equal(presaleAbortName("presale_vault", 3), "EWrongPartner");
+  assert.equal(presaleAbortName("fee_policy", 1), "EInvalidDestination");
+  assert.equal(presaleAbortName("package_admin", 1), "EInvalidDigest");
   assert.equal(presaleAbortName("creation_policy", 4), "EPartnerNotAccepted");
   assert.equal(presaleAbortName("holder_rewards", 12), "EEmptyClaim");
   assert.equal(presaleAbortName("holder_rewards", 13), "EInsufficientBudget");
   assert.equal(presaleAbortName("holder_rewards", 14), "EReserveSettled");
   assert.equal(presaleAbortName("holder_rewards", 15), "EOverReserve");
   assert.equal(presaleAbortName("holder_rewards", 16), "ETreasuryChanged");
-  assert.equal(presaleAbortName("presale_vault", 5), null);
+  assert.equal(presaleAbortName("presale_vault", 4), null);
   assert.equal(presaleAbortName("bps", 0), "EInvalidBps");
   assert.equal(presaleAbortName("bluefin", 1), "EInvalidTier");
   assert.equal(
@@ -99,7 +101,7 @@ test("names an Aftermath vendor abort by its module and code", () => {
 });
 
 test("returns null for an unknown module or code", () => {
-  assert.equal(presaleAbortName("blast_presale", 36), null);
+  assert.equal(presaleAbortName("blast_presale", 38), null);
   assert.equal(presaleAbortName("blast_presale", -1), null);
   assert.equal(presaleAbortName("blast_presale", 1.5), null);
   assert.equal(presaleAbortName("merkle_tree", 0), null);

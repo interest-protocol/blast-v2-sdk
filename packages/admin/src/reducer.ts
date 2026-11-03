@@ -1,4 +1,8 @@
-import type { AclEventKind, DecodedAclEvent } from "./events.ts";
+import type {
+  AclEventKind,
+  DecodedAclDelayedEvent,
+  DecodedAclEvent,
+} from "./events.ts";
 import { aclEventBcs, aclEventId } from "./events.ts";
 import type { PendingSuperAdmin } from "./state.ts";
 
@@ -10,6 +14,7 @@ import type { PendingSuperAdmin } from "./state.ts";
  */
 export type AclProjection = {
   appliedEventIds: Readonly<Record<string, true>>;
+  /** ACL events by kind; super admin transfer lifecycle events are not counted. */
   eventCounts: Readonly<Record<AclEventKind, number>>;
   superAdminCapId: string | null;
   admins: Readonly<Record<string, readonly string[]>>;
@@ -28,13 +33,36 @@ export function createAclProjection(): AclProjection {
   };
 }
 
-/** Applies one event once; replaying an applied event returns `state` unchanged. */
+/**
+ * Applies one event once; replaying an applied event returns `state` unchanged.
+ * The transfer's `delayed` events come from `decodeAclDelayedEvent`.
+ */
 export function reduceAclEvent(
   state: AclProjection,
-  event: DecodedAclEvent,
+  event: DecodedAclEvent | DecodedAclDelayedEvent,
 ): AclProjection {
   const eventId = aclEventId(event);
   if (state.appliedEventIds[eventId]) return state;
+  if (event.source === "delayed") {
+    const applied = {
+      ...state,
+      appliedEventIds: { ...state.appliedEventIds, [eventId]: true as const },
+    };
+    if (
+      event.kind === "ActionScheduled" &&
+      event.payload.change.kind === "Action"
+    )
+      return {
+        ...applied,
+        pendingSuperAdmin: {
+          recipient: event.payload.change.action,
+          readyAtMs: event.payload.ready_at_ms,
+        },
+      };
+    if (event.kind === "ActionCancelled" || event.kind === "ActionApplied")
+      return { ...applied, pendingSuperAdmin: null };
+    return applied;
+  }
   const next: AclProjection = {
     ...state,
     appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
@@ -63,16 +91,6 @@ export function reduceAclEvent(
         roles.filter((held) => held !== role),
       );
     }
-    case "SuperAdminTransferStarted":
-      return {
-        ...next,
-        pendingSuperAdmin: {
-          recipient: event.payload.recipient,
-          executeAfterMs: event.payload.execute_after_ms,
-        },
-      };
-    case "SuperAdminTransferCancelled":
-      return { ...next, pendingSuperAdmin: null };
     case "SuperAdminTransferred":
       return {
         ...next,

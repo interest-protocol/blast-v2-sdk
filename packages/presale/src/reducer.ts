@@ -1,6 +1,10 @@
 import { itemAt } from "@interest-protocol/blast-core/arrays";
-import type { Delayed } from "@interest-protocol/blast-core/bcs";
-import type { DecodedPresaleEvent, PresaleEventKind } from "./events.ts";
+import type { Proposal } from "@interest-protocol/blast-core/bcs";
+import type {
+  DecodedPresaleDelayedEvent,
+  DecodedPresaleEvent,
+  PresaleEventKind,
+} from "./events.ts";
 import { presaleEventId, presaleEventModules } from "./events.ts";
 import { apportionRaise, apportionSupply } from "./math.ts";
 import type {
@@ -115,10 +119,10 @@ export type PresaleVaultProjection = {
   feeRecipients: BpsShare[];
   holderRewardsBps: bigint;
   feeSplitDelayMs: bigint;
-  pendingFeeSplit: Delayed<typeof presaleFeeSplitBcs.$inferType>["pending"];
+  pendingFeeSplit: Proposal<typeof presaleFeeSplitBcs.$inferType> | null;
   /**
    * Blast's shares of each collected LP-fee asset: snapshotted at migration,
-   * then replaced by each `ProtocolLpFeesChanged`.
+   * then replaced by each applied `ProtocolLpFees` proposal.
    */
   pendingProtocolLpFees: {
     memeBps: bigint;
@@ -186,14 +190,33 @@ export type PresalePoolTierProjection = {
   poolFeeRate: bigint;
 };
 
+/**
+ * The package's `FeePolicy` and `CreationPolicy` from `delayed` events; values
+ * are null until their `DelayedCreated` event.
+ */
+export type PresalePolicyProjection = {
+  destination: string | null;
+  fees: ProtocolFees | null;
+  migrationWitnesses: Readonly<Record<string, true>>;
+  /**
+   * Latest proposals by `presaleDelayedPolicyKey`. Crossing ready_at_ms never
+   * applies their values.
+   */
+  pendingPolicies: Readonly<Record<string, DecodedPresaleDelayedEvent>>;
+  /** Applied notices by `presaleDelayedPolicyKey`, without a set member. */
+  policyDelays: Readonly<Record<string, bigint>>;
+};
+
 export type PresaleEventProjection = {
   appliedEventIds: Readonly<Record<string, true>>;
+  /** Presale events by kind; `delayed` events are not counted. */
   eventCounts: Readonly<Record<PresaleEventKind, number>>;
   presales: Readonly<Record<string, PresaleProjection>>;
   /** Pool tiers by sale-token (`memeType`); a sale's is `poolTiers[presale.memeType]`. */
   poolTiers: Readonly<Record<string, PresalePoolTierProjection>>;
   vaults: Readonly<Record<string, PresaleVaultProjection>>;
   rounds: Readonly<Record<string, PresaleRewardRoundProjection>>;
+  policy: PresalePolicyProjection;
 };
 
 export function createPresaleEventProjection(): PresaleEventProjection {
@@ -206,16 +229,36 @@ export function createPresaleEventProjection(): PresaleEventProjection {
     poolTiers: {},
     vaults: {},
     rounds: {},
+    policy: {
+      destination: null,
+      fees: null,
+      migrationWitnesses: {},
+      pendingPolicies: {},
+      policyDelays: {},
+    },
   };
 }
 
-/** Applies one event once; replaying an applied event returns `state` unchanged. */
+/**
+ * Applies one presale event, or one `delayed` event decoded by
+ * `decodePresaleDelayedEvent`, once; replaying an applied event returns
+ * `state` unchanged.
+ */
 export function reducePresaleEvent(
   state: PresaleEventProjection,
-  event: DecodedPresaleEvent,
+  event: DecodedPresaleEvent | DecodedPresaleDelayedEvent,
 ): PresaleEventProjection {
   const eventId = presaleEventId(event);
   if (state.appliedEventIds[eventId]) return state;
+  if (event.source === "delayed")
+    return reduceDelayed(
+      {
+        ...state,
+        appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
+        policy: reduceDelayedPolicy(state.policy, event),
+      },
+      event,
+    );
   const next: PresaleEventProjection = {
     ...state,
     appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
@@ -436,40 +479,6 @@ function applyVaultEvent(
         },
       };
     }
-    case "FeeSplitScheduled":
-      return updateVault(state, event.payload.vault_id, () => ({
-        pendingFeeSplit: {
-          value: event.payload.proposed,
-          delay_ms: event.payload.delay_ms,
-          ready_at_ms: event.payload.ready_at_ms,
-        },
-      }));
-    case "FeeSplitCancelled":
-      return updateVault(state, event.payload.vault_id, () => ({
-        pendingFeeSplit: null,
-      }));
-    case "FeeSplitChanged":
-      return updateVault(state, event.payload.vault_id, (vault) => {
-        const recipients = event.payload.new_fee_split.fee_recipients;
-        const paid = (amounts: bigint[], recipient: string) =>
-          amounts[
-            vault.feeRecipients.findIndex(
-              (prior) => prior.recipient === recipient,
-            )
-          ] ?? 0n;
-        return {
-          feeRecipients: recipients,
-          holderRewardsBps: event.payload.new_fee_split.holder_rewards_bps,
-          feeSplitDelayMs: event.payload.delay_ms,
-          pendingFeeSplit: null,
-          feeRecipientMemePaid: recipients.map((r) =>
-            paid(vault.feeRecipientMemePaid, r.recipient),
-          ),
-          feeRecipientQuotePaid: recipients.map((r) =>
-            paid(vault.feeRecipientQuotePaid, r.recipient),
-          ),
-        };
-      });
     case "FeesCollected": {
       const { payload } = event;
       return updateVault(state, payload.vault_id, (vault) => ({
@@ -506,27 +515,6 @@ function applyVaultEvent(
         protocolQuotePaid: vault.protocolQuotePaid + payload.protocol_quote,
         partnerMemePaid: vault.partnerMemePaid + payload.partner_meme,
         partnerQuotePaid: vault.partnerQuotePaid + payload.partner_quote,
-      }));
-    }
-    case "ProtocolLpFeesScheduled":
-      return updateVault(state, event.payload.vault_id, () => ({
-        pendingProtocolLpFees: {
-          memeBps: event.payload.meme_bps,
-          quoteBps: event.payload.quote_bps,
-          readyAtMs: event.payload.ready_at_ms,
-          delayMs: event.payload.delay_ms,
-        },
-      }));
-    case "ProtocolLpFeesCancelled":
-      return updateVault(state, event.payload.vault_id, () => ({
-        pendingProtocolLpFees: null,
-      }));
-    case "ProtocolLpFeesChanged": {
-      const { payload } = event;
-      return updateVault(state, payload.vault_id, () => ({
-        pendingProtocolLpFees: null,
-        protocolLpFeeMemeBps: payload.protocol_lp_fee_meme_bps,
-        protocolLpFeeQuoteBps: payload.protocol_lp_fee_quote_bps,
       }));
     }
     case "MigrationResidualsClaimed":
@@ -752,6 +740,181 @@ function updatePresale(
       [presaleId]: { ...presale, ...update(presale) },
     },
   };
+}
+
+/**
+ * Applied policy values, witness memberships and vault splits from `delayed`
+ * events. A vault's `DelayedCreated` precedes its `VaultCreated`, which
+ * carries the same values, so only later proposals change a vault.
+ */
+function reduceDelayed(
+  state: PresaleEventProjection,
+  event: DecodedPresaleDelayedEvent,
+): PresaleEventProjection {
+  const policy = state.policy;
+  const vaultId = event.payload.owner;
+  switch (event.kind) {
+    case "DelayedCreated":
+    case "DelayedApplied":
+      switch (event.name) {
+        case "Destination":
+          return {
+            ...state,
+            policy: { ...policy, destination: event.payload.value },
+          };
+        case "Fees":
+          return { ...state, policy: { ...policy, fees: event.payload.value } };
+        case "FeeSplit":
+          return event.kind === "DelayedApplied"
+            ? applyFeeSplit(state, vaultId, event.payload)
+            : state;
+        case "ProtocolLpFees":
+          return updateVault(state, vaultId, () => ({
+            pendingProtocolLpFees: null,
+            protocolLpFeeMemeBps: event.payload.value.lpFeeMemeBps,
+            protocolLpFeeQuoteBps: event.payload.value.lpFeeQuoteBps,
+          }));
+      }
+      return state;
+    case "DelayedScheduled":
+    case "DelayedCancelled":
+      return reduceVaultProposal(state, event);
+    case "SetApplied":
+      if (event.payload.change.kind !== "Admission") return state;
+      return {
+        ...state,
+        policy: {
+          ...policy,
+          migrationWitnesses: {
+            ...policy.migrationWitnesses,
+            [event.payload.change.member]: true,
+          },
+        },
+      };
+    case "MemberRemoved": {
+      const { [event.payload.member]: _, ...migrationWitnesses } =
+        policy.migrationWitnesses;
+      return { ...state, policy: { ...policy, migrationWitnesses } };
+    }
+  }
+  return state;
+}
+
+/** A vault's pending fee split or Blast LP rates. */
+function reduceVaultProposal(
+  state: PresaleEventProjection,
+  event: Extract<
+    DecodedPresaleDelayedEvent,
+    { kind: "DelayedScheduled" | "DelayedCancelled" }
+  >,
+): PresaleEventProjection {
+  const vaultId = event.payload.owner;
+  const scheduled = event.kind === "DelayedScheduled";
+  if (event.name === "FeeSplit") {
+    const { value, delay_ms, ready_at_ms } = event.payload;
+    return updateVault(state, vaultId, () => ({
+      pendingFeeSplit: scheduled ? { value, delay_ms, ready_at_ms } : null,
+    }));
+  }
+  if (event.name === "ProtocolLpFees")
+    return updateVault(state, vaultId, () => ({
+      pendingProtocolLpFees: scheduled
+        ? {
+            memeBps: event.payload.value.lpFeeMemeBps,
+            quoteBps: event.payload.value.lpFeeQuoteBps,
+            readyAtMs: event.payload.ready_at_ms,
+            delayMs: event.payload.delay_ms,
+          }
+        : null,
+    }));
+  return state;
+}
+
+/** Fee recipients keep their paid totals across a split change. */
+function applyFeeSplit(
+  state: PresaleEventProjection,
+  vaultId: string,
+  applied: {
+    value: typeof presaleFeeSplitBcs.$inferType;
+    delay_ms: bigint;
+  },
+): PresaleEventProjection {
+  return updateVault(state, vaultId, (vault) => {
+    const recipients = applied.value.fee_recipients;
+    const paid = (amounts: bigint[], recipient: string) =>
+      amounts[
+        vault.feeRecipients.findIndex((prior) => prior.recipient === recipient)
+      ] ?? 0n;
+    return {
+      feeRecipients: recipients,
+      holderRewardsBps: applied.value.holder_rewards_bps,
+      feeSplitDelayMs: applied.delay_ms,
+      pendingFeeSplit: null,
+      feeRecipientMemePaid: recipients.map((r) =>
+        paid(vault.feeRecipientMemePaid, r.recipient),
+      ),
+      feeRecipientQuotePaid: recipients.map((r) =>
+        paid(vault.feeRecipientQuotePaid, r.recipient),
+      ),
+    };
+  });
+}
+
+/**
+ * The projection key of a delayed value: its registry name, then the owning
+ * vault for a vault setting, then the member for a witness admission.
+ */
+export function presaleDelayedPolicyKey(
+  event: Pick<DecodedPresaleDelayedEvent, "name" | "payload">,
+): string {
+  let key: string = event.name;
+  if (event.name === "FeeSplit" || event.name === "ProtocolLpFees")
+    key += `:${event.payload.owner}`;
+  if (
+    event.name === "MigrationWitnesses" &&
+    "change" in event.payload &&
+    event.payload.change.kind === "Admission"
+  )
+    key += `:${event.payload.change.member}`;
+  return key;
+}
+
+/** Proposals and applied notices; readiness alone changes nothing. */
+function reduceDelayedPolicy(
+  state: PresalePolicyProjection,
+  event: DecodedPresaleDelayedEvent,
+): PresalePolicyProjection {
+  const key = presaleDelayedPolicyKey(event);
+  const pending = { ...state.pendingPolicies };
+  const delays = { ...state.policyDelays };
+  switch (event.kind) {
+    case "DelayedScheduled":
+    case "ActionScheduled":
+    case "SetScheduled":
+      pending[key] = event;
+      break;
+    case "DelayedCancelled":
+    case "ActionCancelled":
+    case "SetCancelled":
+      delete pending[key];
+      break;
+    case "DelayedApplied":
+    case "ActionApplied":
+    case "SetApplied":
+      delete pending[key];
+      // An admission's delay_ms is the notice it waited, not a new set notice.
+      if (event.kind !== "SetApplied" || event.payload.change.kind === "Delay")
+        delays[key] = event.payload.delay_ms;
+      break;
+    case "DelayedCreated":
+    case "ActionCreated":
+    case "SetCreated":
+      delays[key] = event.payload.delay_ms;
+      break;
+    default:
+      return state;
+  }
+  return { ...state, pendingPolicies: pending, policyDelays: delays };
 }
 
 function updateVault(

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { decodeLaunchpadDelayedEvent } from "@interest-protocol/blast-launchpad-sdk/events";
 import {
   decodeLaunchConfigObject,
   decodeLaunchObject,
@@ -117,8 +118,8 @@ test("decodes a finalized opening-round launch from literal contract bytes", () 
   });
   assert.equal(state.curveFeeCapDelayMs, 172_800_000n);
   assert.equal(state.metadataCapDelayMs, 172_800_000n);
-  assert.equal(state.pendingCurveFeeCapRecipient, null);
-  assert.equal(state.pendingMetadataCapRecipient, null);
+  assert.equal(state.pendingCurveFeeCapReassignment, null);
+  assert.equal(state.pendingMetadataCapReassignment, null);
   assert.equal(state.curveFeeCapId, null);
   assert.equal(state.blastMetadataCapId, null);
   assert.equal(state.partnerId, partnerId);
@@ -322,6 +323,13 @@ test("decodes launch and runtime configuration from literal contract bytes", () 
     quoteBps: 250n,
   });
   assert.equal(config.creationFee, 5_000_000_000n);
+  assert.equal(config.witnessDelayMs, 0n);
+  assert.equal(config.pendingWitnessDelay, null);
+  assert.deepEqual(config.pendingWitnesses, {});
+  // Every delayed value names the object storing it.
+  assert.equal(config.tradeFeesPolicy.owner, config.objectId);
+  assert.equal(config.tradeFeesPolicy.pending, null);
+  assert.equal(config.creationFeePolicy.delay_ms, 172_800_000n);
 
   const runtime = decodeRuntimeConfigObject({
     objectId:
@@ -332,6 +340,72 @@ test("decodes launch and runtime configuration from literal contract bytes", () 
   });
   assert.deepEqual(runtime.creatorClaimSignerPublicKey, new Uint8Array());
   assert.equal(runtime.protocolFeeShareBps, 3_000n);
+  assert.equal(runtime.protocolFeeSharePolicy.owner, runtime.objectId);
+});
+
+test("decodes delayed lifecycle events from literal contract bytes", () => {
+  const admin = "0xad";
+  const configId =
+    "0xa4137e2ed945e7f4e8c307001c32e97472fb3eebb8f7b4ab7534b447d22da89b";
+  const decode = (fixture: LaunchpadFixture, eventType: string) =>
+    decodeLaunchpadDelayedEvent(
+      {
+        packageId: FIXTURE_PACKAGE_ID,
+        module: "launch_config",
+        sender: "0xad",
+        eventType: `${admin}::${eventType}`,
+        bcs: launchpadFixture(fixture),
+        json: null,
+        checkpoint: "1",
+        transactionDigest: fixture,
+        eventIndex: 0,
+      },
+      { originalPackageId: FIXTURE_PACKAGE_ID, adminPackageId: admin },
+    );
+  const fees = decode(
+    "tradeFeesApplied",
+    `delayed::DelayedApplied<${FIXTURE_PACKAGE_ID}::launch_config::TradeFeesKey, ${FIXTURE_PACKAGE_ID}::launch_config::TradeFees>`,
+  );
+  assert.equal(fees.name, "TradeFees");
+  assert.equal(fees.payload.owner, configId);
+  assert.deepEqual(fees.kind === "DelayedApplied" && fees.payload.value, {
+    quote_fee_bps: 100n,
+    meme_fee_bps: 250n,
+  });
+  const witness = decode(
+    "migrationWitnessAdmitted",
+    `delayed_set::SetApplied<${FIXTURE_PACKAGE_ID}::launch_config::MigrationWitnessKey, 0x1::type_name::TypeName>`,
+  );
+  assert.deepEqual(witness.kind === "SetApplied" && witness.payload.change, {
+    kind: "Admission",
+    member: normalizeStructTag(
+      `${FIXTURE_PACKAGE_ID}::sdk_fixture_tests::TEST_MIGRATION_WITNESS`,
+    ),
+  });
+  const fee = decode(
+    "creationFeeApplied",
+    `delayed::DelayedApplied<${FIXTURE_PACKAGE_ID}::launch_config::CreationFeeKey, u64>`,
+  );
+  assert.deepEqual(fee.payload, {
+    owner: configId,
+    key: null,
+    previous_value: 0n,
+    value: 5_000_000_000n,
+    delay_ms: 172_800_000n,
+  });
+  const share = decode(
+    "protocolFeeShareApplied",
+    `delayed::DelayedApplied<${FIXTURE_PACKAGE_ID}::runtime_config::ProtocolFeeShareKey, ${FIXTURE_PACKAGE_ID}::bps::Bps>`,
+  );
+  assert.equal(share.kind === "DelayedApplied" && share.payload.value, 3_000n);
+  const allocation = decode(
+    "protocolAllocationApplied",
+    `delayed::DelayedApplied<${FIXTURE_PACKAGE_ID}::launch_config::ProtocolAllocationKey, ${FIXTURE_PACKAGE_ID}::allocation::ProtocolAllocation>`,
+  );
+  assert.deepEqual(
+    allocation.kind === "DelayedApplied" && allocation.payload.value,
+    { memeBps: 750n, quoteBps: 250n },
+  );
 });
 
 test("decodes a partner and previews the partner's share of a protocol claim", () => {

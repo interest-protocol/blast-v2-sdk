@@ -1,7 +1,16 @@
-import { upgradeActionBcs } from "@interest-protocol/blast-admin-sdk/state";
+import type {
+  DecodedDelayedEvent,
+  DelayedKeySpecs,
+} from "@interest-protocol/blast-admin-sdk/events";
 import {
+  decodeDelayedEvent,
+  upgradeDelayedKey,
+} from "@interest-protocol/blast-admin-sdk/events";
+import {
+  addressBcs,
   moveTypeNameBcs,
   suiObjectIdBcs,
+  unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import type { SuiEventPosition } from "@interest-protocol/blast-core/events";
 import {
@@ -28,13 +37,13 @@ import {
   eligibilityPolicyBcs,
   hardCapBcs,
   presaleFeeSplitBcs,
+  protocolFeesBcs,
   uncappedPhaseBcs,
   vestingTermsBcs,
 } from "./state.ts";
 
 type PresaleEventFieldDescriptor =
   | "u8"
-  | "upgradeAction"
   | "id"
   | "typeName"
   | "address"
@@ -52,8 +61,7 @@ type PresaleEventFieldDescriptor =
   | "optionAddress"
   | "optionId"
   | "optionVesting"
-  | "vestingVector"
-  | "feeSplit";
+  | "vestingVector";
 
 /** Every event `blast_presale` emits, by module, in Move field order. */
 export const presaleEventSpecs = {
@@ -167,33 +175,6 @@ export const presaleEventSpecs = {
     },
   },
   presale_vault: {
-    ProtocolLpFeesScheduled: {
-      vault_id: "id",
-      meme_bps: "u64",
-      quote_bps: "u64",
-      ready_at_ms: "u64",
-      delay_ms: "u64",
-    },
-
-    ProtocolLpFeesCancelled: {
-      vault_id: "id",
-      meme_bps: "u64",
-      quote_bps: "u64",
-    },
-
-    FeeSplitScheduled: {
-      vault_id: "id",
-      proposed: "feeSplit",
-      ready_at_ms: "u64",
-      delay_ms: "u64",
-    },
-    FeeSplitCancelled: { vault_id: "id", proposed: "feeSplit" },
-    FeeSplitChanged: {
-      vault_id: "id",
-      old_fee_split: "feeSplit",
-      new_fee_split: "feeSplit",
-      delay_ms: "u64",
-    },
     VaultCreated: {
       vault_id: "id",
       presale_id: "id",
@@ -232,11 +213,6 @@ export const presaleEventSpecs = {
       protocol_quote: "u64",
       partner_meme: "u64",
       partner_quote: "u64",
-    },
-    ProtocolLpFeesChanged: {
-      vault_id: "id",
-      protocol_lp_fee_meme_bps: "u64",
-      protocol_lp_fee_quote_bps: "u64",
     },
     HolderMemePaid: {
       vault_id: "id",
@@ -311,8 +287,6 @@ export type PresaleEventKind = keyof FlatSpecs;
 
 type DescriptorOutputs = {
   u8: number;
-  upgradeAction: ReturnType<typeof upgradeActionBcs.parse>;
-  feeSplit: typeof presaleFeeSplitBcs.$inferType;
   id: string;
   typeName: string;
   address: string;
@@ -359,8 +333,6 @@ const address = bcs.Address.transform({
 });
 const FIELD_BCS: Record<PresaleEventFieldDescriptor, BcsType<unknown>> = {
   u8: bcs.u8() as BcsType<unknown>,
-  upgradeAction: upgradeActionBcs as BcsType<unknown>,
-  feeSplit: presaleFeeSplitBcs as BcsType<unknown>,
   id: suiObjectIdBcs as BcsType<unknown>,
   typeName: moveTypeNameBcs as BcsType<unknown>,
   address: address as BcsType<unknown>,
@@ -422,20 +394,8 @@ export type DecodedPresaleEvent = {
     kind: Kind;
     payload: PresaleEventPayloads[Kind];
     /** The event's `SaleToken` / `Meme` type argument. */
-    memeType: Kind extends
-      | "FeeSplitScheduled"
-      | "FeeSplitCancelled"
-      | "ProtocolLpFeesScheduled"
-      | "ProtocolLpFeesCancelled"
-      ? null
-      : string;
-    quoteType: Kind extends
-      | "FeeSplitScheduled"
-      | "FeeSplitCancelled"
-      | "ProtocolLpFeesScheduled"
-      | "ProtocolLpFeesCancelled"
-      ? null
-      : string;
+    memeType: string;
+    quoteType: string;
     /**
      * `VaultCreated` and `PoolTierReserved` only: the venue marker, e.g.
      * `<pkg>::cetus::Venue`.
@@ -466,18 +426,12 @@ export function decodePresaleEvent(
   const tag = parseStructTag(event.eventType);
   const kind = tag.name as PresaleEventKind;
   const [memeType, quoteType, venueType = null, ...extra] = tag.typeParams;
-  const untyped =
-    kind === "FeeSplitScheduled" ||
-    kind === "FeeSplitCancelled" ||
-    kind === "ProtocolLpFeesScheduled" ||
-    kind === "ProtocolLpFeesCancelled";
   if (
     tag.address !== normalizeSuiAddress(packages.originalPackageId) ||
     !Object.hasOwn(presaleEventModules, kind) ||
     presaleEventModules[kind] !== tag.module ||
-    (untyped
-      ? tag.typeParams.length !== 0
-      : memeType === undefined || quoteType === undefined) ||
+    memeType === undefined ||
+    quoteType === undefined ||
     (venueType === null) === VENUE_TYPED_KINDS.has(kind) ||
     extra.length > 0
   ) {
@@ -487,20 +441,23 @@ export function decodePresaleEvent(
     source: "presale",
     kind,
     payload: presaleEventBcs[kind].parse(event.bcs),
-    memeType: memeType === undefined ? null : normalizeStructTag(memeType),
-    quoteType: quoteType === undefined ? null : normalizeStructTag(quoteType),
+    memeType: normalizeStructTag(memeType),
+    quoteType: normalizeStructTag(quoteType),
     venueType: venueType && normalizeStructTag(venueType),
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
   } as DecodedPresaleEvent;
 }
 
-export function presaleEventId(event: DecodedPresaleEvent): string {
+export function presaleEventId(event: { position: SuiEventPosition }): string {
   return suiEventId(event.position);
 }
 
 /**
- * The `fee_policy` and `creation_policy` events, by module. Unlike every other presale event they have no type arguments.
+ * The `blast_presale_package` and `creation_policy` events, by module. Unlike
+ * every other presale event they have no type arguments. Delayed settings,
+ * witness admissions and upgrade actions emit `blast_admin::delayed` events
+ * under `presaleDelayedKeys` instead.
  */
 export const presalePolicyEventSpecs = {
   blast_presale_package: {
@@ -508,59 +465,8 @@ export const presalePolicyEventSpecs = {
     Unpaused: { bits: "u8", paused: "u8" },
   },
 
-  package_admin: {
-    UpgradeActionCancelled: { action: "upgradeAction" },
-    UpgradeActionScheduled: {
-      action: "upgradeAction",
-      ready_at_ms: "u64",
-      delay_ms: "u64",
-    },
-    UpgradeDelayChanged: { delay_ms: "u64" },
-  },
-
-  fee_policy: {
-    DestinationCancelled: { destination: "address" },
-    DestinationScheduled: {
-      destination: "address",
-      ready_at_ms: "u64",
-      delay_ms: "u64",
-    },
-    FeesCancelled: {
-      raise_bps: "u64",
-      token_bps: "u64",
-      lp_fee_meme_bps: "u64",
-      lp_fee_quote_bps: "u64",
-    },
-    FeesScheduled: {
-      raise_bps: "u64",
-      token_bps: "u64",
-      lp_fee_meme_bps: "u64",
-      lp_fee_quote_bps: "u64",
-      ready_at_ms: "u64",
-      delay_ms: "u64",
-    },
-
-    FeesChanged: {
-      raise_bps: "u64",
-      token_bps: "u64",
-      lp_fee_meme_bps: "u64",
-      lp_fee_quote_bps: "u64",
-    },
-    DestinationChanged: { destination: "address" },
-  },
   creation_policy: {
-    MigrationDelayCancelled: { dummy_field: "bool" },
-    MigrationDelayChanged: { delay_ms: "u64" },
-    MigrationDelayScheduled: { delay_ms: "u64", ready_at_ms: "u64" },
-    MigrationWitnessCancelled: { witness: "typeName" },
-    MigrationWitnessScheduled: {
-      witness: "typeName",
-      ready_at_ms: "u64",
-      delay_ms: "u64",
-    },
-
     QuoteSet: { quote: "typeName", allowed: "bool" },
-    MigrationWitnessSet: { migration_witness: "typeName", allowed: "bool" },
     PartnerAdded: { partner_id: "id" },
     PartnerRemoved: { partner_id: "id", accepted_until_ms: "u64" },
   },
@@ -570,9 +476,7 @@ export const presalePolicyEventSpecs = {
 >;
 
 type PolicySpecs = typeof presalePolicyEventSpecs;
-type FlatPolicySpecs = PolicySpecs["fee_policy"] &
-  PolicySpecs["creation_policy"] &
-  PolicySpecs["package_admin"] &
+type FlatPolicySpecs = PolicySpecs["creation_policy"] &
   PolicySpecs["blast_presale_package"];
 export type PresalePolicyEventKind = keyof FlatPolicySpecs;
 
@@ -615,7 +519,7 @@ export const presalePolicyEventBcs = Object.fromEntries(
 ) as Record<PresalePolicyEventKind, BcsType<unknown>>;
 
 /**
- * Decodes one `<originalPackageId>::fee_policy::<Kind>` or
+ * Decodes one `<originalPackageId>::blast_presale_package::<Kind>` or
  * `creation_policy::<Kind>` event.
  */
 export function decodePresalePolicyEvent(
@@ -639,4 +543,65 @@ export function decodePresalePolicyEvent(
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
   } as DecodedPresalePolicyEvent;
+}
+
+/**
+ * Presale keys of `blast_admin::delayed` values. Every schedule, cancel,
+ * apply and creation fact is emitted by `delayed` under one of these keys;
+ * `owner` names the `CreationPolicy`, `FeePolicy`, `Vault` or `PackageAdmin`
+ * that stores the value.
+ */
+export const presaleDelayedKeys = {
+  MigrationWitnesses: {
+    key: "creation_policy::MigrationWitnessKey",
+    family: "set",
+    keyBcs: unitKeyBcs,
+    valueBcs: moveTypeNameBcs,
+    valueType: "0x1::type_name::TypeName",
+  },
+  Destination: {
+    key: "fee_policy::DestinationKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: addressBcs,
+    valueType: "address",
+  },
+  Fees: {
+    key: "fee_policy::FeesKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: protocolFeesBcs,
+    valueType: "{package}::fee_policy::ProtocolFees",
+  },
+  FeeSplit: {
+    key: "presale_vault::FeeSplitKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: presaleFeeSplitBcs,
+    valueType: "{package}::blast_presale::FeeSplit",
+  },
+  ProtocolLpFees: {
+    key: "presale_vault::ProtocolLpFeesKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: protocolFeesBcs,
+    valueType: "{package}::fee_policy::ProtocolFees",
+  },
+  Upgrade: upgradeDelayedKey,
+} as const satisfies DelayedKeySpecs;
+
+export type DecodedPresaleDelayedEvent = DecodedDelayedEvent<
+  typeof presaleDelayedKeys
+>;
+
+/** Decodes a `<adminPackageId>::delayed` event keyed by the presale package. */
+export function decodePresaleDelayedEvent(
+  event: SuiClientTypes.EventEntry,
+  packages: { originalPackageId: string; adminPackageId: string },
+): DecodedPresaleDelayedEvent {
+  return decodeDelayedEvent(event, {
+    adminPackageId: packages.adminPackageId,
+    packageId: packages.originalPackageId,
+    keys: presaleDelayedKeys,
+  });
 }

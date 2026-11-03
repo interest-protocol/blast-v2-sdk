@@ -753,6 +753,20 @@ export class MigratorCalls {
       });
     };
   }
+  /** `lp_fee_policy::apply_coin_shares_delay`. Permissionless; the contract validates readiness and ownership. */
+  applyLpFeeCoinSharesDelay() {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::apply_coin_shares_delay`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
   /** `lp_fee_policy::apply_default_shares`. Permissionless; the contract validates readiness and ownership. */
   applyLpFeeDefaultShares() {
     return (tx: Transaction): void => {
@@ -798,6 +812,22 @@ export class MigratorCalls {
       });
     };
   }
+  /** `lp_fee_policy::cancel_coin_shares_delay`. Requires CancelAdmin. */
+  cancelLpFeeCoinSharesDelay(options: {
+    adminWitness: TransactionObjectInput;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::cancel_coin_shares_delay`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
+        ],
+      });
+    };
+  }
   /** `lp_fee_policy::cancel_default_shares`. Requires CancelAdmin. */
   cancelLpFeeDefaultShares(options: { adminWitness: TransactionObjectInput }) {
     return (tx: Transaction): void => {
@@ -832,7 +862,6 @@ export class MigratorCalls {
   scheduleClearLpFeeCoinShares(options: {
     memeType: string;
     adminWitness: TransactionObjectInput;
-    delayMs: bigint;
   }) {
     return (tx: Transaction): void => {
       tx.moveCall({
@@ -842,19 +871,17 @@ export class MigratorCalls {
           deploymentObject(tx, this.deployment.lpFeePolicy, true),
           deploymentObject(tx, this.deployment.migratorsVersion, false),
           tx.object(options.adminWitness),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
           tx.object.clock(),
         ],
       });
     };
   }
-  /** `lp_fee_policy::schedule_coin_shares`. Requires FeeAdmin. */
+  /** `lp_fee_policy::schedule_coin_shares`. Requires FeeAdmin; waits the shared per-coin notice. */
   scheduleLpFeeCoinShares(options: {
     memeType: string;
     adminWitness: TransactionObjectInput;
     memeBps: bigint;
     quoteBps: bigint;
-    delayMs: bigint;
   }) {
     return (tx: Transaction): void => {
       tx.moveCall({
@@ -866,6 +893,24 @@ export class MigratorCalls {
           tx.object(options.adminWitness),
           tx.add(this.launchpad.bps(options.memeBps)),
           tx.add(this.launchpad.bps(options.quoteBps)),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+  /** `lp_fee_policy::schedule_coin_shares_delay`. Requires FeeAdmin. */
+  scheduleLpFeeCoinSharesDelay(options: {
+    adminWitness: TransactionObjectInput;
+    delayMs: bigint;
+  }) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: `${this.deployment.packageId}::lp_fee_policy::schedule_coin_shares_delay`,
+        typeArguments: [],
+        arguments: [
+          deploymentObject(tx, this.deployment.lpFeePolicy, true),
+          deploymentObject(tx, this.deployment.migratorsVersion, false),
+          tx.object(options.adminWitness),
           tx.pure.u64(requireU64("delayMs", options.delayMs)),
           tx.object.clock(),
         ],
@@ -1103,6 +1148,26 @@ export class MigratorCalls {
     return deploymentObject(tx, this.deployment.lpFeePolicy, false);
   }
 }
+
+/** LP-fee settings `configureNow` applies at a zero notice. */
+export type MigratorsSettings = {
+  /** Where every collection pays Blast's LP-fee share. */
+  protocolDestination?: string;
+  defaultShares?: { memeBps: bigint; quoteBps: bigint };
+};
+
+/**
+ * The notice `armNotices` gives each named value, in milliseconds. A
+ * setting restates its applied value beside its new notice. Upgrade custody
+ * is not here: `wrap` starts it at a 48-hour notice, which
+ * `scheduleUpgradeDelay` changes only after that notice.
+ */
+export type MigratorsNotices = {
+  protocolDestination?: { destination: string; delayMs: bigint };
+  defaultShares?: { memeBps: bigint; quoteBps: bigint; delayMs: bigint };
+  /** The shared notice each later per-coin override change waits. */
+  coinSharesDelayMs?: bigint;
+};
 
 export class MigratorTransactions {
   readonly call: MigratorCalls;
@@ -1356,6 +1421,11 @@ export class MigratorTransactions {
     tx.add(this.call.applyLpFeeCoinShares(options));
     return tx;
   }
+  applyLpFeeCoinSharesDelay(): Transaction {
+    const tx = new Transaction();
+    tx.add(this.call.applyLpFeeCoinSharesDelay());
+    return tx;
+  }
   applyLpFeeDefaultShares(): Transaction {
     const tx = new Transaction();
     tx.add(this.call.applyLpFeeDefaultShares());
@@ -1374,6 +1444,11 @@ export class MigratorTransactions {
   ): Transaction {
     return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
       this.call.cancelLpFeeCoinShares({ ...options, adminWitness }),
+    );
+  }
+  cancelLpFeeCoinSharesDelay(options: { adminCapId: string }): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelLpFeeCoinSharesDelay({ adminWitness }),
     );
   }
   cancelLpFeeDefaultShares(
@@ -1414,6 +1489,16 @@ export class MigratorTransactions {
   ): Transaction {
     return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.scheduleLpFeeCoinShares({ ...options, adminWitness }),
+    );
+  }
+  scheduleLpFeeCoinSharesDelay(
+    options: Omit<
+      Parameters<MigratorCalls["scheduleLpFeeCoinSharesDelay"]>[0],
+      "adminWitness"
+    > & { adminCapId: string },
+  ): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.scheduleLpFeeCoinSharesDelay({ ...options, adminWitness }),
     );
   }
   scheduleLpFeeDefaultShares(
@@ -1492,6 +1577,81 @@ export class MigratorTransactions {
     return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
       this.call.scheduleUpgradeDelay({ ...options, adminWitness }),
     );
+  }
+
+  /**
+   * Applies LP-fee settings at once on a fresh deployment whose notices are
+   * still zero: each is a schedule and its apply in this PTB, keeping a zero
+   * notice. Name only settings that change; an unchanged schedule aborts.
+   * Then call `armNotices`. The cap needs each setting's role.
+   */
+  configureNow(
+    options: { adminCapId: string } & MigratorsSettings,
+  ): Transaction {
+    const delayMs = 0n;
+    const { protocolDestination, defaultShares } = options;
+    return this.#atZeroNotice(options.adminCapId, {
+      ...(protocolDestination === undefined
+        ? {}
+        : {
+            protocolDestination: { destination: protocolDestination, delayMs },
+          }),
+      ...(defaultShares
+        ? { defaultShares: { ...defaultShares, delayMs } }
+        : {}),
+    });
+  }
+
+  /**
+   * Raises each named notice from zero in one PTB: a schedule and its apply.
+   * A setting restates its applied value, since its schedule proposes a value
+   * and next notice together. Run after `configureNow`; once armed, every
+   * later change waits its notice.
+   */
+  armNotices(options: { adminCapId: string } & MigratorsNotices): Transaction {
+    return this.#atZeroNotice(options.adminCapId, options);
+  }
+
+  #atZeroNotice(adminCapId: string, notices: MigratorsNotices): Transaction {
+    const tx = new Transaction();
+    const witnesses = new Map<BlastFunAdminRole, TransactionObjectArgument>();
+    const as = (role: BlastFunAdminRole) => {
+      let adminWitness = witnesses.get(role);
+      if (!adminWitness) {
+        adminWitness = tx.add(this.call.signIn({ adminCap: adminCapId, role }));
+        witnesses.set(role, adminWitness);
+      }
+      return adminWitness;
+    };
+    const { call } = this;
+    if (notices.protocolDestination) {
+      tx.add(
+        call.scheduleLpFeeProtocolDestination({
+          ...notices.protocolDestination,
+          adminWitness: as("TreasuryAdmin"),
+        }),
+      );
+      tx.add(call.applyLpFeeProtocolDestination());
+    }
+    if (notices.defaultShares) {
+      tx.add(
+        call.scheduleLpFeeDefaultShares({
+          ...notices.defaultShares,
+          adminWitness: as("FeeAdmin"),
+        }),
+      );
+      tx.add(call.applyLpFeeDefaultShares());
+    }
+    if (notices.coinSharesDelayMs !== undefined) {
+      tx.add(
+        call.scheduleLpFeeCoinSharesDelay({
+          delayMs: notices.coinSharesDelayMs,
+          adminWitness: as("FeeAdmin"),
+        }),
+      );
+      tx.add(call.applyLpFeeCoinSharesDelay());
+    }
+    return tx;
   }
 
   #asAdmin(

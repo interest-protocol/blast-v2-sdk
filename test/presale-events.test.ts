@@ -1,15 +1,23 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import type { DelayedEventKind } from "@interest-protocol/blast-admin-sdk/events";
+import {
+  delayedEventBcs,
+  delayedEventModule,
+} from "@interest-protocol/blast-admin-sdk/events";
 import { itemAt } from "@interest-protocol/blast-core/arrays";
 import type {
+  DecodedPresaleDelayedEvent,
   DecodedPresaleEvent,
   PresaleEventKind,
   PresaleEventPayloads,
 } from "@interest-protocol/blast-presale-sdk/events";
 import {
+  decodePresaleDelayedEvent,
   decodePresaleEvent,
   decodePresalePolicyEvent,
+  presaleDelayedKeys,
   presaleEventBcs,
   presaleEventModules,
   presaleEventSpecs,
@@ -25,6 +33,7 @@ import {
   createPresaleEventProjection,
   reducePresaleEvent,
 } from "@interest-protocol/blast-presale-sdk/reducer";
+import type { BcsType } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 import { orderedEventFields } from "./abi.ts";
@@ -64,10 +73,7 @@ function suiEvent<Kind extends PresaleEventKind>(
     packageId: pkg,
     module,
     sender,
-    eventType:
-      kind === "FeeSplitScheduled" || kind === "FeeSplitCancelled"
-        ? `${pkg}::${module}::${kind}`
-        : `${pkg}::${module}::${kind}<${meme}, ${quote}${venue}>`,
+    eventType: `${pkg}::${module}::${kind}<${meme}, ${quote}${venue}>`,
     bcs: presaleEventBcs[kind].serialize(payload).toBytes(),
     json: null,
     checkpoint: "9",
@@ -86,6 +92,42 @@ function decode<Kind extends PresaleEventKind>(
   });
 }
 
+const ADMIN = id("0xad");
+
+/** A `<ADMIN>` delayed event of `kind` under a presale key, in Move field order. */
+function decodeDelayed(
+  kind: DelayedEventKind,
+  name: keyof typeof presaleDelayedKeys,
+  payload: Record<string, unknown>,
+): DecodedPresaleDelayedEvent {
+  const spec = presaleDelayedKeys[name];
+  const valueType = spec.valueType.replaceAll("{package}", pkg);
+  eventIndex += 1;
+  return decodePresaleDelayedEvent(
+    {
+      packageId: pkg,
+      module: "presale_vault",
+      sender: ALICE,
+      eventType: `${ADMIN}::${delayedEventModule(kind)}::${kind}<${pkg}::${spec.key}, ${valueType}>`,
+      bcs: (delayedEventBcs(kind, spec) as unknown as BcsType<unknown, unknown>)
+        .serialize(payload)
+        .toBytes(),
+      json: null,
+      checkpoint: "9",
+      transactionDigest: `tx-${eventIndex}`,
+      eventIndex,
+    },
+    { originalPackageId: pkg, adminPackageId: ADMIN },
+  );
+}
+
+const lpFees = (memeBps: bigint, quoteBps: bigint) => ({
+  raiseBps: 0n,
+  tokenBps: 0n,
+  lpFeeMemeBps: memeBps,
+  lpFeeQuoteBps: quoteBps,
+});
+
 test("event specs match every event frozen in the presale ABI", () => {
   const frozen = readFrozenPresaleEventSpecs();
   const current = { ...presaleEventSpecs, ...presalePolicyEventSpecs };
@@ -102,6 +144,9 @@ test("event specs match every event frozen in the presale ABI", () => {
       );
     }
   }
+  for (const [module, events] of Object.entries(current))
+    for (const kind of Object.keys(events))
+      assert.ok(frozen[module]?.[kind], `${module}::${kind} is not emitted`);
 });
 
 test("decodes an event from bytes laid out in Move field order", () => {
@@ -160,7 +205,7 @@ test("rejects events from another package, module, or arity", () => {
 
 test("rebuilds a presale, its vault, and a reward round from events", () => {
   const recipients = [id("0xa110c"), id("0xb110c")];
-  const events: DecodedPresaleEvent[] = [
+  const events: (DecodedPresaleEvent | DecodedPresaleDelayedEvent)[] = [
     decode("PresaleCreated", {
       presale_id: PRESALE,
       presale_cap_id: id("0xca"),
@@ -315,7 +360,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     [4_000n, 0n, 0n, 0n, 0n, 0n],
   );
 
-  const vaultEvents: DecodedPresaleEvent[] = [
+  const vaultEvents: (DecodedPresaleEvent | DecodedPresaleDelayedEvent)[] = [
     decode("VaultCreated", {
       vault_id: VAULT,
       presale_id: PRESALE,
@@ -347,10 +392,12 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       meme: 1n,
       quote: 0n,
     }),
-    decode("ProtocolLpFeesChanged", {
-      vault_id: VAULT,
-      protocol_lp_fee_meme_bps: 100n,
-      protocol_lp_fee_quote_bps: 0n,
+    decodeDelayed("DelayedApplied", "ProtocolLpFees", {
+      owner: VAULT,
+      key: null,
+      previous_value: lpFees(0n, 0n),
+      value: lpFees(100n, 0n),
+      delay_ms: 172_800_000n,
     }),
     decode("RoundPublished", {
       vault_id: VAULT,
@@ -421,11 +468,6 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
     "ProtocolLpFeesPaid",
     "HolderMemePaid",
     "GasReserveSettled",
-    "FeeSplitScheduled",
-    "FeeSplitCancelled",
-    "FeeSplitChanged",
-    "ProtocolLpFeesScheduled",
-    "ProtocolLpFeesCancelled",
   ];
   for (const kind of Object.keys(presaleEventModules) as PresaleEventKind[]) {
     const expected = twice.includes(kind) ? 2 : never.includes(kind) ? 0 : 1;
@@ -873,10 +915,12 @@ test("tracks Blast's shares from creation through migration, LP fees, and an LP-
   // The AdminCap replaces the vault's rates; collections already paid stand.
   state = reducePresaleEvent(
     state,
-    decode("ProtocolLpFeesChanged", {
-      vault_id: VAULT,
-      protocol_lp_fee_meme_bps: 500n,
-      protocol_lp_fee_quote_bps: 0n,
+    decodeDelayed("DelayedApplied", "ProtocolLpFees", {
+      owner: VAULT,
+      key: null,
+      previous_value: lpFees(1_000n, 2_500n),
+      value: lpFees(500n, 0n),
+      delay_ms: 172_800_000n,
     }),
   );
   const changed = required(state.vaults[VAULT]);
@@ -1228,7 +1272,7 @@ test("rejects the retired blast_presale_admin events: Blast's ACL administers th
   );
 });
 
-test("decodes fee-policy and creation-policy events, which have no type arguments", () => {
+test("decodes package and creation-policy events, which have no type arguments", () => {
   const packages = { originalPackageId: pkg };
   const entry = (
     eventType: string,
@@ -1244,43 +1288,13 @@ test("decodes fee-policy and creation-policy events, which have no type argument
     transactionDigest: "fees",
     eventIndex: 0,
   });
-  const changed = decodePresalePolicyEvent(
-    entry(`${pkg}::fee_policy::FeesChanged`, [
-      ...u64(333n),
-      ...u64(500n),
-      ...u64(1_000n),
-      ...u64(2_500n),
-    ]),
-    packages,
-  );
-  assert.equal(changed.kind, "FeesChanged");
-  assert.deepEqual(changed.payload, {
-    raise_bps: 333n,
-    token_bps: 500n,
-    lp_fee_meme_bps: 1_000n,
-    lp_fee_quote_bps: 2_500n,
-  });
-  const destination = decodePresalePolicyEvent(
-    entry(`${pkg}::fee_policy::DestinationChanged`, [
-      ...Buffer.from(TREASURY.slice(2), "hex"),
-    ]),
-    packages,
-  );
-  assert.deepEqual(destination.payload, { destination: TREASURY });
-  const witness = `${pkg.slice(2)}::cetus::Witness`;
   const typeName = (name: string) => [name.length, ...Buffer.from(name)];
-  const listed = decodePresalePolicyEvent(
-    entry(`${pkg}::creation_policy::MigrationWitnessSet`, [
-      ...typeName(witness),
-      1,
-    ]),
+  const paused = decodePresalePolicyEvent(
+    entry(`${pkg}::blast_presale_package::Paused`, [2, 3]),
     packages,
   );
-  assert.equal(listed.kind, "MigrationWitnessSet");
-  assert.deepEqual(listed.payload, {
-    migration_witness: `0x${witness}`,
-    allowed: true,
-  });
+  assert.equal(paused.kind, "Paused");
+  assert.deepEqual(paused.payload, { bits: 2, paused: 3 });
   const delisted = decodePresalePolicyEvent(
     entry(`${pkg}::creation_policy::QuoteSet`, [
       ...typeName(quote.slice(2)),
@@ -1310,10 +1324,13 @@ test("decodes fee-policy and creation-policy events, which have no type argument
     accepted_until_ms: 604_801_000n,
   });
   for (const eventType of [
-    `${id("0x99")}::fee_policy::FeesChanged`,
-    `${pkg}::blast_presale::FeesChanged`,
+    `${id("0x99")}::creation_policy::QuoteSet`,
+    `${pkg}::blast_presale::QuoteSet`,
     `${pkg}::fee_policy::QuoteSet`,
-    `${pkg}::fee_policy::FeesChanged<${meme}>`,
+    `${pkg}::creation_policy::QuoteSet<${meme}>`,
+    // Retired with the keyed delayed events.
+    `${pkg}::fee_policy::FeesChanged`,
+    `${pkg}::creation_policy::MigrationWitnessSet`,
   ]) {
     assert.throws(() =>
       decodePresalePolicyEvent(entry(eventType, []), packages),
@@ -1321,27 +1338,30 @@ test("decodes fee-policy and creation-policy events, which have no type argument
   }
 });
 
-/** Each module's events, with every event's fields in declaration order. */
-function orderedModuleEventFields(
-  modules: Readonly<
-    Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>
-  >,
-): Record<string, Record<string, [string, string][]>> {
-  return Object.fromEntries(
-    Object.entries(modules).map(([module, events]) => [
-      module,
-      orderedEventFields(events),
-    ]),
-  );
-}
-
+/**
+ * The fresh stack's event fields from `abi/pr150-consumers.json`, for every
+ * event the SDK decodes or the published presale ABI decoded. A published
+ * event that still exists must still decode; a removed one must be gone.
+ */
 function readFrozenPresaleEventSpecs(): Record<
   string,
   Record<string, Record<string, string>>
 > {
-  const artifact = JSON.parse(
+  const published = JSON.parse(
     readFileSync(
       new URL("../abi/production-presale-v1.json", import.meta.url),
+      "utf8",
+    ),
+  ) as {
+    packages: {
+      presale: {
+        modules: Record<string, { events: { sdk: string; name: string }[] }>;
+      };
+    };
+  };
+  const fresh = JSON.parse(
+    readFileSync(
+      new URL("../abi/pr150-consumers.json", import.meta.url),
       "utf8",
     ),
   ) as {
@@ -1350,64 +1370,45 @@ function readFrozenPresaleEventSpecs(): Record<
         modules: Record<
           string,
           {
-            events: Array<{
-              sdk: string;
+            structs: {
               name: string;
-              fields: Array<{ name: string; type: unknown }>;
-            }>;
+              fields: { name: string; type: unknown }[];
+            }[];
           }
         >;
       };
     };
   };
+  const decoded = new Set(
+    Object.entries({
+      ...presaleEventSpecs,
+      ...presalePolicyEventSpecs,
+    }).flatMap(([module, events]) =>
+      Object.keys(events).map((kind) => `${module}::${kind}`),
+    ),
+  );
+  for (const [module, definition] of Object.entries(
+    published.packages.presale.modules,
+  ))
+    for (const event of definition.events)
+      if (event.sdk === "decoder-reducer")
+        decoded.add(`${module}::${event.name}`);
   const specs: Record<string, Record<string, Record<string, string>>> = {};
   for (const [module, definition] of Object.entries(
-    artifact.packages.presale.modules,
-  )) {
-    const events = definition.events.filter(
-      (event) => event.sdk === "decoder-reducer",
-    );
-    if (events.length === 0) continue;
-    specs[module] = Object.fromEntries(
-      events.map((event) => [
-        event.name,
-        Object.fromEntries(
-          event.fields.map((field) => [field.name, descriptor(field.type)]),
-        ),
-      ]),
-    );
-  }
-  const current = JSON.parse(
-    readFileSync(
-      new URL("../abi/pr150-consumers.json", import.meta.url),
-      "utf8",
-    ),
-  ) as {
-    packages: {
-      presale: {
-        modules: {
-          presale_vault: {
-            structs: {
-              name: string;
-              fields: { name: string; type: unknown }[];
-            }[];
-          };
-        };
-      };
-    };
-  };
-  for (const event of current.packages.presale.modules.presale_vault.structs.filter(
-    (s) => s.name.startsWith("FeeSplit"),
-  )) {
-    specs.presale_vault![event.name] = Object.fromEntries(
-      event.fields.map((f) => [f.name, descriptor(f.type)]),
-    );
-  }
+    fresh.packages.presale.modules,
+  ))
+    for (const struct of definition.structs) {
+      if (!decoded.has(`${module}::${struct.name}`)) continue;
+      specs[module] ??= {};
+      specs[module][struct.name] = Object.fromEntries(
+        struct.fields.map((f) => [f.name, descriptor(f.type)]),
+      );
+    }
   return specs;
 }
 
 function descriptor(type: unknown): string {
-  if (["u32", "u64", "u128", "bool", "address"].includes(String(type))) {
+  if (["u8", "u32", "u64", "u128", "bool", "address"].includes(String(type))) {
     return String(type);
   }
   const record = type as Record<string, unknown>;
@@ -1423,7 +1424,6 @@ function descriptor(type: unknown): string {
     type_arguments: unknown[];
   };
   const name = datatype.name;
-  if (name === "FeeSplit") return "feeSplit";
   if (name === "ID") return "id";
   if (name === "TypeName") return "typeName";
   if (name === "EligibilityPolicy") return "eligibility";
@@ -1668,7 +1668,7 @@ test("keys pool tiers by sale token in either coin order; an Aftermath sale has 
 
 test("vault fee proposals remain pending until explicit application, with replay deduplication", () => {
   let state = createPresaleEventProjection();
-  const apply = (event: DecodedPresaleEvent) => {
+  const apply = (event: DecodedPresaleEvent | DecodedPresaleDelayedEvent) => {
     state = reducePresaleEvent(state, event);
   };
   apply(
@@ -1695,31 +1695,39 @@ test("vault fee proposals remain pending until explicit application, with replay
     fee_recipients: [{ recipient: BOB, bps: 5000n, vesting: null }],
     holder_rewards_bps: 5000n,
   };
-  const scheduled = decode("FeeSplitScheduled", {
-    vault_id: VAULT,
-    proposed,
-    ready_at_ms: 100n,
+  const proposal = { owner: VAULT, key: null, value: proposed };
+  const scheduled = decodeDelayed("DelayedScheduled", "FeeSplit", {
+    ...proposal,
     delay_ms: 5n,
+    ready_at_ms: 100n,
   });
   apply(scheduled);
   apply(scheduled);
   assert.equal(state.vaults[VAULT]?.holderRewardsBps, 3000n);
   assert.deepEqual(state.vaults[VAULT]?.pendingFeeSplit?.value, proposed);
-  apply(decode("FeeSplitCancelled", { vault_id: VAULT, proposed }));
-  assert.equal(state.vaults[VAULT]?.pendingFeeSplit, null);
+  assert.equal(state.policy.pendingPolicies[`FeeSplit:${VAULT}`], scheduled);
   apply(
-    decode("FeeSplitScheduled", {
-      vault_id: VAULT,
-      proposed,
-      ready_at_ms: 200n,
+    decodeDelayed("DelayedCancelled", "FeeSplit", {
+      ...proposal,
+      delay_ms: 5n,
+      ready_at_ms: 100n,
+    }),
+  );
+  assert.equal(state.vaults[VAULT]?.pendingFeeSplit, null);
+  assert.equal(state.policy.pendingPolicies[`FeeSplit:${VAULT}`], undefined);
+  apply(
+    decodeDelayed("DelayedScheduled", "FeeSplit", {
+      ...proposal,
       delay_ms: 0n,
+      ready_at_ms: 200n,
     }),
   );
   assert.equal(state.vaults[VAULT]?.holderRewardsBps, 3000n);
-  const changed = decode("FeeSplitChanged", {
-    vault_id: VAULT,
-    old_fee_split: oldSplit,
-    new_fee_split: proposed,
+  const changed = decodeDelayed("DelayedApplied", "FeeSplit", {
+    owner: VAULT,
+    key: null,
+    previous_value: oldSplit,
+    value: proposed,
     delay_ms: 0n,
   });
   apply(changed);
@@ -1729,4 +1737,126 @@ test("vault fee proposals remain pending until explicit application, with replay
   assert.equal(state.vaults[VAULT]?.holderRewardsBps, 5000n);
   assert.equal(state.vaults[VAULT]?.pendingFeeSplit, null);
   assert.equal(state.vaults[VAULT]?.feeSplitDelayMs, 0n);
+  assert.equal(state.policy.policyDelays[`FeeSplit:${VAULT}`], 0n);
+});
+
+test("projects fee policy and witness admissions from keyed delayed events", () => {
+  const policyId = id("0xfe");
+  const witness = normalizeStructTag(`${pkg}::cetus::Witness`);
+  let state = createPresaleEventProjection();
+  const fees = lpFees(1_000n, 2_500n);
+  for (const event of [
+    decodeDelayed("DelayedCreated", "Fees", {
+      owner: policyId,
+      key: null,
+      value: fees,
+      delay_ms: 0n,
+    }),
+    decodeDelayed("DelayedCreated", "Destination", {
+      owner: policyId,
+      key: null,
+      value: TREASURY,
+      delay_ms: 0n,
+    }),
+    decodeDelayed("SetCreated", "MigrationWitnesses", {
+      owner: id("0xcf"),
+      key: null,
+      delay_ms: 0n,
+    }),
+    decodeDelayed("SetScheduled", "MigrationWitnesses", {
+      owner: id("0xcf"),
+      key: null,
+      change: { kind: "Admission", member: witness },
+      delay_ms: 0n,
+      ready_at_ms: 5n,
+    }),
+  ])
+    state = reducePresaleEvent(state, event);
+  assert.deepEqual(
+    [state.policy.fees, state.policy.destination],
+    [fees, TREASURY],
+  );
+  assert.deepEqual(state.policy.migrationWitnesses, {});
+  assert.ok(state.policy.pendingPolicies[`MigrationWitnesses:${witness}`]);
+  const admitted = decodeDelayed("SetApplied", "MigrationWitnesses", {
+    owner: id("0xcf"),
+    key: null,
+    change: { kind: "Admission", member: witness },
+    delay_ms: 0n,
+  });
+  state = reducePresaleEvent(state, admitted);
+  assert.deepEqual(state.policy.migrationWitnesses, { [witness]: true });
+  assert.deepEqual(state.policy.pendingPolicies, {});
+  state = reducePresaleEvent(
+    state,
+    decodeDelayed("SetApplied", "MigrationWitnesses", {
+      owner: id("0xcf"),
+      key: null,
+      change: { kind: "Delay" },
+      delay_ms: 172_800_000n,
+    }),
+  );
+  assert.equal(state.policy.policyDelays.MigrationWitnesses, 172_800_000n);
+  state = reducePresaleEvent(
+    state,
+    decodeDelayed("MemberRemoved", "MigrationWitnesses", {
+      owner: id("0xcf"),
+      key: null,
+      member: witness,
+    }),
+  );
+  assert.deepEqual(state.policy.migrationWitnesses, {});
+});
+
+test("decodes a delayed event only under its presale key and value type", () => {
+  const event = decodeDelayed("DelayedScheduled", "Destination", {
+    owner: id("0xfe"),
+    key: null,
+    value: TREASURY,
+    delay_ms: 7n,
+    ready_at_ms: 9n,
+  });
+  assert.equal(event.name, "Destination");
+  assert.deepEqual(event.payload, {
+    owner: id("0xfe"),
+    key: null,
+    value: TREASURY,
+    delay_ms: 7n,
+    ready_at_ms: 9n,
+  });
+  // Golden bytes: owner, the one-byte key, value, delay_ms, ready_at_ms.
+  const bytes = Uint8Array.from([
+    ...Buffer.from(id("0xfe").slice(2), "hex"),
+    0,
+    ...Buffer.from(TREASURY.slice(2), "hex"),
+    ...u64(7n),
+    ...u64(9n),
+  ]);
+  const entry = (eventType: string): SuiClientTypes.EventEntry => ({
+    packageId: pkg,
+    module: "fee_policy",
+    sender: ALICE,
+    eventType,
+    bcs: bytes,
+    json: null,
+    checkpoint: "9",
+    transactionDigest: "delayed",
+    eventIndex: 0,
+  });
+  const identity = { originalPackageId: pkg, adminPackageId: ADMIN };
+  const destinationKey = `${pkg}::fee_policy::DestinationKey`;
+  assert.deepEqual(
+    decodePresaleDelayedEvent(
+      entry(`${ADMIN}::delayed::DelayedScheduled<${destinationKey}, address>`),
+      identity,
+    ).payload,
+    event.payload,
+  );
+  for (const eventType of [
+    `${id("0x99")}::delayed::DelayedScheduled<${destinationKey}, address>`,
+    `${ADMIN}::delayed::DelayedScheduled<${destinationKey}, u64>`,
+    `${ADMIN}::delayed::DelayedScheduled<${id("0x99")}::fee_policy::DestinationKey, address>`,
+    `${ADMIN}::delayed::ActionScheduled<${destinationKey}, address>`,
+  ])
+    assert.throws(() => decodePresaleDelayedEvent(entry(eventType), identity));
 });
