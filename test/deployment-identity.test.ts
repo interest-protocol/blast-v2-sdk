@@ -689,7 +689,6 @@ function productionManifest() {
       launchpad: reference("launchpad"),
       admin: reference("admin"),
       partners: reference("partners"),
-      timelock: reference("timelock"),
       migrators: reference("migrators"),
     },
     sharedObjects: {

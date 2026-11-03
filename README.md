@@ -102,8 +102,9 @@ product packages retain `0.1.0` because their ABI and implementation are unchang
 
 The [verified deployment record](https://github.com/interest-protocol/blast-v2-contracts/blob/390daf87bf42e4da40804d98c7fad64157967d80/deployments/sui/mainnet/2026-10-28-canonical-mvr-launch-stack.json)
 contains the five new package IDs, eleven SDK shared objects, three upgrade
-custody objects and their initial sharing versions. The immutable timelock
-dependency retains its existing identity. The public documentation and npm
+custody objects and their initial sharing versions. The SDK no longer binds
+that stack's immutable `blast_fun_timelock` dependency: contracts #164 removed
+it, and no package of the fresh stack links it. The public documentation and npm
 `0.1.0` describe the earlier publication; use `0.1.4` for these canonical bindings.
 
 Use the call-ready constants from `@interest-protocol/blast-deployments-sdk`
@@ -125,7 +126,7 @@ const presale = new PresaleCalls(getPresaleDeployment("mainnet"));
 The deployment package also exports `MAINNET_ADMIN_DEPLOYMENT`,
 `MAINNET_PARTNERS_DEPLOYMENT`, `MAINNET_PRESALE_DEPLOYMENT`,
 `CANONICAL_MAINNET_PACKAGES`, and `CANONICAL_MAINNET_SHARED_OBJECTS`.
-Bindings include the matching ACL, partners, timelock and migrators, and all
+Bindings include the matching ACL, partners and migrators, and all
 initial shared versions, including the activated version singletons.
 `npm run check:mainnet` verifies deployed interfaces and object identities.
 
@@ -201,7 +202,7 @@ It provides:
   DAO-pool migration through the partner's vendor package, claims, LP-fee
   collection, and holder-reward rounds, with exact previews and event replay;
 - operator transactions for every administrator action: the shared
-  `blast_admin` ACL (admins, roles, the timelocked root transfer), the
+  `blast_admin` ACL (admins, roles, the delayed root transfer), the
   `LaunchConfig` and `RuntimeConfig` setters, creator-cap reassignment,
   LP-fee policy, buybacks, and the blastSUI redeem fee, each signed in with its
   typed role in the same transaction; and
@@ -232,7 +233,6 @@ const client = new SuiGrpcClient({
     originalPackageId: "0x...",
     adminPackageId: "0x...", // published blast_admin
     partnersPackageId: "0x...", // published blast_partners
-    timelockPackageId: "0x...", // published blast_fun_timelock
     packageVersion: {
       objectId: "0x...",
       initialSharedVersion: "...",
@@ -255,7 +255,6 @@ const client = new SuiGrpcClient({
       mutable: false,
     },
     partnersPackageId: "0x...", // published blast_partners
-    timelockPackageId: "0x...", // published immutable blast_fun_timelock
     packageVersion: { objectId: "0x...", initialSharedVersion: "..." },
     launchConfig: { objectId: "0x...", initialSharedVersion: "..." },
     runtimeConfig: { objectId: "0x...", initialSharedVersion: "..." },
@@ -293,15 +292,15 @@ identity: schema version, environment (`production` may sign; `non-production`
 never can), network and chain identifier (Blast runs on Sui mainnet only, so
 every manifest names mainnet and carries its genesis checkpoint digest as the
 Core API reports it), explorer, every published package with its current and
-original package IDs (`timelock`, `admin`, `partners` and `launchpad` always;
+original package IDs (`admin`, `partners` and `launchpad` always;
 `migrators`, `presale`, `blastSui` and a venue's packages when recorded),
 shared-object IDs and initial versions grouped by the package that owns them,
 migration routes and their tiers, the contracts commit and ABI artifact
 digests it was built from, release transaction digests, the SDK version and
 commit, and post-deploy evidence. The `launch_ticket_template` and
 `coin_template` packages have no entry: each launch publishes its own Meme
-package from the launch ticket template's bytecode, linking the timelock,
-admin, partners and launchpad packages, and each standalone coin publishes its
+package from the launch ticket template's bytecode, linking the admin,
+partners and launchpad packages, and each standalone coin publishes its
 own package from the coin template's.
 
 Each shared object therefore has one owner-qualified path: `admin.acl`;
@@ -667,7 +666,7 @@ accepts a partner for new launches through `addPartner` and `removePartner`.
 (`launch_ticket_template`, formerly `meme_template`; contracts ADR 0108). It patches the type
 identifiers, decimals, metadata, creator recipient, launch policy, and deployed
 Blast package dependency. The publish lists every package the launchpad links:
-the `blast_fun_timelock`, `blast_admin`, and `blast_partners` packages from the
+the `blast_admin` and `blast_partners` packages from the
 deployment, then the launchpad. Launch finalization rejects a symbol longer than 32
 bytes, and `LaunchConfig` admits the decimal precision (six and nine
 initially), so the SDK rejects a longer symbol before publication. The recipient can be the publisher, another Sui address,

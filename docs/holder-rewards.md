@@ -111,7 +111,6 @@ Create a JSON config outside the public artifacts:
       "originalPackageId": "0xORIGINAL_LAUNCHPAD_PACKAGE",
       "adminPackageId": "0xBLAST_ADMIN_PACKAGE",
       "partnersPackageId": "0xBLAST_PARTNERS_PACKAGE",
-      "timelockPackageId": "0xBLAST_FUN_TIMELOCK_PACKAGE",
       "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
       "launchConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
       "runtimeConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },

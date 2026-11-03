@@ -15,7 +15,6 @@ test("registers the typed launchpad client extension", () => {
       packageId: "0x123",
       originalPackageId: "0x123",
       partnersPackageId: "0x112",
-      timelockPackageId: "0x113",
       packageVersion: {
         objectId: "0x2",
         initialSharedVersion: "10",

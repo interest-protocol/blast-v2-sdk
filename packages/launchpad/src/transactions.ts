@@ -51,8 +51,6 @@ export type LaunchpadDeployment = {
   admin: AdminDeployment;
   /** Published `blast_partners` package, a transitive Meme publish dependency. */
   partnersPackageId: string;
-  /** Published immutable `blast_fun_timelock`, a transitive Meme publish dependency. */
-  timelockPackageId: string;
   packageVersion: SharedObjectIdentity;
   launchConfig: SharedObjectIdentity;
   runtimeConfig: SharedObjectIdentity;
@@ -1722,7 +1720,6 @@ export class LaunchpadTransactions {
         dependencies: [
           MOVE_STDLIB_ADDRESS,
           SUI_FRAMEWORK_ADDRESS,
-          this.call.deployment.timelockPackageId,
           this.call.deployment.admin.packageId,
           this.call.deployment.partnersPackageId,
           this.call.deployment.packageId,
@@ -2601,7 +2598,6 @@ function normalizeDeployment(
     ...normalizeSuiPackageReference("launchpad", deployment),
     admin: normalizeAdminDeployment(deployment.admin),
     partnersPackageId: normalizeSuiObjectId(deployment.partnersPackageId),
-    timelockPackageId: normalizeSuiObjectId(deployment.timelockPackageId),
     packageVersion: normalizeSharedObjectIdentity(
       "packageVersion",
       deployment.packageVersion,

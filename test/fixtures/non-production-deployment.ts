@@ -36,12 +36,6 @@ export const NON_PRODUCTION_MANIFEST = {
       originalPackageId:
         "0x661519f5fffe732a38d23ab13fb8d6d3b4527d8b0ca821dd8df61db13441a2b5",
     },
-    timelock: {
-      packageId:
-        "0x4646dcce24368888cc0baf3092e5009777e3b61263bce622c97d7673c8b54070",
-      originalPackageId:
-        "0x4646dcce24368888cc0baf3092e5009777e3b61263bce622c97d7673c8b54070",
-    },
     migrators: {
       packageId:
         "0x3db89a4e81c0b952c952a91d26b8568945ece87ff52ff69a1c7b928f2a257ce6",
@@ -136,7 +130,6 @@ export const NON_PRODUCTION_MANIFEST = {
   },
   release: {
     transactions: {
-      timelock: "FEiQZR1XWhnTCeYdb2f8nZ1Uo49FE13NfJdvkbeJLDvg",
       admin: "HcgAauyuV1TCjtvWFXHE4LqKkja9aPR6wz1y1xCXdLcr",
       partners: "Am7GpsGz2cbd5znWQmkBaWdv6T1D959jiRwZoQE6wRU4",
       launchpad: "AopiFViCrb2tvBTGyJzHxjtPhsuiWqrHkswNH5qrDobs",

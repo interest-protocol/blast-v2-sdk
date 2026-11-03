@@ -86,10 +86,6 @@
       "types": "./dist/sui.d.ts",
       "default": "./dist/sui.js"
     },
-    "./timelock": {
-      "types": "./dist/timelock.d.ts",
-      "default": "./dist/timelock.js"
-    },
     "./package.json": "./package.json"
   },
   "engines": {

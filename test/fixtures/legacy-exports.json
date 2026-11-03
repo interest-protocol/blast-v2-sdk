@@ -414,7 +414,6 @@
     "splitCollectedFee": "function",
     "sqrtPriceX64": "function",
     "suiAtRateDown": "function",
-    "timelockedValue": "function",
     "uncappedForAnyone": "function",
     "uncappedForEligible": "function",
     "uncappedPhaseBcs": "object",
@@ -675,8 +674,7 @@
     "readMemePublication": "function",
     "reduceLaunchpadEvent": "function",
     "requireCompletePlan": "function",
-    "runtimeConfigBcs": "object",
-    "timelockedValue": "function"
+    "runtimeConfigBcs": "object"
   },
   "./launchpad/template": {
     "MAX_MEME_SYMBOL_BYTES": "number",

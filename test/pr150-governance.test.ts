@@ -28,7 +28,6 @@ const launchpad = {
   originalPackageId: "0x15",
   admin,
   partnersPackageId: "0xae",
-  timelockPackageId: "0xaf",
   packageVersion: shared,
   launchConfig: { ...shared, objectId: "0x72" },
   runtimeConfig: { ...shared, objectId: "0x73" },

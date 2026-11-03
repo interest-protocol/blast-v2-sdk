@@ -191,7 +191,6 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
         packageId: address("0x41"),
         originalPackageId: address("0x41"),
         partnersPackageId: address("0xae"),
-        timelockPackageId: address("0xaf"),
         packageVersion: shared("0x42", false),
         launchConfig: shared("0x43", false),
         runtimeConfig: shared("0x44", false),
