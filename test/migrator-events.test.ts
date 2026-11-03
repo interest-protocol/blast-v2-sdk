@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { DelayedEventKind } from "@interest-protocol/blast-admin-sdk/events";
-import { delayedEventBcs } from "@interest-protocol/blast-admin-sdk/events";
+import {
+  delayedEventBcs,
+  delayedEventModule,
+} from "@interest-protocol/blast-admin-sdk/events";
 import type { LaunchpadEventKind } from "@interest-protocol/blast-launchpad-sdk/events";
 import {
   decodeLaunchpadEvent,
@@ -22,6 +25,7 @@ import {
 } from "@interest-protocol/blast-migrators-sdk/events";
 import {
   createLaunchpadProductProjection,
+  migratorsDelayedPolicyKey,
   reduceLaunchpadProductInput,
 } from "@interest-protocol/blast-migrators-sdk/reducer";
 import type { BcsType } from "@mysten/sui/bcs";
@@ -354,33 +358,34 @@ test("replays LP-fee policy defaults, coin pairs, destination, and Cetus reserva
       1,
     ),
     delayedDecoded(
-      "DelayedApplied",
+      "MapApplied",
       "CoinShares",
       {
-        key: "0xa::meme::MEME",
-        previous_value: null,
-        value: { meme_bps: 500n, quote_bps: 600n },
+        change: {
+          kind: "Entry",
+          entry: "0xa::meme::MEME",
+          value: { meme_bps: 500n, quote_bps: 600n },
+        },
       },
       2,
     ),
     delayedDecoded(
-      "DelayedApplied",
+      "MapApplied",
       "CoinShares",
       {
-        key: "0xb::meme::MEME",
-        previous_value: null,
-        value: { meme_bps: 1n, quote_bps: 1n },
+        change: {
+          kind: "Entry",
+          entry: "0xb::meme::MEME",
+          value: { meme_bps: 1n, quote_bps: 1n },
+        },
       },
       3,
     ),
+    // Clearing an entry removes the override.
     delayedDecoded(
-      "DelayedApplied",
+      "MapApplied",
       "CoinShares",
-      {
-        key: "0xb::meme::MEME",
-        previous_value: { meme_bps: 1n, quote_bps: 1n },
-        value: null,
-      },
+      { change: { kind: "Entry", entry: "0xb::meme::MEME", value: null } },
       4,
     ),
     delayedDecoded(
@@ -414,8 +419,7 @@ test("replays LP-fee policy defaults, coin pairs, destination, and Cetus reserva
   });
   assert.deepEqual(projection.migrators.administration.policyDelays, {
     DefaultShares: 0n,
-    [`CoinShares:${normalizedType("0xa::meme::MEME")}`]: 172_800_000n,
-    [`CoinShares:${normalizedType("0xb::meme::MEME")}`]: 172_800_000n,
+    // An entry change's notice is the one it waited, not a new map notice.
     // Applying a destination also applies its proposed next notice.
     ProtocolDestination: 172_800_000n,
   });
@@ -598,9 +602,14 @@ function delayedSuiEvent(
   const spec = migratorsDelayedKeys[name];
   const migrators = normalizeSuiObjectId(migratorPackages.originalPackageId);
   const launchpad = normalizeSuiObjectId(launchpadPackages.originalPackageId);
-  const valueType = spec.valueType
-    .replaceAll("{package}", migrators)
-    .replaceAll("{launchpad}", launchpad);
+  const local = (type: string) =>
+    type
+      .replaceAll("{package}", migrators)
+      .replaceAll("{launchpad}", launchpad);
+  const valueType = [
+    ...("entryType" in spec ? [local(spec.entryType)] : []),
+    local(spec.valueType),
+  ].join(", ");
   const schema = delayedEventBcs(kind, spec) as unknown as BcsType<
     unknown,
     Record<string, unknown>
@@ -609,10 +618,10 @@ function delayedSuiEvent(
     packageId: "0x321",
     module: "lp_fee_policy",
     sender: "0xa",
-    eventType: `0xad::delayed::${kind}<${migrators}::${spec.key}, ${valueType}>`,
+    eventType: `0xad::${delayedEventModule(kind)}::${kind}<${migrators}::${spec.key}, ${valueType}>`,
     bcs: schema
       .serialize({
-        key: name === "CoinShares" ? "0xa::meme::MEME" : null,
+        key: null,
         ...DELAYED_SAMPLES,
         ...overrides,
       })
@@ -964,7 +973,7 @@ test("replays pending split replacement, cancellation, explicit application and 
   );
 });
 
-test("decodes a per-coin LP-fee schedule from its delayed event bytes", () => {
+test("decodes a per-coin LP-fee schedule from its delayed map event bytes", () => {
   const migrators = normalizeSuiObjectId("0x320");
   const typeName = new TextEncoder().encode(`${"0".repeat(63)}a::meme::MEME`);
   const u64 = (value: bigint) => {
@@ -972,10 +981,13 @@ test("decodes a per-coin LP-fee schedule from its delayed event bytes", () => {
     new DataView(bytes.buffer).setBigUint64(0, value, true);
     return bytes;
   };
-  // owner, CoinSharesKey(TypeName), Some(SharePair), delay_ms, ready_at_ms.
+  // owner, CoinSharesKey(), MapChange::Entry { TypeName, Some(SharePair) },
+  // delay_ms, ready_at_ms.
   const golden = Uint8Array.from([
     ...new Uint8Array(31),
     0x50,
+    0,
+    0,
     typeName.length,
     ...typeName,
     1,
@@ -989,7 +1001,7 @@ test("decodes a per-coin LP-fee schedule from its delayed event bytes", () => {
       packageId: "0x321",
       module: "lp_fee_policy",
       sender: "0xa",
-      eventType: `0xad::delayed::DelayedScheduled<${migrators}::lp_fee_policy::CoinSharesKey, 0x1::option::Option<${migrators}::lp_fee_policy::SharePair>>`,
+      eventType: `0xad::delayed_map::MapScheduled<${migrators}::lp_fee_policy::CoinSharesKey, 0x1::type_name::TypeName, ${migrators}::lp_fee_policy::SharePair>`,
       bcs: golden,
       json: null,
       checkpoint: "9",
@@ -1000,14 +1012,22 @@ test("decodes a per-coin LP-fee schedule from its delayed event bytes", () => {
   );
   assert.equal(event.product, "migrators");
   assert.equal(event.name, "CoinShares");
-  assert.equal(event.kind, "DelayedScheduled");
+  assert.equal(event.kind, "MapScheduled");
   assert.deepEqual(event.payload, {
     owner: normalizeSuiObjectId("0x50"),
-    key: normalizedType("0xa::meme::MEME"),
-    value: { meme_bps: 500n, quote_bps: 600n },
+    key: null,
+    change: {
+      kind: "Entry",
+      entry: normalizedType("0xa::meme::MEME"),
+      value: { meme_bps: 500n, quote_bps: 600n },
+    },
     delay_ms: 172_800_000n,
     ready_at_ms: 1_000n,
   });
+  assert.equal(
+    migratorsDelayedPolicyKey(event),
+    `CoinShares:${normalizedType("0xa::meme::MEME")}`,
+  );
 });
 
 test("authenticates migrators delayed events by key, value and family", () => {

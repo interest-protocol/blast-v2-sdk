@@ -642,12 +642,12 @@ function reduceDelayed(
     }
   }
   if (event.name !== "MigrationWitnesses") return state;
-  if (event.kind === "ActionApplied" && event.payload.change.kind === "Action")
+  if (event.kind === "SetApplied" && event.payload.change.kind === "Admission")
     return updateConfig(state, {
       ...config,
       migrationWitnesses: withEntry(
         config.migrationWitnesses,
-        event.payload.change.action,
+        event.payload.change.member,
         true,
       ),
     });
@@ -679,9 +679,9 @@ export function delayedPolicyKey(
   if (
     event.name === "MigrationWitnesses" &&
     "change" in event.payload &&
-    event.payload.change.kind === "Action"
+    event.payload.change.kind === "Admission"
   )
-    key += `:${event.payload.change.action}`;
+    key += `:${event.payload.change.member}`;
   return key;
 }
 
@@ -705,25 +705,25 @@ function reduceDelayedPolicy(
   switch (event.kind) {
     case "DelayedScheduled":
     case "ActionScheduled":
+    case "SetScheduled":
       pending[key] = event;
       break;
     case "DelayedCancelled":
     case "ActionCancelled":
+    case "SetCancelled":
       delete pending[key];
       break;
     case "DelayedApplied":
     case "ActionApplied":
+    case "SetApplied":
       delete pending[key];
       // An admission's delay_ms is the notice it waited, not a new set notice.
-      if (
-        event.kind === "DelayedApplied" ||
-        event.name !== "MigrationWitnesses" ||
-        event.payload.change.kind === "Delay"
-      )
+      if (event.kind !== "SetApplied" || event.payload.change.kind === "Delay")
         delays[key] = event.payload.delay_ms;
       break;
     case "DelayedCreated":
     case "ActionCreated":
+    case "SetCreated":
       delays[key] = event.payload.delay_ms;
       break;
     default:

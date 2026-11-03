@@ -665,9 +665,20 @@ function reduceDelayed(
           : null,
     }));
   }
+  const policy = state.lpFeePolicy;
+  if (event.kind === "MapApplied" && event.payload.change.kind === "Entry") {
+    const { entry, value } = event.payload.change;
+    const coinShares = { ...policy.coinShares };
+    if (value === null) delete coinShares[entry];
+    else
+      coinShares[entry] = {
+        memeBps: value.meme_bps,
+        quoteBps: value.quote_bps,
+      };
+    return { ...state, lpFeePolicy: { ...policy, coinShares } };
+  }
   if (event.kind !== "DelayedCreated" && event.kind !== "DelayedApplied")
     return state;
-  const policy = state.lpFeePolicy;
   switch (event.name) {
     case "ProtocolDestination":
       return {
@@ -684,17 +695,6 @@ function reduceDelayed(
         },
       };
     }
-    case "CoinShares": {
-      const pair = event.payload.value;
-      const coinShares = { ...policy.coinShares };
-      if (pair === null) delete coinShares[event.payload.key];
-      else
-        coinShares[event.payload.key] = {
-          memeBps: pair.meme_bps,
-          quoteBps: pair.quote_bps,
-        };
-      return { ...state, lpFeePolicy: { ...policy, coinShares } };
-    }
     case "FeeSplit": {
       const { owner, value, delay_ms } = event.payload;
       return updateVault(state, owner, (vault) => ({
@@ -709,12 +709,18 @@ function reduceDelayed(
 
 /**
  * The projection key of a delayed value: its registry name, then the coin
- * type for per-coin shares or the `LpVault` for a fee split.
+ * type for a per-coin change or the `LpVault` for a fee split. The shared
+ * per-coin notice is `CoinShares`.
  */
 export function migratorsDelayedPolicyKey(
   event: Pick<DecodedMigratorsDelayedEvent, "name" | "payload">,
 ): string {
-  if (event.name === "CoinShares") return `CoinShares:${event.payload.key}`;
+  if (
+    "change" in event.payload &&
+    "entry" in event.payload.change &&
+    event.payload.change.kind === "Entry"
+  )
+    return `${event.name}:${event.payload.change.entry}`;
   if (event.name === "FeeSplit") return `FeeSplit:${event.payload.owner}`;
   return event.name;
 }
@@ -730,19 +736,25 @@ function reduceDelayedPolicy(
   switch (event.kind) {
     case "DelayedScheduled":
     case "ActionScheduled":
+    case "MapScheduled":
       pending[key] = event;
       break;
     case "DelayedCancelled":
     case "ActionCancelled":
+    case "MapCancelled":
       delete pending[key];
       break;
     case "DelayedApplied":
     case "ActionApplied":
+    case "MapApplied":
       delete pending[key];
-      delays[key] = event.payload.delay_ms;
+      // An entry change's delay_ms is the notice it waited, not a new one.
+      if (event.kind !== "MapApplied" || event.payload.change.kind === "Delay")
+        delays[key] = event.payload.delay_ms;
       break;
     case "DelayedCreated":
     case "ActionCreated":
+    case "MapCreated":
       delays[key] = event.payload.delay_ms;
       break;
     default:

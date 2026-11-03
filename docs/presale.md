@@ -411,7 +411,8 @@ is created:
 
 In a sale's creation PTB before `share`, or after it until the sale's
 `startMs`, `setPresaleProtocolFees` may replace all four of
-its rates within the same bounds (`ProtocolFeesChanged`). Blast's new amounts
+its rates within the same bounds (`ProtocolFeesChanged`); once the sale is
+shared it may only lower each rate (`EProtocolFeesIncreased`). Blast's new amounts
 are its rates of the supply and of the raise, each rounded down. The token
 difference moves to or from the buyers' `tokenAllocation`, which must keep a
 token; the Quote difference moves to or from the LP's, which must stay positive

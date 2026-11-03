@@ -2069,7 +2069,8 @@ export class PresaleCalls {
    * sale allocation and its raise difference to or from the LP's Quote, each
    * rounded down. The contract applies `scheduleProtocolFees`'s bounds and rejects
    * an unchanged set, a started sale, an LP left without Quote or an
-   * unpoolable price, and buyers left without tokens.
+   * unpoolable price, and buyers left without tokens. Once the sale is shared
+   * it may only lower each rate (`EProtocolFeesIncreased`).
    */
   setPresaleProtocolFees(
     options: LaunchTypes & {

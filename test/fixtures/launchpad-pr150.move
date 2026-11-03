@@ -1,5 +1,5 @@
 // Fixture generator for test/fixtures/launchpad-pr150.ts. It is not compiled by the SDK.
-// To regenerate: extract contracts commit 61b55508ce4dd2b2a6e81035eb029cef7994c26a with
+// To regenerate: extract contracts commit 89c36d4925550f23a1d4120056a6f02667a3e986 with
 // `git archive`, copy this file to sui/launchpad/tests/ in that copy only, and run
 // `sui move test sdk_fixture_tests` from sui/launchpad. Never add it to the contracts repository.
 #[test_only]
@@ -44,7 +44,7 @@ fun print_fixtures() {
     let next_governance_time = governance_clock.timestamp_ms() + 172_800_000;
     governance_clock.set_for_testing(next_governance_time);
     config.apply_migration_witness<TEST_MIGRATION_WITNESS>(&pv, &governance_clock);
-    print_delayed<ActionApplied<MigrationWitnessKey, TypeName>>(b"event MigrationWitnessAdmitted");
+    print_delayed<SetApplied<MigrationWitnessKey, TypeName>>(b"event MigrationWitnessAdmitted");
     config.schedule_trade_fees(&pv, &blast_acl::witness_for_testing<FeeAdmin>(), bps::new(100), bps::new(250), 172_800_000, &governance_clock);
     let next_governance_time = governance_clock.timestamp_ms() + 172_800_000;
     governance_clock.set_for_testing(next_governance_time);
@@ -258,7 +258,7 @@ fun print_event<T: copy + drop>(name: vector<u8>) {
     debug::print(&bcs::to_bytes(&events[events.length() - 1].unwrap()));
 }
 
-use blast_admin::{blast_acl, delayed::{ActionApplied, DelayedApplied}};
+use blast_admin::{blast_acl, delayed::DelayedApplied, delayed_set::SetApplied};
 use blast_fun::{
     allocation::{Self, ProtocolAllocation},
     blast_events::Event,

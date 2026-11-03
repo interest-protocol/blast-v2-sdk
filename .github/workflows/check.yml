@@ -52,7 +52,7 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Fetch the PR150 contracts source
         if: env.CONTRACTS_READ_TOKEN != ''
-        run: git -C ../blast-v2-contracts fetch origin 61b55508ce4dd2b2a6e81035eb029cef7994c26a
+        run: git -C ../blast-v2-contracts fetch origin 89c36d4925550f23a1d4120056a6f02667a3e986
       - name: Check fresh PR150 source ABI
         if: env.CONTRACTS_READ_TOKEN != ''
         run: npm run check:abi:pr150

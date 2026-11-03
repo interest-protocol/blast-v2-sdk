@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { DelayedEventKind } from "@interest-protocol/blast-admin-sdk/events";
-import { delayedEventBcs } from "@interest-protocol/blast-admin-sdk/events";
+import {
+  delayedEventBcs,
+  delayedEventModule,
+} from "@interest-protocol/blast-admin-sdk/events";
 import { itemAt } from "@interest-protocol/blast-core/arrays";
 import type {
   DecodedPresaleDelayedEvent,
@@ -91,7 +94,7 @@ function decode<Kind extends PresaleEventKind>(
 
 const ADMIN = id("0xad");
 
-/** A `<ADMIN>::delayed::<kind>` event under a presale key, in Move field order. */
+/** A `<ADMIN>` delayed event of `kind` under a presale key, in Move field order. */
 function decodeDelayed(
   kind: DelayedEventKind,
   name: keyof typeof presaleDelayedKeys,
@@ -105,7 +108,7 @@ function decodeDelayed(
       packageId: pkg,
       module: "presale_vault",
       sender: ALICE,
-      eventType: `${ADMIN}::delayed::${kind}<${pkg}::${spec.key}, ${valueType}>`,
+      eventType: `${ADMIN}::${delayedEventModule(kind)}::${kind}<${pkg}::${spec.key}, ${valueType}>`,
       bcs: (delayedEventBcs(kind, spec) as unknown as BcsType<unknown, unknown>)
         .serialize(payload)
         .toBytes(),
@@ -1755,15 +1758,15 @@ test("projects fee policy and witness admissions from keyed delayed events", () 
       value: TREASURY,
       delay_ms: 0n,
     }),
-    decodeDelayed("ActionCreated", "MigrationWitnesses", {
+    decodeDelayed("SetCreated", "MigrationWitnesses", {
       owner: id("0xcf"),
       key: null,
       delay_ms: 0n,
     }),
-    decodeDelayed("ActionScheduled", "MigrationWitnesses", {
+    decodeDelayed("SetScheduled", "MigrationWitnesses", {
       owner: id("0xcf"),
       key: null,
-      change: { kind: "Action", action: witness },
+      change: { kind: "Admission", member: witness },
       delay_ms: 0n,
       ready_at_ms: 5n,
     }),
@@ -1775,10 +1778,10 @@ test("projects fee policy and witness admissions from keyed delayed events", () 
   );
   assert.deepEqual(state.policy.migrationWitnesses, {});
   assert.ok(state.policy.pendingPolicies[`MigrationWitnesses:${witness}`]);
-  const admitted = decodeDelayed("ActionApplied", "MigrationWitnesses", {
+  const admitted = decodeDelayed("SetApplied", "MigrationWitnesses", {
     owner: id("0xcf"),
     key: null,
-    change: { kind: "Action", action: witness },
+    change: { kind: "Admission", member: witness },
     delay_ms: 0n,
   });
   state = reducePresaleEvent(state, admitted);
@@ -1786,7 +1789,7 @@ test("projects fee policy and witness admissions from keyed delayed events", () 
   assert.deepEqual(state.policy.pendingPolicies, {});
   state = reducePresaleEvent(
     state,
-    decodeDelayed("ActionApplied", "MigrationWitnesses", {
+    decodeDelayed("SetApplied", "MigrationWitnesses", {
       owner: id("0xcf"),
       key: null,
       change: { kind: "Delay" },

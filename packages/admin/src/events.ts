@@ -1,7 +1,13 @@
-import type { DelayedChange } from "@interest-protocol/blast-core/bcs";
+import type {
+  DelayedChange,
+  DelayedMapChange,
+  DelayedSetChange,
+} from "@interest-protocol/blast-core/bcs";
 import {
   addressBcs,
   delayedChangeBcs,
+  delayedMapChangeBcs,
+  delayedSetChangeBcs,
   moveTypeNameBcs,
   suiObjectIdBcs,
   u64Bcs,
@@ -192,7 +198,12 @@ export function decodePackageAdministrationEvent(
   } as DecodedPackageAdministrationEvent;
 }
 
-/** Every lifecycle event `blast_admin::delayed` emits, generic in `<K, T>`. */
+/**
+ * Every lifecycle event the `blast_admin` delayed modules emit, generic in the
+ * owner's key `K` and the value types: `delayed` (`Delayed*`),
+ * `delayed_action` (`Action*`), `delayed_set` (`Set*`, `MemberRemoved`) and
+ * `delayed_map` (`Map*`).
+ */
 export const DELAYED_EVENT_KINDS = [
   "DelayedCreated",
   "DelayedScheduled",
@@ -204,20 +215,39 @@ export const DELAYED_EVENT_KINDS = [
   "ActionCancelled",
   "ActionApplied",
   "ActionDestroyed",
+  "SetCreated",
+  "SetScheduled",
+  "SetCancelled",
+  "SetApplied",
+  "SetDestroyed",
   "MemberRemoved",
+  "MapCreated",
+  "MapScheduled",
+  "MapCancelled",
+  "MapApplied",
+  "MapDestroyed",
 ] as const;
 export type DelayedEventKind = (typeof DELAYED_EVENT_KINDS)[number];
 
 /**
- * Which value a key's events carry: a `Delayed<K, T>` setting, a
- * `DelayedAction<K, A>` slot or a `DelayedSet<K, E>` allowlist.
+ * Which primitive a key names: a `Delayed<K, T>` setting, a
+ * `DelayedAction<K, A>` slot, a `DelayedSet<K, E>` allowlist or a
+ * `DelayedMap<K, E, V>` of entries.
  */
-export type DelayedFamily = "setting" | "action" | "set";
+export type DelayedFamily = "setting" | "action" | "set" | "map";
 
 type FamilyKinds = {
   setting: Extract<DelayedEventKind, `Delayed${string}`>;
   action: Extract<DelayedEventKind, `Action${string}`>;
-  set: FamilyKinds["action"] | "MemberRemoved";
+  set: Extract<DelayedEventKind, `Set${string}`> | "MemberRemoved";
+  map: Extract<DelayedEventKind, `Map${string}`>;
+};
+
+const FAMILY_MODULES: Record<DelayedFamily, string> = {
+  setting: "delayed",
+  action: "delayed_action",
+  set: "delayed_set",
+  map: "delayed_map",
 };
 
 const FAMILY_KINDS: {
@@ -238,12 +268,19 @@ const FAMILY_KINDS: {
     "ActionDestroyed",
   ],
   set: [
-    "ActionCreated",
-    "ActionScheduled",
-    "ActionCancelled",
-    "ActionApplied",
-    "ActionDestroyed",
+    "SetCreated",
+    "SetScheduled",
+    "SetCancelled",
+    "SetApplied",
+    "SetDestroyed",
     "MemberRemoved",
+  ],
+  map: [
+    "MapCreated",
+    "MapScheduled",
+    "MapCancelled",
+    "MapApplied",
+    "MapDestroyed",
   ],
 };
 
@@ -252,22 +289,26 @@ type BcsDecoder<T> = Pick<BcsType<T, never>, "parse">;
 
 /**
  * One consumer key `K`. Owners never expose `K`'s constructor, so its type
- * authenticates every event emitted under it; `valueType` is checked too.
+ * authenticates every event emitted under it; the value types are checked
+ * too. A map key also names its entry type `E`.
  */
-export type DelayedKeySpec<Key = unknown, Value = unknown> = {
+export type DelayedKeySpec<Key = unknown, Value = unknown, Entry = unknown> = {
   /** `<module>::<Struct>` of `K` in the consumer's original package. */
   key: string;
   family: DelayedFamily;
   keyBcs: BcsDecoder<Key>;
-  /** BCS of the second type argument: `T`, `A` or `E`. */
+  /** BCS of the last type argument: `T`, `A`, `E` of a set, or `V` of a map. */
   valueBcs: BcsDecoder<Value>;
-  /** The second type argument; `{package}` stands for the consumer's original package. */
+  /** The last type argument; `{package}` stands for the consumer's original package. */
   valueType: string;
+  /** A map's entry type `E`, its BCS and its type tag. */
+  entryBcs?: BcsDecoder<Entry>;
+  entryType?: string;
 };
 export type DelayedKeySpecs = Readonly<Record<string, DelayedKeySpec>>;
 
-/** Move field order of each event; `Value` is `T`, `A` or `E`. */
-export type DelayedEventPayloads<Key, Value> = {
+/** Move field order of each event; `Value` is `T`, `A`, `E` or `V`. */
+export type DelayedEventPayloads<Key, Value, Entry> = {
   DelayedCreated: { owner: string; key: Key; value: Value; delay_ms: bigint };
   DelayedScheduled: {
     owner: string;
@@ -313,8 +354,60 @@ export type DelayedEventPayloads<Key, Value> = {
     delay_ms: bigint;
   };
   ActionDestroyed: { owner: string; key: Key };
+  SetCreated: { owner: string; key: Key; delay_ms: bigint };
+  SetScheduled: {
+    owner: string;
+    key: Key;
+    change: DelayedSetChange<Value>;
+    delay_ms: bigint;
+    ready_at_ms: bigint;
+  };
+  SetCancelled: {
+    owner: string;
+    key: Key;
+    change: DelayedSetChange<Value>;
+    delay_ms: bigint;
+    ready_at_ms: bigint;
+  };
+  SetApplied: {
+    owner: string;
+    key: Key;
+    change: DelayedSetChange<Value>;
+    delay_ms: bigint;
+  };
+  SetDestroyed: { owner: string; key: Key };
   MemberRemoved: { owner: string; key: Key; member: Value };
+  MapCreated: { owner: string; key: Key; delay_ms: bigint };
+  MapScheduled: {
+    owner: string;
+    key: Key;
+    change: DelayedMapChange<Entry, Value>;
+    delay_ms: bigint;
+    ready_at_ms: bigint;
+  };
+  MapCancelled: {
+    owner: string;
+    key: Key;
+    change: DelayedMapChange<Entry, Value>;
+    delay_ms: bigint;
+    ready_at_ms: bigint;
+  };
+  MapApplied: {
+    owner: string;
+    key: Key;
+    change: DelayedMapChange<Entry, Value>;
+    delay_ms: bigint;
+  };
+  MapDestroyed: { owner: string; key: Key };
 };
+
+type SpecKey<Spec> =
+  Spec extends DelayedKeySpec<infer Key, unknown, unknown> ? Key : never;
+type SpecValue<Spec> =
+  Spec extends DelayedKeySpec<unknown, infer Value, unknown> ? Value : never;
+type SpecEntry<Spec> = Spec extends { entryBcs: BcsDecoder<infer Entry> }
+  ? Entry
+  : never;
 
 /**
  * A decoded delayed event. `name` is the consumer's registry name for `K`;
@@ -327,8 +420,9 @@ export type DecodedDelayedEvent<Specs extends DelayedKeySpecs> = {
       kind: Kind;
       name: Name;
       payload: DelayedEventPayloads<
-        Specs[Name] extends DelayedKeySpec<infer Key, unknown> ? Key : never,
-        Specs[Name] extends DelayedKeySpec<unknown, infer Value> ? Value : never
+        SpecKey<Specs[Name]>,
+        SpecValue<Specs[Name]>,
+        SpecEntry<Specs[Name]>
       >[Kind];
       sender: string;
       position: SuiEventPosition;
@@ -336,7 +430,18 @@ export type DecodedDelayedEvent<Specs extends DelayedKeySpecs> = {
   }[FamilyKinds[Specs[Name]["family"]]];
 }[keyof Specs & string];
 
-/** Whether `eventType` is a `<adminPackageId>::delayed` lifecycle event. */
+/** The `blast_admin` module that emits `kind`. */
+export function delayedEventModule(kind: DelayedEventKind): string {
+  const family = (Object.keys(FAMILY_KINDS) as DelayedFamily[]).find(
+    (candidate) =>
+      (FAMILY_KINDS[candidate] as readonly string[]).includes(kind),
+  );
+  if (family === undefined)
+    throw new TypeError(`unknown delayed event ${kind}`);
+  return FAMILY_MODULES[family];
+}
+
+/** Whether `eventType` is a lifecycle event of `adminPackageId`'s delayed modules. */
 export function isDelayedEventType(
   eventType: string,
   adminPackageId: string,
@@ -344,12 +449,12 @@ export function isDelayedEventType(
   const tag = parseStructTag(eventType);
   return (
     tag.address === normalizeSuiAddress(adminPackageId) &&
-    tag.module === "delayed"
+    Object.values(FAMILY_MODULES).includes(tag.module)
   );
 }
 
 /**
- * Decodes one `blast_admin::delayed` event whose key belongs to `packageId`
+ * Decodes one `blast_admin` delayed event whose key belongs to `packageId`
  * (the consumer's original package) and is listed in `keys`.
  */
 export function decodeDelayedEvent<const Specs extends DelayedKeySpecs>(
@@ -361,9 +466,7 @@ export function decodeDelayedEvent<const Specs extends DelayedKeySpecs>(
   const keyTag = tag.typeParams[0];
   if (
     tag.address !== normalizeSuiAddress(identity.adminPackageId) ||
-    tag.module !== "delayed" ||
     !DELAYED_EVENT_KINDS.includes(kind) ||
-    tag.typeParams.length !== 2 ||
     keyTag === undefined ||
     typeof keyTag === "string"
   )
@@ -373,16 +476,22 @@ export function decodeDelayedEvent<const Specs extends DelayedKeySpecs>(
   const entry = Object.entries(identity.keys).find(
     ([, spec]) => normalizeStructTag(`${packageId}::${spec.key}`) === keyType,
   );
+  if (entry === undefined)
+    throw new TypeError(`unexpected delayed event key ${event.eventType}`);
+  const [name, spec] = entry;
+  const local = (type: string) => type.replaceAll("{package}", packageId);
+  const valueTypes =
+    spec.family === "map"
+      ? [local(spec.entryType ?? ""), local(spec.valueType)]
+      : [local(spec.valueType)];
   if (
-    entry === undefined ||
-    !(FAMILY_KINDS[entry[1].family] as readonly string[]).includes(kind) ||
+    !(FAMILY_KINDS[spec.family] as readonly string[]).includes(kind) ||
     normalizeStructTag(event.eventType) !==
       normalizeStructTag(
-        `${tag.address}::delayed::${kind}<${keyType}, ${entry[1].valueType.replaceAll("{package}", packageId)}>`,
+        `${tag.address}::${FAMILY_MODULES[spec.family]}::${kind}<${[keyType, ...valueTypes].join(", ")}>`,
       )
   )
     throw new TypeError(`unexpected delayed event key ${event.eventType}`);
-  const [name, spec] = entry;
   return {
     source: "delayed",
     kind,
@@ -396,7 +505,7 @@ export function decodeDelayedEvent<const Specs extends DelayedKeySpecs>(
 /** BCS of one delayed event under `spec`, in Move field order. */
 export function delayedEventBcs(
   kind: DelayedEventKind,
-  spec: Pick<DelayedKeySpec, "keyBcs" | "valueBcs">,
+  spec: Pick<DelayedKeySpec, "keyBcs" | "valueBcs" | "entryBcs">,
 ): BcsType<Record<string, unknown>, Record<string, unknown>> {
   // Every decoder in a spec is a full BcsType; the spec only promises `parse`.
   const value = spec.valueBcs as BcsType<unknown, unknown>;
@@ -404,19 +513,34 @@ export function delayedEventBcs(
     owner: suiObjectIdBcs,
     key: spec.keyBcs as BcsType<unknown, unknown>,
   };
+  const timing = { delay_ms: u64Bcs, ready_at_ms: u64Bcs };
   const change = delayedChangeBcs(value);
+  const setChange = delayedSetChangeBcs(value);
+  const mapChange = spec.entryBcs
+    ? delayedMapChangeBcs(spec.entryBcs as BcsType<unknown, unknown>, value)
+    : change;
   const fields = {
     DelayedCreated: { value, delay_ms: u64Bcs },
-    DelayedScheduled: { value, delay_ms: u64Bcs, ready_at_ms: u64Bcs },
-    DelayedCancelled: { value, delay_ms: u64Bcs, ready_at_ms: u64Bcs },
+    DelayedScheduled: { value, ...timing },
+    DelayedCancelled: { value, ...timing },
     DelayedApplied: { previous_value: value, value, delay_ms: u64Bcs },
     DelayedDestroyed: {},
     ActionCreated: { delay_ms: u64Bcs },
-    ActionScheduled: { change, delay_ms: u64Bcs, ready_at_ms: u64Bcs },
-    ActionCancelled: { change, delay_ms: u64Bcs, ready_at_ms: u64Bcs },
+    ActionScheduled: { change, ...timing },
+    ActionCancelled: { change, ...timing },
     ActionApplied: { change, delay_ms: u64Bcs },
     ActionDestroyed: {},
+    SetCreated: { delay_ms: u64Bcs },
+    SetScheduled: { change: setChange, ...timing },
+    SetCancelled: { change: setChange, ...timing },
+    SetApplied: { change: setChange, delay_ms: u64Bcs },
+    SetDestroyed: {},
     MemberRemoved: { member: value },
+    MapCreated: { delay_ms: u64Bcs },
+    MapScheduled: { change: mapChange, ...timing },
+    MapCancelled: { change: mapChange, ...timing },
+    MapApplied: { change: mapChange, delay_ms: u64Bcs },
+    MapDestroyed: {},
   }[kind];
   return bcs.struct(kind, { ...head, ...fields }) as unknown as BcsType<
     Record<string, unknown>,

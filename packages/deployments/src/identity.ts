@@ -17,6 +17,8 @@ import {
   DeploymentManifestError,
   defineBlastDeployment,
 } from "./registry.ts";
+import type { SdkRelease } from "./release.ts";
+import { FROZEN_ABI, SDK_RELEASE } from "./release.ts";
 import type {
   BlastDeployment,
   BlastDeploymentInput,
@@ -26,8 +28,6 @@ import type {
   VenueObjectType,
 } from "./types.ts";
 import { SHARED_OBJECT_GROUPS, VENUE_IDENTITY_SETS } from "./types.ts";
-import type { SdkRelease } from "./release.ts";
-import { FROZEN_ABI, SDK_RELEASE } from "./release.ts";
 
 export * from "./release.ts";
 

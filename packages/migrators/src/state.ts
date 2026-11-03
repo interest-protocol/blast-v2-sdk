@@ -1,6 +1,11 @@
-import type { Delayed } from "@interest-protocol/blast-core/bcs";
+import type {
+  Delayed,
+  EntryProposal,
+  Notice,
+} from "@interest-protocol/blast-core/bcs";
 import {
   delayedBcs,
+  delayedMapBcs,
   moveTypeNameBcs,
   suiBalanceBcs,
   suiIdBcs,
@@ -94,26 +99,13 @@ export const lpFeeSharePairBcs = bcs.struct("SharePair", {
   quote_bps: bpsBcs,
 });
 
-/** `lp_fee_policy::CoinSharesKey(TypeName)`: the original Meme type it overrides. */
-export const lpFeeCoinSharesKeyBcs = bcs
-  .struct("CoinSharesKey", { pos0: moveTypeNameBcs })
-  .transform({
-    input: (meme: string) => ({ pos0: meme }),
-    output: (key) => key.pos0,
-  });
-
-/** Per-coin override, including a proposed clear (null) and its notice. */
-export const lpFeeCoinPolicyBcs = delayedBcs(
-  lpFeeCoinSharesKeyBcs,
-  bcs.option(lpFeeSharePairBcs),
-);
-
 /** BCS layout of `blast_fun_migrators::lp_fee_policy::LpFeePolicy`. */
 export const lpFeePolicyBcs = bcs.struct("LpFeePolicy", {
   id: suiUidBcs,
   destination: delayedBcs(unitKeyBcs, bcs.Address),
   defaults: delayedBcs(unitKeyBcs, lpFeeSharePairBcs),
-  coins: bcs.struct("Table", { id: suiUidBcs, size: bcs.u64() }),
+  /** Per-coin overrides by original Meme `TypeName`, under one shared notice. */
+  coins: delayedMapBcs(unitKeyBcs, moveTypeNameBcs, lpFeeSharePairBcs),
 });
 
 export type LpVaultState = SharedObjectReference<true> & {
@@ -160,9 +152,16 @@ export type LpFeePolicyState = SharedObjectReference<false> & {
   protocolDestinationPolicy: Delayed<null, string>;
   defaultSharesPolicy: Delayed<null, { meme_bps: bigint; quote_bps: bigint }>;
   defaultShares: LpFeeShares;
-  /** Table of per-coin share pairs, keyed by original Meme `TypeName`. */
+  /** Table of applied per-coin share pairs, keyed by original Meme `TypeName`. */
   coinSharesTableId: string;
   coinSharesCount: bigint;
+  /** The notice each per-coin change waits; pending changes keep theirs. */
+  coinSharesDelayMs: bigint;
+  /** Pending per-coin changes by Meme type; a null value clears the override. */
+  pendingCoinShares: Readonly<
+    Record<string, EntryProposal<{ meme_bps: bigint; quote_bps: bigint }>>
+  >;
+  pendingCoinSharesDelay: Notice | null;
 };
 
 export function decodeLpVaultObject(
@@ -274,7 +273,8 @@ export async function getLpFeePolicy(
   if (
     normalizeSuiObjectId(parsed.id.id.bytes) !== policyId ||
     parsed.destination.owner !== policyId ||
-    parsed.defaults.owner !== policyId
+    parsed.defaults.owner !== policyId ||
+    parsed.coins.owner !== policyId
   ) {
     throw new TypeError(
       `LP-fee policy ${object.objectId} has a mismatched UID`,
@@ -294,13 +294,18 @@ export async function getLpFeePolicy(
       memeBps: parsed.defaults.value.meme_bps,
       quoteBps: parsed.defaults.value.quote_bps,
     },
-    coinSharesTableId: normalizeSuiObjectId(parsed.coins.id.id.bytes),
-    coinSharesCount: BigInt(parsed.coins.size),
+    coinSharesTableId: parsed.coins.entries.id,
+    coinSharesCount: parsed.coins.entries.size,
+    coinSharesDelayMs: parsed.coins.delay_ms,
+    pendingCoinShares: Object.fromEntries(
+      parsed.coins.pending.map(({ entry, proposal }) => [entry, proposal]),
+    ),
+    pendingCoinSharesDelay: parsed.coins.pending_delay,
   };
 }
 
 /**
- * Mirrors `lp_fee_policy::shares<Meme>`: the coin's own pair when an
+ * Mirrors `lp_fee_policy::shares<Meme>`: the coin's applied pair when an
  * administrator set one, otherwise the default pair. `source` says which.
  */
 export async function getLpFeeShares(
@@ -318,8 +323,7 @@ export async function getLpFeeShares(
           .toBytes(),
       },
     });
-    const pair = lpFeeCoinPolicyBcs.parse(dynamicField.value.bcs).value;
-    if (pair === null) return { ...policy.defaultShares, source: "default" };
+    const pair = lpFeeSharePairBcs.parse(dynamicField.value.bcs);
     return { memeBps: pair.meme_bps, quoteBps: pair.quote_bps, source: "coin" };
   } catch (error) {
     if (!(error instanceof ObjectError) || error.reason !== "notFound") {

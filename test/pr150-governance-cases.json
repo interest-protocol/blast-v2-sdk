@@ -921,6 +921,14 @@
       "returns": false
     },
     {
+      "method": "applyLpFeeCoinSharesDelay",
+      "module": "lp_fee_policy",
+      "function": "apply_coin_shares_delay",
+      "role": null,
+      "sample": {},
+      "returns": false
+    },
+    {
       "method": "applyLpFeeDefaultShares",
       "module": "lp_fee_policy",
       "function": "apply_default_shares",
@@ -943,6 +951,16 @@
       "role": "CancelAdmin",
       "sample": {
         "memeType": "0x5::coin::MEME",
+        "adminWitness": "0x991"
+      },
+      "returns": false
+    },
+    {
+      "method": "cancelLpFeeCoinSharesDelay",
+      "module": "lp_fee_policy",
+      "function": "cancel_coin_shares_delay",
+      "role": "CancelAdmin",
+      "sample": {
         "adminWitness": "0x991"
       },
       "returns": false
@@ -974,8 +992,7 @@
       "role": "FeeAdmin",
       "sample": {
         "memeType": "0x5::coin::MEME",
-        "adminWitness": "0x991",
-        "delayMs": "BIGINT"
+        "adminWitness": "0x991"
       },
       "returns": false
     },
@@ -988,7 +1005,17 @@
         "memeType": "0x5::coin::MEME",
         "adminWitness": "0x991",
         "memeBps": "BIGINT",
-        "quoteBps": "BIGINT",
+        "quoteBps": "BIGINT"
+      },
+      "returns": false
+    },
+    {
+      "method": "scheduleLpFeeCoinSharesDelay",
+      "module": "lp_fee_policy",
+      "function": "schedule_coin_shares_delay",
+      "role": "FeeAdmin",
+      "sample": {
+        "adminWitness": "0x991",
         "delayMs": "BIGINT"
       },
       "returns": false

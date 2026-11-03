@@ -115,7 +115,13 @@ test("SDK object layouts follow the frozen Move field order", () => {
         id: uid("0x1"),
         destination: delayed("0x2"),
         defaults: delayed({ meme_bps: 0n, quote_bps: 0n }),
-        coins: { id: uid("0x3"), size: 0n },
+        coins: {
+          ...owned,
+          entries: { id: normalizeSuiAddress("0x3"), size: 0n },
+          delay_ms: 172_800_000n,
+          pending: [],
+          pending_delay: null,
+        },
       },
     ],
     [

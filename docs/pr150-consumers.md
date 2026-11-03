@@ -1,6 +1,6 @@
 # PR150 consumer ABI
 
-These bindings target a fresh contract stack at `61b55508ce4dd2b2a6e81035eb029cef7994c26a`.
+These bindings target a fresh contract stack at `89c36d4925550f23a1d4120056a6f02667a3e986`.
 The compiled public signatures and ordered fields are frozen separately in
 `abi/pr150-consumers.json`; run `npm run check:abi:pr150` with `BLAST_CONTRACTS_DIR`
 pointing to a contracts checkout containing that commit. Published mainnet ABI
@@ -70,18 +70,24 @@ const application = launchpad.tx.applyTradeFees();
 
 ### Keyed delayed values (contracts PR 157)
 
-Every delayed setting, one-shot action and allowlist is a `blast_admin::delayed`
-`Delayed<K, T>`, `DelayedAction<K, A>` or `DelayedSet<K, E>` that names its
-owning object and an owner-only key `K`. Products no longer emit schedule,
-cancel or apply events: `delayed` emits `DelayedCreated`, `DelayedScheduled`,
-`DelayedCancelled`, `DelayedApplied`, `DelayedDestroyed`, the matching
-`Action*` events and `MemberRemoved` under `K`.
+Every delayed value names its owning object and an owner-only key `K`, and
+lives in one of four `blast_admin` modules: `delayed::Delayed<K, T>` (a
+setting), `delayed_action::DelayedAction<K, A>` (a one-shot action slot),
+`delayed_set::DelayedSet<K, E>` (an allowlist) or
+`delayed_map::DelayedMap<K, E, V>` (entries under one shared notice). Products
+no longer emit schedule, cancel or apply events. Each module emits its own
+lifecycle under `K`: `Delayed*`, `Action*`, `Set*` plus `MemberRemoved`, and
+`Map*`.
 
-- Layouts: `delayedBcs`, `delayedActionBcs`, `delayedSetBcs`, `proposalBcs`,
-  `noticeBcs` and `unitKeyBcs` in `@interest-protocol/blast-core/bcs`. A
-  zero-field key encodes as one byte.
-- Events: `decodeDelayedEvent` checks the admin package, the key's package and
-  struct, the value type and the key's family. Each product lists its keys
+- Layouts: `delayedBcs`, `delayedActionBcs`, `delayedSetBcs`, `delayedMapBcs`,
+  `proposalBcs`, `entryProposalBcs`, `noticeBcs` and `unitKeyBcs` in
+  `@interest-protocol/blast-core/bcs`. A zero-field key encodes as one byte.
+  `DelayedChange` (`Action | Delay`), `DelayedSetChange` (`Admission | Delay`)
+  and `DelayedMapChange` (`Entry { entry, value } | Delay`) decode the change
+  enums.
+- Events: `decodeDelayedEvent` checks the admin package, the module, the key's
+  package and struct, the value types and the key's family; `delayedEventModule`
+  names the module of an event kind. Each product lists its keys
   (`aclDelayedKeys`, `launchpadDelayedKeys`, `migratorsDelayedKeys`,
   `presaleDelayedKeys`) and wraps the decoder
   (`decodeAclDelayedEvent`, `decodeLaunchpadDelayedEvent`,
@@ -91,7 +97,13 @@ cancel or apply events: `delayed` emits `DelayedCreated`, `DelayedScheduled`,
   launchpad's original package ID.
 - Readers: the `PackageAdmin` upgrade slot exposes `delayMs` and a `pending`
   `Proposal<DelayedChange<UpgradeAction>>`; `UpgradeAction` no longer has
-  `DelayOnly`. The ACL exposes `pendingSuperAdmin.readyAtMs`.
+  `DelayOnly`. The ACL exposes `pendingSuperAdmin.readyAtMs`. The LP-fee
+  policy's per-coin overrides are a `DelayedMap`: `getLpFeeShares` reads one
+  applied entry, and `pendingCoinShares`, `coinSharesDelayMs` and
+  `pendingCoinSharesDelay` expose its pending changes and shared notice.
+  `scheduleLpFeeCoinShares` and `scheduleClearLpFeeCoinShares` wait that
+  notice; `scheduleLpFeeCoinSharesDelay`, `applyLpFeeCoinSharesDelay` and
+  `cancelLpFeeCoinSharesDelay` change it.
 - Bootstrap: on a fresh deployment every notice that starts at zero can act as
   a setter. `configureNow` schedules and applies each named setting in one PTB
   with a zero notice; `armNotices` then schedules and applies each notice
@@ -100,6 +112,8 @@ cancel or apply events: `delayed` emits `DelayedCreated`, `DelayedScheduled`,
   Upgrade custody is not bootstrapped this way: `wrap` starts each
   `PackageAdmin` at a 48-hour notice, so `scheduleUpgradeDelay` and every
   upgrade action wait it from publication.
+- Presale: once a sale is shared, `setPresaleProtocolFees` may only lower each
+  rate (`EProtocolFeesIncreased`).
 
 ```ts
 const configure = launchpad.tx.configureNow({
@@ -110,6 +124,9 @@ const arm = launchpad.tx.armNotices({
   adminCapId,
   tradeFees: { quoteFeeBps: 100n, memeFeeBps: 0n, delayMs: 172_800_000n },
   migrationDelayMs: 172_800_000n,
+});
+const armLpFees = migrators.tx.armNotices({
+  adminCapId, coinSharesDelayMs: 172_800_000n,
 });
 ``` The compiler-signature matrix checks
 roles, argument order and shared-object mutability. Fresh Move-generated golden

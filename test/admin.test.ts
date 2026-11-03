@@ -356,7 +356,7 @@ function transfer(
       packageId: ADMIN_PACKAGE,
       module: "blast_acl",
       sender: id("0x5e"),
-      eventType: `${ADMIN_PACKAGE}::delayed::${kind}<${ADMIN_PACKAGE}::blast_acl::SuperAdminTransfer, address>`,
+      eventType: `${ADMIN_PACKAGE}::delayed_action::${kind}<${ADMIN_PACKAGE}::blast_acl::SuperAdminTransfer, address>`,
       bcs: delayedEventBcs(kind, aclDelayedKeys.SuperAdminTransfer)
         .serialize(payload as never)
         .toBytes(),

@@ -27,7 +27,7 @@ import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { normalizeSuiAddress, parseStructTag } from "@mysten/sui/utils";
-import { lpFeeCoinSharesKeyBcs, lpFeeSharePairBcs } from "./state.ts";
+import { lpFeeSharePairBcs } from "./state.ts";
 
 type MigratorEventFieldDescriptor =
   | "id"
@@ -313,13 +313,15 @@ export const migratorsDelayedKeys = {
     valueBcs: lpFeeSharePairBcs,
     valueType: "{package}::lp_fee_policy::SharePair",
   },
-  /** One per overridden coin; the key is that coin's original Meme type. */
+  /** Per-coin overrides, one entry per original Meme type, under one notice. */
   CoinShares: {
     key: "lp_fee_policy::CoinSharesKey",
-    family: "setting",
-    keyBcs: lpFeeCoinSharesKeyBcs,
-    valueBcs: bcs.option(lpFeeSharePairBcs),
-    valueType: "0x1::option::Option<{package}::lp_fee_policy::SharePair>",
+    family: "map",
+    keyBcs: unitKeyBcs,
+    entryBcs: moveTypeNameBcs,
+    entryType: "0x1::type_name::TypeName",
+    valueBcs: lpFeeSharePairBcs,
+    valueType: "{package}::lp_fee_policy::SharePair",
   },
   FeeSplit: {
     key: "vault::FeeSplitKey",

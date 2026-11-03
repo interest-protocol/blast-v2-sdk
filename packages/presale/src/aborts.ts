@@ -44,6 +44,7 @@ export const PRESALE_ABORTS = {
     "EMissingSetting",
     "ESaleTokenNotUnregulated",
     "EAboveFeePolicy",
+    "EProtocolFeesIncreased",
   ],
   blast_presale_package: ["EInvalidPauseBits", "EPauseUnchanged", "EPaused"],
   aftermath: [

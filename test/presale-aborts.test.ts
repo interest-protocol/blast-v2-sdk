@@ -59,6 +59,7 @@ test("names a presale abort by its module and code", () => {
     "ESaleTokenNotUnregulated",
   );
   assert.equal(presaleAbortName("blast_presale", 36), "EAboveFeePolicy");
+  assert.equal(presaleAbortName("blast_presale", 37), "EProtocolFeesIncreased");
   assert.equal(presaleAbortName("presale_vault", 3), "EWrongPartner");
   assert.equal(presaleAbortName("fee_policy", 1), "EInvalidDestination");
   assert.equal(presaleAbortName("package_admin", 1), "EInvalidDigest");
@@ -100,7 +101,7 @@ test("names an Aftermath vendor abort by its module and code", () => {
 });
 
 test("returns null for an unknown module or code", () => {
-  assert.equal(presaleAbortName("blast_presale", 37), null);
+  assert.equal(presaleAbortName("blast_presale", 38), null);
   assert.equal(presaleAbortName("blast_presale", -1), null);
   assert.equal(presaleAbortName("blast_presale", 1.5), null);
   assert.equal(presaleAbortName("merkle_tree", 0), null);

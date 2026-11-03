@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { DelayedEventKind } from "@interest-protocol/blast-admin-sdk/events";
-import { delayedEventBcs } from "@interest-protocol/blast-admin-sdk/events";
+import {
+  delayedEventBcs,
+  delayedEventModule,
+} from "@interest-protocol/blast-admin-sdk/events";
 import type {
   LaunchpadEventKind,
   LaunchpadEventPackageIdentity,
@@ -382,7 +385,7 @@ test("replays pre-share purchases that reach the graduation target", () => {
 test("replays launch configuration policy", () => {
   const sui = normalizedType("0x2::sui::SUI");
   const witness = normalizedType("0xf::cetus::CETUS");
-  const admit = { kind: "Action", action: witness } as const;
+  const admit = { kind: "Admission", member: witness } as const;
   const configured = [
     decoded("QuoteSet", { quote: "0x2::sui::SUI", allowed: true }, 0),
     decoded("MemeDecimalsSet", { decimals: 8, allowed: true }, 1),
@@ -399,7 +402,7 @@ test("replays launch configuration policy", () => {
     ),
     delayed(
       "MigrationWitnesses",
-      "ActionApplied",
+      "SetApplied",
       { change: admit, delay_ms: 0n },
       4,
     ),
@@ -634,7 +637,7 @@ function delayed(
       packageId: "0x123",
       module: "launch_config",
       sender: "0xd",
-      eventType: `0xad::delayed::${kind}<${original}::${spec.key}, ${spec.valueType.replaceAll("{package}", original)}>`,
+      eventType: `0xad::${delayedEventModule(kind)}::${kind}<${original}::${spec.key}, ${spec.valueType.replaceAll("{package}", original)}>`,
       bcs: delayedEventBcs(kind, spec)
         .serialize({ owner: "0xc0", key: null, ...payload } as never)
         .toBytes(),

@@ -6,8 +6,8 @@ import {
   getLpFeePolicy,
   getLpFeeShares,
   getLpVault,
-  lpFeeCoinPolicyBcs,
   lpFeePolicyBcs,
+  lpFeeSharePairBcs,
   lpVaultBcs,
 } from "@interest-protocol/blast-migrators-sdk/state";
 import { bcs } from "@mysten/sui/bcs";
@@ -188,7 +188,22 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
                 delay_ms: 172_800_000n,
                 pending: null,
               },
-              coins: { id: uid(tableId), size: 1n },
+              coins: {
+                owner: policyId,
+                key: null,
+                entries: { id: tableId, size: 1n },
+                delay_ms: 172_800_000n,
+                pending: [
+                  {
+                    entry: "0xb::meme::MEME",
+                    proposal: {
+                      value: null,
+                      notice: { delay_ms: 172_800_000n, ready_at_ms: 9n },
+                    },
+                  },
+                ],
+                pending_delay: null,
+              },
             })
             .toBytes(),
         },
@@ -199,14 +214,8 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
         return {
           dynamicField: {
             value: {
-              bcs: lpFeeCoinPolicyBcs
-                .serialize({
-                  owner: policyId,
-                  key: memeType,
-                  value: { meme_bps: 500n, quote_bps: 600n },
-                  delay_ms: 0n,
-                  pending: null,
-                })
+              bcs: lpFeeSharePairBcs
+                .serialize({ meme_bps: 500n, quote_bps: 600n })
                 .toBytes(),
             },
           },
@@ -227,6 +236,11 @@ test("reads the LP-fee policy and resolves a coin's own pair before the defaults
     policy.defaultShares.memeBps,
   );
   assert.equal(policy.coinSharesTableId, tableId);
+  assert.equal(policy.coinSharesDelayMs, 172_800_000n);
+  // A pending clear names its coin; the applied pair stays until it applies.
+  assert.deepEqual(Object.values(policy.pendingCoinShares), [
+    { value: null, notice: { delay_ms: 172_800_000n, ready_at_ms: 9n } },
+  ]);
   assert.deepEqual(await getLpFeeShares(client, policy, memeType), {
     memeBps: 500n,
     quoteBps: 600n,

@@ -6,12 +6,15 @@ import {
   DELAYED_EVENT_KINDS,
   decodePackageAdministrationEvent,
   delayedEventBcs,
+  delayedEventModule,
   packageAdministrationEventBcs,
 } from "@interest-protocol/blast-admin-sdk/events";
 import {
   delayedActionBcs,
   delayedBcs,
+  delayedMapBcs,
   delayedSetBcs,
+  entryProposalBcs,
   noticeBcs,
   proposalBcs,
   u64Bcs,
@@ -149,7 +152,7 @@ const delayedEntry = (
 ): SuiClientTypes.EventEntry => {
   const spec = launchpadDelayedKeys[name];
   return event(
-    `${ADMIN}::delayed::${kind}<${LAUNCHPAD}::${spec.key}, ${valueType}>`,
+    `${ADMIN}::${delayedEventModule(kind)}::${kind}<${LAUNCHPAD}::${spec.key}, ${valueType}>`,
     delayedEventBcs(kind, spec)
       .serialize({ owner: "0xc0", key: null, ...payload } as never)
       .toBytes(),
@@ -163,11 +166,17 @@ const launchpadDelayed = (entry: SuiClientTypes.EventEntry) =>
   });
 
 test("every delayed lifecycle event follows compiled field order", () => {
-  const compiled = abi.packages.admin!.modules.delayed!.structs;
+  const modules = abi.packages.admin!.modules;
+  const compiled = (module: string, name: string) =>
+    modules[module]!.structs.find((s) => s.name === name)!.fields;
+  const changes: Record<string, unknown> = {
+    Action: { kind: "Action", action: 3n },
+    Set: { kind: "Admission", member: 3n },
+    Map: { kind: "Entry", entry: 7n, value: null },
+  };
   for (const kind of DELAYED_EVENT_KINDS) {
-    const fields = compiled.find((s) => s.name === kind)!.fields;
-    const spec = { keyBcs: unitKeyBcs, valueBcs: u64Bcs };
-    const value = { kind: "Action" as const, action: 3n };
+    const fields = compiled(delayedEventModule(kind), kind);
+    const spec = { keyBcs: unitKeyBcs, valueBcs: u64Bcs, entryBcs: u64Bcs };
     const payload = Object.fromEntries(
       fields.map(({ name }) => [
         name,
@@ -176,7 +185,7 @@ test("every delayed lifecycle event follows compiled field order", () => {
           : name === "key"
             ? null
             : name === "change"
-              ? value
+              ? changes[kind.replace(/[A-Z][a-z]+$/, "")]
               : 1n,
       ]),
     );
@@ -190,18 +199,21 @@ test("every delayed lifecycle event follows compiled field order", () => {
   const owned = { owner: normalizeSuiAddress("0xc0"), key: null, delay_ms: 1n };
   const proposal = { value: 2n, delay_ms: 3n, ready_at_ms: 4n };
   const notice = { delay_ms: 3n, ready_at_ms: 4n };
-  const layouts: [string, BcsType<unknown, never>, unknown][] = [
+  const layouts: [string, string, BcsType<unknown, never>, unknown][] = [
     [
+      "delayed",
       "Delayed",
       delayedBcs(unitKeyBcs, u64Bcs) as never,
       { ...owned, value: 2n, pending: proposal },
     ],
     [
+      "delayed_action",
       "DelayedAction",
       delayedActionBcs(unitKeyBcs, u64Bcs) as never,
       { ...owned, pending: { ...proposal, value: { kind: "Delay" } } },
     ],
     [
+      "delayed_set",
       "DelayedSet",
       delayedSetBcs(unitKeyBcs, u64Bcs) as never,
       {
@@ -211,15 +223,35 @@ test("every delayed lifecycle event follows compiled field order", () => {
         pending_delay: notice,
       },
     ],
-    ["Proposal", proposalBcs(u64Bcs) as never, proposal],
-    ["Notice", noticeBcs as never, notice],
+    [
+      "delayed_map",
+      "DelayedMap",
+      delayedMapBcs(unitKeyBcs, u64Bcs, u64Bcs) as never,
+      {
+        ...owned,
+        entries: { id: normalizeSuiAddress("0xe1"), size: 1n },
+        pending: [
+          { entry: 5n, proposal: { value: null, notice } },
+          { entry: 6n, proposal: { value: 9n, notice } },
+        ],
+        pending_delay: null,
+      },
+    ],
+    [
+      "delayed_map",
+      "EntryProposal",
+      entryProposalBcs(u64Bcs) as never,
+      { value: 9n, notice },
+    ],
+    ["delayed", "Proposal", proposalBcs(u64Bcs) as never, proposal],
+    ["delayed", "Notice", noticeBcs as never, notice],
   ];
-  for (const [name, schema, value] of layouts) {
+  for (const [module, name, schema, value] of layouts) {
     const bytes = schema.serialize(value as never).toBytes();
     assert.deepEqual(schema.parse(bytes), value, name);
     assert.deepEqual(
       Object.keys(schema.parse(bytes) as object),
-      compiled.find((s) => s.name === name)!.fields.map((f) => f.name),
+      compiled(module, name).map((f) => f.name),
       name,
     );
   }
@@ -356,11 +388,11 @@ test("delayed proposals do not change applied launchpad economics until applied"
 test("witness admissions wait their own notice and removals are immediate", () => {
   const witness =
     "0x0000000000000000000000000000000000000000000000000000000000000015::cetus::Witness";
-  const admission = { kind: "Action", action: witness } as const;
+  const admission = { kind: "Admission", member: witness } as const;
   const created = reduceLaunchpadEvent(
     createLaunchpadEventProjection(),
     launchpadDelayed(
-      delayedEntry("MigrationWitnesses", "ActionCreated", { delay_ms: 7n }, 0),
+      delayedEntry("MigrationWitnesses", "SetCreated", { delay_ms: 7n }, 0),
     ),
   );
   const scheduled = reduceLaunchpadEvent(
@@ -368,7 +400,7 @@ test("witness admissions wait their own notice and removals are immediate", () =
     launchpadDelayed(
       delayedEntry(
         "MigrationWitnesses",
-        "ActionScheduled",
+        "SetScheduled",
         { change: admission, delay_ms: 7n, ready_at_ms: 9n },
         1,
       ),
@@ -383,7 +415,7 @@ test("witness admissions wait their own notice and removals are immediate", () =
     launchpadDelayed(
       delayedEntry(
         "MigrationWitnesses",
-        "ActionApplied",
+        "SetApplied",
         { change: admission, delay_ms: 3n },
         2,
       ),
