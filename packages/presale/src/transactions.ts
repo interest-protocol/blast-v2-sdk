@@ -928,7 +928,7 @@ export class PresaleCalls {
       !Number.isInteger(options.bits) ||
       options.bits <= 0 ||
       options.bits > 255 ||
-      (options.bits & ~11) !== 0
+      (options.bits & ~PRESALE_PAUSE_MASK) !== 0
     )
       throw new RangeError("invalid pause bits");
     return (tx: Transaction): void => {
@@ -958,7 +958,7 @@ export class PresaleCalls {
       !Number.isInteger(options.bits) ||
       options.bits <= 0 ||
       options.bits > 255 ||
-      (options.bits & ~11) !== 0
+      (options.bits & ~PRESALE_PAUSE_MASK) !== 0
     )
       throw new RangeError("invalid pause bits");
     return (tx: Transaction): void => {
@@ -3425,7 +3425,11 @@ function requireU32(name: string, value: number): number {
 }
 
 /** Flags may be ORed together; each package has its own migration bit. */
-export const PRESALE_PAUSE_BITS = { Create: 1, Commit: 2, Migrate: 8 } as const;
+export const PRESALE_PAUSE_BITS = { Create: 1, Commit: 2, Migrate: 4 } as const;
+const PRESALE_PAUSE_MASK =
+  PRESALE_PAUSE_BITS.Create |
+  PRESALE_PAUSE_BITS.Commit |
+  PRESALE_PAUSE_BITS.Migrate;
 
 /** Mirrors `fee_policy::protocol_fees`, whose `EInvalidFees` (0) rejects any rate above its cap. */
 function cappedProtocolFees(fees: ProtocolFees): ProtocolFees {

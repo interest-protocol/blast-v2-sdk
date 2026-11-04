@@ -234,7 +234,7 @@ test("PR150 upgrade scheduling rejects wrong digest lengths and invalid delays",
 test("pause builders reject empty masks and bits outside their product", () => {
   for (const [product, invalid] of [
     ["launchpad", [0, 8, 255, 256, -1, 1.5]],
-    ["presale", [0, 4, 255, 256, -1, 1.5]],
+    ["presale", [0, 8, 255, 256, -1, 1.5]],
   ] as const) {
     const calls = products[product].calls;
     for (const bits of invalid) {
@@ -246,6 +246,14 @@ test("pause builders reject empty masks and bits outside their product", () => {
           bits,
         }),
       );
+    }
+    for (const bits of [1, 2, 4, 7]) {
+      calls.pause({ adminWitness: "0xca", bits });
+      calls.unpause({
+        packageAdmin: { ...shared, mutable: false },
+        adminWitness: "0xca",
+        bits,
+      });
     }
   }
 });
