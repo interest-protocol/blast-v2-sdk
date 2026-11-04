@@ -45,6 +45,21 @@ export function requireBasisPoints(name: string, value: bigint): BasisPoints {
   return value as BasisPoints;
 }
 
+/** Requires a basis-point value no greater than a contract's compiled maximum. */
+export function requireBasisPointsAtMost(
+  name: string,
+  value: bigint,
+  maximum: bigint,
+): BasisPoints {
+  const bps = requireBasisPoints(name, value);
+  if (bps > maximum) {
+    throw new RangeError(
+      `${name} exceeds ${maximum.toLocaleString("en-US")} basis points`,
+    );
+  }
+  return bps;
+}
+
 /** Adds two values and requires the result to remain a Move `u64`. */
 export function checkedAddU64(name: string, left: bigint, right: bigint): U64 {
   return requireU64(name, left + right);

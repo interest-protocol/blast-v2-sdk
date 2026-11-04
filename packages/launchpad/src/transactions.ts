@@ -6,6 +6,7 @@ import {
 import type { CoinSourceOptions } from "@interest-protocol/blast-core/coins";
 import {
   requireBasisPoints,
+  requireBasisPointsAtMost,
   requirePositiveU64,
   requireU64,
 } from "@interest-protocol/blast-core/integers";
@@ -84,6 +85,12 @@ export type LaunchTypes = {
 export const MIN_OPENING_ROUND_MS = 60_000n;
 /** Longest opening round `launch::finalize` accepts. */
 export const MAX_OPENING_ROUND_MS = 300_000n;
+/** Largest Blast allocation of a launch's Meme supply or final Quote reserve, each asset. */
+export const MAX_PROTOCOL_ALLOCATION_BPS = 1_000n;
+/** Largest Blast share of each launch trade fee; the creator receives the rest. */
+export const MAX_PROTOCOL_FEE_SHARE_BPS = 7_000n;
+/** Largest creation fee `launch_config::schedule_creation_fee` accepts, in MIST (10 SUI). */
+export const MAX_CREATION_FEE_MIST = 10_000_000_000n;
 
 /**
  * The creator's launch settings, applied to a `LaunchInitializer` before
@@ -886,12 +893,20 @@ export class LaunchpadCalls {
       });
     };
   }
-  /** `launch_config::schedule_creation_fee`. Requires FeeAdmin. */
+  /**
+   * `launch_config::schedule_creation_fee`. Requires FeeAdmin. Throws above
+   * `MAX_CREATION_FEE_MIST` (10 SUI), which the contract rejects with
+   * `invalid_creation_fee` (35).
+   */
   scheduleCreationFee(options: {
     adminWitness: TransactionObjectInput;
     creationFee: bigint;
     delayMs: bigint;
   }) {
+    const creationFee = requireU64("creationFee", options.creationFee);
+    if (creationFee > MAX_CREATION_FEE_MIST) {
+      throw new RangeError("creationFee exceeds 10 SUI");
+    }
     return (tx: Transaction): void => {
       tx.moveCall({
         target: `${this.deployment.packageId}::launch_config::schedule_creation_fee`,
@@ -900,7 +915,7 @@ export class LaunchpadCalls {
           deploymentObject(tx, this.deployment.launchConfig, true),
           deploymentObject(tx, this.deployment.packageVersion, false),
           tx.object(options.adminWitness),
-          tx.pure.u64(requireU64("creationFee", options.creationFee)),
+          tx.pure.u64(creationFee),
           tx.pure.u64(requireU64("delayMs", options.delayMs)),
           tx.object.clock(),
         ],
@@ -944,13 +959,27 @@ export class LaunchpadCalls {
       });
     };
   }
-  /** `launch_config::schedule_protocol_allocation`. Requires TreasuryAdmin. */
+  /**
+   * `launch_config::schedule_protocol_allocation`. Requires TreasuryAdmin.
+   * Throws when either share exceeds `MAX_PROTOCOL_ALLOCATION_BPS` (1,000),
+   * which the contract rejects with `invalid_protocol_allocation` (5).
+   */
   scheduleProtocolAllocation(options: {
     adminWitness: TransactionObjectInput;
     memeBps: bigint;
     quoteBps: bigint;
     delayMs: bigint;
   }) {
+    const memeBps = requireBasisPointsAtMost(
+      "memeBps",
+      options.memeBps,
+      MAX_PROTOCOL_ALLOCATION_BPS,
+    );
+    const quoteBps = requireBasisPointsAtMost(
+      "quoteBps",
+      options.quoteBps,
+      MAX_PROTOCOL_ALLOCATION_BPS,
+    );
     return (tx: Transaction): void => {
       tx.moveCall({
         target: `${this.deployment.packageId}::launch_config::schedule_protocol_allocation`,
@@ -959,8 +988,8 @@ export class LaunchpadCalls {
           deploymentObject(tx, this.deployment.launchConfig, true),
           deploymentObject(tx, this.deployment.packageVersion, false),
           tx.object(options.adminWitness),
-          tx.add(this.bps(options.memeBps)),
-          tx.add(this.bps(options.quoteBps)),
+          tx.add(this.bps(memeBps)),
+          tx.add(this.bps(quoteBps)),
           tx.pure.u64(requireU64("delayMs", options.delayMs)),
           tx.object.clock(),
         ],
@@ -1046,12 +1075,21 @@ export class LaunchpadCalls {
       });
     };
   }
-  /** `runtime_config::schedule_protocol_fee_share`. Requires FeeAdmin. */
+  /**
+   * `runtime_config::schedule_protocol_fee_share`. Requires FeeAdmin. Throws
+   * above `MAX_PROTOCOL_FEE_SHARE_BPS` (7,000), which the contract rejects with
+   * `invalid_protocol_fee_share` (45).
+   */
   scheduleProtocolFeeShare(options: {
     adminWitness: TransactionObjectInput;
     protocolFeeShareBps: bigint;
     delayMs: bigint;
   }) {
+    const protocolFeeShareBps = requireBasisPointsAtMost(
+      "protocolFeeShareBps",
+      options.protocolFeeShareBps,
+      MAX_PROTOCOL_FEE_SHARE_BPS,
+    );
     return (tx: Transaction): void => {
       tx.moveCall({
         target: `${this.deployment.packageId}::runtime_config::schedule_protocol_fee_share`,
@@ -1060,7 +1098,7 @@ export class LaunchpadCalls {
           deploymentObject(tx, this.deployment.runtimeConfig, true),
           deploymentObject(tx, this.deployment.packageVersion, false),
           tx.object(options.adminWitness),
-          tx.add(this.bps(options.protocolFeeShareBps)),
+          tx.add(this.bps(protocolFeeShareBps)),
           tx.pure.u64(requireU64("delayMs", options.delayMs)),
           tx.object.clock(),
         ],

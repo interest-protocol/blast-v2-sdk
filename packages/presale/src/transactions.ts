@@ -6,7 +6,10 @@ import {
 import { cetusMemeSide } from "@interest-protocol/blast-core/cetus";
 import type { CoinSourceOptions } from "@interest-protocol/blast-core/coins";
 import { grossGasBudget } from "@interest-protocol/blast-core/gas";
-import { requireU64 } from "@interest-protocol/blast-core/integers";
+import {
+  requireBasisPointsAtMost,
+  requireU64,
+} from "@interest-protocol/blast-core/integers";
 import {
   deploymentObject,
   moveResults,
@@ -269,6 +272,13 @@ export type PresalePayout = {
 
 /** Maximum Merkle proof depth for 65,536 leaves. */
 export const MAX_PRESALE_PROOF_DEPTH = 16;
+
+/** Largest Blast share of a sale's raise `fee_policy` accepts. */
+export const MAX_PROTOCOL_RAISE_BPS = 1_000n;
+/** Largest Blast share of a sale's tokens `fee_policy` accepts. */
+export const MAX_PROTOCOL_TOKEN_BPS = 1_000n;
+/** Largest Blast share of each LP fee, Meme and Quote, `fee_policy` accepts. */
+export const MAX_PROTOCOL_LP_FEE_BPS = 3_000n;
 
 /**
  * The normalized struct type of an external migrator's witness. The contract
@@ -797,12 +807,17 @@ export class PresaleCalls {
       });
     };
   }
-  /** `fee_policy::schedule_fees`. Requires FeeAdmin. */
+  /**
+   * `fee_policy::schedule_fees`. Requires FeeAdmin. Throws when the raise or
+   * token rate exceeds 1,000 BPS or an LP rate exceeds 3,000, which the
+   * contract rejects with `fee_policy::EInvalidFees` (0).
+   */
   scheduleProtocolFees(options: {
     adminWitness: TransactionObjectInput;
     fees: ProtocolFees;
     delayMs: bigint;
   }) {
+    const fees = cappedProtocolFees(options.fees);
     return (tx: Transaction): void => {
       tx.moveCall({
         target: `${this.deployment.packageId}::fee_policy::schedule_fees`,
@@ -811,10 +826,10 @@ export class PresaleCalls {
           deploymentObject(tx, this.deployment.feePolicy, true),
           deploymentObject(tx, this.deployment.packageVersion, false),
           tx.object(options.adminWitness),
-          tx.add(this.bps(options.fees.raiseBps)),
-          tx.add(this.bps(options.fees.tokenBps)),
-          tx.add(this.bps(options.fees.lpFeeMemeBps)),
-          tx.add(this.bps(options.fees.lpFeeQuoteBps)),
+          tx.add(this.bps(fees.raiseBps)),
+          tx.add(this.bps(fees.tokenBps)),
+          tx.add(this.bps(fees.lpFeeMemeBps)),
+          tx.add(this.bps(fees.lpFeeQuoteBps)),
           tx.pure.u64(requireU64("delayMs", options.delayMs)),
           tx.object.clock(),
         ],
@@ -864,7 +879,11 @@ export class PresaleCalls {
       });
     };
   }
-  /** `presale_vault::schedule_protocol_lp_fees`. Requires FeeAdmin. */
+  /**
+   * `presale_vault::schedule_protocol_lp_fees`. Requires FeeAdmin. Throws when
+   * either rate exceeds `MAX_PROTOCOL_LP_FEE_BPS` (3,000), which the contract
+   * rejects with `fee_policy::EInvalidFees` (0).
+   */
   scheduleProtocolLpFees(options: {
     memeType: string;
     quoteType: string;
@@ -874,6 +893,16 @@ export class PresaleCalls {
     lpFeeQuoteBps: bigint;
     delayMs: bigint;
   }) {
+    const lpFeeMemeBps = requireBasisPointsAtMost(
+      "lpFeeMemeBps",
+      options.lpFeeMemeBps,
+      MAX_PROTOCOL_LP_FEE_BPS,
+    );
+    const lpFeeQuoteBps = requireBasisPointsAtMost(
+      "lpFeeQuoteBps",
+      options.lpFeeQuoteBps,
+      MAX_PROTOCOL_LP_FEE_BPS,
+    );
     return (tx: Transaction): void => {
       tx.moveCall({
         target: `${this.deployment.packageId}::presale_vault::schedule_protocol_lp_fees`,
@@ -885,8 +914,8 @@ export class PresaleCalls {
           sharedObject(tx, "vault", options.vault, true),
           deploymentObject(tx, this.deployment.packageVersion, false),
           tx.object(options.adminWitness),
-          tx.add(this.bps(options.lpFeeMemeBps)),
-          tx.add(this.bps(options.lpFeeQuoteBps)),
+          tx.add(this.bps(lpFeeMemeBps)),
+          tx.add(this.bps(lpFeeQuoteBps)),
           tx.pure.u64(requireU64("delayMs", options.delayMs)),
           tx.object.clock(),
         ],
@@ -2090,7 +2119,8 @@ export class PresaleCalls {
     },
   ) {
     const { presale } = options;
-    const { raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps } = options.fees;
+    const { raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps } =
+      cappedProtocolFees(options.fees);
     const rates = [raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps].map(
       (rate) => this.bps(rate),
     );
@@ -3396,3 +3426,29 @@ function requireU32(name: string, value: number): number {
 
 /** Flags may be ORed together; each package has its own migration bit. */
 export const PRESALE_PAUSE_BITS = { Create: 1, Commit: 2, Migrate: 8 } as const;
+
+/** Mirrors `fee_policy::protocol_fees`, whose `EInvalidFees` (0) rejects any rate above its cap. */
+function cappedProtocolFees(fees: ProtocolFees): ProtocolFees {
+  return {
+    raiseBps: requireBasisPointsAtMost(
+      "raiseBps",
+      fees.raiseBps,
+      MAX_PROTOCOL_RAISE_BPS,
+    ),
+    tokenBps: requireBasisPointsAtMost(
+      "tokenBps",
+      fees.tokenBps,
+      MAX_PROTOCOL_TOKEN_BPS,
+    ),
+    lpFeeMemeBps: requireBasisPointsAtMost(
+      "lpFeeMemeBps",
+      fees.lpFeeMemeBps,
+      MAX_PROTOCOL_LP_FEE_BPS,
+    ),
+    lpFeeQuoteBps: requireBasisPointsAtMost(
+      "lpFeeQuoteBps",
+      fees.lpFeeQuoteBps,
+      MAX_PROTOCOL_LP_FEE_BPS,
+    ),
+  };
+}

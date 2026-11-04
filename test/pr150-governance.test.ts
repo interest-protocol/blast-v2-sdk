@@ -249,3 +249,168 @@ test("pause builders reject empty masks and bits outside their product", () => {
     }
   }
 });
+
+test("fee builders enforce the contracts' compiled maximums", () => {
+  const launchpadCalls = products.launchpad.calls;
+  const migratorCalls = products.migrators.calls;
+  const presaleCalls = products.presale.calls;
+  const adminWitness = "0xca";
+  const delayMs = 172_800_000n;
+  const vault = { ...shared, objectId: "0x81", mutable: true as const };
+  const types = { memeType: "0x5::coin::MEME", quoteType: "0x2::sui::SUI" };
+  const fees = {
+    raiseBps: 1_000n,
+    tokenBps: 1_000n,
+    lpFeeMemeBps: 3_000n,
+    lpFeeQuoteBps: 3_000n,
+  };
+  const presaleArg = new Transaction().object("0x82");
+
+  // Each cap itself is accepted.
+  launchpadCalls.scheduleProtocolAllocation({
+    adminWitness,
+    memeBps: 1_000n,
+    quoteBps: 1_000n,
+    delayMs,
+  });
+  launchpadCalls.scheduleProtocolFeeShare({
+    adminWitness,
+    protocolFeeShareBps: 7_000n,
+    delayMs,
+  });
+  launchpadCalls.scheduleCreationFee({
+    adminWitness,
+    creationFee: 10_000_000_000n,
+    delayMs,
+  });
+  migratorCalls.scheduleLpFeeDefaultShares({
+    adminWitness,
+    memeBps: 3_000n,
+    quoteBps: 3_000n,
+    delayMs,
+  });
+  migratorCalls.scheduleLpFeeCoinShares({
+    adminWitness,
+    memeType: types.memeType,
+    memeBps: 3_000n,
+    quoteBps: 3_000n,
+  });
+  presaleCalls.scheduleProtocolFees({ adminWitness, fees, delayMs });
+  presaleCalls.setPresaleProtocolFees({
+    ...types,
+    presale: presaleArg,
+    adminWitness,
+    fees,
+  });
+  presaleCalls.scheduleProtocolLpFees({
+    ...types,
+    vault,
+    adminWitness,
+    lpFeeMemeBps: 3_000n,
+    lpFeeQuoteBps: 3_000n,
+    delayMs,
+  });
+
+  // One unit above each cap throws before a PTB is built.
+  const rejected: [() => unknown, RegExp][] = [
+    [
+      () =>
+        launchpadCalls.scheduleProtocolAllocation({
+          adminWitness,
+          memeBps: 1_001n,
+          quoteBps: 0n,
+          delayMs,
+        }),
+      /memeBps exceeds 1,000 basis points/,
+    ],
+    [
+      () =>
+        launchpadCalls.scheduleProtocolAllocation({
+          adminWitness,
+          memeBps: 0n,
+          quoteBps: 1_001n,
+          delayMs,
+        }),
+      /quoteBps exceeds 1,000 basis points/,
+    ],
+    [
+      () =>
+        launchpadCalls.scheduleProtocolFeeShare({
+          adminWitness,
+          protocolFeeShareBps: 7_001n,
+          delayMs,
+        }),
+      /protocolFeeShareBps exceeds 7,000 basis points/,
+    ],
+    [
+      () =>
+        launchpadCalls.scheduleCreationFee({
+          adminWitness,
+          creationFee: 10_000_000_001n,
+          delayMs,
+        }),
+      /creationFee exceeds 10 SUI/,
+    ],
+    [
+      () =>
+        migratorCalls.scheduleLpFeeDefaultShares({
+          adminWitness,
+          memeBps: 3_001n,
+          quoteBps: 0n,
+          delayMs,
+        }),
+      /memeBps exceeds 3,000 basis points/,
+    ],
+    [
+      () =>
+        migratorCalls.scheduleLpFeeCoinShares({
+          adminWitness,
+          memeType: types.memeType,
+          memeBps: 0n,
+          quoteBps: 3_001n,
+        }),
+      /quoteBps exceeds 3,000 basis points/,
+    ],
+    ...(
+      [
+        ["raiseBps", 1_001n, /raiseBps exceeds 1,000/],
+        ["tokenBps", 1_001n, /tokenBps exceeds 1,000/],
+        ["lpFeeMemeBps", 3_001n, /lpFeeMemeBps exceeds 3,000/],
+        ["lpFeeQuoteBps", 3_001n, /lpFeeQuoteBps exceeds 3,000/],
+      ] as const
+    ).flatMap(([field, value, message]): [() => unknown, RegExp][] => [
+      [
+        () =>
+          presaleCalls.scheduleProtocolFees({
+            adminWitness,
+            fees: { ...fees, [field]: value },
+            delayMs,
+          }),
+        message,
+      ],
+      [
+        () =>
+          presaleCalls.setPresaleProtocolFees({
+            ...types,
+            presale: presaleArg,
+            adminWitness,
+            fees: { ...fees, [field]: value },
+          }),
+        message,
+      ],
+    ]),
+    [
+      () =>
+        presaleCalls.scheduleProtocolLpFees({
+          ...types,
+          vault,
+          adminWitness,
+          lpFeeMemeBps: 0n,
+          lpFeeQuoteBps: 3_001n,
+          delayMs,
+        }),
+      /lpFeeQuoteBps exceeds 3,000/,
+    ],
+  ];
+  for (const [build, message] of rejected) assert.throws(build, message);
+});

@@ -393,8 +393,13 @@ terms.
 
 `fee_policy::FeePolicy` holds four rates, all zero at publication, and the
 address Blast is paid at. Every rate is a `bps::Bps`, built in the PTB through
-`bps::new`, which aborts above 10,000. Each presale snapshots the rates when it
-is created:
+`bps::new`, which aborts above 10,000. `fee_policy` caps the raise and token
+rates at 1,000 BPS each and each LP rate at 3,000 (`EInvalidFees`, 0), on the
+policy, on one sale and on one vault; `scheduleProtocolFees`,
+`setPresaleProtocolFees` and `scheduleProtocolLpFees` throw before building a
+rate above its cap (`MAX_PROTOCOL_RAISE_BPS`, `MAX_PROTOCOL_TOKEN_BPS`,
+`MAX_PROTOCOL_LP_FEE_BPS`). Each presale snapshots the rates when it is
+created:
 
 - `tokenBps` of the supply joins the supply apportionment, so the creator's
   presale, LP, and recipient BPS must total `10,000 - tokenBps`. Read the
