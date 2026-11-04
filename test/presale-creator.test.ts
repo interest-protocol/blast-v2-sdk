@@ -143,7 +143,6 @@ function fixture(
         unpaid_protocol_quote: { value: 0n },
         migration_meme_residual: { value: 20n },
         migration_quote_residual: { value: 10n },
-        holder_rewards_meme: { value: 0n },
         holder_rewards_quote: { value: 0n },
         next_round: 0n,
         last_checkpoint: null,

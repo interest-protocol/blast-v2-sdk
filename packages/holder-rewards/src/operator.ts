@@ -533,7 +533,8 @@ async function loadProduct(
     const pair = { memeType: state.memeType, quoteType: state.quoteType };
     const vault: RewardsVault = {
       ...state,
-      rewardsMeme: state.holderRewardsMeme,
+      // Presale rounds pay only Quote; holder Meme goes to the treasury.
+      rewardsMeme: 0n,
       rewardsQuote: state.holderRewardsQuote,
       summary: {
         presaleId: state.presaleId,

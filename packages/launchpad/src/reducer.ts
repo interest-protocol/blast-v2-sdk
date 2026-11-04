@@ -322,11 +322,12 @@ export function reduceLaunchpadEvent(
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
         openingRoundBids: payload.bids,
-        openingRoundQuote: launch.openingRoundQuote + payload.quote,
+        openingRoundQuote: launch.openingRoundQuote + payload.quote_amount,
         openingRoundBidders: {
           ...launch.openingRoundBidders,
           [event.sender]:
-            (launch.openingRoundBidders[event.sender] ?? 0n) + payload.quote,
+            (launch.openingRoundBidders[event.sender] ?? 0n) +
+            payload.quote_amount,
         },
       }));
     }
@@ -339,8 +340,8 @@ export function reduceLaunchpadEvent(
         lifecycle:
           launch.lifecycle === "OpeningRound" ? "Live" : launch.lifecycle,
         openingRoundBids: payload.bids,
-        openingRoundMeme: payload.meme,
-        openingRoundQuote: payload.quote,
+        openingRoundMeme: payload.meme_amount,
+        openingRoundQuote: payload.quote_amount,
       }));
     }
     case "OpeningRoundDelivered": {
@@ -348,8 +349,8 @@ export function reduceLaunchpadEvent(
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
         openingRoundBids: launch.openingRoundBids - payload.bid,
-        openingRoundMeme: launch.openingRoundMeme - payload.meme,
-        openingRoundQuote: launch.openingRoundQuote - payload.quote,
+        openingRoundMeme: launch.openingRoundMeme - payload.meme_amount,
+        openingRoundQuote: launch.openingRoundQuote - payload.quote_amount,
         openingRoundBidders: withEntry(
           launch.openingRoundBidders,
           payload.bidder,
@@ -412,14 +413,14 @@ export function reduceLaunchpadEvent(
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
         lifecycle: "Migrated",
-        allocatedMeme: launch.allocatedMeme - payload.meme,
-        realQuoteReserve: launch.realQuoteReserve - payload.quote,
+        allocatedMeme: launch.allocatedMeme - payload.meme_amount,
+        realQuoteReserve: launch.realQuoteReserve - payload.quote_amount,
         allocationPayments: [
           ...launch.allocationPayments,
           {
             destination: payload.destination,
-            meme: payload.meme,
-            quote: payload.quote,
+            meme: payload.meme_amount,
+            quote: payload.quote_amount,
           },
         ],
       }));
@@ -434,8 +435,8 @@ export function reduceLaunchpadEvent(
         pendingBurn: 0n,
         allocatedMeme: 0n,
         migration: {
-          meme: payload.meme,
-          quote: payload.quote,
+          meme: payload.meme_amount,
+          quote: payload.quote_amount,
           disposedMeme: payload.disposed_meme,
           totalSupplyAfter: payload.total_supply_after,
         },

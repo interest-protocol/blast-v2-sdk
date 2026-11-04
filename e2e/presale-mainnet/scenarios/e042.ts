@@ -760,7 +760,7 @@ async function migrate(
     ownerCapOwner,
     lpCoinId: String(dao.lp_coin_id),
     lpCoinOwner,
-    liquidity: String(vaultEvent.liquidity),
+    liquidity: String(vaultEvent.position_liquidity),
     liquidityTokens: liquidityTokens.toString(),
     liquidityQuote: liquidityQuote.toString(),
     createdPoolCoins,
@@ -994,8 +994,7 @@ async function collect(
   verify(
     state,
     "holder Meme goes to treasury and holder Quote stays in the vault",
-    vaultState.holderRewardsMeme === 0n &&
-      vaultState.holderRewardsQuote === u64(collected.holder_rewards_quote) &&
+    vaultState.holderRewardsQuote === u64(collected.holder_rewards_quote) &&
       balanceChange(
         executed,
         String(collected.protocol_destination),
@@ -1006,10 +1005,7 @@ async function collect(
           (collected.protocol_destination === sale.feeRecipient
             ? total(recipientMeme)
             : 0n),
-    {
-      holderRewardsMeme: vaultState.holderRewardsMeme,
-      holderRewardsQuote: vaultState.holderRewardsQuote,
-    },
+    { holderRewardsQuote: vaultState.holderRewardsQuote },
   );
   // An empty collection is valid and moves nothing.
   const repeated = await step(

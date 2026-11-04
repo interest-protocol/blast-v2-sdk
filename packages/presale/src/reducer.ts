@@ -115,6 +115,7 @@ export type PresaleVaultProjection = {
   venueType: string;
   memeType: string;
   quoteType: string;
+  /** `VaultCreated.position_liquidity`: the position's liquidity in its venue's own units. */
   liquidity: bigint;
   feeRecipients: BpsShare[];
   holderRewardsBps: bigint;
@@ -134,8 +135,10 @@ export type PresaleVaultProjection = {
   protocolLpFeeQuoteBps: bigint;
   migrationMemeResidual: bigint;
   migrationQuoteResidual: bigint;
-  /** Holder-reward share not yet reserved by a round. */
-  holderRewardsMeme: bigint;
+  /**
+   * Holder-reward Quote not yet reserved by a round. Holder Meme fees go to
+   * the treasury when collected (`HolderMemePaid`).
+   */
   holderRewardsQuote: bigint;
   /** Cumulative holder Meme actually paid to governed treasury, outside funded leaves. */
   holderMemeTreasuryPaid: bigint;
@@ -452,7 +455,7 @@ function applyVaultEvent(
             venueType: event.venueType,
             memeType: event.memeType,
             quoteType: event.quoteType,
-            liquidity: payload.liquidity,
+            liquidity: payload.position_liquidity,
             feeRecipients,
             holderRewardsBps: payload.holder_rewards_bps,
             feeSplitDelayMs: 172_800_000n,
@@ -462,7 +465,6 @@ function applyVaultEvent(
             protocolLpFeeQuoteBps: payload.protocol_lp_fee_quote_bps,
             migrationMemeResidual: payload.migration_meme_residual,
             migrationQuoteResidual: payload.migration_quote_residual,
-            holderRewardsMeme: 0n,
             holderRewardsQuote: 0n,
             holderMemeTreasuryPaid: 0n,
             nextRound: 0n,
@@ -482,8 +484,6 @@ function applyVaultEvent(
     case "FeesCollected": {
       const { payload } = event;
       return updateVault(state, payload.vault_id, (vault) => ({
-        holderRewardsMeme:
-          vault.holderRewardsMeme + payload.holder_rewards_meme,
         holderRewardsQuote:
           vault.holderRewardsQuote + payload.holder_rewards_quote,
         feeRecipientMemePaid: vault.feeRecipientMemePaid.map(
@@ -525,7 +525,6 @@ function applyVaultEvent(
     case "HolderMemePaid": {
       const { payload } = event;
       return updateVault(state, payload.vault_id, (vault) => ({
-        holderRewardsMeme: payload.unallocated_meme_remaining,
         holderMemeTreasuryPaid:
           vault.holderMemeTreasuryPaid + payload.meme_amount,
       }));
@@ -533,7 +532,6 @@ function applyVaultEvent(
     case "RoundPublished": {
       const { payload } = event;
       const updated = updateVault(state, payload.vault_id, () => ({
-        holderRewardsMeme: payload.meme_unallocated,
         holderRewardsQuote: payload.quote_unallocated,
         nextRound: payload.number + 1n,
         lastCheckpoint: payload.end_checkpoint,
@@ -589,7 +587,6 @@ function applyVaultEvent(
     case "RoundClosed": {
       const { payload } = event;
       const returned = updateVault(state, payload.vault_id, (vault) => ({
-        holderRewardsMeme: vault.holderRewardsMeme + payload.meme_returned,
         holderRewardsQuote:
           vault.holderRewardsQuote +
           payload.quote_returned +

@@ -294,6 +294,7 @@ test("CLI resumes checkpoint batches and publishes, advances and relays the same
             content: lpVaultBcs
               .serialize({
                 id: uid(vaultId),
+                launch_id: { bytes: address("0x11") },
                 pool_id: { bytes: address("0x10") },
                 partner_id: null,
                 protocol_meme_residual: { value: 0n },
@@ -605,7 +606,6 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
                 unpaid_protocol_quote: { value: 0n },
                 migration_meme_residual: { value: 0n },
                 migration_quote_residual: { value: 0n },
-                holder_rewards_meme: { value: published ? 0n : 4000n },
                 holder_rewards_quote: { value: published ? 0n : 800n },
                 next_round: published ? number + 1n : number,
                 last_checkpoint: published ? 2n : previousEnd,
@@ -676,8 +676,8 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
       quoteAmount,
     })),
     [
-      { beneficiary: alice, memeAmount: "3000", quoteAmount: "600" },
-      { beneficiary: bob, memeAmount: "1000", quoteAmount: "200" },
+      { beneficiary: alice, memeAmount: "0", quoteAmount: "600" },
+      { beneficiary: bob, memeAmount: "0", quoteAmount: "200" },
     ],
   );
   await assert.rejects(() => run("publish-tx"), /claimWindowMs/);

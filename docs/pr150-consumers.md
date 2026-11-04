@@ -1,6 +1,6 @@
 # PR150 consumer ABI
 
-These bindings target a fresh contract stack at `2de44b688ebf8208dff82f5b83714eceb00727da`.
+These bindings target a fresh contract stack at `9d76884868e449d5b6a72d4d0e12edc5df9dbe0f`.
 The compiled public signatures and ordered fields are frozen separately in
 `abi/pr150-consumers.json`; run `npm run check:abi:pr150` with `BLAST_CONTRACTS_DIR`
 pointing to a contracts checkout containing that commit. Published mainnet ABI
@@ -197,7 +197,51 @@ const arm = launchpad.tx.armNotices({
 - LP fees: the migrators `LpFeePolicy` starts at a 48-hour notice with its
   compiled destination and 15%/15% default shares, so the migrators
   `configureNow` and `armNotices` are removed; use the `scheduleLpFee*` and
-  `applyLpFee*` builders. The compiler-signature matrix checks
+  `applyLpFee*` builders.
+
+### Pre-audit informational fixes (contracts #168)
+
+Every change below alters an event or object layout or a call signature, so a
+decoder, indexer or signer built before it misreads the fresh stack.
+
+- Launchpad events: `OpeningRoundJoined.quote` is `quote_amount`;
+  `OpeningRoundSettled`, `OpeningRoundDelivered`, `MigrationAllocationPaid`
+  and `Migrated` rename `meme`/`quote` to `meme_amount`/`quote_amount`. BCS
+  bytes are unchanged; decoded payload keys change.
+- Creator claims: the backend signs the 28 ASCII bytes
+  `blast_fun::creator_claim::v1` (no length prefix) followed by the BCS
+  `CreatorClaimMessage`. `encodeCreatorClaimMessage` returns the tagged bytes,
+  so a signer that calls it follows without code changes; a signature over the
+  untagged BCS no longer verifies.
+- Presale claims: `claimHolderReward(s)` pass the shared Clock after the proof;
+  a claim at or after the deadline aborts with `holder_rewards::EClaimsClosed`
+  (14).
+- Presale rounds pay only Quote: `scheduleHolderRewardRound` rejects a manifest
+  with a nonzero Meme amount (the contract's
+  `presale_vault::EMemeRewardsUnsupported`, 13), and the holder-rewards
+  operator allocates no Meme for presale vaults. The leaf format is unchanged.
+- Presale layouts: the `Vault` object drops `holder_rewards_meme`, so
+  `PresaleVaultState` and the reducer's vault projection drop
+  `holderRewardsMeme`; `RoundPublished` drops `meme_unallocated`,
+  `HolderMemePaid` drops `unallocated_meme_remaining`, and
+  `VaultCreated.liquidity` is `position_liquidity` (the projection keeps
+  `liquidity`).
+- Migrators: `VaultCreated` gains `launch_id` after `vault_id` and the
+  `LpVault` object gains `launch_id` after `id` (`LpVaultState.launchId`); the
+  reducer takes the vault's `launchId` from the event instead of matching Meme
+  types. `ProtocolLpFeesClaimed.protocol_meme/quote` are `blast_meme/quote`,
+  `AutoLiquidityAdded.meme_pending/quote_pending` are
+  `auto_lp_meme_pending/auto_lp_quote_pending`, and
+  `BuybackBurned.quote_pending` is `burn_quote_pending`. `scheduleFeeSplit`,
+  `cancelFeeSplit` and `claimCreatorFees` abort with `vault::EWrongLaunch`
+  (15) unless `launch` is the vault's own.
+- Admin: upgrade events name the package `original_package_id`
+  (`OperationalVersionAdvanced`, `UpgradeCustodyCreated`,
+  `UpgradePolicyRestricted`, `UpgradeCapDestroyed`) and
+  `UpgradeAuthorized.current_package_id`. `delayed_map::destroy` and the
+  `MapDestroyed` event are gone, so `decodeDelayedEvent` no longer names it.
+
+The compiler-signature matrix checks
 roles, argument order and shared-object mutability. Fresh Move-generated golden
 bytes check launch, config and runtime decoders. Table ACL, delayed application,
 upgrade identity, masks and LP Quote guard have regression tests.

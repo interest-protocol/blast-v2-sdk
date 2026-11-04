@@ -17,6 +17,7 @@ import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
 
 const objectId = "0xc";
 const poolId = "0xd";
+const launchId = "0xb1";
 const originalPackageId = "0x321";
 const uid = (id: string) => ({ id: { bytes: id } });
 const balance = (value: bigint) => ({ value });
@@ -47,6 +48,7 @@ function serializeVault(id = objectId, owner = id): Uint8Array {
   return lpVaultBcs
     .serialize({
       id: uid(id),
+      launch_id: { bytes: launchId },
       pool_id: { bytes: poolId },
       partner_id: "0x9a27",
       protocol_meme_residual: balance(5n),
@@ -96,6 +98,7 @@ test("decodes LP-vault custody, fee split, and every balance", () => {
   );
 
   assert.equal(vault.objectId, normalizeSuiObjectId(objectId));
+  assert.equal(vault.launchId, normalizeSuiObjectId(launchId));
   assert.equal(vault.poolId, normalizeSuiObjectId(poolId));
   assert.equal(vault.memeType.endsWith("0a::meme::MEME"), true);
   assert.equal(vault.quoteType.endsWith("02::sui::SUI"), true);

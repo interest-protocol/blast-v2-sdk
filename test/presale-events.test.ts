@@ -366,7 +366,7 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       presale_id: PRESALE,
       pool_id: id("0x90"),
       position_id: id("0x91"),
-      liquidity: 1_234n,
+      position_liquidity: 1_234n,
       fee_recipients: [id("0xc0ffee"), id("0xfee")],
       fee_recipient_bps: [5_000n, 2_000n],
       holder_rewards_bps: 3_000n,
@@ -409,9 +409,8 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       root: "22".repeat(32),
       manifest_digest: "33".repeat(32),
       leaf_count: 2n,
-      meme_amount: 30n,
+      meme_amount: 0n,
       quote_amount: 3n,
-      meme_unallocated: 0n,
       quote_unallocated: 0n,
       treasury: TREASURY,
       gas_reserve_amount: 0n,
@@ -420,16 +419,16 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       round_id: ROUND,
       index: 1n,
       beneficiary: BOB,
-      meme_amount: 20n,
+      meme_amount: 0n,
       quote_amount: 2n,
-      meme_remaining: 10n,
+      meme_remaining: 0n,
       quote_remaining: 1n,
     }),
     decode("RoundClosed", {
       vault_id: VAULT,
       round_id: ROUND,
       number: 0n,
-      meme_returned: 10n,
+      meme_returned: 0n,
       quote_returned: 1n,
       gas_reserve_returned: 0n,
     }),
@@ -444,13 +443,12 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
   assert.equal(vault.venueType, normalizeStructTag(`${pkg}::cetus::Venue`));
   assert.deepEqual(
     [
-      vault.holderRewardsMeme,
       vault.holderRewardsQuote,
       vault.nextRound,
       vault.lastCheckpoint,
       vault.migrationMemeResidual,
     ],
-    [10n, 1n, 1n, 10n, 0n],
+    [1n, 1n, 10n, 0n],
   );
   assert.deepEqual(vault.feeRecipientMemePaid, [51n, 20n]);
   assert.deepEqual(vault.feeRecipientQuotePaid, [5n, 2n]);
@@ -489,7 +487,6 @@ test("rebuilds a presale, its vault, and a reward round from events", () => {
       leaf_count: 1n,
       meme_amount: 0n,
       quote_amount: 1n,
-      meme_unallocated: 10n,
       quote_unallocated: 0n,
       treasury: TREASURY,
       gas_reserve_amount: 0n,
@@ -563,7 +560,7 @@ for (const settle of [false, true]) {
         presale_id: PRESALE,
         pool_id: id("0x9001"),
         position_id: id("0x9051"),
-        liquidity: 100n,
+        position_liquidity: 100n,
         fee_recipients: [],
         fee_recipient_bps: [],
         holder_rewards_bps: 10_000n,
@@ -592,7 +589,6 @@ for (const settle of [false, true]) {
         vault_id: VAULT,
         treasury: TREASURY,
         meme_amount: 40n,
-        unallocated_meme_remaining: 0n,
       }),
     );
     apply(
@@ -614,10 +610,9 @@ for (const settle of [false, true]) {
         vault_id: VAULT,
         treasury: TREASURY,
         meme_amount: 5n,
-        unallocated_meme_remaining: 0n,
       }),
     );
-    assert.equal(required(state.vaults[VAULT]).holderRewardsMeme, 0n);
+    assert.equal(required(state.vaults[VAULT]).holderMemeTreasuryPaid, 45n);
     const roundId = id("0xd1");
     apply(
       decode("RoundPublished", {
@@ -632,7 +627,6 @@ for (const settle of [false, true]) {
         leaf_count: 2n,
         meme_amount: 0n,
         quote_amount: 970n,
-        meme_unallocated: 0n,
         quote_unallocated: 0n,
         treasury: TREASURY,
         gas_reserve_amount: 30n,
@@ -698,10 +692,7 @@ for (const settle of [false, true]) {
       vault.holderRewardsQuote + 200n + closed.gasReimbursed,
       1_000n,
     );
-    assert.deepEqual(
-      [vault.holderRewardsMeme, vault.holderMemeTreasuryPaid],
-      [0n, 45n],
-    );
+    assert.equal(vault.holderMemeTreasuryPaid, 45n);
   });
 }
 
@@ -871,7 +862,7 @@ test("tracks Blast's shares from creation through migration, LP fees, and an LP-
       presale_id: PRESALE,
       pool_id: id("0x90"),
       position_id: id("0x91"),
-      liquidity: 1n,
+      position_liquidity: 1n,
       fee_recipients: [id("0xc0ffee")],
       fee_recipient_bps: [7_000n],
       holder_rewards_bps: 3_000n,
@@ -1031,7 +1022,7 @@ test("holds a partnered vault's Blast LP fees until its partner is paid", () => 
       presale_id: PRESALE,
       pool_id: id("0x90"),
       position_id: id("0x91"),
-      liquidity: 1n,
+      position_liquidity: 1n,
       fee_recipients: [id("0xc0ffee"), id("0xfee")],
       fee_recipient_bps: [5_000n, 2_000n],
       holder_rewards_bps: 3_000n,
@@ -1052,9 +1043,8 @@ test("holds a partnered vault's Blast LP fees until its partner is paid", () => 
       vault.protocolQuoteHeld,
       vault.protocolMemePaid,
       vault.protocolQuotePaid,
-      vault.holderRewardsMeme,
     ],
-    [22n, 6n, 0n, 0n, 54n],
+    [22n, 6n, 0n, 0n],
   );
 
   // 40% of 22 Meme and 6 Quote is 8.8 and 2.4: the partner takes 8 and 2.
@@ -1237,7 +1227,7 @@ test("a vault without a presale links no presale and is projected on its own", (
       presale_id: ZERO,
       pool_id: id("0x90"),
       position_id: id("0x91"),
-      liquidity: 77n,
+      position_liquidity: 77n,
       fee_recipients: [id("0xc0ffee")],
       fee_recipient_bps: [10_000n],
       holder_rewards_bps: 0n,
@@ -1677,7 +1667,7 @@ test("vault fee proposals remain pending until explicit application, with replay
       presale_id: PRESALE,
       pool_id: id("0x90"),
       position_id: id("0x91"),
-      liquidity: 1n,
+      position_liquidity: 1n,
       fee_recipients: [ALICE],
       fee_recipient_bps: [7000n],
       holder_rewards_bps: 3000n,

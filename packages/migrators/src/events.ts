@@ -45,6 +45,7 @@ type MigratorEventFieldDescriptor =
 export const migratorEventSpecs = {
   VaultCreated: {
     vault_id: "id",
+    launch_id: "id",
     pool_id: "id",
     position_id: "id",
     venue: "typeName",
@@ -77,14 +78,14 @@ export const migratorEventSpecs = {
     vault_id: "id",
     meme_amount: "u64",
     quote_amount: "u64",
-    meme_pending: "u64",
-    quote_pending: "u64",
+    auto_lp_meme_pending: "u64",
+    auto_lp_quote_pending: "u64",
   },
   BuybackBurned: {
     vault_id: "id",
     quote_spent: "u64",
     meme_burned: "u64",
-    quote_pending: "u64",
+    burn_quote_pending: "u64",
   },
   AutoLpPositionOpened: {
     vault_id: "id",
@@ -149,8 +150,8 @@ export const migratorEventSpecs = {
   ProtocolLpFeesClaimed: {
     vault_id: "id",
     protocol_destination: "address",
-    protocol_meme: "u64",
-    protocol_quote: "u64",
+    blast_meme: "u64",
+    blast_quote: "u64",
     partner_meme: "u64",
     partner_quote: "u64",
   },

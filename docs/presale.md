@@ -557,13 +557,19 @@ is reserved until `publishHolderRewardRound`, which takes no terms. Each vault's
 round notice starts at two hours, so `CancelAdmin` can stop a bad round
 (`scheduleHolderRewardRoundDelay` changes it after that notice). The reserve
 may be at most 10% of the round's holder Quote
-(`presale_vault::EGasReserveTooLarge`, 12). The administrator
+(`presale_vault::EGasReserveTooLarge`, 12). Rounds pay only Quote: the leaf and
+terms keep a Meme amount for parity with the migrators' rounds, but it must be
+zero, and `scheduleHolderRewardRound` rejects a manifest with Meme before the
+contract would (`presale_vault::EMemeRewardsUnsupported`, 13). The administrator
 chooses the reserve for each publication: zero disables reimbursement and Blast
 pays gas; a positive amount funds separate gas custody inside the canonical
 `Round`. Holder leaf balances and proofs never include that reserve. Treasury
 comes from the governed FeePolicy and is fixed in the round. Publication checks
 that it still equals the explicit `expectedTreasury` before withdrawing funds,
 and rechecks the round number, interval and budget against the vault.
+
+`claimHolderReward` passes the shared Clock; a claim at or after the round's
+deadline aborts with `holder_rewards::EClaimsClosed` (14).
 
 `settleHolderRewardGasReserve` reimburses the fixed treasury once, capped by the
 positive original reserve, and returns the remainder to the vault. A zero
@@ -573,7 +579,9 @@ reserve. The SDK performs no USD pricing or gas reimbursement policy.
 
 Holder Meme fees are paid to the governed treasury at collection; holder Quote
 stays in the vault for reward publication. The canonical `HolderMemePaid` event
-records that transfer.
+records that transfer. The `Vault` object holds no holder Meme balance, so
+`PresaleVaultState` and the reducer's vault projection carry only
+`holderRewardsQuote`.
 
 ## Reads and replay
 

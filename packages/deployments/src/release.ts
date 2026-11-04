@@ -4,10 +4,10 @@
  * ABI mismatch.
  */
 export const FROZEN_ABI = Object.freeze({
-  contractsCommit: "2de44b688ebf8208dff82f5b83714eceb00727da",
+  contractsCommit: "9d76884868e449d5b6a72d4d0e12edc5df9dbe0f",
   artifacts: Object.freeze({
     launchpad:
-      "f9dfcf1fa50b05cbaef89c6747fe48fed6632dffa67d0969aeb992b643a00398",
+      "2530a97950480e4581b2e6083cbb50be392d5579320ced15f2da2f8c74573633",
     blastSui:
       "943236915134897494c1a1eb7f18d2a0ea8a012e6e657321abc5fc274ee3587f",
   }),

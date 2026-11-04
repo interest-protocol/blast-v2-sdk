@@ -2154,7 +2154,10 @@ export class PresaleCalls {
    * notice (two hours from creation) has passed; claims stay open for
    * `claimWindowMs` from publication. `gasReserveAmount` may be at most 10% of
    * the manifest's Quote, or scheduling aborts with
-   * `presale_vault::EGasReserveTooLarge` (12).
+   * `presale_vault::EGasReserveTooLarge` (12). Rounds pay only Quote (holder
+   * Meme fees go to the treasury): a manifest with a nonzero Meme amount is
+   * rejected here, as the contract would with
+   * `presale_vault::EMemeRewardsUnsupported` (13).
    */
   scheduleHolderRewardRound(
     options: LaunchTypes & {
@@ -2181,6 +2184,8 @@ export class PresaleCalls {
       rewardAddress(manifest.vaultId) !== rewardAddress(options.vault.objectId)
     )
       throw new TypeError("manifest belongs to another vault");
+    if (BigInt(manifest.memeAmount) !== 0n)
+      throw new RangeError("presale holder rounds pay only Quote");
     const expectedTreasury = normalizeSuiAddress(options.expectedTreasury);
     if (!isValidSuiAddress(expectedTreasury))
       throw new TypeError("invalid expectedTreasury address");
@@ -2283,24 +2288,16 @@ export class PresaleCalls {
     ]);
   }
 
-  /** `holder_rewards::claim`: relays one proof; the round pays its beneficiary. */
+  /**
+   * `holder_rewards::claim`: relays one proof; the round pays its beneficiary.
+   * It aborts with `holder_rewards::EClaimsClosed` (14) once the round's claim
+   * deadline is reached.
+   */
   claimHolderReward(
     options: LaunchTypes & {
       round: SharedObjectReference<true>;
       allocation: RewardProof;
     },
-  ) {
-    return this.#claimHolderReward(options, "claim");
-  }
-
-  /** Relays the same presale proof domain against the distinct reserve-bearing round. */
-
-  #claimHolderReward(
-    options: LaunchTypes & {
-      round: SharedObjectReference<true>;
-      allocation: RewardProof;
-    },
-    functionName: "claim",
   ) {
     const { allocation } = options;
     const index = requireU64("index", BigInt(allocation.index));
@@ -2314,7 +2311,7 @@ export class PresaleCalls {
     return (tx: Transaction): void => {
       this.#presaleCall(
         tx,
-        functionName,
+        "claim",
         [
           sharedObject(tx, "round", options.round, true),
           this.#version(tx),
@@ -2323,6 +2320,7 @@ export class PresaleCalls {
           tx.pure.u64(memeAmount),
           tx.pure.u64(quoteAmount),
           tx.pure.vector("vector<u8>", proof),
+          tx.object.clock(),
         ],
         options,
         "holder_rewards",

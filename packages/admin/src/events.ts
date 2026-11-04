@@ -116,14 +116,14 @@ export function aclEventId(event: { position: SuiEventPosition }): string {
 export const packageAdministrationEventBcs = {
   OperationalVersionAdvanced: bcs.struct("OperationalVersionAdvanced", {
     container_id: suiObjectIdBcs,
-    package_id: addressBcs,
+    original_package_id: addressBcs,
     previous_generation: u64Bcs,
     new_generation: u64Bcs,
   }),
   UpgradeAuthorized: bcs.struct("UpgradeAuthorized", {
     custodian_id: suiObjectIdBcs,
     upgrade_cap_id: suiObjectIdBcs,
-    package_id: suiObjectIdBcs,
+    current_package_id: suiObjectIdBcs,
     native_version: u64Bcs,
     policy: bcs.u8(),
     digest: bcs.vector(bcs.u8()),
@@ -131,7 +131,7 @@ export const packageAdministrationEventBcs = {
   UpgradeCapDestroyed: bcs.struct("UpgradeCapDestroyed", {
     custodian_id: suiObjectIdBcs,
     upgrade_cap_id: suiObjectIdBcs,
-    package_id: addressBcs,
+    original_package_id: addressBcs,
     final_native_version: u64Bcs,
     final_policy: bcs.u8(),
   }),
@@ -147,14 +147,14 @@ export const packageAdministrationEventBcs = {
     custodian_id: suiObjectIdBcs,
     publisher_id: suiObjectIdBcs,
     upgrade_cap_id: suiObjectIdBcs,
-    package_id: suiObjectIdBcs,
+    original_package_id: suiObjectIdBcs,
     native_version: u64Bcs,
     policy: bcs.u8(),
   }),
   UpgradePolicyRestricted: bcs.struct("UpgradePolicyRestricted", {
     custodian_id: suiObjectIdBcs,
     upgrade_cap_id: suiObjectIdBcs,
-    package_id: addressBcs,
+    original_package_id: addressBcs,
     native_version: u64Bcs,
     previous_policy: bcs.u8(),
     new_policy: bcs.u8(),
@@ -225,7 +225,6 @@ export const DELAYED_EVENT_KINDS = [
   "MapScheduled",
   "MapCancelled",
   "MapApplied",
-  "MapDestroyed",
 ] as const;
 export type DelayedEventKind = (typeof DELAYED_EVENT_KINDS)[number];
 
@@ -275,13 +274,7 @@ const FAMILY_KINDS: {
     "SetDestroyed",
     "MemberRemoved",
   ],
-  map: [
-    "MapCreated",
-    "MapScheduled",
-    "MapCancelled",
-    "MapApplied",
-    "MapDestroyed",
-  ],
+  map: ["MapCreated", "MapScheduled", "MapCancelled", "MapApplied"],
 };
 
 /** Any `BcsType` decoding `T`, whatever it serializes from. */
@@ -398,7 +391,6 @@ export type DelayedEventPayloads<Key, Value, Entry> = {
     change: DelayedMapChange<Entry, Value>;
     delay_ms: bigint;
   };
-  MapDestroyed: { owner: string; key: Key };
 };
 
 type SpecKey<Spec> =
@@ -540,7 +532,6 @@ export function delayedEventBcs(
     MapScheduled: { change: mapChange, ...timing },
     MapCancelled: { change: mapChange, ...timing },
     MapApplied: { change: mapChange, delay_ms: u64Bcs },
-    MapDestroyed: {},
   }[kind];
   return bcs.struct(kind, { ...head, ...fields }) as unknown as BcsType<
     Record<string, unknown>,
