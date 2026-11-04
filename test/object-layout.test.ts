@@ -214,6 +214,7 @@ function launch() {
 function vault() {
   return {
     id: uid("0x1"),
+    launch_id: { bytes: "0x3" },
     pool_id: { bytes: "0x2" },
     partner_id: null,
     protocol_meme_residual: balance,

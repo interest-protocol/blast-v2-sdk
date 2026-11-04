@@ -419,7 +419,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
     number: 0n,
     startCheckpoint: 1n,
     endCheckpoint: 2n,
-    allocations: [{ beneficiary: "0xb0b", memeAmount: 40n, quoteAmount: 5n }],
+    allocations: [{ beneficiary: "0xb0b", memeAmount: 0n, quoteAmount: 5n }],
     leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
   });
   const cases: Array<[Transaction, string, string[]]> = [
@@ -560,7 +560,7 @@ test("builds every lifecycle call with the ABI's argument count", () => {
         allocations: manifest.allocations,
       }),
       "holder_rewards::claim",
-      ["shared-mut:0xd0", "shared:0x64", ...Array(5).fill("pure")],
+      ["shared-mut:0xd0", "shared:0x64", ...Array(5).fill("pure"), CLOCK],
     ],
     [
       tx.closeHolderRewardRound({ ...types, round, vault }),
@@ -1203,6 +1203,8 @@ test("rejects a manifest from the migrators' leaf domain or another vault", () =
     leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
   });
   assert.throws(() => publish(presaleManifest, "0xbb"), /another vault/);
+  // Rounds pay only Quote (`presale_vault::EMemeRewardsUnsupported`).
+  assert.throws(() => publish(presaleManifest), /pay only Quote/);
 });
 
 test("builds reserve publication, immutable beneficiary claims, settlement and safe close against the new ABI", () => {
@@ -1330,6 +1332,7 @@ test("builds reserve publication, immutable beneficiary claims, settlement and s
         "shared-mut:0xd1",
         "shared:0x64",
         ...Array.from({ length: 5 }, () => "pure"),
+        CLOCK,
       ],
     ],
     [

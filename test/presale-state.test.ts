@@ -266,7 +266,6 @@ test("decodes a Vault from bytes laid out in Move field order", () => {
     ...u64(3n), // unpaid_protocol_quote
     ...u64(1n), // migration_meme_residual
     ...u64(0n), // migration_quote_residual
-    ...u64(30n), // holder_rewards_meme
     ...u64(3n), // holder_rewards_quote
     ...u64(2n), // next_round
     ...u8(1), // last_checkpoint: Some
@@ -309,7 +308,6 @@ test("decodes a Vault from bytes laid out in Move field order", () => {
       vault.unpaidProtocolQuote,
       vault.migrationMemeResidual,
       vault.migrationQuoteResidual,
-      vault.holderRewardsMeme,
       vault.holderRewardsQuote,
       vault.nextRound,
       vault.lastCheckpoint,
@@ -324,7 +322,6 @@ test("decodes a Vault from bytes laid out in Move field order", () => {
       3n,
       1n,
       0n,
-      30n,
       3n,
       2n,
       99n,

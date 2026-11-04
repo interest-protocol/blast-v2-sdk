@@ -79,6 +79,7 @@ export function launchMigrationRoute(
 /** BCS layout of `blast_fun_migrators::vault::LpVault<Meme, Quote>`. */
 export const lpVaultBcs = bcs.struct("LpVault", {
   id: suiUidBcs,
+  launch_id: suiIdBcs,
   pool_id: suiIdBcs,
   partner_id: bcs.option(suiObjectIdBcs),
   protocol_meme_residual: suiBalanceBcs,
@@ -116,6 +117,8 @@ export const lpFeePolicyBcs = bcs.struct("LpFeePolicy", {
 export type LpVaultState = SharedObjectReference<true> & {
   memeType: string;
   quoteType: string;
+  /** The launch whose migration created the vault; launch-gated calls must pass it. */
+  launchId: string;
   poolId: string;
   /** The partner the launch named, paid its cut of Blast's LP fees; null for none. */
   partnerId: string | null;
@@ -215,6 +218,7 @@ export function decodeLpVaultObject(
     mutable: true,
     memeType: normalizeTypeParameter(tag.typeParams[0]),
     quoteType: normalizeTypeParameter(tag.typeParams[1]),
+    launchId: normalizeSuiObjectId(parsed.launch_id.bytes),
     poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
     partnerId: parsed.partner_id,
     protocolMemeResidual: BigInt(parsed.protocol_meme_residual.value),

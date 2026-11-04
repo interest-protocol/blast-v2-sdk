@@ -26,8 +26,8 @@ import { migratorEventId, migratorEventSpecs } from "./events.ts";
 
 export type LpVaultEventProjection = {
   vaultId: string;
-  /** The launch this vault completed, linked by Meme type in the product projection. */
-  launchId: string | null;
+  /** The launch whose migration created this vault (`VaultCreated.launch_id`). */
+  launchId: string;
   poolId: string;
   positionId: string;
   /** Separate full-range position Cetus auto-LP adds to; null until first use. */
@@ -255,7 +255,7 @@ export function reduceMigratorEvent(
           ...state.vaults,
           [payload.vault_id]: {
             vaultId: payload.vault_id,
-            launchId: null,
+            launchId: payload.launch_id,
             poolId: payload.pool_id,
             positionId: payload.position_id,
             autoLpPositionId: null,
@@ -318,8 +318,8 @@ export function reduceMigratorEvent(
         ...vault,
         protocolMemeHeld: 0n,
         protocolQuoteHeld: 0n,
-        protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
-        protocolQuotePaid: vault.protocolQuotePaid + payload.protocol_quote,
+        protocolMemePaid: vault.protocolMemePaid + payload.blast_meme,
+        protocolQuotePaid: vault.protocolQuotePaid + payload.blast_quote,
         partnerMemePaid: vault.partnerMemePaid + payload.partner_meme,
         partnerQuotePaid: vault.partnerQuotePaid + payload.partner_quote,
       }));
@@ -328,15 +328,15 @@ export function reduceMigratorEvent(
       const payload = event.payload;
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
-        autoLpMeme: payload.meme_pending,
-        autoLpQuote: payload.quote_pending,
+        autoLpMeme: payload.auto_lp_meme_pending,
+        autoLpQuote: payload.auto_lp_quote_pending,
       }));
     }
     case "BuybackBurned": {
       const payload = event.payload;
       return updateVault(next, payload.vault_id, (vault) => ({
         ...vault,
-        burnQuote: payload.quote_pending,
+        burnQuote: payload.burn_quote_pending,
       }));
     }
     case "AutoLpPositionOpened": {
@@ -497,12 +497,7 @@ export function reduceLaunchpadProductInput(
   }
   if (input.source === "migrators") {
     const migrators = reduceMigratorEvent(state.migrators, input);
-    if (migrators === state.migrators) return state;
-    if (input.kind !== "VaultCreated") return { ...state, migrators };
-    return {
-      ...state,
-      migrators: linkVaultLaunch(migrators, state.launchpad, input.payload),
-    };
+    return migrators === state.migrators ? state : { ...state, migrators };
   }
   const native = reduceNativeFact(state.native, input);
   return native === state.native ? state : { ...state, native };
@@ -563,28 +558,6 @@ function reduceNativeFact(
         },
       };
   }
-}
-
-/**
- * The migration transaction migrates the launch (`Migrated`) before it
- * attaches the vault (`VaultCreated`). One launch exists per Meme type, so the
- * launch of the vault's Meme type is the vault's launch.
- */
-function linkVaultLaunch(
-  state: MigratorEventProjection,
-  launchpad: LaunchpadEventProjection,
-  payload: Extract<DecodedMigratorEvent, { kind: "VaultCreated" }>["payload"],
-): MigratorEventProjection {
-  const launch = Object.values(launchpad.launches).find(
-    (candidate) =>
-      candidate.memeType === payload.meme &&
-      candidate.quoteType === payload.quote,
-  );
-  if (!launch) return state;
-  return updateVault(state, payload.vault_id, (current) => ({
-    ...current,
-    launchId: launch.launchId,
-  }));
 }
 
 function updateVault(

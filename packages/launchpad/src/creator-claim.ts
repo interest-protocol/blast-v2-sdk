@@ -13,6 +13,11 @@ const creatorClaimMessageBcs = bcs.struct("CreatorClaimMessage", {
   expiry_ms: bcs.u64(),
 });
 
+/** `creator_authority::CREATOR_CLAIM_DOMAIN`, prefixed to every signed claim without a length. */
+const CREATOR_CLAIM_DOMAIN = new TextEncoder().encode(
+  "blast_fun::creator_claim::v1",
+);
+
 const creatorClaimAttestationBcs = bcs.tuple([bcs.u64(), bcs.vector(bcs.u8())]);
 
 export type CreatorClaim = {
@@ -22,7 +27,11 @@ export type CreatorClaim = {
   expiryMs: bigint;
 };
 
-/** Encodes the exact provider-independent message authorized by the backend. */
+/**
+ * Encodes the exact provider-independent message the backend signs: the ASCII
+ * domain tag `blast_fun::creator_claim::v1` followed by the BCS
+ * `CreatorClaimMessage`.
+ */
 export function encodeCreatorClaimMessage(claim: CreatorClaim): Uint8Array {
   requireLength(
     "accountCommitment",
@@ -32,7 +41,7 @@ export function encodeCreatorClaimMessage(claim: CreatorClaim): Uint8Array {
   requireU64("expiryMs", claim.expiryMs);
   const memeType = normalizeStructTag(claim.memeType);
 
-  return creatorClaimMessageBcs
+  const claimBytes = creatorClaimMessageBcs
     .serialize({
       // Move's TypeName text omits the conventional address prefix.
       meme: memeType.startsWith("0x") ? memeType.slice(2) : memeType,
@@ -41,6 +50,12 @@ export function encodeCreatorClaimMessage(claim: CreatorClaim): Uint8Array {
       expiry_ms: claim.expiryMs,
     })
     .toBytes();
+  const message = new Uint8Array(
+    CREATOR_CLAIM_DOMAIN.length + claimBytes.length,
+  );
+  message.set(CREATOR_CLAIM_DOMAIN);
+  message.set(claimBytes, CREATOR_CLAIM_DOMAIN.length);
+  return message;
 }
 
 /** Encodes an expiry and Ed25519 signature for `claim_creator_cap`. */

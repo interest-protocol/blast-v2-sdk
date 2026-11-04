@@ -365,7 +365,6 @@ export const presaleVaultBcs = bcs.struct("Vault", {
   unpaid_protocol_quote: suiBalanceBcs,
   migration_meme_residual: suiBalanceBcs,
   migration_quote_residual: suiBalanceBcs,
-  holder_rewards_meme: suiBalanceBcs,
   holder_rewards_quote: suiBalanceBcs,
   next_round: u64,
   last_checkpoint: bcs.option(u64),
@@ -530,8 +529,10 @@ export type PresaleVaultState = SharedObjectReference<true> & {
   unpaidProtocolQuote: bigint;
   migrationMemeResidual: bigint;
   migrationQuoteResidual: bigint;
-  /** Holder-reward share not yet reserved by a round. */
-  holderRewardsMeme: bigint;
+  /**
+   * Holder-reward Quote not yet reserved by a round. Holder Meme fees go to
+   * the treasury when collected, so the vault holds no holder Meme.
+   */
   holderRewardsQuote: bigint;
   nextRound: bigint;
   /** Earliest checkpoint the next round may start at; null before the first round. */
@@ -707,7 +708,6 @@ export function decodePresaleVaultObject(
     unpaidProtocolQuote: BigInt(parsed.unpaid_protocol_quote.value),
     migrationMemeResidual: BigInt(parsed.migration_meme_residual.value),
     migrationQuoteResidual: BigInt(parsed.migration_quote_residual.value),
-    holderRewardsMeme: BigInt(parsed.holder_rewards_meme.value),
     holderRewardsQuote: BigInt(parsed.holder_rewards_quote.value),
     nextRound: parsed.next_round,
     lastCheckpoint: parsed.last_checkpoint,

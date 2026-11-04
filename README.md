@@ -697,7 +697,9 @@ creatorRecipient: { kind: "account", accountCommitment },
 An account commitment may identify an unclaimed account created for a future
 recipient. The backend binds provider logins to that account by immutable
 provider subject ID; mutable handles such as `@name` are display metadata only.
-Use `encodeCreatorClaimMessage` for the bytes signed by the creator-claim key,
+Use `encodeCreatorClaimMessage` for the bytes signed by the creator-claim key
+(the ASCII domain tag `blast_fun::creator_claim::v1` followed by the BCS
+`CreatorClaimMessage`; a signature over the untagged BCS no longer verifies),
 then wrap its Ed25519 signature with `encodeCreatorClaimAttestation` before
 passing it as `accountAttestation` to `claimCreatorCaps`. The claim returns a
 `CurveFeeCap` for bonding-curve creator fees and a `BlastMetadataCap` for the

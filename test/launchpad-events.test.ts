@@ -169,8 +169,8 @@ test("replays lifecycle, reserves, and fees from ordered events", () => {
       {
         launch_id: "0xc",
         destination: "0xb",
-        meme: 50_000_000n,
-        quote: 10n,
+        meme_amount: 50_000_000n,
+        quote_amount: 10n,
       },
       8,
     ),
@@ -183,8 +183,8 @@ test("replays lifecycle, reserves, and fees from ordered events", () => {
       "Migrated",
       {
         launch_id: "0xc",
-        meme: 200n,
-        quote: 180n,
+        meme_amount: 200n,
+        quote_amount: 180n,
         disposed_meme: 612n,
         total_supply_after: 388n,
       },
@@ -284,7 +284,7 @@ test("replays an opening round from bids to deliveries", () => {
   const bid = (sender: string, quote: bigint, bids: bigint, index: number) => {
     const event = suiEvent(
       "OpeningRoundJoined",
-      { launch_id: "0xc", quote, bids },
+      { launch_id: "0xc", quote_amount: quote, bids },
       index,
     );
     return decodeLaunchpadEvent({ ...event, sender }, packages);
@@ -314,12 +314,18 @@ test("replays an opening round from bids to deliveries", () => {
     ),
     decoded(
       "OpeningRoundSettled",
-      { launch_id: "0xc", bids: 500n, meme: 399n, quote: 0n },
+      { launch_id: "0xc", bids: 500n, meme_amount: 399n, quote_amount: 0n },
       7,
     ),
     decoded(
       "OpeningRoundDelivered",
-      { launch_id: "0xc", bidder: "0xb", bid: 100n, meme: 79n, quote: 0n },
+      {
+        launch_id: "0xc",
+        bidder: "0xb",
+        bid: 100n,
+        meme_amount: 79n,
+        quote_amount: 0n,
+      },
       8,
     ),
   ];
@@ -359,7 +365,7 @@ test("replays an opening round from bids to deliveries", () => {
     ),
     decoded(
       "OpeningRoundSettled",
-      { launch_id: "0xc", bids: 500n, meme: 900n, quote: 7n },
+      { launch_id: "0xc", bids: 500n, meme_amount: 900n, quote_amount: 7n },
       7,
     ),
   ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());

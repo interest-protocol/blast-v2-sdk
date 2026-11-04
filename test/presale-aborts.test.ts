@@ -75,11 +75,16 @@ test("names a presale abort by its module and code", () => {
     presaleAbortName("holder_rewards", 13),
     "EClaimDeadlineOverflow",
   );
-  assert.equal(presaleAbortName("holder_rewards", 14), null);
+  assert.equal(presaleAbortName("holder_rewards", 14), "EClaimsClosed");
+  assert.equal(presaleAbortName("holder_rewards", 15), null);
   assert.equal(presaleAbortName("presale_vault", 10), "EZeroClaimWindow");
   assert.equal(presaleAbortName("presale_vault", 11), "EWrongRoundProposal");
   assert.equal(presaleAbortName("presale_vault", 12), "EGasReserveTooLarge");
-  assert.equal(presaleAbortName("presale_vault", 13), null);
+  assert.equal(
+    presaleAbortName("presale_vault", 13),
+    "EMemeRewardsUnsupported",
+  );
+  assert.equal(presaleAbortName("presale_vault", 14), null);
   assert.equal(presaleAbortName("bps", 0), "EInvalidBps");
   assert.equal(presaleAbortName("bluefin", 1), "EInvalidTier");
   assert.equal(

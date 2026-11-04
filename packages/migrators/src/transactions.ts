@@ -391,7 +391,11 @@ export class MigratorCalls {
     };
   }
 
-  /** Proposes a split and next notice; the currently applied notice governs this wait. */
+  /**
+   * Proposes a split and next notice; the currently applied notice governs this wait.
+   * `launch` must be the vault's own launch (`LpVaultState.launchId`), or the call
+   * aborts with `vault::EWrongLaunch` (15).
+   */
   scheduleFeeSplit(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
@@ -421,6 +425,7 @@ export class MigratorCalls {
     };
   }
 
+  /** Cancels a pending split; `launch` must be the vault's own (`vault::EWrongLaunch`, 15). */
   cancelFeeSplit(
     options: LaunchTypes & {
       vault: SharedObjectReference<true>;
@@ -522,7 +527,8 @@ export class MigratorCalls {
 
   /**
    * Claims the creator's accrued LP fees with the launch's live `CurveFeeCap`.
-   * `launch` is read immutably by Move.
+   * `launch` is read immutably by Move and must be the vault's own launch, or
+   * the call aborts with `vault::EWrongLaunch` (15).
    */
   claimCreatorFees(
     options: LaunchTypes & {
