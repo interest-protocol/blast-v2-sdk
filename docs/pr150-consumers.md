@@ -1,6 +1,6 @@
 # PR150 consumer ABI
 
-These bindings target a fresh contract stack at `9d76884868e449d5b6a72d4d0e12edc5df9dbe0f`.
+These bindings target a fresh contract stack at `d8482986e71eea91d364babba7897ad68bd05046`.
 The compiled public signatures and ordered fields are frozen separately in
 `abi/pr150-consumers.json`; run `npm run check:abi:pr150` with `BLAST_CONTRACTS_DIR`
 pointing to a contracts checkout containing that commit. Published mainnet ABI
@@ -240,6 +240,26 @@ decoder, indexer or signer built before it misreads the fresh stack.
   `UpgradePolicyRestricted`, `UpgradeCapDestroyed`) and
   `UpgradeAuthorized.current_package_id`. `delayed_map::destroy` and the
   `MapDestroyed` event are gone, so `decodeDelayedEvent` no longer names it.
+
+### Fee maximums (contracts #172)
+
+No signature, event or object layout changes; the contracts compile a maximum
+into each admin-set fee's constructor. The SDK builders throw a `RangeError`
+before building a value the contract would reject.
+
+| Value | Maximum | Builder | Contract abort |
+| --- | --- | --- | --- |
+| Launchpad protocol allocation, Meme and Quote each | 1,000 BPS (`MAX_PROTOCOL_ALLOCATION_BPS`) | `scheduleProtocolAllocation` | `errors::invalid_protocol_allocation` (5) |
+| Launchpad protocol share of each trade fee | 7,000 BPS (`MAX_PROTOCOL_FEE_SHARE_BPS`) | `scheduleProtocolFeeShare` | `errors::invalid_protocol_fee_share` (45, new) |
+| Launchpad creation fee | 10 SUI (`MAX_CREATION_FEE_MIST`) | `scheduleCreationFee` | `errors::invalid_creation_fee` (35) |
+| Migrators Blast LP-fee share, default and per coin, Meme and Quote each | 3,000 BPS (`MAX_LP_FEE_SHARE_BPS`) | `scheduleLpFeeDefaultShares`, `scheduleLpFeeCoinShares` | `lp_fee_policy::EInvalidShares` (1, new) |
+| Presale raise and token rates | 1,000 BPS each (`MAX_PROTOCOL_RAISE_BPS`, `MAX_PROTOCOL_TOKEN_BPS`) | `scheduleProtocolFees`, `setPresaleProtocolFees` | `fee_policy::EInvalidFees` (0) |
+| Presale LP rates, policy, sale and vault | 3,000 BPS each (`MAX_PROTOCOL_LP_FEE_BPS`) | `scheduleProtocolFees`, `setPresaleProtocolFees`, `scheduleProtocolLpFees` | `fee_policy::EInvalidFees` (0) |
+
+Codes 5 and 35 keep their numbers with a wider meaning: 5 was "no room for the
+curve or pool" (9,998/9,999 BPS) and 35 was only a paid fee that differs from
+the configured one. `EInvalidFees` previously allowed a raise rate below 10,000
+and a token rate up to 9,998 with no LP cap.
 
 The compiler-signature matrix checks
 roles, argument order and shared-object mutability. Fresh Move-generated golden

@@ -1,6 +1,7 @@
 import type { CoinSourceOptions } from "@interest-protocol/blast-core/coins";
 import { grossGasBudget } from "@interest-protocol/blast-core/gas";
 import {
+  requireBasisPointsAtMost,
   requirePositiveU64,
   requireU64,
 } from "@interest-protocol/blast-core/integers";
@@ -92,6 +93,9 @@ export type CreateLaunchOptions = LaunchTypes &
     creationFee: bigint;
     preShareBuy?: PreShareBuyInput;
   };
+
+/** Largest Blast share of a vault's collected LP fees, per asset (30%). */
+export const MAX_LP_FEE_SHARE_BPS = 3_000n;
 
 /** Maximum Merkle proof depth the holder-reward leaf count (65,536) allows. */
 export const MAX_HOLDER_REWARD_PROOF_DEPTH = 16;
@@ -971,13 +975,18 @@ export class MigratorCalls {
       });
     };
   }
-  /** `lp_fee_policy::schedule_coin_shares`. Requires FeeAdmin; waits the shared per-coin notice. */
+  /**
+   * `lp_fee_policy::schedule_coin_shares`. Requires FeeAdmin; waits the shared
+   * per-coin notice. Throws when either share exceeds `MAX_LP_FEE_SHARE_BPS`
+   * (3,000), which the contract rejects with `lp_fee_policy::EInvalidShares` (1).
+   */
   scheduleLpFeeCoinShares(options: {
     memeType: string;
     adminWitness: TransactionObjectInput;
     memeBps: bigint;
     quoteBps: bigint;
   }) {
+    const shares = lpFeeShares(options);
     return (tx: Transaction): void => {
       tx.moveCall({
         target: `${this.deployment.packageId}::lp_fee_policy::schedule_coin_shares`,
@@ -986,8 +995,8 @@ export class MigratorCalls {
           deploymentObject(tx, this.deployment.lpFeePolicy, true),
           deploymentObject(tx, this.deployment.migratorsVersion, false),
           tx.object(options.adminWitness),
-          tx.add(this.launchpad.bps(options.memeBps)),
-          tx.add(this.launchpad.bps(options.quoteBps)),
+          tx.add(this.launchpad.bps(shares.memeBps)),
+          tx.add(this.launchpad.bps(shares.quoteBps)),
           tx.object.clock(),
         ],
       });
@@ -1012,13 +1021,18 @@ export class MigratorCalls {
       });
     };
   }
-  /** `lp_fee_policy::schedule_default_shares`. Requires FeeAdmin. */
+  /**
+   * `lp_fee_policy::schedule_default_shares`. Requires FeeAdmin. Throws when
+   * either share exceeds `MAX_LP_FEE_SHARE_BPS` (3,000), which the contract
+   * rejects with `lp_fee_policy::EInvalidShares` (1).
+   */
   scheduleLpFeeDefaultShares(options: {
     adminWitness: TransactionObjectInput;
     memeBps: bigint;
     quoteBps: bigint;
     delayMs: bigint;
   }) {
+    const shares = lpFeeShares(options);
     return (tx: Transaction): void => {
       tx.moveCall({
         target: `${this.deployment.packageId}::lp_fee_policy::schedule_default_shares`,
@@ -1027,8 +1041,8 @@ export class MigratorCalls {
           deploymentObject(tx, this.deployment.lpFeePolicy, true),
           deploymentObject(tx, this.deployment.migratorsVersion, false),
           tx.object(options.adminWitness),
-          tx.add(this.launchpad.bps(options.memeBps)),
-          tx.add(this.launchpad.bps(options.quoteBps)),
+          tx.add(this.launchpad.bps(shares.memeBps)),
+          tx.add(this.launchpad.bps(shares.quoteBps)),
           tx.pure.u64(requireU64("delayMs", options.delayMs)),
           tx.object.clock(),
         ],
@@ -1782,4 +1796,19 @@ function requireU32(name: string, value: number): number {
     throw new RangeError(`${name} must be a u32`);
   }
   return value;
+}
+
+function lpFeeShares(options: { memeBps: bigint; quoteBps: bigint }) {
+  return {
+    memeBps: requireBasisPointsAtMost(
+      "memeBps",
+      options.memeBps,
+      MAX_LP_FEE_SHARE_BPS,
+    ),
+    quoteBps: requireBasisPointsAtMost(
+      "quoteBps",
+      options.quoteBps,
+      MAX_LP_FEE_SHARE_BPS,
+    ),
+  };
 }
