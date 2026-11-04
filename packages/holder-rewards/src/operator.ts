@@ -1,3 +1,4 @@
+import type { DelayedAction } from "@interest-protocol/blast-core/bcs";
 import type {
   RewardLeafDomain,
   RewardManifest,
@@ -28,6 +29,7 @@ import {
   assertRewardRoundMatchesManifest,
   pendingRewardAllocations,
 } from "@interest-protocol/blast-core/rewards/keeper";
+import type { RewardRoundTerms } from "@interest-protocol/blast-core/rewards/state";
 import { getRewardRound } from "@interest-protocol/blast-core/rewards/state";
 import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
 import { getLpVault } from "@interest-protocol/blast-migrators-sdk/state";
@@ -92,11 +94,15 @@ export type HolderRewardsOperatorConfig = {
   /**
    * Claims stay open this many milliseconds after the round is published.
    * `publish-tx` schedules the round and, while the vault's round notice is
-   * zero, publishes it in the same PTB; otherwise anyone publishes it once
-   * the notice has passed.
+   * zero, publishes it in the same PTB. Vaults start at a two-hour notice, so
+   * `publish-tx` usually runs twice: once to schedule, then, once the notice
+   * has passed, to build the permissionless publication of that round.
    */
   claimWindowMs?: string;
-  /** Explicit per-publication Quote gas reserve; zero chooses Blast-paid gas. */
+  /**
+   * Explicit per-publication Quote gas reserve; zero chooses Blast-paid gas.
+   * The contracts cap it at 10% of the round's holder Quote.
+   */
   gasReserveAmount?: string;
   /** Explicit governed treasury expected by this publication. */
   expectedTreasury?: string;
@@ -119,7 +125,10 @@ export type HolderRewardsOperator = {
   index(until: bigint): Promise<void>;
   /** Freezes the indexed interval into the pending manifest and its accounting. */
   prepare(): Promise<RewardManifest>;
-  /** Unsigned publication of `manifest`, or of the pending manifest when omitted. */
+  /**
+   * Unsigned next step for `manifest`, or the pending manifest when omitted:
+   * its publication once it is the vault's scheduled round, else its schedule.
+   */
   publishTransaction(manifest?: RewardManifest): Promise<Transaction>;
   /** After `roundId` confirms, closes its interval and clears the pending manifest. */
   advance(roundId: string, manifest?: RewardManifest): Promise<void>;
@@ -548,26 +557,14 @@ async function loadProduct(
         };
       },
       publish: (manifest, adminCapId) => {
-        if (!config.claimWindowMs || !/^\d+$/.test(config.claimWindowMs))
-          throw new Error("publish-tx needs claimWindowMs");
-        if (
-          config.gasReserveAmount === undefined ||
-          !/^(0|[1-9][0-9]*)$/.test(config.gasReserveAmount)
-        )
-          throw new Error(
-            "publish-tx needs explicit gasReserveAmount (0 disables reimbursement)",
-          );
-        if (config.expectedTreasury === undefined)
-          throw new Error("publish-tx needs explicit expectedTreasury");
-
+        if (isScheduled(state.roundPublication, manifest))
+          return transactions.publishHolderRewardRound({ ...pair, vault });
         const round = {
           ...pair,
           vault,
           adminCapId,
           manifest,
-          claimWindowMs: BigInt(config.claimWindowMs),
-          gasReserveAmount: BigInt(config.gasReserveAmount),
-          expectedTreasury: config.expectedTreasury,
+          ...roundTerms(config),
         };
         return state.roundPublication.delay_ms === 0n
           ? transactions.scheduleAndPublishHolderRewardRound(round)
@@ -591,25 +588,14 @@ async function loadProduct(
     },
     readRound: (roundId) => getRewardRound(client, roundId, originalPackageId),
     publish: (manifest, adminCapId) => {
-      if (!config.claimWindowMs || !/^\d+$/.test(config.claimWindowMs))
-        throw new Error("publish-tx needs claimWindowMs");
-      if (
-        config.gasReserveAmount === undefined ||
-        !/^(0|[1-9][0-9]*)$/.test(config.gasReserveAmount)
-      )
-        throw new Error(
-          "publish-tx needs explicit gasReserveAmount (0 disables reimbursement)",
-        );
-      if (config.expectedTreasury === undefined)
-        throw new Error("publish-tx needs explicit expectedTreasury");
+      if (isScheduled(state.roundPublication, manifest))
+        return transactions.publishHolderRewardRound({ ...pair, vault: state });
       const round = {
         ...pair,
         vault: state,
         adminCapId,
         manifest,
-        claimWindowMs: BigInt(config.claimWindowMs),
-        gasReserveAmount: BigInt(config.gasReserveAmount),
-        expectedTreasury: config.expectedTreasury,
+        ...roundTerms(config),
       };
       return state.roundPublication.delay_ms === 0n
         ? transactions.scheduleAndPublishHolderRewardRound(round)
@@ -618,4 +604,36 @@ async function loadProduct(
     claim: (round, allocations) =>
       transactions.claimHolderRewards({ ...pair, round, allocations }),
   };
+}
+
+/** The configured terms a round schedule needs; every product requires all three. */
+function roundTerms(config: HolderRewardsOperatorConfig) {
+  if (!config.claimWindowMs || !/^\d+$/.test(config.claimWindowMs))
+    throw new Error("publish-tx needs claimWindowMs");
+  if (
+    config.gasReserveAmount === undefined ||
+    !/^(0|[1-9][0-9]*)$/.test(config.gasReserveAmount)
+  )
+    throw new Error(
+      "publish-tx needs explicit gasReserveAmount (0 disables reimbursement)",
+    );
+  if (config.expectedTreasury === undefined)
+    throw new Error("publish-tx needs explicit expectedTreasury");
+  return {
+    claimWindowMs: BigInt(config.claimWindowMs),
+    gasReserveAmount: BigInt(config.gasReserveAmount),
+    expectedTreasury: config.expectedTreasury,
+  };
+}
+
+/** True when `manifest` is the round already waiting in the vault's publication slot. */
+function isScheduled(
+  publication: DelayedAction<null, RewardRoundTerms>,
+  manifest: RewardManifest,
+): boolean {
+  const change = publication.pending?.value;
+  return (
+    change?.kind === "Action" &&
+    change.action.manifest_digest === manifest.manifestDigest
+  );
 }

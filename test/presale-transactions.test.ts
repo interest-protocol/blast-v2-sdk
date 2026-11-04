@@ -972,7 +972,6 @@ test("configures a fresh deployment at zero notice, then arms each notice", () =
     fees: { fees, delayMs: 172_800_000n },
     destination: { destination: "0x7ea5", delayMs: 172_800_000n },
     migrationDelayMs: 172_800_000n,
-    roundNotices: [{ ...types, vault: shared("0xba", true), delayMs: 1n }],
   });
   assert.deepEqual(flow(armed), [
     "blast_acl::sign_in",
@@ -984,9 +983,6 @@ test("configures a fresh deployment at zero notice, then arms each notice", () =
     "blast_acl::sign_in",
     "creation_policy::schedule_migration_delay",
     "creation_policy::apply_migration_delay",
-    "blast_acl::sign_in",
-    "holder_rewards::schedule_round_delay",
-    "holder_rewards::apply_round_delay",
   ]);
   assert.equal(
     pureU64(armed, moveCall(armed, "fee_policy::schedule_fees").arguments[7]),

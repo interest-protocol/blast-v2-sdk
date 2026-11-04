@@ -80,7 +80,7 @@ The contract enforces this admission check; SDK previews do not certify currency
 | Vault without a presale | `newCetusVault`, `newBluefinVault` | Anyone may lock their own Cetus or Bluefin `position` in a new `Vault` with their own LP-fee split and an optional accepted `partnerId` (contracts ADR 0109). Cetus burns the position through LP Burn and takes either coin order (`cetusMemeSide`); Bluefin's pool must be `Pool<Meme, Quote>`. The `CreationPolicy` must allow Quote and the venue's migrator. The vault's presale and `PresaleCap` IDs are zero (`isVaultWithoutPresale`), so it has no residuals; fees and holder rewards work as on any vault. |
 | Residuals | `claimMigrationResiduals` | The `PresaleCap` holder. |
 | Own position | `newCetusVault`, `newBluefinVault` | Anyone, for their own position: locks it in a new `Vault` with zero presale IDs, the given fee split, and an optional accepted partner (contracts ADR 0109). |
-| Holder rewards | `scheduleHolderRewardRound`, `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Scheduling signs in as `RewardsAdmin` (`adminCapId`); anyone publishes once the vault's round notice has passed (zero by default, so `scheduleAndPublishHolderRewardRound` does both in one PTB). `cancelHolderRewardRound` signs in as `CancelAdmin`. |
+| Holder rewards | `scheduleHolderRewardRound`, `publishHolderRewardRound`, `claimHolderRewards`, `closeHolderRewardRound` | Scheduling signs in as `RewardsAdmin` (`adminCapId`); anyone publishes once the vault's round notice has passed (two hours from creation; `scheduleAndPublishHolderRewardRound` does both in one PTB only at a zero notice). `cancelHolderRewardRound` signs in as `CancelAdmin`. |
 | Cap | `destroyCap` | After cancellation only. |
 | Blast's rates | `scheduleProtocolFees` | Signs in as `FeeAdmin`; call `applyProtocolFees` after the notice. Affects later presales. |
 | Blast's rates on one sale | `setPresaleProtocolFees` | Signs in as `FeeAdmin`. In the creation PTB before `share` (pass the `Presale` result and an `adminWitness` from `call.signIn`), or once shared until the sale's `startMs` (`EPresaleStarted`). See [Blast's fees](#blasts-fees). |
@@ -554,8 +554,10 @@ from its own time, including when recovering an older holding period.
 stores the terms in the vault's `round_publication` slot
 (`PresaleVaultState.roundPublication`), replacing any scheduled round; nothing
 is reserved until `publishHolderRewardRound`, which takes no terms. Each vault's
-round notice starts at zero (`scheduleHolderRewardRoundDelay`, or
-`armNotices({ roundNotices })`, raises it). The administrator
+round notice starts at two hours, so `CancelAdmin` can stop a bad round
+(`scheduleHolderRewardRoundDelay` changes it after that notice). The reserve
+may be at most 10% of the round's holder Quote
+(`presale_vault::EGasReserveTooLarge`, 12). The administrator
 chooses the reserve for each publication: zero disables reimbursement and Blast
 pays gas; a positive amount funds separate gas custody inside the canonical
 `Round`. Holder leaf balances and proofs never include that reserve. Treasury
@@ -594,7 +596,8 @@ upgrade slot) emit `blast_admin::delayed` events instead;
 given the admin package ID, and `reducePresaleEvent` takes them beside the
 presale events, keeping pending proposals and notices in its `policy` section.
 On a fresh deployment, `configureNow` applies policy settings at a zero notice
-and `armNotices` then raises each notice.
+and `armNotices` then raises each notice. `unpause` (`package_admin::unpause`)
+aborts with `EUnguardedNotice` until every notice is armed.
 `reducePresaleEvent` rebuilds each presale's lifecycle, windows, commitments,
 and custody balances, its vault, and its rounds. `Committed` has no wallet
 field, so the reducer keys commitments by the event sender. The `Presale`

@@ -596,8 +596,10 @@ export class MigratorCalls {
    * `blast_holder_rewards::schedule_round` (`RewardsAdmin`): schedules a
    * round from a validated manifest, replacing any scheduled round or notice
    * change. Nothing is reserved until `publishHolderRewardRound`, which
-   * anyone may call once the vault's round notice has passed; claims stay
-   * open for `claimWindowMs` from publication.
+   * anyone may call once the vault's round notice (two hours from creation)
+   * has passed; claims stay open for `claimWindowMs` from publication.
+   * `gasReserveAmount` may be at most 10% of the manifest's Quote, or
+   * scheduling aborts with `vault::EGasReserveTooLarge` (14).
    */
   scheduleHolderRewardRound(
     options: LaunchTypes & {
@@ -1236,34 +1238,6 @@ export class MigratorCalls {
   }
 }
 
-/** LP-fee settings `configureNow` applies at a zero notice. */
-export type MigratorsSettings = {
-  /** Where every collection pays Blast's LP-fee share. */
-  protocolDestination?: string;
-  defaultShares?: { memeBps: bigint; quoteBps: bigint };
-};
-
-/**
- * The notice `armNotices` gives each named value, in milliseconds. A
- * setting restates its applied value beside its new notice. Upgrade custody
- * is not here: `wrap` starts it at a 48-hour notice, which
- * `scheduleUpgradeDelay` changes only after that notice.
- */
-export type MigratorsNotices = {
-  protocolDestination?: { destination: string; delayMs: bigint };
-  defaultShares?: { memeBps: bigint; quoteBps: bigint; delayMs: bigint };
-  /** The shared notice each later per-coin override change waits. */
-  coinSharesDelayMs?: bigint;
-  /**
-   * Holder-reward round notices to raise, one per vault. Each vault starts at
-   * zero, so a round schedules and publishes in one PTB until raised.
-   */
-  roundNotices?: readonly (LaunchTypes & {
-    vault: SharedObjectReference<true>;
-    delayMs: bigint;
-  })[];
-};
-
 export class MigratorTransactions {
   readonly call: MigratorCalls;
   readonly #useGasCoin: boolean;
@@ -1486,8 +1460,9 @@ export class MigratorTransactions {
   }
 
   /**
-   * Schedules a round and publishes it in one PTB. Only valid while the
-   * vault's round notice is zero, its default; otherwise the publish aborts.
+   * Schedules a round and publishes it in one PTB. Only valid once the
+   * vault's round notice has been lowered to zero; vaults start at two hours,
+   * and at any other notice the publish aborts.
    */
   scheduleAndPublishHolderRewardRound(
     options: Omit<
@@ -1737,90 +1712,6 @@ export class MigratorTransactions {
     return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
       this.call.scheduleUpgradeDelay({ ...options, adminWitness }),
     );
-  }
-
-  /**
-   * Applies LP-fee settings at once on a fresh deployment whose notices are
-   * still zero: each is a schedule and its apply in this PTB, keeping a zero
-   * notice. Name only settings that change; an unchanged schedule aborts.
-   * Then call `armNotices`. The cap needs each setting's role.
-   */
-  configureNow(
-    options: { adminCapId: string } & MigratorsSettings,
-  ): Transaction {
-    const delayMs = 0n;
-    const { protocolDestination, defaultShares } = options;
-    return this.#atZeroNotice(options.adminCapId, {
-      ...(protocolDestination === undefined
-        ? {}
-        : {
-            protocolDestination: { destination: protocolDestination, delayMs },
-          }),
-      ...(defaultShares
-        ? { defaultShares: { ...defaultShares, delayMs } }
-        : {}),
-    });
-  }
-
-  /**
-   * Raises each named notice from zero in one PTB: a schedule and its apply.
-   * A setting restates its applied value, since its schedule proposes a value
-   * and next notice together. Run after `configureNow`; once armed, every
-   * later change waits its notice.
-   */
-  armNotices(options: { adminCapId: string } & MigratorsNotices): Transaction {
-    return this.#atZeroNotice(options.adminCapId, options);
-  }
-
-  #atZeroNotice(adminCapId: string, notices: MigratorsNotices): Transaction {
-    const tx = new Transaction();
-    const witnesses = new Map<BlastFunAdminRole, TransactionObjectArgument>();
-    const as = (role: BlastFunAdminRole) => {
-      let adminWitness = witnesses.get(role);
-      if (!adminWitness) {
-        adminWitness = tx.add(this.call.signIn({ adminCap: adminCapId, role }));
-        witnesses.set(role, adminWitness);
-      }
-      return adminWitness;
-    };
-    const { call } = this;
-    if (notices.protocolDestination) {
-      tx.add(
-        call.scheduleLpFeeProtocolDestination({
-          ...notices.protocolDestination,
-          adminWitness: as("TreasuryAdmin"),
-        }),
-      );
-      tx.add(call.applyLpFeeProtocolDestination());
-    }
-    if (notices.defaultShares) {
-      tx.add(
-        call.scheduleLpFeeDefaultShares({
-          ...notices.defaultShares,
-          adminWitness: as("FeeAdmin"),
-        }),
-      );
-      tx.add(call.applyLpFeeDefaultShares());
-    }
-    if (notices.coinSharesDelayMs !== undefined) {
-      tx.add(
-        call.scheduleLpFeeCoinSharesDelay({
-          delayMs: notices.coinSharesDelayMs,
-          adminWitness: as("FeeAdmin"),
-        }),
-      );
-      tx.add(call.applyLpFeeCoinSharesDelay());
-    }
-    for (const notice of notices.roundNotices ?? []) {
-      tx.add(
-        call.scheduleHolderRewardRoundDelay({
-          ...notice,
-          adminWitness: as("RewardsAdmin"),
-        }),
-      );
-      tx.add(call.applyHolderRewardRoundDelay(notice));
-    }
-    return tx;
   }
 
   #asAdmin(

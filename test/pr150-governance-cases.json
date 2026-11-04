@@ -479,10 +479,15 @@
     },
     {
       "method": "unpause",
-      "module": "blast_fun",
+      "module": "package_admin",
       "function": "unpause",
       "role": "UnpauseAdmin",
       "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": false
+        },
         "adminWitness": "0x991",
         "bits": 1
       },
@@ -827,10 +832,15 @@
     },
     {
       "method": "unpause",
-      "module": "blast_presale_package",
+      "module": "package_admin",
       "function": "unpause",
       "role": "UnpauseAdmin",
       "sample": {
+        "packageAdmin": {
+          "objectId": "0x992",
+          "initialSharedVersion": "1",
+          "mutable": false
+        },
         "adminWitness": "0x991",
         "bits": 1
       },

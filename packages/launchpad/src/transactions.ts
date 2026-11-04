@@ -1339,8 +1339,16 @@ export class LaunchpadCalls {
       });
     };
   }
-  /** `blast_fun::unpause`. Requires UnpauseAdmin. */
-  unpause(options: { adminWitness: TransactionObjectInput; bits: number }) {
+  /**
+   * `package_admin::unpause`. Requires UnpauseAdmin. Aborts with
+   * `unguarded_notice` (44) unless the upgrade, runtime and launch policy
+   * notices are all nonzero, with no pending zero notice or admission.
+   */
+  unpause(options: {
+    packageAdmin: SharedObjectReference<false>;
+    adminWitness: TransactionObjectInput;
+    bits: number;
+  }) {
     if (
       !Number.isInteger(options.bits) ||
       options.bits <= 0 ||
@@ -1350,11 +1358,14 @@ export class LaunchpadCalls {
       throw new RangeError("invalid pause bits");
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::blast_fun::unpause`,
+        target: `${this.deployment.packageId}::package_admin::unpause`,
         typeArguments: [],
         arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, false),
           deploymentObject(tx, this.deployment.packageVersion, true),
           tx.object(options.adminWitness),
+          this.#runtimeConfig(tx),
+          this.#launchConfig(tx),
           tx.pure.u8(options.bits),
         ],
       });

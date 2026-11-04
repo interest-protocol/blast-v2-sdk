@@ -240,7 +240,13 @@ test("pause builders reject empty masks and bits outside their product", () => {
     const calls = products[product].calls;
     for (const bits of invalid) {
       assert.throws(() => calls.pause({ adminWitness: "0xca", bits }));
-      assert.throws(() => calls.unpause({ adminWitness: "0xca", bits }));
+      assert.throws(() =>
+        calls.unpause({
+          packageAdmin: { ...shared, mutable: false },
+          adminWitness: "0xca",
+          bits,
+        }),
+      );
     }
   }
 });

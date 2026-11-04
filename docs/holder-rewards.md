@@ -5,7 +5,7 @@ ADR 0089) and, for presales, in the presale package (`holder_rewards`); the sepa
 and pause switch are gone. Every LP-fee collection credits the creator's
 `FeeSplit` rewards share to the launch's `LpVault`. A Blast administrator
 schedules a Merkle allocation of those funds on the vault; once the vault's
-round notice has passed (zero by default), anyone publishes it as a shared
+round notice has passed (two hours from vault creation), anyone publishes it as a shared
 `Round`, and anyone can relay a proof; each leaf pays its committed beneficiary
 once.
 
@@ -15,7 +15,7 @@ accounting, Merkle manifests, round reads, permissionless payout helpers, and
 workflow over a `HolderRewardsStore` that you supply. The transaction builders
 are `MigratorTransactions.scheduleHolderRewardRound`,
 `publishHolderRewardRound` (permissionless, no terms),
-`scheduleAndPublishHolderRewardRound` (one PTB while the notice is zero),
+`scheduleAndPublishHolderRewardRound` (one PTB, only at a zero notice),
 `cancelHolderRewardRound`, the `*HolderRewardRoundDelay` notice builders, and
 `claimHolderRewards`.
 The Node operator is `npm run holder-rewards -- <command> ...` from this
@@ -44,15 +44,21 @@ const manifest = buildRewardManifest({
   endCheckpoint,
   allocations,
 });
-const publish = client.blastMigrators.tx.scheduleAndPublishHolderRewardRound({
+const schedule = client.blastMigrators.tx.scheduleHolderRewardRound({
   memeType,
   quoteType,
   vault, // the shared LpVault, mutable
   adminCapId,
   manifest,
   claimWindowMs: 604_800_000n, // claims stay open seven days from publication
-  gasReserveAmount: 0n,
+  gasReserveAmount: 0n, // at most 10% of the round's Quote
   expectedTreasury,
+});
+// After the vault's round notice (two hours by default), anyone publishes it.
+const publish = client.blastMigrators.tx.publishHolderRewardRound({
+  memeType,
+  quoteType,
+  vault,
 });
 const relay = client.blastMigrators.tx.claimHolderRewards({
   memeType,
@@ -180,6 +186,8 @@ npm run holder-rewards -- index --config config.json --dir operator-data --until
 npm run holder-rewards -- prepare --config config.json --dir operator-data
 npm run holder-rewards -- publish-tx --config config.json --dir operator-data
 # Review accounting; make the manifest public; sign/execute publish-tx externally.
+# That schedules the round. After the vault's round notice (two hours by
+# default), rerun publish-tx: it now builds the permissionless publication.
 # Read the confirmed RoundPublished event to obtain the shared Round ID.
 npm run holder-rewards -- advance --config config.json --dir operator-data --round 0xROUND
 npm run holder-rewards -- relay --config config.json --dir operator-data --round 0xROUND --manifest operator-data/rounds/0/manifest.json

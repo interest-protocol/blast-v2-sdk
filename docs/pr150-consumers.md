@@ -1,6 +1,6 @@
 # PR150 consumer ABI
 
-These bindings target a fresh contract stack at `b841a811f1cb299543ce215efda586686f77383d`.
+These bindings target a fresh contract stack at `2de44b688ebf8208dff82f5b83714eceb00727da`.
 The compiled public signatures and ordered fields are frozen separately in
 `abi/pr150-consumers.json`; run `npm run check:abi:pr150` with `BLAST_CONTRACTS_DIR`
 pointing to a contracts checkout containing that commit. Published mainnet ABI
@@ -108,7 +108,8 @@ lifecycle under `K`: `Delayed*`, `Action*`, `Set*` plus `MemberRemoved`, and
   a setter. `configureNow` schedules and applies each named setting in one PTB
   with a zero notice; `armNotices` then schedules and applies each notice
   (restating a setting's applied value). After that every change waits. The
-  launchpad, presale and migrators transactions each have both builders.
+  launchpad and presale transactions have both builders; the migrators
+  `LpFeePolicy` starts at a 48-hour notice, so it has neither (contracts #167).
   Upgrade custody is not bootstrapped this way: `wrap` starts each
   `PackageAdmin` at a 48-hour notice, so `scheduleUpgradeDelay` and every
   upgrade action wait it from publication.
@@ -136,7 +137,8 @@ lifecycle under `K`: `Delayed*`, `Action*`, `Set*` plus `MemberRemoved`, and
   `scheduleHolderRewardRound` (`RewardsAdmin`) takes `claimWindowMs`, a
   duration that publication starts; `publishHolderRewardRound` is
   permissionless and takes no terms; `scheduleAndPublishHolderRewardRound`
-  does both while the vault's round notice is zero (its default);
+  does both only once the vault's round notice is lowered to zero (it starts
+  at two hours, contracts #167);
   `cancelHolderRewardRound` (`CancelAdmin`) and
   `schedule/apply/cancelHolderRewardRoundDelay` complete the slot. The
   `RoundPublication` delayed key decodes `Action*` events; `ActionScheduled`
@@ -153,10 +155,8 @@ lifecycle under `K`: `Delayed*`, `Action*`, `Set*` plus `MemberRemoved`, and
   `decodePartnerDelayedEvent` decodes the `Share` and `Cap` lifecycle and
   `reducePartnerEvent` projects applied and pending terms. `abi/pr150-consumers.json`
   now freezes the partners package too.
-- Bootstrap: launchpad `configureNow` admits `creatorClaimSigners`;
-  `armNotices` raises `claimSignerDelayMs`, and the migrators and presale
-  `armNotices` raise each named vault's round notice (`roundNotices`). Round
-  notices stay zero unless the operator names a vault.
+- Bootstrap: launchpad `configureNow` admits `creatorClaimSigners` and
+  `armNotices` raises `claimSignerDelayMs`.
 
 ```ts
 const configure = launchpad.tx.configureNow({
@@ -169,11 +169,35 @@ const arm = launchpad.tx.armNotices({
   migrationDelayMs: 172_800_000n,
   claimSignerDelayMs: 172_800_000n,
 });
-const armLpFees = migrators.tx.armNotices({
-  adminCapId, coinSharesDelayMs: 172_800_000n,
-  roundNotices: [{ memeType, quoteType, vault, delayMs: 86_400_000n }],
-});
-``` The compiler-signature matrix checks
+```
+
+### Pre-audit Low fixes (contracts #167)
+
+- Unpause: `blast_fun::unpause` and `blast_presale_package::unpause` are gone.
+  Launchpad and presale `unpause` call `package_admin::unpause` and take the
+  shared `packageAdmin` (immutable) beside the deployment's `RuntimeConfig`
+  and `LaunchConfig` (launchpad) or `FeePolicy` and `CreationPolicy`
+  (presale). It aborts unless every upgrade and policy notice is nonzero, with
+  no pending zero notice or admission: launchpad `unguarded_notice` (44),
+  presale `package_admin::EUnguardedNotice` (2). Run `armNotices` before the
+  first unpause.
+- Notices: no delayed value, action, set or map accepts a notice above
+  `blast_admin::delayed::max_delay_ms()` (30 days); a longer one aborts with
+  `blast_admin` error 19. `Delayed`, `DelayedAction` and `DelayedSet` gain
+  `is_guarded` readers. `@interest-protocol/blast-core/bcs` mirrors them as
+  `MAX_DELAY_MS`, `isDelayedGuarded`, `isDelayedActionGuarded` and
+  `isDelayedSetGuarded` over decoded state, so a console can tell before
+  signing whether `unpause` would abort.
+- Reward rounds: vaults start at a two-hour round notice, so
+  `CancelAdmin` can stop a bad round; schedule first and publish once ready.
+  Round terms need a gas reserve of at most 10% of the holder Quote: migrators
+  `vault::EGasReserveTooLarge` (14), presale
+  `presale_vault::EGasReserveTooLarge` (12). The presale `armNotices` no longer
+  takes `roundNotices`.
+- LP fees: the migrators `LpFeePolicy` starts at a 48-hour notice with its
+  compiled destination and 15%/15% default shares, so the migrators
+  `configureNow` and `armNotices` are removed; use the `scheduleLpFee*` and
+  `applyLpFee*` builders. The compiler-signature matrix checks
 roles, argument order and shared-object mutability. Fresh Move-generated golden
 bytes check launch, config and runtime decoders. Table ACL, delayed application,
 upgrade identity, masks and LP Quote guard have regression tests.

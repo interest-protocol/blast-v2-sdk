@@ -914,8 +914,17 @@ export class PresaleCalls {
       });
     };
   }
-  /** `blast_presale_package::unpause`. Requires UnpauseAdmin. */
-  unpause(options: { adminWitness: TransactionObjectInput; bits: number }) {
+  /**
+   * `package_admin::unpause`. Requires UnpauseAdmin. Aborts with
+   * `package_admin::EUnguardedNotice` (2) unless the upgrade, fee-policy and
+   * creation-policy notices are all nonzero, with no pending zero notice or
+   * admission.
+   */
+  unpause(options: {
+    packageAdmin: SharedObjectReference<false>;
+    adminWitness: TransactionObjectInput;
+    bits: number;
+  }) {
     if (
       !Number.isInteger(options.bits) ||
       options.bits <= 0 ||
@@ -925,11 +934,14 @@ export class PresaleCalls {
       throw new RangeError("invalid pause bits");
     return (tx: Transaction): void => {
       tx.moveCall({
-        target: `${this.deployment.packageId}::blast_presale_package::unpause`,
+        target: `${this.deployment.packageId}::package_admin::unpause`,
         typeArguments: [],
         arguments: [
+          sharedObject(tx, "packageAdmin", options.packageAdmin, false),
           deploymentObject(tx, this.deployment.packageVersion, true),
           tx.object(options.adminWitness),
+          this.#feePolicy(tx),
+          this.#creationPolicy(tx),
           tx.pure.u8(options.bits),
         ],
       });
@@ -2139,7 +2151,10 @@ export class PresaleCalls {
    * a manifest built with `PRESALE_REWARD_LEAF_DOMAIN`, replacing any
    * scheduled round or notice change. Nothing is reserved until
    * `publishHolderRewardRound`, which anyone may call once the vault's round
-   * notice has passed; claims stay open for `claimWindowMs` from publication.
+   * notice (two hours from creation) has passed; claims stay open for
+   * `claimWindowMs` from publication. `gasReserveAmount` may be at most 10% of
+   * the manifest's Quote, or scheduling aborts with
+   * `presale_vault::EGasReserveTooLarge` (12).
    */
   scheduleHolderRewardRound(
     options: LaunchTypes & {
@@ -2536,14 +2551,6 @@ export type PresaleNotices = {
   destination?: { destination: string; delayMs: bigint };
   /** The notice for each later migration witness admission. */
   migrationDelayMs?: bigint;
-  /**
-   * Holder-reward round notices to raise, one per vault. Each vault starts at
-   * zero, so a round schedules and publishes in one PTB until raised.
-   */
-  roundNotices?: readonly (LaunchTypes & {
-    vault: SharedObjectReference<true>;
-    delayMs: bigint;
-  })[];
 };
 
 export class PresaleTransactions {
@@ -2880,8 +2887,9 @@ export class PresaleTransactions {
   }
 
   /**
-   * Schedules a round and publishes it in one PTB. Only valid while the
-   * vault's round notice is zero, its default; otherwise the publish aborts.
+   * Schedules a round and publishes it in one PTB. Only valid once the
+   * vault's round notice has been lowered to zero; vaults start at two hours,
+   * and at any other notice the publish aborts.
    */
   scheduleAndPublishHolderRewardRound(
     options: AsAdmin<Parameters<PresaleCalls["scheduleHolderRewardRound"]>[0]>,
@@ -3283,15 +3291,6 @@ export class PresaleTransactions {
         }),
       );
       tx.add(call.applyMigrationDelay());
-    }
-    for (const notice of notices.roundNotices ?? []) {
-      tx.add(
-        call.scheduleHolderRewardRoundDelay({
-          ...notice,
-          adminWitness: as("RewardsAdmin"),
-        }),
-      );
-      tx.add(call.applyHolderRewardRoundDelay(notice));
     }
     return tx;
   }
