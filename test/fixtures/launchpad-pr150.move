@@ -1,5 +1,5 @@
 // Fixture generator for test/fixtures/launchpad-pr150.ts. It is not compiled by the SDK.
-// To regenerate: extract contracts commit 9b030cce7d1269520e1965185018a25f1a8dc5ef with
+// To regenerate: extract contracts commit 2de44b688ebf8208dff82f5b83714eceb00727da with
 // `git archive`, copy this file to sui/launchpad/tests/ in that copy only, and run
 // `sui move test sdk_fixture_tests` from sui/launchpad. Never add it to the contracts repository.
 #[test_only]

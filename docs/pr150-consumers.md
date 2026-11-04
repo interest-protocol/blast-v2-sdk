@@ -1,6 +1,6 @@
 # PR150 consumer ABI
 
-These bindings target a fresh contract stack at `9b030cce7d1269520e1965185018a25f1a8dc5ef`.
+These bindings target a fresh contract stack at `2de44b688ebf8208dff82f5b83714eceb00727da`.
 The compiled public signatures and ordered fields are frozen separately in
 `abi/pr150-consumers.json`; run `npm run check:abi:pr150` with `BLAST_CONTRACTS_DIR`
 pointing to a contracts checkout containing that commit. Published mainnet ABI
