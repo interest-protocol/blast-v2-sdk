@@ -53,7 +53,7 @@ Administrative bindings also target the fresh stack:
   `applyMetadataCapDelay`. `pending*CapReassignment.value.kind` is `Action`
   for a recipient and `Delay` for a notice change.
 - `pause` / `unpause` use separate roles. Launchpad masks are Create=1,
-  Trading=2, Migrate=4; presale masks are Create=1, Commit=2, Migrate=8.
+  Trading=2, Migrate=4; presale masks are Create=1, Commit=2, Migrate=4.
 - Each package exposes delayed upgrade actions. Compose `authorizeUpgrade`,
   Sui's upgrade command and `commitUpgradeAndAdvance` in one PTB. The commit
   mutates the version container and advances the operational generation.
