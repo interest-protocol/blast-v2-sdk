@@ -34,7 +34,6 @@ const launchpad: LaunchpadDeployment = {
   packageId: "0x123",
   originalPackageId: "0x122",
   partnersPackageId: "0xae",
-  timelockPackageId: "0xaf",
   packageVersion: shared("0x2", false),
   launchConfig: shared("0x3", false),
   runtimeConfig: shared("0x4", false),

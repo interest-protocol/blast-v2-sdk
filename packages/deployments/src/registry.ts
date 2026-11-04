@@ -42,7 +42,7 @@ import {
 } from "./types.ts";
 
 /** The packages every manifest records, whatever else it carries. */
-const REQUIRED_PACKAGES = ["launchpad", "admin", "partners", "timelock"];
+const REQUIRED_PACKAGES = ["launchpad", "admin", "partners"];
 
 /** Each shared-object group's complete key set, in canonical order. */
 const SHARED_OBJECT_KEYS = {
@@ -367,7 +367,6 @@ export function launchpadDeployment(
     originalPackageId: packages.launchpad.originalPackageId,
     admin: adminDeployment(deployment),
     partnersPackageId: packages.partners.packageId,
-    timelockPackageId: packages.timelock.packageId,
     packageVersion: objects.packageVersion,
     launchConfig: objects.launchConfig,
     runtimeConfig: objects.runtimeConfig,

@@ -63,7 +63,6 @@ const corePackages = {
   launchpad: packages.launchpad,
   admin: packages.admin,
   partners: packages.partners,
-  timelock: packages.timelock,
 };
 const coreObjects = {
   admin: sharedObjects.admin,
@@ -106,7 +105,6 @@ test("derives every package's call-ready deployment", () => {
     originalPackageId: packages.launchpad.originalPackageId,
     admin,
     partnersPackageId: packages.partners.packageId,
-    timelockPackageId: packages.timelock.packageId,
     packageVersion: sharedObjects.launchpad.packageVersion,
     launchConfig: sharedObjects.launchpad.launchConfig,
     runtimeConfig: sharedObjects.launchpad.runtimeConfig,
@@ -142,7 +140,7 @@ test("derives every package's call-ready deployment", () => {
 });
 
 test("requires the core packages every manifest records", () => {
-  for (const name of ["launchpad", "admin", "partners", "timelock"] as const) {
+  for (const name of ["launchpad", "admin", "partners"] as const) {
     const { [name]: _removed, ...rest } = input.packages;
     assert.throws(
       () =>

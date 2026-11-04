@@ -458,14 +458,6 @@ export const runtimeConfigBcs = bcs.struct("RuntimeConfig", {
   treasury: delayedBcs(unitKeyBcs, addressBcs),
 });
 
-/** `blast_fun_timelock::Timelocked<T>`: `before` until `atMs`, then `after`. */
-export type Timelocked<T> = {
-  before: T;
-  after: T;
-  atMs: bigint;
-  delayMs: bigint;
-};
-
 /** BCS layout of `blast_partners::blast_partners::Partner`. */
 export const partnerBcs = bcs.struct("Partner", {
   id: suiUidBcs,
@@ -607,11 +599,6 @@ export function decodePartnerObject(
     shareBps: parsed.share_bps,
     capId: parsed.cap_id,
   };
-}
-
-/** Mirrors `Timelocked::value`: `after` from `atMs` on, `before` until then. */
-export function timelockedValue<T>(value: Timelocked<T>, nowMs: bigint): T {
-  return nowMs >= value.atMs ? value.after : value.before;
 }
 
 export type ProtocolFeeClaimPreview = {

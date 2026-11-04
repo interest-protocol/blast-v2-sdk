@@ -190,7 +190,6 @@ const deployment = {
     acl: { objectId: "0x5", initialSharedVersion: "1" },
   },
   partnersPackageId: "0xbe",
-  timelockPackageId: "0x7e",
   packageVersion: { objectId: "0x2", initialSharedVersion: "1" },
   launchConfig: { objectId: "0x3", initialSharedVersion: "1" },
   runtimeConfig: { objectId: "0x4", initialSharedVersion: "1" },

@@ -18,15 +18,13 @@ export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
  * entry: each is bytecode a launch or a standalone coin publishes as its own
  * package.
  *
- * `timelock`, `admin`, `partners` and `launchpad` are the core every manifest
+ * `admin`, `partners` and `launchpad` are the core every manifest
  * records. A package a manifest does not record is absent, and the accessor
  * that needs it refuses; the presale publishes on its own (contracts ADR
  * 0099), so a launchpad manifest may predate it. A venue's packages are
  * recorded whole or not at all.
  */
 export type BlastPackages = Readonly<{
-  /** Immutable `blast_fun_timelock`, which `admin` and `partners` link. */
-  timelock: SuiPackageReference;
   /** Immutable `blast_admin`, home of the shared ACL. */
   admin: SuiPackageReference;
   /** Immutable `blast_partners`. */

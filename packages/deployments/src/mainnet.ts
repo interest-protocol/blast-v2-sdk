@@ -64,14 +64,6 @@ export const CANONICAL_MAINNET_PACKAGES = Object.freeze({
         "0xb0279fbe54bfd1d920e985a4dba0916b2b73a5218514edeecb7b9dd30cf2863b",
     }),
   ),
-  timelock: Object.freeze(
-    normalizeSuiPackageReference("timelock", {
-      packageId:
-        "0x1749b76a3ae065dedfe847578b07826fa83d1e18ff485d9e4f9647f3698e104d",
-      originalPackageId:
-        "0x1749b76a3ae065dedfe847578b07826fa83d1e18ff485d9e4f9647f3698e104d",
-    }),
-  ),
 });
 
 /** Shared singletons with their initial sharing versions, including activated PackageVersion objects. */
@@ -221,7 +213,6 @@ function createMainnetDeployments(packages: typeof CANONICAL_MAINNET_PACKAGES) {
     ...CANONICAL_MAINNET_SHARED_OBJECTS.launchpad,
     admin,
     partnersPackageId: packages.partners.packageId,
-    timelockPackageId: packages.timelock.packageId,
   });
   const migrators: MigratorsDeployment = Object.freeze({
     ...packages.migrators,

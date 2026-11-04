@@ -33,7 +33,6 @@ const deployment: MigratorsDeployment = {
     packageId: "0x123",
     originalPackageId: "0x122",
     partnersPackageId: "0xae",
-    timelockPackageId: "0xaf",
     packageVersion: shared("0x2", "10", false),
     launchConfig: shared("0x3", "11", false),
     runtimeConfig: shared("0x4", "12", false),

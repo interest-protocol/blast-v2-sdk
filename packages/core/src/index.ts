@@ -10,4 +10,3 @@ export * from "./merkle.ts";
 export * from "./migration-math.ts";
 export * from "./ptb.ts";
 export * from "./sui.ts";
-export * from "./timelock.ts";

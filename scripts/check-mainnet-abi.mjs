@@ -25,7 +25,9 @@ const aliases = {
   blast_fun: CANONICAL_MAINNET_PACKAGES.launchpad.originalPackageId,
   blast_fun_migrators: CANONICAL_MAINNET_PACKAGES.migrators.originalPackageId,
   blast_presale: CANONICAL_MAINNET_PACKAGES.presale.originalPackageId,
-  blast_fun_timelock: CANONICAL_MAINNET_PACKAGES.timelock.originalPackageId,
+  // The 2026-10-28 stack's admin and partners link this; contracts #164 removed it.
+  blast_fun_timelock:
+    "0x1749b76a3ae065dedfe847578b07826fa83d1e18ff485d9e4f9647f3698e104d",
   cetus_clmm:
     "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb",
   lp_burn: "0x12d73de9a6bc3cb658ec9dc0fe7de2662be1cea5c76c092fcc3606048cdbac27",
