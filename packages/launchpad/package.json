@@ -14,6 +14,10 @@
     "src"
   ],
   "exports": {
+    "./aborts": {
+      "types": "./dist/aborts.d.ts",
+      "default": "./dist/aborts.js"
+    },
     "./allocation": {
       "types": "./dist/allocation.d.ts",
       "default": "./dist/allocation.js"
@@ -82,7 +86,10 @@
   },
   "dependencies": {
     "@interest-protocol/blast-admin-sdk": "0.1.0",
-    "@interest-protocol/blast-core": "0.1.0"
+    "@interest-protocol/blast-core": "0.1.0",
+    "@interest-protocol/blast-migrators-sdk": "0.1.2",
+    "@interest-protocol/blast-partners-sdk": "0.1.0",
+    "@interest-protocol/blast-vault-sdk": "0.1.0"
   },
   "peerDependencies": {
     "@mysten/move-bytecode-template": "^0.4.1",

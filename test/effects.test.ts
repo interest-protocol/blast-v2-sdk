@@ -9,6 +9,7 @@ import { LaunchpadTransactions } from "@interest-protocol/blast-launchpad-sdk/tr
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { Inputs, Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
+import { LAUNCHPAD_DEPLOYMENT } from "./fixtures/launchpad-deployment.ts";
 
 const launchpad = normalizeSuiObjectId("0x122");
 const memePackage = normalizeSuiObjectId("0xabc");
@@ -83,6 +84,7 @@ const publication = {
     changed("0xd1", owner(publisher)),
     changed("0xd2", owner(registry)),
     changed("0xd3", owner(publisher)),
+    changed("0xd4", owner(publisher)),
   ]),
   objectTypes: {
     [memePackage]: "package",
@@ -90,10 +92,11 @@ const publication = {
       `${launchpad}::launch_ticket::LaunchTicket<${memeType}>`,
     [normalizeSuiObjectId("0xd2")]: `0x2::coin_registry::Currency<${memeType}>`,
     [normalizeSuiObjectId("0xd3")]: "0x2::package::UpgradeCap",
+    [normalizeSuiObjectId("0xd4")]: `0x2::coin::TreasuryCap<${memeType}>`,
   },
 };
 
-test("reads the published Meme, ticket, and currency with the Core API package marker", () => {
+test("reads the published Meme, ticket, treasury cap and currency with the Core API package marker", () => {
   assert.deepEqual(readMemePublication(publication, "0x122"), {
     packageId: memePackage,
     memeType: normalizeStructTag(memeType),
@@ -101,6 +104,12 @@ test("reads the published Meme, ticket, and currency with the Core API package m
       objectId: normalizeSuiObjectId("0xd1"),
       version: "7",
       digest: "digest-0xd1",
+      owner: publisher,
+    },
+    treasuryCap: {
+      objectId: normalizeSuiObjectId("0xd4"),
+      version: "7",
+      digest: "digest-0xd4",
       owner: publisher,
     },
     pendingCurrency: {
@@ -182,18 +191,30 @@ test("rejects publication effects without exactly one ticket from the launchpad"
   );
 });
 
-const deployment = {
-  packageId: "0x123",
-  originalPackageId: "0x122",
-  admin: {
-    packageId: "0xad",
-    acl: { objectId: "0x5", initialSharedVersion: "1" },
-  },
-  partnersPackageId: "0xbe",
-  packageVersion: { objectId: "0x2", initialSharedVersion: "1" },
-  launchConfig: { objectId: "0x3", initialSharedVersion: "1" },
-  runtimeConfig: { objectId: "0x4", initialSharedVersion: "1" },
-};
+const deployment = { ...LAUNCHPAD_DEPLOYMENT, originalPackageId: "0x122" };
+
+test("refuses a publication without the TreasuryCap beside the ticket", () => {
+  const { [normalizeSuiObjectId("0xd4")]: _, ...objectTypes } =
+    publication.objectTypes;
+  assert.throws(
+    () => readMemePublication({ ...publication, objectTypes }, "0x122"),
+    /exactly one TreasuryCap<Meme> beside the ticket/,
+  );
+  const elsewhere = {
+    ...publication,
+    effects: effects(
+      publication.effects.changedObjects.map((object) =>
+        object.objectId === normalizeSuiObjectId("0xd4")
+          ? changed("0xd4", owner("0xdead"))
+          : object,
+      ),
+    ),
+  };
+  assert.throws(
+    () => readMemePublication(elsewhere, "0x122"),
+    /exactly one TreasuryCap<Meme> beside the ticket/,
+  );
+});
 
 test("finalizes the currency registration and reads the shared Currency", () => {
   const sdk = new LaunchpadTransactions(deployment);

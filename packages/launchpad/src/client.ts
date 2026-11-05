@@ -14,7 +14,12 @@ import {
   previewSell,
 } from "./curve.ts";
 import type { LaunchConfigState, LaunchState } from "./state.ts";
-import { getLaunch, getLaunchConfig, getOpeningRoundBid } from "./state.ts";
+import {
+  getLaunch,
+  getLaunchByMeme,
+  getLaunchConfig,
+  getOpeningRoundBid,
+} from "./state.ts";
 import type { LaunchpadDeployment } from "./transactions.ts";
 import { LaunchpadCalls, LaunchpadTransactions } from "./transactions.ts";
 
@@ -39,6 +44,11 @@ export class LaunchpadClient {
       objectId,
       this.call.deployment.originalPackageId,
     );
+  }
+
+  /** The one launch of `memeType`, at its derived ID. */
+  async getLaunchByMeme(memeType: string): Promise<LaunchState> {
+    return getLaunchByMeme(this.#client, this.call.deployment, memeType);
   }
 
   /** Previews settling the launch's opening-round pot as it stands. */

@@ -53,7 +53,7 @@ test("locks the embedded artifact to the contracts build of coin_template", asyn
   const bytecode = await buildCoinPackageBytecode(templateDefaults);
   assert.equal(
     createHash("sha256").update(bytecode).digest("hex"),
-    "f175d5053793e7add203f76273745be16048638a3dd8835c2a936a8bb350679f",
+    "cdfdd72a9b0026afdbd9876a2d69f375ef02b5d39986b2e0c541413ac4de70cd",
   );
 });
 

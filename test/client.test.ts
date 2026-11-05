@@ -5,34 +5,13 @@ import {
   LaunchpadClient,
 } from "@interest-protocol/blast-launchpad-sdk/client";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
+import { LAUNCHPAD_DEPLOYMENT } from "./fixtures/launchpad-deployment.ts";
 
 test("registers the typed launchpad client extension", () => {
   const client = new SuiGrpcClient({
     network: "mainnet",
     baseUrl: "https://fullnode.mainnet.sui.io:443",
-  }).$extend(
-    blastLaunchpad({
-      packageId: "0x123",
-      originalPackageId: "0x123",
-      partnersPackageId: "0x112",
-      packageVersion: {
-        objectId: "0x2",
-        initialSharedVersion: "10",
-      },
-      launchConfig: {
-        objectId: "0x3",
-        initialSharedVersion: "11",
-      },
-      runtimeConfig: {
-        objectId: "0x4",
-        initialSharedVersion: "12",
-      },
-      admin: {
-        packageId: "0x111",
-        acl: { objectId: "0x5", initialSharedVersion: "13" },
-      },
-    }),
-  );
+  }).$extend(blastLaunchpad(LAUNCHPAD_DEPLOYMENT));
 
   assert.equal(client.blastLaunchpad instanceof LaunchpadClient, true);
 });

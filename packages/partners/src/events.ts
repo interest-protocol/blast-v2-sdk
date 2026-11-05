@@ -37,9 +37,36 @@ export const partnerEventBcs = {
     partner_id: suiObjectIdBcs,
     amount: u64Bcs,
   }),
+  /**
+   * `partner_list::add`: the list owned by `owner` (a product configuration's
+   * ID) accepts `partner_id` without end.
+   */
+  PartnerAdded: bcs.struct("PartnerAdded", {
+    owner: suiObjectIdBcs,
+    partner_id: suiObjectIdBcs,
+  }),
+  /** `partner_list::remove`: new sales stop naming the partner from `acceptance_ends_at_ms`. */
+  PartnerRemoved: bcs.struct("PartnerRemoved", {
+    owner: suiObjectIdBcs,
+    partner_id: suiObjectIdBcs,
+    acceptance_ends_at_ms: u64Bcs,
+  }),
+  /** `partner_list::destroy`: the list owned by `owner` and its entries are gone. */
+  PartnerListDestroyed: bcs.struct("PartnerListDestroyed", {
+    owner: suiObjectIdBcs,
+  }),
 };
 
 export type PartnerEventKind = keyof typeof partnerEventBcs;
+
+/** The module each event is defined in. */
+const PARTNER_EVENT_MODULES: Record<PartnerEventKind, string> = {
+  PartnerUpdated: "blast_partners",
+  PartnerPaid: "blast_partners",
+  PartnerAdded: "partner_list",
+  PartnerRemoved: "partner_list",
+  PartnerListDestroyed: "partner_list",
+};
 
 export type PartnerEventPayloads = {
   [Kind in PartnerEventKind]: ReturnType<
@@ -59,7 +86,10 @@ export type DecodedPartnerEvent = {
   };
 }[PartnerEventKind];
 
-/** Decodes one `<partnersPackageId>::blast_partners::<Kind>` event. */
+/**
+ * Decodes one `<partnersPackageId>::blast_partners::<Kind>` or
+ * `<partnersPackageId>::partner_list::<Kind>` event.
+ */
 export function decodePartnerEvent(
   event: SuiClientTypes.EventEntry,
   partnersPackageId: string,
@@ -69,8 +99,8 @@ export function decodePartnerEvent(
   const [coinType = null, ...extra] = tag.typeParams;
   if (
     tag.address !== normalizeSuiAddress(partnersPackageId) ||
-    tag.module !== "blast_partners" ||
     !Object.hasOwn(partnerEventBcs, kind) ||
+    tag.module !== PARTNER_EVENT_MODULES[kind] ||
     (coinType === null) === (kind === "PartnerPaid") ||
     extra.length > 0
   ) {

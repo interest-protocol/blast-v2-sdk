@@ -4,6 +4,7 @@ import {
   delayedBcs,
   suiObjectIdBcs,
   suiUidBcs,
+  tableBcs,
   u64Bcs,
   unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
@@ -15,6 +16,7 @@ import {
 import type { SharedObjectIdentity } from "@interest-protocol/blast-core/sui";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { ObjectError } from "@mysten/sui/client";
 import { normalizeSuiObjectId, parseStructTag } from "@mysten/sui/utils";
 
 /**
@@ -120,4 +122,45 @@ export function partnerPayment(
   fee: bigint,
 ): bigint {
   return mulDivDown(fee, partner.shareBps.value, BASIS_POINTS_DENOMINATOR);
+}
+
+/**
+ * BCS layout of `blast_partners::partner_list::PartnerList`, embedded in a
+ * product's configuration (`LaunchConfig.partners`,
+ * `CreationPolicy.partners`). `owner` is that configuration's ID; each
+ * accepted partner is an entry of the `acceptance_ends_at_ms` table.
+ */
+export const partnerListBcs = bcs.struct("PartnerList", {
+  owner: suiObjectIdBcs,
+  acceptance_ends_at_ms: tableBcs,
+});
+
+export type PartnerList = ReturnType<typeof partnerListBcs.parse>;
+
+/**
+ * Reads one entry of a `PartnerList`'s `acceptance_ends_at_ms` table (its
+ * `id`): the millisecond from which new sales stop naming `partnerId`, or
+ * `U64_MAX` while it is accepted without end. Null when the list never
+ * accepted the partner. A partner is accepted at `now` when `now` is before
+ * the returned time (`partner_list::is_accepted`).
+ */
+export async function getPartnerAcceptance(
+  client: ClientWithCoreApi,
+  listTableId: string,
+  partnerId: string,
+): Promise<bigint | null> {
+  try {
+    const { dynamicField } = await client.core.getDynamicField({
+      parentId: normalizeSuiObjectId(listTableId),
+      name: {
+        type: "0x2::object::ID",
+        bcs: suiObjectIdBcs.serialize(partnerId).toBytes(),
+      },
+    });
+    return u64Bcs.parse(dynamicField.value.bcs);
+  } catch (error) {
+    if (error instanceof ObjectError && error.reason === "notFound")
+      return null;
+    throw error;
+  }
 }

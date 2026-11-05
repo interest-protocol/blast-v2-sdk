@@ -14,6 +14,10 @@ import type { BlastSuiDeployment } from "@interest-protocol/blast-sui-sdk/types"
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag } from "@mysten/sui/utils";
+import { LAUNCHPAD_DEPLOYMENT } from "./fixtures/launchpad-deployment.ts";
+import { stubVenueCalls } from "./fixtures/venue-stubs.ts";
+
+stubVenueCalls();
 
 function shared<const Mutable extends boolean>(
   objectId: string,
@@ -28,13 +32,8 @@ const SENDER = `0x${"a1".repeat(32)}`;
 const SPONSOR = `0x${"5b".repeat(32)}`;
 const admin = { packageId: "0xad", acl: shared("0xac", false) };
 const launchpad: LaunchpadDeployment = {
-  packageId: "0x123",
+  ...LAUNCHPAD_DEPLOYMENT,
   originalPackageId: "0x122",
-  partnersPackageId: "0xae",
-  packageVersion: shared("0x2", false),
-  launchConfig: shared("0x3", false),
-  runtimeConfig: shared("0x4", false),
-  admin,
 };
 const blastSui: BlastSuiDeployment = {
   packageId: "0x223",
@@ -91,6 +90,42 @@ function builders(construct: CoinSourceOptions) {
         quoteAmount: 1n,
         ...o,
       }),
+    createLaunch: (o: CoinSourceOptions) =>
+      launch.createLaunch({
+        ...sui,
+        memeType: "0xa::meme::MEME",
+        ticket: "0x7c",
+        treasuryCap: "0x7d",
+        venue: "bluefin",
+        tier: { tickSpacing: 200, feeRate: 10_000n },
+        currency: shared("0xd", true),
+        virtualQuote: 1n,
+        graduationTarget: 2n,
+        allocationPlan: {
+          curveMemeBps: 8_000n,
+          lpMemeBps: 2_000n,
+          lpQuoteBps: 10_000n,
+          recipients: [],
+        },
+        lpFeeSplit: {
+          routes: [{ destination: { kind: "Owner" }, bps: 10_000n }],
+        },
+        creationFee: 5n,
+        preShareBuy: { quoteAmount: 1n, minMemeOut: 0n, recipient: "0xe" },
+        ...o,
+      }),
+    migrateLaunchBluefin: (o: CoinSourceOptions) =>
+      launch.migrate({
+        ...sui,
+        memeType: "0xa::meme::MEME",
+        launch: shared("0xc", true),
+        currency: shared("0xd", true),
+        venue: "bluefin",
+        quoteCurrency: shared("0xe", false),
+        bluefinConfig: shared("0x80", true),
+        creationFee: 5_000_000n,
+        ...o,
+      }),
     commit: (o: CoinSourceOptions) =>
       sale.commit({
         ...sui,
@@ -129,6 +164,9 @@ const SUI_COIN_COUNTS = {
   donateSui: 1,
   buy: 1,
   joinOpeningRound: 1,
+  // The creation fee and the creator's SUI purchase.
+  createLaunch: 2,
+  migrateLaunchBluefin: 1,
   commit: 1,
   migratePresaleBluefin: 1,
 };

@@ -2,8 +2,16 @@ import type { AdminDeployment } from "@interest-protocol/blast-admin-sdk/transac
 import {
   AdminCalls,
   normalizeAdminDeployment,
+  packageRoleType,
 } from "@interest-protocol/blast-admin-sdk/transactions";
+import { MAX_LP_FEE_BPS } from "@interest-protocol/blast-core/bps";
 import type { CoinSourceOptions } from "@interest-protocol/blast-core/coins";
+import type { CoreDeployment } from "@interest-protocol/blast-core/deployment";
+import {
+  CoreCalls,
+  normalizeCoreDeployment,
+} from "@interest-protocol/blast-core/deployment";
+import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
 import {
   requireBasisPoints,
   requireBasisPointsAtMost,
@@ -14,6 +22,8 @@ import {
   deploymentObject,
   moveResults,
 } from "@interest-protocol/blast-core/ptb";
+import type { CoreRole } from "@interest-protocol/blast-core/roles";
+import { coreRoleType } from "@interest-protocol/blast-core/roles";
 import type {
   SharedObjectIdentity,
   SharedObjectReference,
@@ -23,6 +33,17 @@ import {
   normalizeSharedObjectReference,
   normalizeSuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
+import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
+import {
+  MigratorCalls,
+  normalizeMigratorsDeployment,
+} from "@interest-protocol/blast-migrators-sdk/transactions";
+import type { PartnersDeployment } from "@interest-protocol/blast-partners-sdk/transactions";
+import type { VaultDeployment } from "@interest-protocol/blast-vault-sdk/transactions";
+import {
+  normalizeVaultDeployment,
+  VaultCalls,
+} from "@interest-protocol/blast-vault-sdk/transactions";
 import type {
   TransactionArgument,
   TransactionObjectArgument,
@@ -38,59 +59,61 @@ import {
   normalizeSuiObjectId,
   SUI_FRAMEWORK_ADDRESS,
 } from "@mysten/sui/utils";
-import type { CreatorAllocationPlan, FeeSplit } from "./allocation.ts";
-import { normalizeAllocationPlan, normalizeFeeSplit } from "./allocation.ts";
+import type { CreatorAllocationPlan, RecipientShare } from "./allocation.ts";
+import { normalizeAllocationPlan } from "./allocation.ts";
 import type { ObjectVersionReference } from "./effects.ts";
 import { COIN_REGISTRY_ID } from "./effects.ts";
 import type { MemeTemplateOptions } from "./template.ts";
 import { buildMemePackageBytecode } from "./template.ts";
 
+/**
+ * The `blast_fun` package: its shared `PackageVersion<BLAST_FUN>`,
+ * `PackageAdmin<BLAST_FUN>`, `LaunchConfig`, `RuntimeConfig` and
+ * `LaunchRegistry`, and the packages its calls and compositions read. Calls
+ * target `packageId`; types and roles name `originalPackageId`.
+ */
 export type LaunchpadDeployment = {
   packageId: string;
   originalPackageId: string;
-  /** `blast_admin`, a transitive Meme publish dependency, and its ACL. */
-  admin: AdminDeployment;
-  /** Published `blast_partners` package, a transitive Meme publish dependency. */
-  partnersPackageId: string;
   packageVersion: SharedObjectIdentity;
+  packageAdmin: SharedObjectIdentity;
   launchConfig: SharedObjectIdentity;
   runtimeConfig: SharedObjectIdentity;
+  launchRegistry: SharedObjectIdentity;
+  core: CoreDeployment;
+  admin: AdminDeployment;
+  partners: PartnersDeployment;
+  vault: VaultDeployment;
+  migrators: MigratorsDeployment;
+  /**
+   * The immutable `blast_fun_vesting` package `blast_core` links; a generated
+   * Meme package lists it among its transitive publish dependencies.
+   */
+  vestingPackageId: string;
 };
-
-/**
- * The typed `blast_fun::blast_fun_domain` roles (contracts ADR 0097). Each
- * administrator action takes the `AdminWitness` of exactly one of them; the
- * migrators reuse the launchpad's roles.
- */
-export type BlastFunAdminRole =
-  | "PauseAdmin"
-  | "UnpauseAdmin"
-  | "CancelAdmin"
-  | "UpgradeAdmin"
-  | "CreatorAdmin"
-  | "BuybackAdmin"
-  | "TreasuryAdmin"
-  | "FeeAdmin"
-  | "ListingAdmin"
-  | "AdapterAdmin"
-  | "ClaimSignerAdmin"
-  | "RewardsAdmin";
 
 export type LaunchTypes = {
   memeType: string;
   quoteType: string;
 };
 
-/** Shortest nonzero opening round `launch::finalize` accepts. */
+/** `constants::min_opening_round_ms`: shortest nonzero opening round `finalize` accepts. */
 export const MIN_OPENING_ROUND_MS = 60_000n;
-/** Longest opening round `launch::finalize` accepts. */
+/** `constants::max_opening_round_ms`: longest opening round `finalize` accepts. */
 export const MAX_OPENING_ROUND_MS = 300_000n;
-/** Largest Blast allocation of a launch's Meme supply or final Quote reserve, each asset. */
+/** `constants::max_protocol_allocation_bps`: Blast's largest allocation of each asset. */
 export const MAX_PROTOCOL_ALLOCATION_BPS = 1_000n;
-/** Largest Blast share of each launch trade fee; the creator receives the rest. */
+/** `constants::max_protocol_fee_share_bps`: Blast's largest share of each trade fee. */
 export const MAX_PROTOCOL_FEE_SHARE_BPS = 7_000n;
-/** Largest creation fee `launch_config::schedule_creation_fee` accepts, in MIST (10 SUI). */
+/** `constants::max_creation_fee_mist`: the largest creation fee, in MIST (10 SUI). */
 export const MAX_CREATION_FEE_MIST = 10_000_000_000n;
+
+/** `blast_fun::constants` pause bits; flags may be ORed together. */
+export const LAUNCHPAD_PAUSE_BITS = {
+  Create: 1,
+  Trading: 2,
+  Migrate: 4,
+} as const;
 
 /**
  * The creator's launch settings, applied to a `LaunchInitializer` before
@@ -102,6 +125,7 @@ export type LaunchSettings = {
   graduationTarget: bigint;
   /** The creator's plan; finalization adds Blast's shares. */
   allocationPlan: CreatorAllocationPlan;
+  /** The vault's LP-fee split at migration (core `FeeSplit`). */
   lpFeeSplit: FeeSplit;
   /** Opening-round length after share; zero or omitted, trading starts at share. */
   openingRoundMs?: bigint;
@@ -122,12 +146,43 @@ export type PreShareBuyInput = {
 };
 
 /**
+ * The venue a launch's liquidity migrates to and the tier it reserves at
+ * creation (`cetus::prepare` / `bluefin::prepare`). Cetus also needs its
+ * `GlobalConfig` and `Pools` shared objects.
+ */
+export type LaunchVenue =
+  | {
+      venue: "cetus";
+      tier: { tickSpacing: number };
+      cetus: { config: SharedObjectIdentity; pools: SharedObjectIdentity };
+    }
+  | { venue: "bluefin"; tier: { tickSpacing: number; feeRate: bigint } };
+
+/** The venue objects `cetus::migrate` / `bluefin::migrate` read. */
+export type MigrationVenue =
+  | {
+      venue: "cetus";
+      cetus: {
+        config: SharedObjectIdentity;
+        pools: SharedObjectIdentity;
+        burnManager: SharedObjectIdentity;
+      };
+    }
+  | {
+      venue: "bluefin";
+      quoteCurrency: SharedObjectIdentity;
+      bluefinConfig: SharedObjectIdentity;
+      /** Bluefin's pool creation fee, in MIST, paid from a `Coin<SUI>`. */
+      creationFee: bigint;
+    };
+
+/**
  * Inputs shared by the launch metadata setters. `launch` is read immutably by
  * Move; pass `mutable: true` only when the same PTB also mutates the launch.
  */
 export type MemeMetadataUpdate = LaunchTypes & {
   launch: SharedObjectReference;
-  blastMetadataCap: TransactionObjectInput;
+  creatorMetadataCap: TransactionObjectInput;
   currency: SharedObjectReference<true>;
 };
 
@@ -135,89 +190,115 @@ export type LaunchInitializerInput = LaunchTypes & {
   initializer: TransactionArgument;
 };
 
+/** A shared launch, borrowed mutably. */
+type LaunchInput = LaunchTypes & { launch: SharedObjectReference<true> };
+
+/** The shared launch, or the owned `Launch` `finalize` returned in this PTB. */
+type OwnedOrSharedLaunch = LaunchTypes & {
+  launch: SharedObjectReference<true> | TransactionArgument;
+};
+
+/** An administrator action's `AdminWitness` (`signIn`'s result). */
+type AdminWitnessInput = { adminWitness: TransactionObjectInput };
+
+/** A venue witness type argument (`<migrators>::cetus::Venue`, ...). */
+type VenueTypeInput = { venueType: string };
+
+/**
+ * `blast_fun` calls, one per public function the SDK builds, in Move argument
+ * order; `&mut TxContext` is implicit and the `Clock` is `0x6`. The package
+ * version, configurations, registry and core treasury come from the
+ * deployment. An `adminWitness` is `signIn`'s result for the named
+ * `blast_core::blast_domain` role.
+ */
 export class LaunchpadCalls {
   readonly deployment: LaunchpadDeployment;
   readonly admin: AdminCalls;
+  readonly core: CoreCalls;
+  /** `blast_fun::BLAST_FUN`, the package's OTW. */
+  readonly otw: string;
+  /** `blast_fun::PackageWitness`: the launchpad's vault terms and owner proofs name it. */
+  readonly packageWitnessType: string;
 
   constructor(deployment: LaunchpadDeployment) {
     this.deployment = normalizeDeployment(deployment);
     this.admin = new AdminCalls(this.deployment.admin);
+    this.core = new CoreCalls(this.deployment.core);
+    const module = `${this.deployment.originalPackageId}::blast_fun`;
+    this.otw = normalizeStructTag(`${module}::BLAST_FUN`);
+    this.packageWitnessType = normalizeStructTag(`${module}::PackageWitness`);
   }
 
-  /** The Move type of one `blast_fun_domain` role, for `AdminCalls.grantRole`. */
-  roleType(role: BlastFunAdminRole): string {
-    return `${this.deployment.originalPackageId}::blast_fun_domain::${role}`;
+  /** This PTB's `AdminWitness<Role>` for a `blast_domain` role the `AdminCap` holds. */
+  signIn(options: { adminCap: TransactionObjectInput; role: CoreRole }) {
+    return this.admin.signIn({
+      adminCap: options.adminCap,
+      role: coreRoleType(this.deployment.core, options.role),
+    });
   }
 
-  /** Builds one `bps::Bps` value. */
-  bps(value: bigint) {
-    requireBasisPoints("bps", value);
+  // Value constructors.
+
+  /** `allocation::recipient_share` of a core `payout::recipient` and its two rates. */
+  recipientShare(share: RecipientShare) {
+    const recipient = this.core.recipient(share.recipient);
+    const memeBps = this.core.bps(share.memeBps);
+    const quoteBps = this.core.bps(share.quoteBps);
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::bps::new`,
-        arguments: [tx.pure.u64(value)],
+        target: this.#target("allocation", "recipient_share"),
+        arguments: [recipient(tx), memeBps(tx), quoteBps(tx)],
       });
   }
 
-  /**
-   * Builds the creator's `allocation::AllocationPlan` (Blast excluded) through
-   * `allocation::recipient` and `allocation::plan`.
-   */
+  /** The creator's `allocation::plan` (Blast's shares are added at finalization). */
   allocationPlan(plan: CreatorAllocationPlan) {
     const normalized = normalizeAllocationPlan(plan);
-    return (tx: Transaction): TransactionResult => {
-      const recipients = tx.makeMoveVec({
-        type: `${this.deployment.originalPackageId}::allocation::Recipient`,
-        elements: normalized.recipients.map((recipient) =>
-          tx.moveCall({
-            target: `${this.deployment.packageId}::allocation::recipient`,
-            arguments: [
-              tx.pure.address(recipient.destination),
-              tx.add(this.bps(recipient.memeBps)),
-              tx.add(this.bps(recipient.quoteBps)),
-            ],
-          }),
-        ),
-      });
-      return tx.moveCall({
-        target: `${this.deployment.packageId}::allocation::plan`,
+    const shares = normalized.recipients.map((share) =>
+      this.recipientShare(share),
+    );
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: this.#target("allocation", "plan"),
         arguments: [
-          tx.add(this.bps(normalized.curveMemeBps)),
-          tx.add(this.bps(normalized.lpMemeBps)),
-          tx.add(this.bps(normalized.lpQuoteBps)),
-          recipients,
+          this.core.bps(normalized.curveMemeBps)(tx),
+          this.core.bps(normalized.lpMemeBps)(tx),
+          this.core.bps(normalized.lpQuoteBps)(tx),
+          tx.makeMoveVec({
+            type: `${this.deployment.originalPackageId}::allocation::RecipientShare`,
+            elements: shares.map((share) => share(tx)),
+          }),
         ],
       });
-    };
   }
 
-  /** Builds an `allocation::FeeSplit` through `allocation::route` and `allocation::fee_split`. */
-  feeSplit(split: FeeSplit) {
-    const normalized = normalizeFeeSplit(split);
-    return (tx: Transaction): TransactionResult => {
-      const recipients = tx.makeMoveVec({
-        type: `${this.deployment.originalPackageId}::allocation::Route`,
-        elements: normalized.recipients.map((recipient) =>
-          tx.moveCall({
-            target: `${this.deployment.packageId}::allocation::route`,
-            arguments: [
-              tx.pure.address(recipient.destination),
-              tx.add(this.bps(recipient.bps)),
-            ],
-          }),
-        ),
-      });
-      return tx.moveCall({
-        target: `${this.deployment.packageId}::allocation::fee_split`,
+  // Creation, in PTB order: `newLaunch`, the setters, `finalize`, `share`.
+
+  /**
+   * `launch::new`: starts the launch from the publisher's ticket and
+   * `TreasuryCap` and the venue's `VenueTicket` (`MigratorCalls.prepare*`),
+   * returning the `LaunchInitializer` hot potato.
+   */
+  newLaunch(
+    options: LaunchTypes & {
+      ticket: TransactionObjectInput;
+      treasuryCap: TransactionObjectInput;
+      venueTicket: TransactionArgument;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: this.#target("launch", "new"),
+        typeArguments: [types.memeType, types.quoteType],
         arguments: [
-          tx.add(this.bps(normalized.creatorBps)),
-          tx.add(this.bps(normalized.autoLpBps)),
-          tx.add(this.bps(normalized.rewardsBps)),
-          tx.add(this.bps(normalized.burnBps)),
-          recipients,
+          tx.object(options.ticket),
+          tx.object(options.treasuryCap),
+          this.#packageVersion(tx),
+          this.#launchConfig(tx),
+          options.venueTicket,
         ],
       });
-    };
   }
 
   setVirtualQuote(options: LaunchInitializerInput & { virtualQuote: bigint }) {
@@ -241,14 +322,14 @@ export class LaunchpadCalls {
   ) {
     const plan = this.allocationPlan(options.allocationPlan);
     return this.#initializerCall("set_allocation_plan", options, (tx) => [
-      tx.add(plan),
+      plan(tx),
     ]);
   }
 
   setLpFeeSplit(options: LaunchInitializerInput & { lpFeeSplit: FeeSplit }) {
-    const split = this.feeSplit(options.lpFeeSplit);
+    const split = this.core.feeSplit(options.lpFeeSplit);
     return this.#initializerCall("set_lp_fee_split", options, (tx) => [
-      tx.add(split),
+      split(tx),
     ]);
   }
 
@@ -262,7 +343,7 @@ export class LaunchpadCalls {
     ]);
   }
 
-  /** Names the launch's partner; `launch_config` must accept it now. */
+  /** Names the launch's partner; `LaunchConfig` must accept it now. */
   setPartner(
     options: LaunchInitializerInput & {
       partner: SharedObjectReference<false>;
@@ -276,11 +357,11 @@ export class LaunchpadCalls {
   }
 
   /**
-   * Consumes the initializer, checks every setting, and returns the owned
-   * launch. `creationFee` must be a `Coin<SUI>` of exactly the `LaunchConfig`
-   * creation fee.
+   * `launch::finalize`: consumes the initializer, checks every setting and
+   * returns the owned launch, its ID derived from the `LaunchRegistry`.
+   * `creationFee` is a `Coin<SUI>` of exactly the `LaunchConfig` creation fee.
    */
-  finalizeLaunch(
+  finalize(
     options: LaunchInitializerInput & {
       currency: SharedObjectReference<true>;
       creationFee: TransactionObjectInput;
@@ -289,11 +370,12 @@ export class LaunchpadCalls {
     const types = normalizeLaunchTypes(options);
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::launch::finalize`,
+        target: this.#target("launch", "finalize"),
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           options.initializer,
           this.#packageVersion(tx),
+          deploymentObject(tx, this.deployment.launchRegistry, true),
           sharedObject(tx, "currency", options.currency, true),
           this.#launchConfig(tx),
           tx.object(options.creationFee),
@@ -301,12 +383,12 @@ export class LaunchpadCalls {
       });
   }
 
-  /** Shares the finalized launch; trading or the opening round starts now. */
-  shareLaunch(options: LaunchTypes & { launch: TransactionArgument }) {
+  /** `launch::share`: trading or the opening round starts now. */
+  share(options: LaunchTypes & { launch: TransactionArgument }) {
     const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): void => {
+    return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::launch::share`,
+        target: this.#target("launch", "share"),
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           options.launch,
@@ -314,192 +396,118 @@ export class LaunchpadCalls {
           tx.object.clock(),
         ],
       });
-    };
   }
 
-  /**
-   * Applies the creator's settings to an adapter-started initializer, finalizes
-   * it, runs the optional purchase on the owned launch, and shares the launch.
-   * Without an opening round the purchase is a curve buy, which may reach the
-   * graduation target before share, and its `(Coin<Meme>, Coin<Quote>)` result
-   * is returned. With one, the purchase is the creator's bid in the round and
-   * nothing is returned.
-   */
-  completeLaunch(
-    options: LaunchInitializerInput &
-      LaunchSettings & {
-        currency: SharedObjectReference<true>;
-        creationFee: TransactionObjectInput;
-        preShareBuy?: { quoteCoin: TransactionObjectInput; minMemeOut: bigint };
-      },
-  ) {
-    const { openingRoundMs = 0n, partner, preShareBuy } = options;
-    const settings = [
-      this.setVirtualQuote(options),
-      this.setGraduationTarget(options),
-      this.setAllocationPlan(options),
-      this.setLpFeeSplit(options),
-      ...(openingRoundMs > 0n
-        ? [this.setOpeningRound({ ...options, openingRoundMs })]
-        : []),
-      ...(partner ? [this.setPartner({ ...options, partner })] : []),
-    ];
-    const purchase = preShareBuy && { ...options, ...preShareBuy };
-    return (tx: Transaction): TransactionResult | undefined => {
-      for (const setting of settings) tx.add(setting);
-      const launch = tx.add(this.finalizeLaunch(options));
-      let bought: TransactionResult | undefined;
-      if (purchase && openingRoundMs > 0n) {
-        tx.add(this.#joinCall(purchase, () => launch));
-      } else if (purchase) {
-        bought = tx.add(this.#buyCall(purchase, () => launch));
-      }
-      tx.add(this.shareLaunch({ ...options, launch }));
-      return bought;
-    };
-  }
+  // Trading and claims.
 
   /**
    * Adds `quoteCoin` to the sender's opening-round bid until the round ends.
-   * Bids cannot be withdrawn.
+   * `launch` is the shared launch, or the owned `finalize` result before share.
    */
   joinOpeningRound(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      quoteCoin: TransactionObjectInput;
-    },
-  ) {
-    return this.#joinCall(options, (tx) =>
-      sharedObject(tx, "launch", options.launch, true),
-    );
-  }
-
-  /** Settles an ended opening round with one curve purchase; anyone may call it. */
-  settleOpeningRound(
-    options: LaunchTypes & { launch: SharedObjectReference<true> },
+    options: OwnedOrSharedLaunch & { quoteCoin: TransactionObjectInput },
   ) {
     const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): void => {
+    return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::launch::settle_opening_round`,
+        target: this.#target("launch", "join_opening_round"),
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
-          sharedObject(tx, "launch", options.launch, true),
+          launchArgument(tx, options.launch),
           this.#packageVersion(tx),
-          this.#runtimeConfig(tx),
+          tx.object(options.quoteCoin),
           tx.object.clock(),
         ],
       });
-    };
+  }
+
+  /** Settles an ended opening round with one curve purchase; anyone may call it. */
+  settleOpeningRound(options: LaunchInput) {
+    return this.#launchCall("settle_opening_round", options, (tx) => [
+      this.#runtimeConfig(tx),
+      tx.object.clock(),
+    ]);
   }
 
   /**
    * Sends `bidder` its pro-rata share of the settled round's Meme and refunded
    * Quote; anyone may call it, and the coins always go to the bidder.
    */
-  deliverOpeningRound(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      bidder: string;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
+  deliverOpeningRound(options: LaunchInput & { bidder: string }) {
     const bidder = normalizeSuiAddress(options.bidder);
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::deliver_opening_round`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          this.#packageVersion(tx),
-          tx.pure.address(bidder),
-        ],
-      });
-    };
+    return this.#launchCall("deliver_opening_round", options, (tx) => [
+      tx.pure.address(bidder),
+    ]);
   }
 
+  /**
+   * `launch::buy`: returns `[Coin<Meme>, Coin<Quote>]`, the Meme and any
+   * refund. `launch` is the shared launch, or the owned `finalize` result
+   * before share.
+   */
   buy(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
+    options: OwnedOrSharedLaunch & {
       quoteCoin: TransactionObjectInput;
       minMemeOut: bigint;
     },
   ) {
-    return this.#buyCall(options, (tx) =>
-      sharedObject(tx, "launch", options.launch, true),
-    );
+    const types = normalizeLaunchTypes(options);
+    const minMemeOut = requireU64("minMemeOut", options.minMemeOut);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: this.#target("launch", "buy"),
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          launchArgument(tx, options.launch),
+          this.#packageVersion(tx),
+          this.#runtimeConfig(tx),
+          tx.object(options.quoteCoin),
+          tx.pure.u64(minMemeOut),
+        ],
+      });
   }
 
+  /** `launch::sell`: returns the `Coin<Quote>`. */
   sell(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
+    options: LaunchInput & {
       memeCoin: TransactionObjectInput;
       minQuoteOut: bigint;
     },
   ) {
-    const types = normalizeLaunchTypes(options);
-    requireU64("minQuoteOut", options.minQuoteOut);
-    return (tx: Transaction): TransactionObjectArgument =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::sell`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          this.#packageVersion(tx),
-          this.#runtimeConfig(tx),
-          tx.object(options.memeCoin),
-          tx.pure.u64(options.minQuoteOut),
-        ],
-      });
+    const minQuoteOut = requireU64("minQuoteOut", options.minQuoteOut);
+    return this.#launchCall("sell", options, (tx) => [
+      this.#runtimeConfig(tx),
+      tx.object(options.memeCoin),
+      tx.pure.u64(minQuoteOut),
+    ]);
   }
 
   /**
-   * Issues both creator capabilities. The `CurveFeeCap` also claims the
-   * creator's migrated LP fees and changes the LP-fee split.
+   * `launch::claim_creator_caps`: returns `[CurveFeeCap, CreatorMetadataCap]`.
+   * The `CurveFeeCap` also proves ownership of the launch's vault.
    */
   claimCreatorCaps(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      accountAttestation?: Uint8Array | null;
-    },
+    options: LaunchInput & { accountAttestation?: Uint8Array | null },
   ) {
-    const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::claim_creator_caps`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          this.#packageVersion(tx),
-          this.#runtimeConfig(tx),
-          tx.pure.option(
-            "vector<u8>",
-            options.accountAttestation
-              ? Array.from(options.accountAttestation)
-              : null,
-          ),
-          tx.object.clock(),
-        ],
-      });
+    return this.#launchCall("claim_creator_caps", options, (tx) => [
+      this.#runtimeConfig(tx),
+      tx.pure.option(
+        "vector<u8>",
+        options.accountAttestation
+          ? Array.from(options.accountAttestation)
+          : null,
+      ),
+      tx.object.clock(),
+    ]);
   }
 
+  /** `launch::claim_creator_fees`: returns `[Coin<Meme>, Coin<Quote>]`. */
   claimCreatorFees(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      curveFeeCap: TransactionObjectInput;
-    },
+    options: LaunchInput & { curveFeeCap: TransactionObjectInput },
   ) {
-    const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::claim_creator_fees`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          this.#packageVersion(tx),
-          tx.object(options.curveFeeCap),
-        ],
-      });
+    return this.#launchCall("claim_creator_fees", options, (tx) => [
+      tx.object(options.curveFeeCap),
+    ]);
   }
 
   setName(options: MemeMetadataUpdate & { name: string }) {
@@ -518,42 +526,31 @@ export class LaunchpadCalls {
     return this.#setMemeMetadata("set_icon_url", options, options.iconUrl);
   }
 
-  /** This PTB's `AdminWitness<Role>`; the `AdminCap` must hold `role`. */
-  signIn(options: {
-    adminCap: TransactionObjectInput;
-    role: BlastFunAdminRole;
-  }) {
-    return this.admin.signIn({
-      adminCap: options.adminCap,
-      role: this.roleType(options.role),
-    });
+  /**
+   * `launch::claim_protocol_fees`: pays Blast's fees on a launch that names no
+   * partner to the core `Treasury`. Anyone may call it.
+   */
+  claimProtocolFees(options: LaunchInput) {
+    return this.#launchCall("claim_protocol_fees", options, (tx) => [
+      this.#treasury(tx),
+    ]);
   }
 
   /**
-   * Pays Blast's Meme, Quote, and SUI fees to the `RuntimeConfig` treasury.
-   * Anyone may call it. A launch that names a partner needs that `partner`
-   * (`claim_protocol_fees_with_partner`), which is paid its share in the call.
+   * `launch::claim_protocol_fees_with_partner`: on a launch that names
+   * `partner`, pays the partner its share and the core `Treasury` the rest.
    */
-  claimProtocolFees(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      partner?: SharedObjectReference<false> | null;
-    },
+  claimProtocolFeesWithPartner(
+    options: LaunchInput & { partner: SharedObjectReference<false> },
   ) {
-    const types = normalizeLaunchTypes(options);
-    const { partner } = options;
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::${partner ? "claim_protocol_fees_with_partner" : "claim_protocol_fees"}`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          this.#packageVersion(tx),
-          this.#runtimeConfig(tx),
-          ...(partner ? [sharedObject(tx, "partner", partner, false)] : []),
-        ],
-      });
-    };
+    return this.#launchCall(
+      "claim_protocol_fees_with_partner",
+      options,
+      (tx) => [
+        this.#treasury(tx),
+        sharedObject(tx, "partner", options.partner, false),
+      ],
+    );
   }
 
   /**
@@ -572,404 +569,64 @@ export class LaunchpadCalls {
       version: options.currency.version,
       digest: options.currency.digest,
     };
-    return (tx: Transaction): void => {
+    return (tx: Transaction): TransactionResult =>
       tx.moveCall({
         target: `${SUI_FRAMEWORK_ADDRESS}::coin_registry::finalize_registration`,
         typeArguments: [memeType],
         arguments: [tx.object(COIN_REGISTRY_ID), tx.receivingRef(currency)],
       });
-    };
   }
 
-  /** `launch_config::set_meme_decimals_allowed` (`ListingAdmin`). */
-  setMemeDecimalsAllowed(options: {
-    adminWitness: TransactionObjectInput;
-    decimals: number;
-    allowed: boolean;
-  }) {
-    return this.#configCall(
-      "launch_config::set_meme_decimals_allowed",
-      options,
-      (tx) => [tx.pure.u8(options.decimals), tx.pure.bool(options.allowed)],
-    );
-  }
-
-  /** `launch_config::set_quote_allowed<Quote>` (`ListingAdmin`); existing launches keep trading. */
-  setQuoteAllowed(options: {
-    adminWitness: TransactionObjectInput;
-    quoteType: string;
-    allowed: boolean;
-  }) {
-    return this.#configCall(
-      "launch_config::set_quote_allowed",
-      options,
-      (tx) => [tx.pure.bool(options.allowed)],
-      [normalizeStructTag(options.quoteType)],
-    );
-  }
-
-  /** `launch_config::add_partner` (`FeeAdmin`): new launches may name `partner` at once. */
-  addPartner(options: {
-    adminWitness: TransactionObjectInput;
-    partner: SharedObjectReference<false>;
-  }) {
-    return this.#configCall("launch_config::add_partner", options, (tx) => [
-      sharedObject(tx, "partner", options.partner, false),
-    ]);
-  }
+  // Migration and ownership.
 
   /**
-   * `launch_config::remove_partner` (`FeeAdmin`): new launches stop naming
-   * `partner` after `PARTNER_DELAY_MS`; launches that name it keep paying it.
+   * `launch::migrate`: pays the plan's recipients, accrues Blast's migration
+   * fee, disposes of the unsold Meme, and returns the `Migration<Meme, Quote>`
+   * the launch's venue must redeem in the same PTB (`MigratorCalls.migrate*`).
    */
-  removePartner(options: {
-    adminWitness: TransactionObjectInput;
-    partner: SharedObjectReference<false>;
-  }) {
-    return this.#configCall("launch_config::remove_partner", options, (tx) => [
-      sharedObject(tx, "partner", options.partner, false),
+  migrate(options: LaunchInput & { currency: SharedObjectReference<true> }) {
+    return this.#launchCall("migrate", options, (tx) => [
+      this.#launchConfig(tx),
+      sharedObject(tx, "currency", options.currency, true),
       tx.object.clock(),
     ]);
   }
 
   /**
-   * `runtime_config::schedule_creator_claim_signer` (`ClaimSignerAdmin`):
-   * proposes admitting an Ed25519 key that may sign account claims, after the
-   * signer notice. At most four keys may be live or pending at once.
+   * `launch::prove_owner`: the `OwnerProof` the launch's vault accepts from the
+   * holder of its live `CurveFeeCap`, for one owner call in the same PTB.
+   * `launch` is read immutably; pass `mutable: true` only when the same PTB
+   * also mutates it.
    */
-  scheduleCreatorClaimSigner(options: {
-    adminWitness: TransactionObjectInput;
-    signerPublicKey: ClaimSignerPublicKey;
-  }) {
-    const key = claimSignerKey(options.signerPublicKey);
-    return this.#configCall(
-      "runtime_config::schedule_creator_claim_signer",
-      options,
-      (tx) => [tx.pure.vector("u8", key), tx.object.clock()],
-    );
-  }
-
-  /** `runtime_config::apply_creator_claim_signer`: anyone admits a ready signer key. */
-  applyCreatorClaimSigner(options: { signerPublicKey: ClaimSignerPublicKey }) {
-    const key = claimSignerKey(options.signerPublicKey);
-    return (tx: Transaction): void => {
+  proveOwner(
+    options: LaunchTypes & {
+      launch: SharedObjectReference;
+      curveFeeCap: TransactionObjectInput;
+    },
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::runtime_config::apply_creator_claim_signer`,
+        target: this.#target("launch", "prove_owner"),
+        typeArguments: [types.memeType, types.quoteType],
         arguments: [
-          this.#runtimeConfig(tx, true),
+          sharedObject(tx, "launch", options.launch, options.launch.mutable),
           this.#packageVersion(tx),
-          tx.pure.vector("u8", key),
-          tx.object.clock(),
+          tx.object(options.curveFeeCap),
         ],
       });
-    };
   }
 
-  /** `runtime_config::cancel_creator_claim_signer` (`CancelAdmin`): discards a pending admission. */
-  cancelCreatorClaimSigner(options: {
-    adminWitness: TransactionObjectInput;
-    signerPublicKey: ClaimSignerPublicKey;
-  }) {
-    const key = claimSignerKey(options.signerPublicKey);
-    return this.#configCall(
-      "runtime_config::cancel_creator_claim_signer",
-      options,
-      (tx) => [tx.pure.vector("u8", key)],
-    );
-  }
+  // `launch_config`.
 
-  /**
-   * `runtime_config::revoke_creator_claim_signer` (`ClaimSignerAdmin`):
-   * removes a live or pending key at once; attestations it signed stop
-   * verifying.
-   */
-  revokeCreatorClaimSigner(options: {
-    adminWitness: TransactionObjectInput;
-    signerPublicKey: ClaimSignerPublicKey;
-  }) {
-    const key = claimSignerKey(options.signerPublicKey);
-    return this.#configCall(
-      "runtime_config::revoke_creator_claim_signer",
-      options,
-      (tx) => [tx.pure.vector("u8", key)],
-    );
-  }
-
-  /** `runtime_config::schedule_creator_claim_signer_delay` (`ClaimSignerAdmin`): the next signer notice. */
-  scheduleCreatorClaimSignerDelay(options: {
-    adminWitness: TransactionObjectInput;
-    delayMs: bigint;
-  }) {
-    const delayMs = requireU64("delayMs", options.delayMs);
-    return this.#configCall(
-      "runtime_config::schedule_creator_claim_signer_delay",
-      options,
-      (tx) => [tx.pure.u64(delayMs), tx.object.clock()],
-    );
-  }
-
-  /** `runtime_config::apply_creator_claim_signer_delay`: anyone applies a ready signer notice. */
-  applyCreatorClaimSignerDelay() {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::runtime_config::apply_creator_claim_signer_delay`,
-        arguments: [
-          this.#runtimeConfig(tx, true),
-          this.#packageVersion(tx),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-
-  /** `runtime_config::cancel_creator_claim_signer_delay` (`CancelAdmin`). */
-  cancelCreatorClaimSignerDelay(options: {
-    adminWitness: TransactionObjectInput;
-  }) {
-    return this.#configCall(
-      "runtime_config::cancel_creator_claim_signer_delay",
-      options,
-      () => [],
-    );
-  }
-
-  /** `launch_config::apply_creation_fee`. Permissionless; the contract validates readiness and ownership. */
-  applyCreationFee() {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::apply_creation_fee`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch_config::apply_migration_delay`. Permissionless; the contract validates readiness and ownership. */
-  applyMigrationDelay() {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::apply_migration_delay`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch_config::apply_migration_witness`. Permissionless; the contract validates readiness and ownership. */
-  applyMigrationWitness(options: { migrationWitnessType: string }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::apply_migration_witness`,
-        typeArguments: [normalizeStructTag(options.migrationWitnessType)],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch_config::apply_protocol_allocation`. Permissionless; the contract validates readiness and ownership. */
-  applyProtocolAllocation() {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::apply_protocol_allocation`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch_config::apply_trade_fees`. Permissionless; the contract validates readiness and ownership. */
-  applyTradeFees() {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::apply_trade_fees`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch_config::cancel_creation_fee`. Requires CancelAdmin. */
-  cancelCreationFee(options: { adminWitness: TransactionObjectInput }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::cancel_creation_fee`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `launch_config::cancel_migration_delay`. Requires CancelAdmin. */
-  cancelMigrationDelay(options: { adminWitness: TransactionObjectInput }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::cancel_migration_delay`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `launch_config::cancel_migration_witness`. Requires CancelAdmin. */
-  cancelMigrationWitness(options: {
-    migrationWitnessType: string;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::cancel_migration_witness`,
-        typeArguments: [normalizeStructTag(options.migrationWitnessType)],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `launch_config::cancel_protocol_allocation`. Requires CancelAdmin. */
-  cancelProtocolAllocation(options: { adminWitness: TransactionObjectInput }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::cancel_protocol_allocation`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `launch_config::cancel_trade_fees`. Requires CancelAdmin. */
-  cancelTradeFees(options: { adminWitness: TransactionObjectInput }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::cancel_trade_fees`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `launch_config::remove_migration_witness`. Requires AdapterAdmin. */
-  removeMigrationWitness(options: {
-    migrationWitnessType: string;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::remove_migration_witness`,
-        typeArguments: [normalizeStructTag(options.migrationWitnessType)],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /**
-   * `launch_config::schedule_creation_fee`. Requires FeeAdmin. Throws above
-   * `MAX_CREATION_FEE_MIST` (10 SUI), which the contract rejects with
-   * `invalid_creation_fee` (35).
-   */
-  scheduleCreationFee(options: {
-    adminWitness: TransactionObjectInput;
-    creationFee: bigint;
-    delayMs: bigint;
-  }) {
-    const creationFee = requireU64("creationFee", options.creationFee);
-    if (creationFee > MAX_CREATION_FEE_MIST) {
-      throw new RangeError("creationFee exceeds 10 SUI");
-    }
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::schedule_creation_fee`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.u64(creationFee),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch_config::schedule_migration_delay`. Requires AdapterAdmin. */
-  scheduleMigrationDelay(options: {
-    adminWitness: TransactionObjectInput;
-    delayMs: bigint;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::schedule_migration_delay`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch_config::schedule_migration_witness`. Requires AdapterAdmin. */
-  scheduleMigrationWitness(options: {
-    migrationWitnessType: string;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::schedule_migration_witness`,
-        typeArguments: [normalizeStructTag(options.migrationWitnessType)],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /**
-   * `launch_config::schedule_protocol_allocation`. Requires TreasuryAdmin.
-   * Throws when either share exceeds `MAX_PROTOCOL_ALLOCATION_BPS` (1,000),
-   * which the contract rejects with `invalid_protocol_allocation` (5).
-   */
-  scheduleProtocolAllocation(options: {
-    adminWitness: TransactionObjectInput;
-    memeBps: bigint;
-    quoteBps: bigint;
-    delayMs: bigint;
-  }) {
+  /** `TreasuryAdmin`; each share at most `MAX_PROTOCOL_ALLOCATION_BPS`. */
+  scheduleProtocolAllocation(
+    options: AdminWitnessInput & {
+      memeBps: bigint;
+      quoteBps: bigint;
+      delayMs: bigint;
+    },
+  ) {
     const memeBps = requireBasisPointsAtMost(
       "memeBps",
       options.memeBps,
@@ -980,662 +637,526 @@ export class LaunchpadCalls {
       options.quoteBps,
       MAX_PROTOCOL_ALLOCATION_BPS,
     );
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::schedule_protocol_allocation`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.add(this.bps(memeBps)),
-          tx.add(this.bps(quoteBps)),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#configCall("schedule_protocol_allocation", options, (tx) => [
+      this.core.bps(memeBps)(tx),
+      this.core.bps(quoteBps)(tx),
+      tx.pure.u64(delayMs),
+      tx.object.clock(),
+    ]);
   }
-  /** `launch_config::schedule_trade_fees`. Requires FeeAdmin. */
-  scheduleTradeFees(options: {
-    adminWitness: TransactionObjectInput;
-    quoteFeeBps: bigint;
-    memeFeeBps: bigint;
-    delayMs: bigint;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch_config::schedule_trade_fees`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.launchConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.add(this.bps(options.quoteFeeBps)),
-          tx.add(this.bps(options.memeFeeBps)),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
+
+  applyProtocolAllocation() {
+    return this.#applyConfig("apply_protocol_allocation");
   }
-  /** `runtime_config::apply_protocol_fee_share`. Permissionless; the contract validates readiness and ownership. */
-  applyProtocolFeeShare() {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::runtime_config::apply_protocol_fee_share`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.runtimeConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
+
+  /** `CancelAdmin`. */
+  cancelProtocolAllocation(options: AdminWitnessInput) {
+    return this.#configCall("cancel_protocol_allocation", options);
   }
-  /** `runtime_config::apply_treasury`. Permissionless; the contract validates readiness and ownership. */
-  applyTreasury() {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::runtime_config::apply_treasury`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.runtimeConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
+
+  /** `FeeAdmin`; each share at most core `MAX_LP_FEE_BPS` (3,000). */
+  scheduleProtocolLpFees(
+    options: AdminWitnessInput & {
+      memeBps: bigint;
+      quoteBps: bigint;
+      delayMs: bigint;
+    },
+  ) {
+    const memeBps = requireBasisPointsAtMost(
+      "memeBps",
+      options.memeBps,
+      MAX_LP_FEE_BPS,
+    );
+    const quoteBps = requireBasisPointsAtMost(
+      "quoteBps",
+      options.quoteBps,
+      MAX_LP_FEE_BPS,
+    );
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#configCall("schedule_protocol_lp_fees", options, (tx) => [
+      this.core.bps(memeBps)(tx),
+      this.core.bps(quoteBps)(tx),
+      tx.pure.u64(delayMs),
+      tx.object.clock(),
+    ]);
   }
-  /** `runtime_config::cancel_protocol_fee_share`. Requires CancelAdmin. */
-  cancelProtocolFeeShare(options: { adminWitness: TransactionObjectInput }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::runtime_config::cancel_protocol_fee_share`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.runtimeConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
+
+  applyProtocolLpFees() {
+    return this.#applyConfig("apply_protocol_lp_fees");
   }
-  /** `runtime_config::cancel_treasury`. Requires CancelAdmin. */
-  cancelTreasury(options: { adminWitness: TransactionObjectInput }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::runtime_config::cancel_treasury`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.runtimeConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
+
+  /** `CancelAdmin`. */
+  cancelProtocolLpFees(options: AdminWitnessInput) {
+    return this.#configCall("cancel_protocol_lp_fees", options);
   }
+
+  /** `ListingAdmin`. */
+  setMemeDecimalsAllowed(
+    options: AdminWitnessInput & { decimals: number; allowed: boolean },
+  ) {
+    return this.#configCall("set_meme_decimals_allowed", options, (tx) => [
+      tx.pure.u8(options.decimals),
+      tx.pure.bool(options.allowed),
+    ]);
+  }
+
+  /** `ListingAdmin`; existing launches keep trading in the Quote. */
+  setQuoteAllowed(
+    options: AdminWitnessInput & { quoteType: string; allowed: boolean },
+  ) {
+    return this.#configCall(
+      "set_quote_allowed",
+      options,
+      (tx) => [tx.pure.bool(options.allowed)],
+      [normalizeStructTag(options.quoteType)],
+    );
+  }
+
+  /** `FeeAdmin`. */
+  scheduleTradeFees(
+    options: AdminWitnessInput & {
+      quoteFeeBps: bigint;
+      memeFeeBps: bigint;
+      delayMs: bigint;
+    },
+  ) {
+    const quoteFeeBps = requireBasisPoints("quoteFeeBps", options.quoteFeeBps);
+    const memeFeeBps = requireBasisPoints("memeFeeBps", options.memeFeeBps);
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#configCall("schedule_trade_fees", options, (tx) => [
+      this.core.bps(quoteFeeBps)(tx),
+      this.core.bps(memeFeeBps)(tx),
+      tx.pure.u64(delayMs),
+      tx.object.clock(),
+    ]);
+  }
+
+  applyTradeFees() {
+    return this.#applyConfig("apply_trade_fees");
+  }
+
+  /** `CancelAdmin`. */
+  cancelTradeFees(options: AdminWitnessInput) {
+    return this.#configCall("cancel_trade_fees", options);
+  }
+
+  /** `FeeAdmin`; at most `MAX_CREATION_FEE_MIST` (10 SUI). */
+  scheduleCreationFee(
+    options: AdminWitnessInput & { creationFee: bigint; delayMs: bigint },
+  ) {
+    const creationFee = requireU64("creationFee", options.creationFee);
+    if (creationFee > MAX_CREATION_FEE_MIST) {
+      throw new RangeError("creationFee exceeds 10 SUI");
+    }
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#configCall("schedule_creation_fee", options, (tx) => [
+      tx.pure.u64(creationFee),
+      tx.pure.u64(delayMs),
+      tx.object.clock(),
+    ]);
+  }
+
+  applyCreationFee() {
+    return this.#applyConfig("apply_creation_fee");
+  }
+
+  /** `CancelAdmin`. */
+  cancelCreationFee(options: AdminWitnessInput) {
+    return this.#configCall("cancel_creation_fee", options);
+  }
+
+  /** `FeeAdmin`: new launches may name `partner` at once. */
+  addPartner(
+    options: AdminWitnessInput & { partner: SharedObjectReference<false> },
+  ) {
+    return this.#configCall("add_partner", options, (tx) => [
+      sharedObject(tx, "partner", options.partner, false),
+    ]);
+  }
+
   /**
-   * `runtime_config::schedule_protocol_fee_share`. Requires FeeAdmin. Throws
-   * above `MAX_PROTOCOL_FEE_SHARE_BPS` (7,000), which the contract rejects with
-   * `invalid_protocol_fee_share` (45).
+   * `FeeAdmin`: new launches stop naming `partner` after `PARTNER_DELAY_MS`;
+   * launches that name it keep paying it.
    */
-  scheduleProtocolFeeShare(options: {
-    adminWitness: TransactionObjectInput;
-    protocolFeeShareBps: bigint;
-    delayMs: bigint;
-  }) {
-    const protocolFeeShareBps = requireBasisPointsAtMost(
+  removePartner(
+    options: AdminWitnessInput & { partner: SharedObjectReference<false> },
+  ) {
+    return this.#configCall("remove_partner", options, (tx) => [
+      sharedObject(tx, "partner", options.partner, false),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `VenueAdmin`: admits `venueType` after the applied admission delay. */
+  scheduleVenue(options: AdminWitnessInput & VenueTypeInput) {
+    return this.#configCall(
+      "schedule_venue",
+      options,
+      (tx) => [tx.object.clock()],
+      [normalizeStructTag(options.venueType)],
+    );
+  }
+
+  applyVenue(options: VenueTypeInput) {
+    return this.#applyConfig("apply_venue", [
+      normalizeStructTag(options.venueType),
+    ]);
+  }
+
+  /** `CancelAdmin`. */
+  cancelVenue(options: AdminWitnessInput & VenueTypeInput) {
+    return this.#configCall("cancel_venue", options, () => [], [
+      normalizeStructTag(options.venueType),
+    ]);
+  }
+
+  /** `VenueAdmin`: removes the venue for new launches at once. */
+  removeVenue(options: AdminWitnessInput & VenueTypeInput) {
+    return this.#configCall("remove_venue", options, () => [], [
+      normalizeStructTag(options.venueType),
+    ]);
+  }
+
+  /** `VenueAdmin`. */
+  scheduleVenueDelay(options: AdminWitnessInput & { delayMs: bigint }) {
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#configCall("schedule_venue_delay", options, (tx) => [
+      tx.pure.u64(delayMs),
+      tx.object.clock(),
+    ]);
+  }
+
+  applyVenueDelay() {
+    return this.#applyConfig("apply_venue_delay");
+  }
+
+  /** `CancelAdmin`. */
+  cancelVenueDelay(options: AdminWitnessInput) {
+    return this.#configCall("cancel_venue_delay", options);
+  }
+
+  /**
+   * `launch_config::unpause`: clears `bits` once every launchpad delay is
+   * guarded. `adminWitness` is `AdminWitness<UnpauseAdmin<BLAST_FUN>>`
+   * (`packageRoleType(admin, otw, "UnpauseAdmin")`).
+   */
+  unpause(options: AdminWitnessInput & { bits: number }) {
+    const { bits } = options;
+    if (
+      !Number.isInteger(bits) ||
+      bits <= 0 ||
+      (bits &
+        ~(
+          LAUNCHPAD_PAUSE_BITS.Create |
+          LAUNCHPAD_PAUSE_BITS.Trading |
+          LAUNCHPAD_PAUSE_BITS.Migrate
+        )) !==
+        0
+    ) {
+      throw new RangeError("invalid pause bits");
+    }
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: this.#target("launch_config", "unpause"),
+        arguments: [
+          this.#launchConfig(tx),
+          deploymentObject(tx, this.deployment.packageVersion, true),
+          tx.object(options.adminWitness),
+          deploymentObject(tx, this.deployment.packageAdmin, false),
+          this.#runtimeConfig(tx),
+          tx.pure.u8(bits),
+        ],
+      });
+  }
+
+  // `runtime_config`.
+
+  /**
+   * `ClaimSignerAdmin`: proposes admitting an Ed25519 key that may sign
+   * account claims, after the signer delay. At most four keys may be live or
+   * pending at once.
+   */
+  scheduleCreatorClaimSigner(
+    options: AdminWitnessInput & { signerPublicKey: ClaimSignerPublicKey },
+  ) {
+    const key = claimSignerKey(options.signerPublicKey);
+    return this.#runtimeCall("schedule_creator_claim_signer", options, (tx) => [
+      tx.pure.vector("u8", key),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** Anyone admits a ready signer key. */
+  applyCreatorClaimSigner(options: { signerPublicKey: ClaimSignerPublicKey }) {
+    const key = claimSignerKey(options.signerPublicKey);
+    return this.#runtimeCall("apply_creator_claim_signer", null, (tx) => [
+      tx.pure.vector("u8", key),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `CancelAdmin`: discards a pending admission. */
+  cancelCreatorClaimSigner(
+    options: AdminWitnessInput & { signerPublicKey: ClaimSignerPublicKey },
+  ) {
+    const key = claimSignerKey(options.signerPublicKey);
+    return this.#runtimeCall("cancel_creator_claim_signer", options, (tx) => [
+      tx.pure.vector("u8", key),
+    ]);
+  }
+
+  /**
+   * `ClaimSignerAdmin`: removes a live or pending key at once; attestations
+   * it signed stop verifying.
+   */
+  revokeCreatorClaimSigner(
+    options: AdminWitnessInput & { signerPublicKey: ClaimSignerPublicKey },
+  ) {
+    const key = claimSignerKey(options.signerPublicKey);
+    return this.#runtimeCall("revoke_creator_claim_signer", options, (tx) => [
+      tx.pure.vector("u8", key),
+    ]);
+  }
+
+  /** `ClaimSignerAdmin`: the delay of later signer admissions. */
+  scheduleCreatorClaimSignerDelay(
+    options: AdminWitnessInput & { delayMs: bigint },
+  ) {
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#runtimeCall(
+      "schedule_creator_claim_signer_delay",
+      options,
+      (tx) => [tx.pure.u64(delayMs), tx.object.clock()],
+    );
+  }
+
+  applyCreatorClaimSignerDelay() {
+    return this.#runtimeCall("apply_creator_claim_signer_delay", null, (tx) => [
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `CancelAdmin`. */
+  cancelCreatorClaimSignerDelay(options: AdminWitnessInput) {
+    return this.#runtimeCall("cancel_creator_claim_signer_delay", options);
+  }
+
+  /** `FeeAdmin`; at most `MAX_PROTOCOL_FEE_SHARE_BPS` (7,000). */
+  scheduleProtocolFeeShare(
+    options: AdminWitnessInput & {
+      protocolFeeShareBps: bigint;
+      delayMs: bigint;
+    },
+  ) {
+    const share = requireBasisPointsAtMost(
       "protocolFeeShareBps",
       options.protocolFeeShareBps,
       MAX_PROTOCOL_FEE_SHARE_BPS,
     );
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::runtime_config::schedule_protocol_fee_share`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.runtimeConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.add(this.bps(protocolFeeShareBps)),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `runtime_config::schedule_treasury`. Requires TreasuryAdmin. */
-  scheduleTreasury(options: {
-    adminWitness: TransactionObjectInput;
-    treasury: string;
-    delayMs: bigint;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::runtime_config::schedule_treasury`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.runtimeConfig, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.address(normalizeSuiAddress(options.treasury)),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch::apply_curve_fee_cap_delay`. Permissionless; applies a ready notice change. */
-  applyCurveFeeCapDelay(options: {
-    memeType: string;
-    quoteType: string;
-    launch: SharedObjectReference<true>;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::apply_curve_fee_cap_delay`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch::apply_curve_fee_cap_reassignment`. Permissionless; hands the cap to the ready recipient. */
-  applyCurveFeeCapReassignment(options: {
-    memeType: string;
-    quoteType: string;
-    launch: SharedObjectReference<true>;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::apply_curve_fee_cap_reassignment`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch::apply_metadata_cap_delay`. Permissionless; applies a ready notice change. */
-  applyMetadataCapDelay(options: {
-    memeType: string;
-    quoteType: string;
-    launch: SharedObjectReference<true>;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::apply_metadata_cap_delay`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch::apply_metadata_cap_reassignment`. Permissionless; hands the cap to the ready recipient. */
-  applyMetadataCapReassignment(options: {
-    memeType: string;
-    quoteType: string;
-    launch: SharedObjectReference<true>;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::apply_metadata_cap_reassignment`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch::cancel_curve_fee_cap_reassignment`. Requires CancelAdmin. */
-  cancelCurveFeeCapReassignment(options: {
-    memeType: string;
-    quoteType: string;
-    launch: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::cancel_curve_fee_cap_reassignment`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `launch::cancel_metadata_cap_reassignment`. Requires CancelAdmin. */
-  cancelMetadataCapReassignment(options: {
-    memeType: string;
-    quoteType: string;
-    launch: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::cancel_metadata_cap_reassignment`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `launch::schedule_curve_fee_cap_delay`. Requires CreatorAdmin. */
-  scheduleCurveFeeCapDelay(options: {
-    memeType: string;
-    quoteType: string;
-    launch: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    delayMs: bigint;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::schedule_curve_fee_cap_delay`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch::schedule_curve_fee_cap_reassignment`. Requires CreatorAdmin. */
-  scheduleCurveFeeCapReassignment(options: {
-    memeType: string;
-    quoteType: string;
-    launch: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    recipient: string;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::schedule_curve_fee_cap_reassignment`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.address(normalizeSuiAddress(options.recipient)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch::schedule_metadata_cap_delay`. Requires CreatorAdmin. */
-  scheduleMetadataCapDelay(options: {
-    memeType: string;
-    quoteType: string;
-    launch: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    delayMs: bigint;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::schedule_metadata_cap_delay`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `launch::schedule_metadata_cap_reassignment`. Requires CreatorAdmin. */
-  scheduleMetadataCapReassignment(options: {
-    memeType: string;
-    quoteType: string;
-    launch: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    recipient: string;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::schedule_metadata_cap_reassignment`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "launch", options.launch, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.address(normalizeSuiAddress(options.recipient)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `blast_fun::pause`. Requires PauseAdmin. */
-  pause(options: { adminWitness: TransactionObjectInput; bits: number }) {
-    if (
-      !Number.isInteger(options.bits) ||
-      options.bits <= 0 ||
-      options.bits > 255 ||
-      (options.bits & ~7) !== 0
-    )
-      throw new RangeError("invalid pause bits");
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::blast_fun::pause`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.packageVersion, true),
-          tx.object(options.adminWitness),
-          tx.pure.u8(options.bits),
-        ],
-      });
-    };
-  }
-  /**
-   * `package_admin::unpause`. Requires UnpauseAdmin. Aborts with
-   * `unguarded_notice` (44) unless the upgrade, runtime and launch policy
-   * notices are all nonzero, with no pending zero notice or admission.
-   */
-  unpause(options: {
-    packageAdmin: SharedObjectReference<false>;
-    adminWitness: TransactionObjectInput;
-    bits: number;
-  }) {
-    if (
-      !Number.isInteger(options.bits) ||
-      options.bits <= 0 ||
-      options.bits > 255 ||
-      (options.bits & ~7) !== 0
-    )
-      throw new RangeError("invalid pause bits");
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::unpause`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, false),
-          deploymentObject(tx, this.deployment.packageVersion, true),
-          tx.object(options.adminWitness),
-          this.#runtimeConfig(tx),
-          this.#launchConfig(tx),
-          tx.pure.u8(options.bits),
-        ],
-      });
-    };
-  }
-  /** `package_admin::apply_upgrade_delay`. Permissionless; the contract validates readiness and ownership. */
-  applyUpgradeDelay(options: { packageAdmin: SharedObjectReference<true> }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::apply_upgrade_delay`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::authorize_upgrade`. Requires UpgradeAdmin. */
-  authorizeUpgrade(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    digest: Uint8Array;
-  }) {
-    if (options.digest.length !== 32)
-      throw new RangeError("digest must contain 32 bytes");
-    return (tx: Transaction): TransactionResult => {
-      return tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::authorize_upgrade`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.vector("u8", Array.from(options.digest)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::cancel_upgrade_action`. Requires CancelAdmin. */
-  cancelUpgradeAction(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::cancel_upgrade_action`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `package_admin::commit_upgrade_and_advance`. Requires UpgradeAdmin. */
-  commitUpgradeAndAdvance(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    receipt: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::commit_upgrade_and_advance`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, true),
-          tx.object(options.adminWitness),
-          tx.object(options.receipt),
-        ],
-      });
-    };
-  }
-  /** `package_admin::make_immutable`. Requires UpgradeAdmin. */
-  makeImmutable(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::make_immutable`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::schedule_make_immutable`. Requires UpgradeAdmin. */
-  scheduleMakeImmutable(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::schedule_make_immutable`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::schedule_upgrade`. Requires UpgradeAdmin. */
-  scheduleUpgrade(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    digest: Uint8Array;
-  }) {
-    if (options.digest.length !== 32)
-      throw new RangeError("digest must contain 32 bytes");
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::schedule_upgrade`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.vector("u8", Array.from(options.digest)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::schedule_upgrade_delay`. Requires UpgradeAdmin. */
-  scheduleUpgradeDelay(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    delayMs: bigint;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::schedule_upgrade_delay`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::wrap`. Permissionless; the contract validates readiness and ownership. */
-  wrapPublication(options: {
-    publication: TransactionObjectInput;
-    upgradeCap: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::wrap`,
-        typeArguments: [],
-        arguments: [
-          tx.object(options.publication),
-          tx.object(options.upgradeCap),
-        ],
-      });
-    };
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#runtimeCall("schedule_protocol_fee_share", options, (tx) => [
+      this.core.bps(share)(tx),
+      tx.pure.u64(delayMs),
+      tx.object.clock(),
+    ]);
   }
 
+  applyProtocolFeeShare() {
+    return this.#runtimeCall("apply_protocol_fee_share", null, (tx) => [
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `CancelAdmin`. */
+  cancelProtocolFeeShare(options: AdminWitnessInput) {
+    return this.#runtimeCall("cancel_protocol_fee_share", options);
+  }
+
+  // `launch` creator-cap governance.
+
+  /** `CreatorAdmin`: this launch's curve-fee cap reassignment delay. */
+  scheduleCurveFeeCapDelay(
+    options: LaunchInput & AdminWitnessInput & { delayMs: bigint },
+  ) {
+    return this.#capDelay("schedule_curve_fee_cap_delay", options);
+  }
+
+  /** `CreatorAdmin`: a replacement curve-fee cap recipient, after the delay. */
+  scheduleCurveFeeCapReassignment(
+    options: LaunchInput & AdminWitnessInput & { recipient: string },
+  ) {
+    return this.#capReassignment(
+      "schedule_curve_fee_cap_reassignment",
+      options,
+    );
+  }
+
+  /** `CancelAdmin`. */
+  cancelCurveFeeCapReassignment(options: LaunchInput & AdminWitnessInput) {
+    return this.#launchCall(
+      "cancel_curve_fee_cap_reassignment",
+      options,
+      (tx) => [tx.object(options.adminWitness)],
+    );
+  }
+
+  applyCurveFeeCapDelay(options: LaunchInput) {
+    return this.#launchCall("apply_curve_fee_cap_delay", options, (tx) => [
+      tx.object.clock(),
+    ]);
+  }
+
+  /** Anyone: issues a fresh curve-fee cap to the ready recipient. */
+  applyCurveFeeCapReassignment(options: LaunchInput) {
+    return this.#launchCall(
+      "apply_curve_fee_cap_reassignment",
+      options,
+      (tx) => [tx.object.clock()],
+    );
+  }
+
+  /** `CreatorAdmin`: this launch's creator metadata cap reassignment delay. */
+  scheduleCreatorMetadataCapDelay(
+    options: LaunchInput & AdminWitnessInput & { delayMs: bigint },
+  ) {
+    return this.#capDelay("schedule_creator_metadata_cap_delay", options);
+  }
+
+  /** `CreatorAdmin`: a replacement creator metadata cap recipient, after the delay. */
+  scheduleCreatorMetadataCapReassignment(
+    options: LaunchInput & AdminWitnessInput & { recipient: string },
+  ) {
+    return this.#capReassignment(
+      "schedule_creator_metadata_cap_reassignment",
+      options,
+    );
+  }
+
+  /** `CancelAdmin`. */
+  cancelCreatorMetadataCapReassignment(
+    options: LaunchInput & AdminWitnessInput,
+  ) {
+    return this.#launchCall(
+      "cancel_creator_metadata_cap_reassignment",
+      options,
+      (tx) => [tx.object(options.adminWitness)],
+    );
+  }
+
+  applyCreatorMetadataCapDelay(options: LaunchInput) {
+    return this.#launchCall(
+      "apply_creator_metadata_cap_delay",
+      options,
+      (tx) => [tx.object.clock()],
+    );
+  }
+
+  /** Anyone: issues a fresh creator metadata cap to the ready recipient. */
+  applyCreatorMetadataCapReassignment(options: LaunchInput) {
+    return this.#launchCall(
+      "apply_creator_metadata_cap_reassignment",
+      options,
+      (tx) => [tx.object.clock()],
+    );
+  }
+
+  #capDelay(
+    functionName: string,
+    options: LaunchInput & AdminWitnessInput & { delayMs: bigint },
+  ) {
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#launchCall(functionName, options, (tx) => [
+      tx.object(options.adminWitness),
+      tx.pure.u64(delayMs),
+      tx.object.clock(),
+    ]);
+  }
+
+  #capReassignment(
+    functionName: string,
+    options: LaunchInput & AdminWitnessInput & { recipient: string },
+  ) {
+    const recipient = normalizeSuiAddress(options.recipient);
+    if (BigInt(recipient) === 0n) {
+      throw new RangeError("recipient must be a nonzero Sui address");
+    }
+    return this.#launchCall(functionName, options, (tx) => [
+      tx.object(options.adminWitness),
+      tx.pure.address(recipient),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `launch_config::<fn>(config (mut), package_version, admin_witness, ...)`. */
   #configCall(
-    target: `${"launch_config" | "runtime_config"}::${string}`,
-    options: { adminWitness: TransactionObjectInput },
-    extra: (tx: Transaction) => TransactionArgument[],
+    functionName: string,
+    options: AdminWitnessInput,
+    extra: (tx: Transaction) => TransactionArgument[] = () => [],
     typeArguments: string[] = [],
   ) {
-    return (tx: Transaction): void => {
+    return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::${target}`,
+        target: this.#target("launch_config", functionName),
         typeArguments,
         arguments: [
-          target.startsWith("launch_config")
-            ? this.#launchConfig(tx, true)
-            : this.#runtimeConfig(tx, true),
+          this.#launchConfig(tx, true),
           this.#packageVersion(tx),
           tx.object(options.adminWitness),
           ...extra(tx),
         ],
       });
-    };
   }
 
-  #buyCall(
-    options: LaunchTypes & {
-      quoteCoin: TransactionObjectInput;
-      minMemeOut: bigint;
-    },
-    launch: (tx: Transaction) => TransactionArgument,
-  ) {
-    const types = normalizeLaunchTypes(options);
-    requireU64("minMemeOut", options.minMemeOut);
+  /** `launch_config::apply_*(config (mut), package_version, clock)`. */
+  #applyConfig(functionName: string, typeArguments: string[] = []) {
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::launch::buy`,
-        typeArguments: [types.memeType, types.quoteType],
+        target: this.#target("launch_config", functionName),
+        typeArguments,
         arguments: [
-          launch(tx),
+          this.#launchConfig(tx, true),
           this.#packageVersion(tx),
-          this.#runtimeConfig(tx),
-          tx.object(options.quoteCoin),
-          tx.pure.u64(options.minMemeOut),
-        ],
-      });
-  }
-
-  #joinCall(
-    options: LaunchTypes & { quoteCoin: TransactionObjectInput },
-    launch: (tx: Transaction) => TransactionArgument,
-  ) {
-    const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::launch::join_opening_round`,
-        typeArguments: [types.memeType, types.quoteType],
-        arguments: [
-          launch(tx),
-          this.#packageVersion(tx),
-          tx.object(options.quoteCoin),
           tx.object.clock(),
         ],
       });
-    };
+  }
+
+  /** `runtime_config::<fn>(config (mut), package_version, [admin_witness], ...)`. */
+  #runtimeCall(
+    functionName: string,
+    options: AdminWitnessInput | null,
+    extra: (tx: Transaction) => TransactionArgument[] = () => [],
+  ) {
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: this.#target("runtime_config", functionName),
+        arguments: [
+          this.#runtimeConfig(tx, true),
+          this.#packageVersion(tx),
+          ...(options ? [tx.object(options.adminWitness)] : []),
+          ...extra(tx),
+        ],
+      });
+  }
+
+  /** `launch::<fn><Meme, Quote>(launch (mut), package_version, ...)`. */
+  #launchCall(
+    functionName: string,
+    options: LaunchInput,
+    extra: (tx: Transaction) => TransactionArgument[],
+  ) {
+    const types = normalizeLaunchTypes(options);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: this.#target("launch", functionName),
+        typeArguments: [types.memeType, types.quoteType],
+        arguments: [
+          sharedObject(tx, "launch", options.launch, true),
+          this.#packageVersion(tx),
+          ...extra(tx),
+        ],
+      });
   }
 
   #initializerCall(
@@ -1644,9 +1165,9 @@ export class LaunchpadCalls {
     extra: (tx: Transaction) => TransactionArgument[],
   ) {
     const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): void => {
+    return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::launch::${functionName}`,
+        target: this.#target("launch", functionName),
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           options.initializer,
@@ -1654,7 +1175,6 @@ export class LaunchpadCalls {
           ...extra(tx),
         ],
       });
-    };
   }
 
   #setMemeMetadata(
@@ -1666,19 +1186,22 @@ export class LaunchpadCalls {
     if (typeof value !== "string") {
       throw new TypeError(`${functionName} value must be a string`);
     }
-    return (tx: Transaction): void => {
+    return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: `${this.deployment.packageId}::launch::${functionName}`,
+        target: this.#target("launch", functionName),
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           sharedObject(tx, "launch", options.launch, options.launch.mutable),
           this.#packageVersion(tx),
-          tx.object(options.blastMetadataCap),
+          tx.object(options.creatorMetadataCap),
           sharedObject(tx, "currency", options.currency, true),
           tx.pure.string(value),
         ],
       });
-    };
+  }
+
+  #target(module: string, functionName: string): string {
+    return `${this.deployment.packageId}::${module}::${functionName}`;
   }
 
   #packageVersion(tx: Transaction): TransactionObjectArgument {
@@ -1692,6 +1215,10 @@ export class LaunchpadCalls {
   #runtimeConfig(tx: Transaction, mutable = false): TransactionObjectArgument {
     return deploymentObject(tx, this.deployment.runtimeConfig, mutable);
   }
+
+  #treasury(tx: Transaction): TransactionObjectArgument {
+    return deploymentObject(tx, this.deployment.core.treasury, false);
+  }
 }
 
 /** A 32-byte Ed25519 public key, as bytes or hex (with or without `0x`). */
@@ -1704,43 +1231,62 @@ function claimSignerKey(value: ClaimSignerPublicKey): number[] {
   return Array.from(bytes);
 }
 
-/** Launchpad settings `configureNow` applies at a zero notice. */
+/** Launchpad settings `configureNow` applies at a zero delay. */
 export type LaunchpadSettings = {
   tradeFees?: { quoteFeeBps: bigint; memeFeeBps: bigint };
   protocolAllocation?: { memeBps: bigint; quoteBps: bigint };
+  protocolLpFees?: { memeBps: bigint; quoteBps: bigint };
   /** SUI, in MIST, each launch pays at creation. */
   creationFee?: bigint;
   protocolFeeShareBps?: bigint;
-  treasury?: string;
 };
 
 /**
- * The notice `armNotices` gives each named value, in milliseconds. A
- * setting restates its applied value beside its new notice. Upgrade custody
- * is not here: `wrap` starts it at a 48-hour notice, which
- * `scheduleUpgradeDelay` changes only after that notice.
+ * The delay `armNotices` gives each named value, in milliseconds. A setting
+ * restates its applied value beside its new delay. The upgrade delay is the
+ * generic administration's (`AdminCalls.scheduleUpgradeDelay`).
  */
 export type LaunchpadNotices = {
   tradeFees?: { quoteFeeBps: bigint; memeFeeBps: bigint; delayMs: bigint };
   protocolAllocation?: { memeBps: bigint; quoteBps: bigint; delayMs: bigint };
+  protocolLpFees?: { memeBps: bigint; quoteBps: bigint; delayMs: bigint };
   creationFee?: { creationFee: bigint; delayMs: bigint };
   protocolFeeShare?: { protocolFeeShareBps: bigint; delayMs: bigint };
-  treasury?: { treasury: string; delayMs: bigint };
-  /** The notice for each later migration witness admission. */
-  migrationDelayMs?: bigint;
-  /** The notice for each later account-claim signer admission. */
+  /** The delay of each later venue admission. */
+  venueDelayMs?: bigint;
+  /** The delay of each later account-claim signer admission. */
   claimSignerDelayMs?: bigint;
 };
 
-/** Admissions `configureNow` makes while their notices are zero. */
-type ZeroNoticeAdmissions = {
-  migrationWitnessTypes?: readonly string[];
-  /** Keys that may sign account claims; both notices start at zero. */
+/** Admissions `configureNow` makes: venues and signers at a zero delay, the rest at once. */
+type ImmediateAdmissions = {
+  /** Venue witness types (`venueWitnessType`). */
+  venueTypes?: readonly string[];
+  /** Keys that may sign account claims; both delays start at zero. */
   creatorClaimSigners?: readonly ClaimSignerPublicKey[];
+  quoteTypes?: readonly string[];
+  /** Meme precisions to admit beyond the published six and nine. */
+  memeDecimals?: readonly number[];
+  partners?: readonly SharedObjectReference<false>[];
+};
+
+/** The owned objects a Meme publication sends the publisher (`readMemePublication`). */
+export type LaunchTicketInput = {
+  ticket: TransactionObjectInput;
+  treasuryCap: TransactionObjectInput;
+};
+
+/** A launch's vault and the curve-fee cap that proves ownership of it. */
+type VaultOwnerInput = LaunchTypes & {
+  launch: SharedObjectReference;
+  curveFeeCapId: string;
+  vault: SharedObjectIdentity;
 };
 
 export class LaunchpadTransactions {
   readonly call: LaunchpadCalls;
+  readonly migrators: MigratorCalls;
+  readonly vault: VaultCalls;
   readonly #useGasCoin: boolean;
 
   constructor(
@@ -1748,30 +1294,34 @@ export class LaunchpadTransactions {
     options: CoinSourceOptions = {},
   ) {
     this.call = new LaunchpadCalls(deployment);
+    this.migrators = new MigratorCalls(this.call.deployment.migrators);
+    this.vault = new VaultCalls(this.call.deployment.vault);
     this.#useGasCoin = options.useGasCoin ?? true;
   }
 
   /**
    * Publishes the generated Meme package and makes it immutable. Its
-   * initializer transfers the `LaunchTicket` to the sender, who starts the
-   * launch through a migration adapter (`MigratorTransactions.createCetusLaunch`
-   * or `createBluefinLaunch`).
+   * initializer transfers the `LaunchTicket<Meme>` and the `TreasuryCap<Meme>`
+   * to the sender (`readMemePublication`), who then runs `createLaunch`.
    */
   publishMeme(options: MemeTemplateOptions): Transaction {
+    const { deployment } = this.call;
     const tx = new Transaction();
     const upgradeCap = tx.add(async (innerTx) => {
       const module = await buildMemePackageBytecode(
         options,
-        this.call.deployment.originalPackageId,
+        deployment.originalPackageId,
       );
       return innerTx.publish({
         modules: [Array.from(module)],
         dependencies: [
           MOVE_STDLIB_ADDRESS,
           SUI_FRAMEWORK_ADDRESS,
-          this.call.deployment.admin.packageId,
-          this.call.deployment.partnersPackageId,
-          this.call.deployment.packageId,
+          deployment.admin.packageId,
+          deployment.partners.packageId,
+          deployment.vestingPackageId,
+          deployment.core.packageId,
+          deployment.packageId,
         ],
       });
     });
@@ -1782,9 +1332,178 @@ export class LaunchpadTransactions {
     return tx;
   }
 
+  /**
+   * One PTB from a published Meme to a shared launch: the venue's `prepare`
+   * (the `TreasuryCap` by reference) returns the `VenueTicket`, `launch::new`
+   * takes the ticket and the cap by value, the settings follow, the exact SUI
+   * `creationFee` (`LaunchConfigState.creationFee`) pays `finalize`, the
+   * optional purchase or opening-round bid runs on the owned launch and its
+   * coins go to `preShareBuy.recipient`, and `share` opens it. `currency` is
+   * the shared `Currency<Meme>` (`readCurrencyRegistration`).
+   */
+  createLaunch(
+    options: LaunchTypes &
+      LaunchTicketInput &
+      LaunchVenue &
+      LaunchSettings & {
+        currency: SharedObjectReference<true>;
+        creationFee: bigint;
+        preShareBuy?: PreShareBuyInput;
+      } & CoinSourceOptions,
+  ): Transaction {
+    const { call } = this;
+    const { openingRoundMs = 0n, partner, preShareBuy } = options;
+    const useGasCoin = options.useGasCoin ?? this.#useGasCoin;
+    const creationFee = requireU64("creationFee", options.creationFee);
+    if (preShareBuy) requirePositiveU64("quoteAmount", preShareBuy.quoteAmount);
+    const tx = new Transaction();
+    const treasuryCap = tx.object(options.treasuryCap);
+    const venueTicket = tx.add(
+      options.venue === "cetus"
+        ? this.migrators.prepareCetus({
+            ...options,
+            cetus: options.cetus,
+            treasuryCap,
+            tickSpacing: options.tier.tickSpacing,
+          })
+        : this.migrators.prepareBluefin({
+            ...options,
+            treasuryCap,
+            currency: options.currency,
+            tickSpacing: options.tier.tickSpacing,
+            feeRate: options.tier.feeRate,
+          }),
+    );
+    const initializer = tx.add(
+      call.newLaunch({ ...options, treasuryCap, venueTicket }),
+    );
+    const settings = { ...options, initializer };
+    tx.add(call.setVirtualQuote(settings));
+    tx.add(call.setGraduationTarget(settings));
+    tx.add(call.setAllocationPlan(settings));
+    tx.add(call.setLpFeeSplit(settings));
+    if (openingRoundMs > 0n)
+      tx.add(call.setOpeningRound({ ...settings, openingRoundMs }));
+    if (partner) tx.add(call.setPartner({ ...settings, partner }));
+    const launch = tx.add(
+      call.finalize({
+        ...settings,
+        creationFee: tx.coin({
+          type: "0x2::sui::SUI",
+          balance: creationFee,
+          useGasCoin,
+        }),
+      }),
+    );
+    if (preShareBuy) {
+      const quoteCoin = tx.coin({
+        type: normalizeStructTag(options.quoteType),
+        balance: preShareBuy.quoteAmount,
+        useGasCoin,
+      });
+      if (openingRoundMs > 0n) {
+        tx.add(call.joinOpeningRound({ ...options, launch, quoteCoin }));
+      } else {
+        const bought = tx.add(
+          call.buy({
+            ...options,
+            launch,
+            quoteCoin,
+            minMemeOut: preShareBuy.minMemeOut,
+          }),
+        );
+        tx.transferObjects(
+          moveResults(bought, 2),
+          normalizeSuiAddress(preShareBuy.recipient),
+        );
+      }
+    }
+    tx.add(call.share({ ...options, launch }));
+    return tx;
+  }
+
+  /**
+   * The two-call migration, one PTB, anyone: `launch::migrate` returns the
+   * `Migration`, which the launch's venue (`LaunchState.venue`, `venueOf`)
+   * redeems at once into its pool and vault.
+   */
+  migrate(
+    options: LaunchInput &
+      MigrationVenue & {
+        currency: SharedObjectReference<true>;
+      } & CoinSourceOptions,
+  ): Transaction {
+    const tx = new Transaction();
+    const migration = tx.add(this.call.migrate(options));
+    if (options.venue === "cetus") {
+      tx.add(
+        this.migrators.migrateCetus({
+          ...options,
+          migration,
+          cetus: options.cetus,
+        }),
+      );
+    } else {
+      tx.add(
+        this.migrators.migrateBluefin({
+          ...options,
+          migration,
+          currency: options.currency,
+          quoteCurrency: options.quoteCurrency,
+          bluefinConfig: options.bluefinConfig,
+          creationFee: tx.coin({
+            type: "0x2::sui::SUI",
+            balance: requireU64("creationFee", options.creationFee),
+            useGasCoin: options.useGasCoin ?? this.#useGasCoin,
+          }),
+        }),
+      );
+    }
+    return tx;
+  }
+
+  /**
+   * `prove_owner` with the launch's live `CurveFeeCap`, then
+   * `vault::claim_owner_balances`; both coins go to `recipient`. The vault
+   * aborts when both owner balances are zero (`VaultState.ownerMeme`,
+   * `ownerQuote`).
+   */
+  claimOwnerBalances(
+    options: VaultOwnerInput & { recipient: string },
+  ): Transaction {
+    const tx = new Transaction();
+    const proof = tx.add(this.#proveOwner(options));
+    const coins = tx.add(this.vault.claimOwnerBalances({ ...options, proof }));
+    tx.transferObjects(
+      moveResults(coins, 2),
+      normalizeSuiAddress(options.recipient),
+    );
+    return tx;
+  }
+
+  /** `prove_owner`, then `vault::schedule_fee_split` of `feeSplit`. */
+  scheduleFeeSplit(
+    options: VaultOwnerInput & { feeSplit: FeeSplit },
+  ): Transaction {
+    const split = this.call.core.feeSplit(options.feeSplit);
+    const tx = new Transaction();
+    const proof = tx.add(this.#proveOwner(options));
+    tx.add(
+      this.vault.scheduleFeeSplit({ ...options, proof, proposed: split(tx) }),
+    );
+    return tx;
+  }
+
+  /** `prove_owner`, then `vault::cancel_fee_split`. */
+  cancelFeeSplit(options: VaultOwnerInput): Transaction {
+    const tx = new Transaction();
+    const proof = tx.add(this.#proveOwner(options));
+    tx.add(this.vault.cancelFeeSplit({ ...options, proof }));
+    return tx;
+  }
+
   buy(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
+    options: LaunchInput & {
       quoteAmount: bigint;
       minMemeOut: bigint;
       recipient: string;
@@ -1797,17 +1516,16 @@ export class LaunchpadTransactions {
       balance: options.quoteAmount,
       useGasCoin: options.useGasCoin ?? this.#useGasCoin,
     });
-    const buyResult = tx.add(this.call.buy({ ...options, quoteCoin }));
+    const bought = tx.add(this.call.buy({ ...options, quoteCoin }));
     tx.transferObjects(
-      moveResults(buyResult, 2),
+      moveResults(bought, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
   }
 
   sell(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
+    options: LaunchInput & {
       memeAmount: bigint;
       minQuoteOut: bigint;
       recipient: string;
@@ -1825,126 +1543,110 @@ export class LaunchpadTransactions {
   }
 
   claimCreatorCaps(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
+    options: LaunchInput & {
       recipient: string;
       accountAttestation?: Uint8Array | null;
     },
   ): Transaction {
     const tx = new Transaction();
-    const claimResult = tx.add(this.call.claimCreatorCaps(options));
+    const caps = tx.add(this.call.claimCreatorCaps(options));
     tx.transferObjects(
-      moveResults(claimResult, 2),
+      moveResults(caps, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
   }
 
   claimCreatorFees(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      curveFeeCapId: string;
-      recipient: string;
-    },
+    options: LaunchInput & { curveFeeCapId: string; recipient: string },
   ): Transaction {
     const tx = new Transaction();
-    const claimResult = tx.add(
+    const fees = tx.add(
       this.call.claimCreatorFees({
         ...options,
         curveFeeCap: options.curveFeeCapId,
       }),
     );
     tx.transferObjects(
-      moveResults(claimResult, 2),
+      moveResults(fees, 2),
       normalizeSuiAddress(options.recipient),
     );
     return tx;
   }
 
   setName(
-    options: Omit<MemeMetadataUpdate, "blastMetadataCap"> & {
-      blastMetadataCapId: string;
+    options: Omit<MemeMetadataUpdate, "creatorMetadataCap"> & {
+      creatorMetadataCapId: string;
       name: string;
     },
   ): Transaction {
-    const tx = new Transaction();
-    tx.add(
+    return single(
       this.call.setName({
         ...options,
-        blastMetadataCap: options.blastMetadataCapId,
+        creatorMetadataCap: options.creatorMetadataCapId,
       }),
     );
-    return tx;
   }
 
   setDescription(
-    options: Omit<MemeMetadataUpdate, "blastMetadataCap"> & {
-      blastMetadataCapId: string;
+    options: Omit<MemeMetadataUpdate, "creatorMetadataCap"> & {
+      creatorMetadataCapId: string;
       description: string;
     },
   ): Transaction {
-    const tx = new Transaction();
-    tx.add(
+    return single(
       this.call.setDescription({
         ...options,
-        blastMetadataCap: options.blastMetadataCapId,
+        creatorMetadataCap: options.creatorMetadataCapId,
       }),
     );
-    return tx;
   }
 
   setIconUrl(
-    options: Omit<MemeMetadataUpdate, "blastMetadataCap"> & {
-      blastMetadataCapId: string;
+    options: Omit<MemeMetadataUpdate, "creatorMetadataCap"> & {
+      creatorMetadataCapId: string;
       iconUrl: string;
     },
   ): Transaction {
-    const tx = new Transaction();
-    tx.add(
+    return single(
       this.call.setIconUrl({
         ...options,
-        blastMetadataCap: options.blastMetadataCapId,
+        creatorMetadataCap: options.creatorMetadataCapId,
       }),
     );
-    return tx;
   }
 
   /**
-   * Pays Blast's fees to the `RuntimeConfig` treasury; any sender may claim.
-   * Pass the launch's `partner` when `LaunchState.partnerId` is set.
+   * Pays Blast's launch fees to the core treasury; any sender may claim. Pass
+   * the launch's `partner` exactly when `LaunchState.partnerId` is set.
    */
   claimProtocolFees(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      partner?: SharedObjectReference<false> | null;
-    },
+    options: LaunchInput & { partner?: SharedObjectReference<false> | null },
   ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.claimProtocolFees(options));
-    return tx;
+    const { partner } = options;
+    return single(
+      partner
+        ? this.call.claimProtocolFeesWithPartner({ ...options, partner })
+        : this.call.claimProtocolFees(options),
+    );
   }
 
   /**
    * Shares a published Meme's `Currency<Meme>` through
    * `coin_registry::finalize_registration`, the step between publication and
-   * launch creation. Anyone may run it; `readCurrencyRegistration` reads the
+   * `createLaunch`. Anyone may run it; `readCurrencyRegistration` reads the
    * shared currency from its effects.
    */
   finalizeCurrencyRegistration(options: {
     memeType: string;
     currency: ObjectVersionReference;
   }): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.finalizeCurrencyRegistration(options));
-    return tx;
+    return single(this.call.finalizeCurrencyRegistration(options));
   }
 
   /** Adds a bid of `quoteAmount` to the sender's opening-round bid. */
   joinOpeningRound(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      quoteAmount: bigint;
-    } & CoinSourceOptions,
+    options: LaunchInput & { quoteAmount: bigint } & CoinSourceOptions,
   ): Transaction {
     requirePositiveU64("quoteAmount", options.quoteAmount);
     const tx = new Transaction();
@@ -1957,20 +1659,13 @@ export class LaunchpadTransactions {
     return tx;
   }
 
-  settleOpeningRound(
-    options: LaunchTypes & { launch: SharedObjectReference<true> },
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.settleOpeningRound(options));
-    return tx;
+  settleOpeningRound(options: LaunchInput): Transaction {
+    return single(this.call.settleOpeningRound(options));
   }
 
   /** Delivers each bidder's share of a settled opening round in one PTB. */
   deliverOpeningRound(
-    options: LaunchTypes & {
-      launch: SharedObjectReference<true>;
-      bidders: readonly string[];
-    },
+    options: LaunchInput & { bidders: readonly string[] },
   ): Transaction {
     const tx = new Transaction();
     for (const bidder of options.bidders) {
@@ -1979,479 +1674,325 @@ export class LaunchpadTransactions {
     return tx;
   }
 
-  setMemeDecimalsAllowed(options: {
-    adminCapId: string;
-    decimals: number;
-    allowed: boolean;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "ListingAdmin", (adminWitness) =>
+  // Administrator actions, each signed in as its role in the same PTB.
+
+  setMemeDecimalsAllowed(
+    options: AdminCap & { decimals: number; allowed: boolean },
+  ): Transaction {
+    return this.#asAdmin(options, "ListingAdmin", (adminWitness) =>
       this.call.setMemeDecimalsAllowed({ ...options, adminWitness }),
     );
   }
 
-  setQuoteAllowed(options: {
-    adminCapId: string;
-    quoteType: string;
-    allowed: boolean;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "ListingAdmin", (adminWitness) =>
+  setQuoteAllowed(
+    options: AdminCap & { quoteType: string; allowed: boolean },
+  ): Transaction {
+    return this.#asAdmin(options, "ListingAdmin", (adminWitness) =>
       this.call.setQuoteAllowed({ ...options, adminWitness }),
     );
   }
 
-  addPartner(options: {
-    adminCapId: string;
-    partner: SharedObjectReference<false>;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+  addPartner(
+    options: AdminCap & { partner: SharedObjectReference<false> },
+  ): Transaction {
+    return this.#asAdmin(options, "FeeAdmin", (adminWitness) =>
       this.call.addPartner({ ...options, adminWitness }),
     );
   }
 
-  removePartner(options: {
-    adminCapId: string;
-    partner: SharedObjectReference<false>;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+  removePartner(
+    options: AdminCap & { partner: SharedObjectReference<false> },
+  ): Transaction {
+    return this.#asAdmin(options, "FeeAdmin", (adminWitness) =>
       this.call.removePartner({ ...options, adminWitness }),
     );
   }
 
-  scheduleCreatorClaimSigner(options: {
-    adminCapId: string;
-    signerPublicKey: ClaimSignerPublicKey;
-  }): Transaction {
-    return this.#asAdmin(
-      options.adminCapId,
-      "ClaimSignerAdmin",
-      (adminWitness) =>
-        this.call.scheduleCreatorClaimSigner({ ...options, adminWitness }),
+  scheduleProtocolAllocation(
+    options: AdminCap & { memeBps: bigint; quoteBps: bigint; delayMs: bigint },
+  ): Transaction {
+    return this.#asAdmin(options, "TreasuryAdmin", (adminWitness) =>
+      this.call.scheduleProtocolAllocation({ ...options, adminWitness }),
+    );
+  }
+
+  applyProtocolAllocation(): Transaction {
+    return single(this.call.applyProtocolAllocation());
+  }
+
+  cancelProtocolAllocation(options: AdminCap): Transaction {
+    return this.#asAdmin(options, "CancelAdmin", (adminWitness) =>
+      this.call.cancelProtocolAllocation({ adminWitness }),
+    );
+  }
+
+  scheduleProtocolLpFees(
+    options: AdminCap & { memeBps: bigint; quoteBps: bigint; delayMs: bigint },
+  ): Transaction {
+    return this.#asAdmin(options, "FeeAdmin", (adminWitness) =>
+      this.call.scheduleProtocolLpFees({ ...options, adminWitness }),
+    );
+  }
+
+  applyProtocolLpFees(): Transaction {
+    return single(this.call.applyProtocolLpFees());
+  }
+
+  cancelProtocolLpFees(options: AdminCap): Transaction {
+    return this.#asAdmin(options, "CancelAdmin", (adminWitness) =>
+      this.call.cancelProtocolLpFees({ adminWitness }),
+    );
+  }
+
+  scheduleTradeFees(
+    options: AdminCap & {
+      quoteFeeBps: bigint;
+      memeFeeBps: bigint;
+      delayMs: bigint;
+    },
+  ): Transaction {
+    return this.#asAdmin(options, "FeeAdmin", (adminWitness) =>
+      this.call.scheduleTradeFees({ ...options, adminWitness }),
+    );
+  }
+
+  applyTradeFees(): Transaction {
+    return single(this.call.applyTradeFees());
+  }
+
+  cancelTradeFees(options: AdminCap): Transaction {
+    return this.#asAdmin(options, "CancelAdmin", (adminWitness) =>
+      this.call.cancelTradeFees({ adminWitness }),
+    );
+  }
+
+  scheduleCreationFee(
+    options: AdminCap & { creationFee: bigint; delayMs: bigint },
+  ): Transaction {
+    return this.#asAdmin(options, "FeeAdmin", (adminWitness) =>
+      this.call.scheduleCreationFee({ ...options, adminWitness }),
+    );
+  }
+
+  applyCreationFee(): Transaction {
+    return single(this.call.applyCreationFee());
+  }
+
+  cancelCreationFee(options: AdminCap): Transaction {
+    return this.#asAdmin(options, "CancelAdmin", (adminWitness) =>
+      this.call.cancelCreationFee({ adminWitness }),
+    );
+  }
+
+  scheduleVenue(options: AdminCap & VenueTypeInput): Transaction {
+    return this.#asAdmin(options, "VenueAdmin", (adminWitness) =>
+      this.call.scheduleVenue({ ...options, adminWitness }),
+    );
+  }
+
+  applyVenue(options: VenueTypeInput): Transaction {
+    return single(this.call.applyVenue(options));
+  }
+
+  cancelVenue(options: AdminCap & VenueTypeInput): Transaction {
+    return this.#asAdmin(options, "CancelAdmin", (adminWitness) =>
+      this.call.cancelVenue({ ...options, adminWitness }),
+    );
+  }
+
+  removeVenue(options: AdminCap & VenueTypeInput): Transaction {
+    return this.#asAdmin(options, "VenueAdmin", (adminWitness) =>
+      this.call.removeVenue({ ...options, adminWitness }),
+    );
+  }
+
+  scheduleVenueDelay(options: AdminCap & { delayMs: bigint }): Transaction {
+    return this.#asAdmin(options, "VenueAdmin", (adminWitness) =>
+      this.call.scheduleVenueDelay({ ...options, adminWitness }),
+    );
+  }
+
+  applyVenueDelay(): Transaction {
+    return single(this.call.applyVenueDelay());
+  }
+
+  cancelVenueDelay(options: AdminCap): Transaction {
+    return this.#asAdmin(options, "CancelAdmin", (adminWitness) =>
+      this.call.cancelVenueDelay({ adminWitness }),
+    );
+  }
+
+  /** Signs in as `UnpauseAdmin<BLAST_FUN>` and runs `launch_config::unpause`. */
+  unpause(options: AdminCap & { bits: number }): Transaction {
+    const { call } = this;
+    const tx = new Transaction();
+    const adminWitness = tx.add(
+      call.admin.signIn({
+        adminCap: options.adminCapId,
+        role: packageRoleType(call.deployment.admin, call.otw, "UnpauseAdmin"),
+      }),
+    );
+    tx.add(call.unpause({ ...options, adminWitness }));
+    return tx;
+  }
+
+  scheduleCreatorClaimSigner(
+    options: AdminCap & { signerPublicKey: ClaimSignerPublicKey },
+  ): Transaction {
+    return this.#asAdmin(options, "ClaimSignerAdmin", (adminWitness) =>
+      this.call.scheduleCreatorClaimSigner({ ...options, adminWitness }),
     );
   }
 
   applyCreatorClaimSigner(options: {
     signerPublicKey: ClaimSignerPublicKey;
   }): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyCreatorClaimSigner(options));
-    return tx;
+    return single(this.call.applyCreatorClaimSigner(options));
   }
 
-  cancelCreatorClaimSigner(options: {
-    adminCapId: string;
-    signerPublicKey: ClaimSignerPublicKey;
-  }): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+  cancelCreatorClaimSigner(
+    options: AdminCap & { signerPublicKey: ClaimSignerPublicKey },
+  ): Transaction {
+    return this.#asAdmin(options, "CancelAdmin", (adminWitness) =>
       this.call.cancelCreatorClaimSigner({ ...options, adminWitness }),
     );
   }
 
-  scheduleCreatorClaimSignerDelay(options: {
-    adminCapId: string;
-    delayMs: bigint;
-  }): Transaction {
-    return this.#asAdmin(
-      options.adminCapId,
-      "ClaimSignerAdmin",
-      (adminWitness) =>
-        this.call.scheduleCreatorClaimSignerDelay({ ...options, adminWitness }),
+  revokeCreatorClaimSigner(
+    options: AdminCap & { signerPublicKey: ClaimSignerPublicKey },
+  ): Transaction {
+    return this.#asAdmin(options, "ClaimSignerAdmin", (adminWitness) =>
+      this.call.revokeCreatorClaimSigner({ ...options, adminWitness }),
+    );
+  }
+
+  scheduleCreatorClaimSignerDelay(
+    options: AdminCap & { delayMs: bigint },
+  ): Transaction {
+    return this.#asAdmin(options, "ClaimSignerAdmin", (adminWitness) =>
+      this.call.scheduleCreatorClaimSignerDelay({ ...options, adminWitness }),
     );
   }
 
   applyCreatorClaimSignerDelay(): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyCreatorClaimSignerDelay());
-    return tx;
+    return single(this.call.applyCreatorClaimSignerDelay());
   }
 
-  cancelCreatorClaimSignerDelay(options: { adminCapId: string }): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+  cancelCreatorClaimSignerDelay(options: AdminCap): Transaction {
+    return this.#asAdmin(options, "CancelAdmin", (adminWitness) =>
       this.call.cancelCreatorClaimSignerDelay({ adminWitness }),
     );
   }
 
-  /** Signs in as `role` and runs one administrator call in the same PTB. */
-  applyCreationFee(): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyCreationFee());
-    return tx;
-  }
-  applyMigrationDelay(): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyMigrationDelay());
-    return tx;
-  }
-  applyMigrationWitness(
-    options: Parameters<LaunchpadCalls["applyMigrationWitness"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyMigrationWitness(options));
-    return tx;
-  }
-  applyProtocolAllocation(): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyProtocolAllocation());
-    return tx;
-  }
-  applyTradeFees(): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyTradeFees());
-    return tx;
-  }
-  cancelCreationFee(
-    options: Omit<
-      Parameters<LaunchpadCalls["cancelCreationFee"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelCreationFee({ ...options, adminWitness }),
-    );
-  }
-  cancelMigrationDelay(
-    options: Omit<
-      Parameters<LaunchpadCalls["cancelMigrationDelay"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelMigrationDelay({ ...options, adminWitness }),
-    );
-  }
-  cancelMigrationWitness(
-    options: Omit<
-      Parameters<LaunchpadCalls["cancelMigrationWitness"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelMigrationWitness({ ...options, adminWitness }),
-    );
-  }
-  cancelProtocolAllocation(
-    options: Omit<
-      Parameters<LaunchpadCalls["cancelProtocolAllocation"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelProtocolAllocation({ ...options, adminWitness }),
-    );
-  }
-  cancelTradeFees(
-    options: Omit<
-      Parameters<LaunchpadCalls["cancelTradeFees"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelTradeFees({ ...options, adminWitness }),
-    );
-  }
-  removeMigrationWitness(
-    options: Omit<
-      Parameters<LaunchpadCalls["removeMigrationWitness"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
-      this.call.removeMigrationWitness({ ...options, adminWitness }),
-    );
-  }
-  scheduleCreationFee(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleCreationFee"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
-      this.call.scheduleCreationFee({ ...options, adminWitness }),
-    );
-  }
-  scheduleMigrationDelay(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleMigrationDelay"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
-      this.call.scheduleMigrationDelay({ ...options, adminWitness }),
-    );
-  }
-  scheduleMigrationWitness(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleMigrationWitness"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
-      this.call.scheduleMigrationWitness({ ...options, adminWitness }),
-    );
-  }
-  scheduleProtocolAllocation(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleProtocolAllocation"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
-      this.call.scheduleProtocolAllocation({ ...options, adminWitness }),
-    );
-  }
-  scheduleTradeFees(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleTradeFees"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
-      this.call.scheduleTradeFees({ ...options, adminWitness }),
-    );
-  }
-  applyProtocolFeeShare(): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyProtocolFeeShare());
-    return tx;
-  }
-  applyTreasury(): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyTreasury());
-    return tx;
-  }
-  cancelProtocolFeeShare(
-    options: Omit<
-      Parameters<LaunchpadCalls["cancelProtocolFeeShare"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelProtocolFeeShare({ ...options, adminWitness }),
-    );
-  }
-  cancelTreasury(
-    options: Omit<
-      Parameters<LaunchpadCalls["cancelTreasury"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelTreasury({ ...options, adminWitness }),
-    );
-  }
-  revokeCreatorClaimSigner(
-    options: Omit<
-      Parameters<LaunchpadCalls["revokeCreatorClaimSigner"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(
-      options.adminCapId,
-      "ClaimSignerAdmin",
-      (adminWitness) =>
-        this.call.revokeCreatorClaimSigner({ ...options, adminWitness }),
-    );
-  }
   scheduleProtocolFeeShare(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleProtocolFeeShare"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
+    options: AdminCap & { protocolFeeShareBps: bigint; delayMs: bigint },
   ): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+    return this.#asAdmin(options, "FeeAdmin", (adminWitness) =>
       this.call.scheduleProtocolFeeShare({ ...options, adminWitness }),
     );
   }
-  scheduleTreasury(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleTreasury"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
-      this.call.scheduleTreasury({ ...options, adminWitness }),
-    );
+
+  applyProtocolFeeShare(): Transaction {
+    return single(this.call.applyProtocolFeeShare());
   }
-  applyCurveFeeCapDelay(
-    options: Parameters<LaunchpadCalls["applyCurveFeeCapDelay"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyCurveFeeCapDelay(options));
-    return tx;
-  }
-  applyCurveFeeCapReassignment(
-    options: Parameters<LaunchpadCalls["applyCurveFeeCapReassignment"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyCurveFeeCapReassignment(options));
-    return tx;
-  }
-  applyMetadataCapDelay(
-    options: Parameters<LaunchpadCalls["applyMetadataCapDelay"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyMetadataCapDelay(options));
-    return tx;
-  }
-  applyMetadataCapReassignment(
-    options: Parameters<LaunchpadCalls["applyMetadataCapReassignment"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyMetadataCapReassignment(options));
-    return tx;
-  }
-  cancelCurveFeeCapReassignment(
-    options: Omit<
-      Parameters<LaunchpadCalls["cancelCurveFeeCapReassignment"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelCurveFeeCapReassignment({ ...options, adminWitness }),
-    );
-  }
-  cancelMetadataCapReassignment(
-    options: Omit<
-      Parameters<LaunchpadCalls["cancelMetadataCapReassignment"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelMetadataCapReassignment({ ...options, adminWitness }),
-    );
-  }
-  scheduleCurveFeeCapDelay(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleCurveFeeCapDelay"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
-      this.call.scheduleCurveFeeCapDelay({ ...options, adminWitness }),
-    );
-  }
-  scheduleCurveFeeCapReassignment(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleCurveFeeCapReassignment"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
-      this.call.scheduleCurveFeeCapReassignment({ ...options, adminWitness }),
-    );
-  }
-  scheduleMetadataCapDelay(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleMetadataCapDelay"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
-      this.call.scheduleMetadataCapDelay({ ...options, adminWitness }),
-    );
-  }
-  scheduleMetadataCapReassignment(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleMetadataCapReassignment"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CreatorAdmin", (adminWitness) =>
-      this.call.scheduleMetadataCapReassignment({ ...options, adminWitness }),
-    );
-  }
-  pause(
-    options: Omit<Parameters<LaunchpadCalls["pause"]>[0], "adminWitness"> & {
-      adminCapId: string;
-    },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "PauseAdmin", (adminWitness) =>
-      this.call.pause({ ...options, adminWitness }),
-    );
-  }
-  unpause(
-    options: Omit<Parameters<LaunchpadCalls["unpause"]>[0], "adminWitness"> & {
-      adminCapId: string;
-    },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "UnpauseAdmin", (adminWitness) =>
-      this.call.unpause({ ...options, adminWitness }),
-    );
-  }
-  applyUpgradeDelay(
-    options: Parameters<LaunchpadCalls["applyUpgradeDelay"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyUpgradeDelay(options));
-    return tx;
-  }
-  cancelUpgradeAction(
-    options: Omit<
-      Parameters<LaunchpadCalls["cancelUpgradeAction"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelUpgradeAction({ ...options, adminWitness }),
-    );
-  }
-  makeImmutable(
-    options: Omit<
-      Parameters<LaunchpadCalls["makeImmutable"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
-      this.call.makeImmutable({ ...options, adminWitness }),
-    );
-  }
-  scheduleMakeImmutable(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleMakeImmutable"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
-      this.call.scheduleMakeImmutable({ ...options, adminWitness }),
-    );
-  }
-  scheduleUpgrade(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleUpgrade"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
-      this.call.scheduleUpgrade({ ...options, adminWitness }),
-    );
-  }
-  scheduleUpgradeDelay(
-    options: Omit<
-      Parameters<LaunchpadCalls["scheduleUpgradeDelay"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
-      this.call.scheduleUpgradeDelay({ ...options, adminWitness }),
+
+  cancelProtocolFeeShare(options: AdminCap): Transaction {
+    return this.#asAdmin(options, "CancelAdmin", (adminWitness) =>
+      this.call.cancelProtocolFeeShare({ adminWitness }),
     );
   }
 
+  scheduleCurveFeeCapDelay(
+    options: AdminCap & LaunchInput & { delayMs: bigint },
+  ): Transaction {
+    return this.#asAdmin(options, "CreatorAdmin", (adminWitness) =>
+      this.call.scheduleCurveFeeCapDelay({ ...options, adminWitness }),
+    );
+  }
+
+  scheduleCurveFeeCapReassignment(
+    options: AdminCap & LaunchInput & { recipient: string },
+  ): Transaction {
+    return this.#asAdmin(options, "CreatorAdmin", (adminWitness) =>
+      this.call.scheduleCurveFeeCapReassignment({ ...options, adminWitness }),
+    );
+  }
+
+  cancelCurveFeeCapReassignment(options: AdminCap & LaunchInput): Transaction {
+    return this.#asAdmin(options, "CancelAdmin", (adminWitness) =>
+      this.call.cancelCurveFeeCapReassignment({ ...options, adminWitness }),
+    );
+  }
+
+  applyCurveFeeCapDelay(options: LaunchInput): Transaction {
+    return single(this.call.applyCurveFeeCapDelay(options));
+  }
+
+  applyCurveFeeCapReassignment(options: LaunchInput): Transaction {
+    return single(this.call.applyCurveFeeCapReassignment(options));
+  }
+
+  scheduleCreatorMetadataCapDelay(
+    options: AdminCap & LaunchInput & { delayMs: bigint },
+  ): Transaction {
+    return this.#asAdmin(options, "CreatorAdmin", (adminWitness) =>
+      this.call.scheduleCreatorMetadataCapDelay({ ...options, adminWitness }),
+    );
+  }
+
+  scheduleCreatorMetadataCapReassignment(
+    options: AdminCap & LaunchInput & { recipient: string },
+  ): Transaction {
+    return this.#asAdmin(options, "CreatorAdmin", (adminWitness) =>
+      this.call.scheduleCreatorMetadataCapReassignment({
+        ...options,
+        adminWitness,
+      }),
+    );
+  }
+
+  cancelCreatorMetadataCapReassignment(
+    options: AdminCap & LaunchInput,
+  ): Transaction {
+    return this.#asAdmin(options, "CancelAdmin", (adminWitness) =>
+      this.call.cancelCreatorMetadataCapReassignment({
+        ...options,
+        adminWitness,
+      }),
+    );
+  }
+
+  applyCreatorMetadataCapDelay(options: LaunchInput): Transaction {
+    return single(this.call.applyCreatorMetadataCapDelay(options));
+  }
+
+  applyCreatorMetadataCapReassignment(options: LaunchInput): Transaction {
+    return single(this.call.applyCreatorMetadataCapReassignment(options));
+  }
+
   /**
-   * Applies launchpad settings at once on a fresh deployment whose notices
-   * are still zero: each is a schedule and its apply in this PTB, keeping a
-   * zero notice. Name only settings that change; an unchanged schedule aborts.
-   * Then call `armNotices`. The cap needs each setting's role.
+   * Configures a fresh launchpad whose delays are still zero, in one PTB:
+   * each setting is a schedule and its apply, keeping a zero delay; each
+   * venue and claim signer is admitted the same way; Quotes, decimals and
+   * partners are admitted at once. Name only settings that change; an
+   * unchanged schedule aborts. Then call `armNotices`. The cap needs each
+   * setting's role.
    */
   configureNow(
-    options: { adminCapId: string } & LaunchpadSettings & ZeroNoticeAdmissions,
+    options: AdminCap & LaunchpadSettings & ImmediateAdmissions,
   ): Transaction {
     const delayMs = 0n;
-    const { tradeFees, protocolAllocation, creationFee, treasury } = options;
-    const { protocolFeeShareBps, migrationWitnessTypes } = options;
-    const { creatorClaimSigners } = options;
+    const { tradeFees, protocolAllocation, protocolLpFees } = options;
+    const { creationFee, protocolFeeShareBps } = options;
+    const { venueTypes, creatorClaimSigners, quoteTypes } = options;
+    const { memeDecimals, partners } = options;
     return this.#atZeroNotice(options.adminCapId, {
       ...(tradeFees ? { tradeFees: { ...tradeFees, delayMs } } : {}),
       ...(protocolAllocation
         ? { protocolAllocation: { ...protocolAllocation, delayMs } }
+        : {}),
+      ...(protocolLpFees
+        ? { protocolLpFees: { ...protocolLpFees, delayMs } }
         : {}),
       ...(creationFee === undefined
         ? {}
@@ -2459,29 +2000,31 @@ export class LaunchpadTransactions {
       ...(protocolFeeShareBps === undefined
         ? {}
         : { protocolFeeShare: { protocolFeeShareBps, delayMs } }),
-      ...(treasury === undefined ? {} : { treasury: { treasury, delayMs } }),
-      ...(migrationWitnessTypes ? { migrationWitnessTypes } : {}),
+      ...(venueTypes ? { venueTypes } : {}),
       ...(creatorClaimSigners ? { creatorClaimSigners } : {}),
+      ...(quoteTypes ? { quoteTypes } : {}),
+      ...(memeDecimals ? { memeDecimals } : {}),
+      ...(partners ? { partners } : {}),
     });
   }
 
   /**
-   * Raises each named notice from zero in one PTB: a schedule and its apply.
+   * Raises each named delay from zero in one PTB: a schedule and its apply.
    * A setting restates its applied value, since its schedule proposes a value
-   * and next notice together. Run after `configureNow`; once armed, every
-   * later change waits its notice.
+   * and next delay together. Run after `configureNow`; once armed, every
+   * later change waits its delay, and `unpause` may run.
    */
-  armNotices(options: { adminCapId: string } & LaunchpadNotices): Transaction {
+  armNotices(options: AdminCap & LaunchpadNotices): Transaction {
     return this.#atZeroNotice(options.adminCapId, options);
   }
 
   #atZeroNotice(
     adminCapId: string,
-    notices: LaunchpadNotices & ZeroNoticeAdmissions,
+    notices: LaunchpadNotices & ImmediateAdmissions,
   ): Transaction {
     const tx = new Transaction();
-    const witnesses = new Map<BlastFunAdminRole, TransactionObjectArgument>();
-    const as = (role: BlastFunAdminRole) => {
+    const witnesses = new Map<CoreRole, TransactionObjectArgument>();
+    const as = (role: CoreRole) => {
       let adminWitness = witnesses.get(role);
       if (!adminWitness) {
         adminWitness = tx.add(this.call.signIn({ adminCap: adminCapId, role }));
@@ -2489,6 +2032,44 @@ export class LaunchpadTransactions {
       }
       return adminWitness;
     };
+    this.#admitNow(tx, as, notices);
+    this.#scheduleSettings(tx, as, notices);
+    this.#scheduleSets(tx, as, notices);
+    return tx;
+  }
+
+  /** Quotes, decimals and partners, admitted at once. */
+  #admitNow(tx: Transaction, as: SignIn, notices: ImmediateAdmissions): void {
+    const { call } = this;
+    for (const quoteType of notices.quoteTypes ?? []) {
+      tx.add(
+        call.setQuoteAllowed({
+          quoteType,
+          allowed: true,
+          adminWitness: as("ListingAdmin"),
+        }),
+      );
+    }
+    for (const decimals of notices.memeDecimals ?? []) {
+      tx.add(
+        call.setMemeDecimalsAllowed({
+          decimals,
+          allowed: true,
+          adminWitness: as("ListingAdmin"),
+        }),
+      );
+    }
+    for (const partner of notices.partners ?? []) {
+      tx.add(call.addPartner({ partner, adminWitness: as("FeeAdmin") }));
+    }
+  }
+
+  /** Each named setting: a schedule and its apply. */
+  #scheduleSettings(
+    tx: Transaction,
+    as: SignIn,
+    notices: LaunchpadNotices,
+  ): void {
     const { call } = this;
     if (notices.tradeFees) {
       tx.add(
@@ -2508,6 +2089,15 @@ export class LaunchpadTransactions {
       );
       tx.add(call.applyProtocolAllocation());
     }
+    if (notices.protocolLpFees) {
+      tx.add(
+        call.scheduleProtocolLpFees({
+          ...notices.protocolLpFees,
+          adminWitness: as("FeeAdmin"),
+        }),
+      );
+      tx.add(call.applyProtocolLpFees());
+    }
     if (notices.creationFee) {
       tx.add(
         call.scheduleCreationFee({
@@ -2526,32 +2116,27 @@ export class LaunchpadTransactions {
       );
       tx.add(call.applyProtocolFeeShare());
     }
-    if (notices.treasury) {
-      tx.add(
-        call.scheduleTreasury({
-          ...notices.treasury,
-          adminWitness: as("TreasuryAdmin"),
-        }),
-      );
-      tx.add(call.applyTreasury());
+  }
+
+  /** Venue and signer admissions and delays: a schedule and its apply each. */
+  #scheduleSets(
+    tx: Transaction,
+    as: SignIn,
+    notices: LaunchpadNotices & ImmediateAdmissions,
+  ): void {
+    const { call } = this;
+    for (const venueType of notices.venueTypes ?? []) {
+      tx.add(call.scheduleVenue({ venueType, adminWitness: as("VenueAdmin") }));
+      tx.add(call.applyVenue({ venueType }));
     }
-    for (const migrationWitnessType of notices.migrationWitnessTypes ?? []) {
+    if (notices.venueDelayMs !== undefined) {
       tx.add(
-        call.scheduleMigrationWitness({
-          migrationWitnessType,
-          adminWitness: as("AdapterAdmin"),
+        call.scheduleVenueDelay({
+          delayMs: notices.venueDelayMs,
+          adminWitness: as("VenueAdmin"),
         }),
       );
-      tx.add(call.applyMigrationWitness({ migrationWitnessType }));
-    }
-    if (notices.migrationDelayMs !== undefined) {
-      tx.add(
-        call.scheduleMigrationDelay({
-          delayMs: notices.migrationDelayMs,
-          adminWitness: as("AdapterAdmin"),
-        }),
-      );
-      tx.add(call.applyMigrationDelay());
+      tx.add(call.applyVenueDelay());
     }
     for (const signerPublicKey of notices.creatorClaimSigners ?? []) {
       tx.add(
@@ -2571,94 +2156,68 @@ export class LaunchpadTransactions {
       );
       tx.add(call.applyCreatorClaimSignerDelay());
     }
-    return tx;
   }
 
+  #proveOwner(options: VaultOwnerInput) {
+    return this.call.proveOwner({
+      ...options,
+      curveFeeCap: options.curveFeeCapId,
+    });
+  }
+
+  /** Signs in as `role` and runs one administrator call in the same PTB. */
   #asAdmin(
-    adminCapId: string,
-    role: BlastFunAdminRole,
+    options: AdminCap,
+    role: CoreRole,
     call: (
       adminWitness: TransactionObjectArgument,
-    ) => (tx: Transaction) => void,
+    ) => (tx: Transaction) => TransactionResult,
   ): Transaction {
     const tx = new Transaction();
     const adminWitness = tx.add(
-      this.call.signIn({ adminCap: adminCapId, role }),
+      this.call.signIn({ adminCap: options.adminCapId, role }),
     );
     tx.add(call(adminWitness));
     return tx;
   }
 }
 
-/**
- * Completes an adapter-started launch in `tx`: pays the exact SUI
- * `creationFee` and the optional purchase's Quote as `useGasCoin` directs,
- * applies the settings, finalizes, runs the optional purchase or opening-round
- * bid on the owned launch and routes its coins, then shares.
- */
-export function addLaunchCompletion(
-  tx: Transaction,
-  calls: LaunchpadCalls,
-  options: LaunchInitializerInput &
-    LaunchSettings & {
-      currency: SharedObjectReference<true>;
-      /** `LaunchConfig.creation_fee`, in MIST (`LaunchpadClient.getLaunchConfig`). */
-      creationFee: bigint;
-      preShareBuy?: PreShareBuyInput;
-    } & CoinSourceOptions,
-): void {
-  const { preShareBuy, useGasCoin = true, ...rest } = options;
-  const settings = {
-    ...rest,
-    creationFee: tx.coin({
-      type: "0x2::sui::SUI",
-      balance: requireU64("creationFee", options.creationFee),
-      useGasCoin,
-    }),
-  };
-  if (!preShareBuy) {
-    tx.add(calls.completeLaunch(settings));
-    return;
-  }
-  requirePositiveU64("quoteAmount", preShareBuy.quoteAmount);
-  const quoteCoin = tx.coin({
-    type: normalizeStructTag(options.quoteType),
-    balance: preShareBuy.quoteAmount,
-    useGasCoin,
-  });
-  const bought = tx.add(
-    calls.completeLaunch({
-      ...settings,
-      preShareBuy: { quoteCoin, minMemeOut: preShareBuy.minMemeOut },
-    }),
-  );
-  if (bought) {
-    tx.transferObjects(
-      moveResults(bought, 2),
-      normalizeSuiAddress(preShareBuy.recipient),
-    );
-  }
+/** The `AdminCap` an administrator signs in with. */
+type AdminCap = { adminCapId: string };
+
+/** This PTB's one `AdminWitness` per role. */
+type SignIn = (role: CoreRole) => TransactionObjectArgument;
+
+function single(step: (tx: Transaction) => TransactionResult): Transaction {
+  const tx = new Transaction();
+  tx.add(step);
+  return tx;
 }
 
 function normalizeDeployment(
   deployment: LaunchpadDeployment,
 ): LaunchpadDeployment {
+  const shared = (name: keyof LaunchpadDeployment & string) =>
+    normalizeSharedObjectIdentity(
+      `launchpad.${name}`,
+      deployment[name] as SharedObjectIdentity,
+    );
   return {
     ...normalizeSuiPackageReference("launchpad", deployment),
+    packageVersion: shared("packageVersion"),
+    packageAdmin: shared("packageAdmin"),
+    launchConfig: shared("launchConfig"),
+    runtimeConfig: shared("runtimeConfig"),
+    launchRegistry: shared("launchRegistry"),
+    core: normalizeCoreDeployment(deployment.core),
     admin: normalizeAdminDeployment(deployment.admin),
-    partnersPackageId: normalizeSuiObjectId(deployment.partnersPackageId),
-    packageVersion: normalizeSharedObjectIdentity(
-      "packageVersion",
-      deployment.packageVersion,
-    ),
-    launchConfig: normalizeSharedObjectIdentity(
-      "launchConfig",
-      deployment.launchConfig,
-    ),
-    runtimeConfig: normalizeSharedObjectIdentity(
-      "runtimeConfig",
-      deployment.runtimeConfig,
-    ),
+    partners: {
+      packageId: normalizeSuiObjectId(deployment.partners.packageId),
+      admin: normalizeAdminDeployment(deployment.partners.admin),
+    },
+    vault: normalizeVaultDeployment(deployment.vault),
+    migrators: normalizeMigratorsDeployment(deployment.migrators),
+    vestingPackageId: normalizeSuiObjectId(deployment.vestingPackageId),
   };
 }
 
@@ -2671,6 +2230,15 @@ function requireOpeningRoundMs(value: bigint): void {
       "openingRoundMs must be zero or between 60,000 and 300,000",
     );
   }
+}
+
+function launchArgument(
+  tx: Transaction,
+  launch: SharedObjectReference<true> | TransactionArgument,
+): TransactionArgument {
+  return "objectId" in launch
+    ? sharedObject(tx, "launch", launch, true)
+    : launch;
 }
 
 function sharedObject<const Mutable extends boolean>(
@@ -2690,10 +2258,3 @@ export function normalizeLaunchTypes(types: LaunchTypes): LaunchTypes {
     quoteType: normalizeStructTag(types.quoteType),
   };
 }
-
-/** Flags may be ORed together; each package has its own migration bit. */
-export const LAUNCHPAD_PAUSE_BITS = {
-  Create: 1,
-  Trading: 2,
-  Migrate: 4,
-} as const;
