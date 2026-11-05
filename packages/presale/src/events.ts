@@ -2,14 +2,12 @@ import type {
   DecodedDelayedEvent,
   DelayedKeySpecs,
 } from "@interest-protocol/blast-admin-sdk/events";
-import {
-  decodeDelayedEvent,
-  upgradeDelayedKey,
-} from "@interest-protocol/blast-admin-sdk/events";
+import { decodeDelayedEvent } from "@interest-protocol/blast-admin-sdk/events";
 import {
   addressBcs,
   moveTypeNameBcs,
   suiObjectIdBcs,
+  u64Bcs,
   unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import type { SuiEventPosition } from "@interest-protocol/blast-core/events";
@@ -17,54 +15,55 @@ import {
   normalizeSuiEventPosition,
   suiEventId,
 } from "@interest-protocol/blast-core/events";
-import { rewardRoundTermsBcs } from "@interest-protocol/blast-core/rewards/state";
+import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
+import { feeSplitBcs } from "@interest-protocol/blast-core/fee-split";
+import type {
+  Recipient,
+  VestingTerms,
+} from "@interest-protocol/blast-core/payout";
+import {
+  recipientBcs,
+  vestingTermsBcs,
+} from "@interest-protocol/blast-core/payout";
 import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import {
-  fromHex,
   normalizeStructTag,
   normalizeSuiAddress,
   parseStructTag,
-  toHex,
 } from "@mysten/sui/utils";
-import type {
-  EligibilityPolicy,
-  HardCap,
-  UncappedPhase,
-  VestingTerms,
-} from "./state.ts";
+import type { EligibilityPolicy, HardCap, UncappedPhase } from "./state.ts";
 import {
   eligibilityPolicyBcs,
   hardCapBcs,
-  presaleFeeSplitBcs,
   protocolFeesBcs,
   uncappedPhaseBcs,
-  vestingTermsBcs,
 } from "./state.ts";
 
 type PresaleEventFieldDescriptor =
-  | "u8"
   | "id"
   | "typeName"
   | "address"
   | "bool"
-  | "u32"
   | "u64"
-  | "u128"
-  | "bytes"
-  | "addressVector"
   | "u64Vector"
+  | "recipientVector"
   | "eligibility"
+  | "feeSplit"
   | "optionUncapped"
   | "optionHardCap"
   | "optionU64"
-  | "optionAddress"
   | "optionId"
-  | "optionVesting"
-  | "vestingVector";
+  | "optionVesting";
 
-/** Every event `blast_presale` emits, by module, in Move field order. */
+/**
+ * Every `<SaleToken, Quote>` event the presale package emits, by module, in
+ * Move field order: `PresaleCreated` is declared in `blast_presale`, the rest
+ * in `events`. `QuoteAllowed<Quote>` is `decodePresalePolicyEvent`'s; Blast's
+ * fee payouts emit core `ProtocolFeesPaid` (origin = presale ID) and partner
+ * list changes the partners package's events.
+ */
 export const presaleEventSpecs = {
   blast_presale: {
     PresaleCreated: {
@@ -75,23 +74,19 @@ export const presaleEventSpecs = {
       token_allocation_bps: "u64",
       participant_vesting: "optionVesting",
       liquidity_token_allocation_bps: "u64",
-      recipients: "addressVector",
+      recipients: "recipientVector",
       recipient_bps: "u64Vector",
-      recipient_vesting: "vestingVector",
       burnable: "bool",
       raise_target: "u64",
-      raise_recipients: "addressVector",
+      raise_recipients: "recipientVector",
       raise_recipient_bps: "u64Vector",
-      raise_recipient_vesting: "vestingVector",
       duration_ms: "u64",
       liquidity_window_ms: "u64",
       eligibility: "eligibility",
       uncapped: "optionUncapped",
       hard_cap: "optionHardCap",
-      migration_witness: "typeName",
-      fee_recipients: "addressVector",
-      fee_recipient_bps: "u64Vector",
-      holder_rewards_bps: "u64",
+      venue: "typeName",
+      fee_split: "feeSplit",
       protocol_raise_bps: "u64",
       protocol_token_bps: "u64",
       protocol_lp_fee_meme_bps: "u64",
@@ -99,6 +94,8 @@ export const presaleEventSpecs = {
       protocol_quote: "u64",
       protocol_tokens: "u64",
     },
+  },
+  events: {
     PresaleOpened: {
       presale_id: "id",
       start_ms: "u64",
@@ -141,17 +138,10 @@ export const presaleEventSpecs = {
     },
     PresaleMigrated: {
       presale_id: "id",
-      migration_witness: "typeName",
+      venue: "typeName",
       liquidity_quote: "u64",
       liquidity_tokens: "u64",
       recipient_tokens: "u64",
-    },
-    ProtocolFeesPaid: {
-      presale_id: "id",
-      destination: "address",
-      quote: "u64",
-      tokens: "u64",
-      partner_quote: "u64",
     },
     RaiseAllocated: {
       presale_id: "id",
@@ -175,102 +165,6 @@ export const presaleEventSpecs = {
       vesting_id: "optionId",
     },
   },
-  presale_vault: {
-    VaultCreated: {
-      vault_id: "id",
-      presale_id: "id",
-      pool_id: "id",
-      position_id: "id",
-      position_liquidity: "u128",
-      fee_recipients: "addressVector",
-      fee_recipient_bps: "u64Vector",
-      holder_rewards_bps: "u64",
-      protocol_lp_fee_meme_bps: "u64",
-      protocol_lp_fee_quote_bps: "u64",
-      migration_meme_residual: "u64",
-      migration_quote_residual: "u64",
-    },
-    FeesCollected: {
-      vault_id: "id",
-      gross_meme: "u64",
-      gross_quote: "u64",
-      protocol_destination: "optionAddress",
-      protocol_meme: "u64",
-      protocol_quote: "u64",
-      fee_recipient_meme: "u64Vector",
-      fee_recipient_quote: "u64Vector",
-      holder_rewards_meme: "u64",
-      holder_rewards_quote: "u64",
-    },
-    MigrationResidualsClaimed: {
-      vault_id: "id",
-      meme: "u64",
-      quote: "u64",
-    },
-    ProtocolLpFeesPaid: {
-      vault_id: "id",
-      protocol_destination: "address",
-      protocol_meme: "u64",
-      protocol_quote: "u64",
-      partner_meme: "u64",
-      partner_quote: "u64",
-    },
-    HolderMemePaid: {
-      vault_id: "id",
-      treasury: "address",
-      meme_amount: "u64",
-    },
-  },
-  venue_config: {
-    PoolTierReserved: {
-      tick_spacing: "u32",
-      pool_fee_rate: "u64",
-    },
-  },
-  holder_rewards: {
-    RoundPublished: {
-      vault_id: "id",
-      round_id: "id",
-      number: "u64",
-      start_checkpoint: "u64",
-      end_checkpoint: "u64",
-      claim_deadline_ms: "u64",
-      root: "bytes",
-      manifest_digest: "bytes",
-      leaf_count: "u64",
-      meme_amount: "u64",
-      quote_amount: "u64",
-      quote_unallocated: "u64",
-      treasury: "address",
-      gas_reserve_amount: "u64",
-    },
-    RewardClaimed: {
-      round_id: "id",
-      index: "u64",
-      beneficiary: "address",
-      meme_amount: "u64",
-      quote_amount: "u64",
-      meme_remaining: "u64",
-      quote_remaining: "u64",
-    },
-    GasReserveSettled: {
-      vault_id: "id",
-      round_id: "id",
-      number: "u64",
-      treasury: "address",
-      reimbursement_amount: "u64",
-      reserve_returned: "u64",
-      quote_unallocated: "u64",
-    },
-    RoundClosed: {
-      vault_id: "id",
-      round_id: "id",
-      number: "u64",
-      meme_returned: "u64",
-      quote_returned: "u64",
-      gas_reserve_returned: "u64",
-    },
-  },
 } as const satisfies Record<
   string,
   Record<string, Record<string, PresaleEventFieldDescriptor>>
@@ -278,39 +172,28 @@ export const presaleEventSpecs = {
 
 type Specs = typeof presaleEventSpecs;
 export type PresaleEventModule = keyof Specs;
-type FlatSpecs = Specs["blast_presale"] &
-  Specs["presale_vault"] &
-  Specs["venue_config"] &
-  Specs["holder_rewards"];
+type FlatSpecs = Specs["blast_presale"] & Specs["events"];
 export type PresaleEventKind = keyof FlatSpecs;
 
 type DescriptorOutputs = {
-  u8: number;
   id: string;
   typeName: string;
   address: string;
   bool: boolean;
-  u32: number;
   u64: bigint;
-  u128: bigint;
-  /** Lowercase hex without `0x`. */
-  bytes: string;
-  addressVector: string[];
   u64Vector: bigint[];
+  recipientVector: Recipient[];
   eligibility: EligibilityPolicy;
+  feeSplit: FeeSplit;
   optionUncapped: UncappedPhase | null;
   /** Null for a sale that overflows for its whole window. */
   optionHardCap: HardCap | null;
   /** Null for a sale without a hard cap. */
   optionU64: bigint | null;
-  /** Null when a partnered vault holds Blast's LP fees for its partner payout. */
-  optionAddress: string | null;
-  /** A `blast_fun_linear_vesting::Vesting` ID, or null for a direct payout. */
+  /** A partner ID, or a `blast_fun_linear_vesting::Vesting` ID; null for none. */
   optionId: string | null;
   /** Null when the tokens are paid out. */
   optionVesting: VestingTerms | null;
-  /** Aligned with the share list it follows; null for an unvested share. */
-  vestingVector: (VestingTerms | null)[];
 };
 
 export type PresaleEventPayloads = {
@@ -322,43 +205,24 @@ export type PresaleEventPayloads = {
   };
 };
 
-const u64 = bcs.u64().transform({
-  input: (value: bigint) => value,
-  output: (value) => BigInt(value),
-});
-const address = bcs.Address.transform({
-  input: (value: string) => normalizeSuiAddress(value),
-  output: (value) => normalizeSuiAddress(value),
-});
 const FIELD_BCS: Record<PresaleEventFieldDescriptor, BcsType<unknown>> = {
-  u8: bcs.u8() as BcsType<unknown>,
   id: suiObjectIdBcs as BcsType<unknown>,
   typeName: moveTypeNameBcs as BcsType<unknown>,
-  address: address as BcsType<unknown>,
+  address: addressBcs as BcsType<unknown>,
   bool: bcs.bool() as BcsType<unknown>,
-  u32: bcs.u32() as BcsType<unknown>,
-  u64: u64 as BcsType<unknown>,
-  u128: bcs.u128().transform({
-    input: (value: bigint) => value,
-    output: (value) => BigInt(value),
-  }) as BcsType<unknown>,
-  bytes: bcs.vector(bcs.u8()).transform({
-    input: (value: string) => Array.from(fromHex(value)),
-    output: (value) => toHex(Uint8Array.from(value)),
-  }) as BcsType<unknown>,
-  addressVector: bcs.vector(address) as BcsType<unknown>,
-  u64Vector: bcs.vector(u64) as BcsType<unknown>,
+  u64: u64Bcs as BcsType<unknown>,
+  u64Vector: bcs.vector(u64Bcs) as BcsType<unknown>,
+  recipientVector: bcs.vector(recipientBcs) as BcsType<unknown>,
   eligibility: eligibilityPolicyBcs as BcsType<unknown>,
+  feeSplit: feeSplitBcs as BcsType<unknown>,
   optionUncapped: bcs.option(uncappedPhaseBcs) as BcsType<unknown>,
   optionHardCap: bcs.option(hardCapBcs) as BcsType<unknown>,
-  optionU64: bcs.option(u64) as BcsType<unknown>,
-  optionAddress: bcs.option(address) as BcsType<unknown>,
+  optionU64: bcs.option(u64Bcs) as BcsType<unknown>,
   optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown>,
   optionVesting: bcs.option(vestingTermsBcs) as BcsType<unknown>,
-  vestingVector: bcs.vector(bcs.option(vestingTermsBcs)) as BcsType<unknown>,
 };
 
-/** Kind to Move module, e.g. `FeesCollected` to `presale_vault`. */
+/** Kind to Move module: `PresaleCreated` to `blast_presale`, the rest to `events`. */
 export const presaleEventModules = Object.fromEntries(
   Object.entries(presaleEventSpecs).flatMap(([module, events]) =>
     Object.keys(events).map((kind) => [kind, module]),
@@ -392,46 +256,32 @@ export type DecodedPresaleEvent = {
     source: "presale";
     kind: Kind;
     payload: PresaleEventPayloads[Kind];
-    /** The event's `SaleToken` / `Meme` type argument. */
-    memeType: string;
+    /** The event's `SaleToken` type argument. */
+    saleTokenType: string;
     quoteType: string;
-    /**
-     * `VaultCreated` and `PoolTierReserved` only: the venue marker, e.g.
-     * `<pkg>::cetus::Venue`.
-     */
-    venueType: Kind extends VenueTypedKind ? string : null;
     /** Transaction sender; for `Committed`, the committing wallet. */
     sender: string;
     position: SuiEventPosition;
   };
 }[PresaleEventKind];
 
-/** The events generic over a venue marker after `<SaleToken, Quote>`. */
-type VenueTypedKind = "VaultCreated" | "PoolTierReserved";
-const VENUE_TYPED_KINDS: ReadonlySet<string> = new Set<VenueTypedKind>([
-  "VaultCreated",
-  "PoolTierReserved",
-]);
-
 /**
- * Decodes one event whose type is `<originalPackageId>::<module>::<Kind><...>`.
- * Every presale event is generic over `<SaleToken, Quote>`, and
- * `VaultCreated` and `PoolTierReserved` also over their `Venue`.
+ * Decodes one `<originalPackageId>::<module>::<Kind><SaleToken, Quote>`
+ * event: `blast_presale::PresaleCreated` or one of the `events` structs.
  */
 export function decodePresaleEvent(
   event: SuiClientTypes.EventEntry,
-  packages: { originalPackageId: string },
+  presale: { originalPackageId: string },
 ): DecodedPresaleEvent {
   const tag = parseStructTag(event.eventType);
   const kind = tag.name as PresaleEventKind;
-  const [memeType, quoteType, venueType = null, ...extra] = tag.typeParams;
+  const [saleTokenType, quoteType, ...extra] = tag.typeParams;
   if (
-    tag.address !== normalizeSuiAddress(packages.originalPackageId) ||
+    tag.address !== normalizeSuiAddress(presale.originalPackageId) ||
     !Object.hasOwn(presaleEventModules, kind) ||
     presaleEventModules[kind] !== tag.module ||
-    memeType === undefined ||
+    saleTokenType === undefined ||
     quoteType === undefined ||
-    (venueType === null) === VENUE_TYPED_KINDS.has(kind) ||
     extra.length > 0
   ) {
     throw new TypeError(`unexpected presale event type ${event.eventType}`);
@@ -440,9 +290,8 @@ export function decodePresaleEvent(
     source: "presale",
     kind,
     payload: presaleEventBcs[kind].parse(event.bcs),
-    memeType: normalizeStructTag(memeType),
+    saleTokenType: normalizeStructTag(saleTokenType),
     quoteType: normalizeStructTag(quoteType),
-    venueType: venueType && normalizeStructTag(venueType),
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
   } as DecodedPresaleEvent;
@@ -452,118 +301,65 @@ export function presaleEventId(event: { position: SuiEventPosition }): string {
   return suiEventId(event.position);
 }
 
-/**
- * The `blast_presale_package` and `creation_policy` events, by module. Unlike
- * every other presale event they have no type arguments. Delayed settings,
- * witness admissions and upgrade actions emit `blast_admin::delayed` events
- * under `presaleDelayedKeys` instead.
- */
-export const presalePolicyEventSpecs = {
-  blast_presale_package: {
-    Paused: { bits: "u8", paused: "u8" },
-    Unpaused: { bits: "u8", paused: "u8" },
-  },
-
-  creation_policy: {
-    QuoteSet: { quote: "typeName", allowed: "bool" },
-    PartnerAdded: { partner_id: "id" },
-    PartnerRemoved: { partner_id: "id", accepted_until_ms: "u64" },
-  },
-} as const satisfies Record<
-  string,
-  Record<string, Record<string, PresaleEventFieldDescriptor>>
->;
-
-type PolicySpecs = typeof presalePolicyEventSpecs;
-type FlatPolicySpecs = PolicySpecs["creation_policy"] &
-  PolicySpecs["blast_presale_package"];
-export type PresalePolicyEventKind = keyof FlatPolicySpecs;
+/** BCS of `events::QuoteAllowed<Quote>`; the Quote is only in the event type. */
+export const quoteAllowedBcs = bcs.struct("QuoteAllowed", {
+  allowed: bcs.bool(),
+});
 
 export type DecodedPresalePolicyEvent = {
-  [Kind in PresalePolicyEventKind]: {
-    source: "presale-policy";
-    kind: Kind;
-    payload: {
-      -readonly [Field in keyof FlatPolicySpecs[Kind]]: DescriptorOutputs[Extract<
-        FlatPolicySpecs[Kind][Field],
-        PresaleEventFieldDescriptor
-      >];
-    };
-    sender: string;
-    position: SuiEventPosition;
-  };
-}[PresalePolicyEventKind];
-
-const presalePolicyEventModules = Object.fromEntries(
-  Object.entries(presalePolicyEventSpecs).flatMap(([module, events]) =>
-    Object.keys(events).map((kind) => [kind, module]),
-  ),
-) as Record<PresalePolicyEventKind, keyof PolicySpecs>;
-
-export const presalePolicyEventBcs = Object.fromEntries(
-  Object.values(presalePolicyEventSpecs).flatMap((events) =>
-    Object.entries(events).map(([kind, spec]) => [
-      kind,
-      bcs.struct(
-        kind,
-        Object.fromEntries(
-          Object.entries(spec).map(([field, descriptor]) => [
-            field,
-            FIELD_BCS[descriptor as PresaleEventFieldDescriptor],
-          ]),
-        ),
-      ),
-    ]),
-  ),
-) as Record<PresalePolicyEventKind, BcsType<unknown>>;
+  source: "presale-policy";
+  kind: "QuoteAllowed";
+  /** The event's `Quote` type argument. */
+  quoteType: string;
+  payload: { allowed: boolean };
+  sender: string;
+  position: SuiEventPosition;
+};
 
 /**
- * Decodes one `<originalPackageId>::blast_presale_package::<Kind>` or
- * `creation_policy::<Kind>` event.
+ * Decodes `<originalPackageId>::events::QuoteAllowed<Quote>`, emitted by
+ * `creation_policy::set_quote_allowed`. Venue admissions and the fee policy
+ * emit `blast_admin` delayed events (`decodePresaleDelayedEvent`); partner
+ * acceptance emits `blast_partners::partner_list` events.
  */
 export function decodePresalePolicyEvent(
   event: SuiClientTypes.EventEntry,
-  packages: { originalPackageId: string },
+  presale: { originalPackageId: string },
 ): DecodedPresalePolicyEvent {
   const tag = parseStructTag(event.eventType);
-  const kind = tag.name as PresalePolicyEventKind;
+  const [quoteType, ...extra] = tag.typeParams;
   if (
-    tag.address !== normalizeSuiAddress(packages.originalPackageId) ||
-    !Object.hasOwn(presalePolicyEventModules, kind) ||
-    presalePolicyEventModules[kind] !== tag.module ||
-    tag.typeParams.length !== 0
+    tag.address !== normalizeSuiAddress(presale.originalPackageId) ||
+    tag.module !== "events" ||
+    tag.name !== "QuoteAllowed" ||
+    quoteType === undefined ||
+    extra.length > 0
   ) {
     throw new TypeError(`unexpected presale policy event ${event.eventType}`);
   }
   return {
     source: "presale-policy",
-    kind,
-    payload: presalePolicyEventBcs[kind].parse(event.bcs),
+    kind: "QuoteAllowed",
+    quoteType: normalizeStructTag(quoteType),
+    payload: quoteAllowedBcs.parse(event.bcs),
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
-  } as DecodedPresalePolicyEvent;
+  };
 }
 
 /**
- * Presale keys of `blast_admin::delayed` values. Every schedule, cancel,
- * apply and creation fact is emitted by `delayed` under one of these keys;
- * `owner` names the `CreationPolicy`, `FeePolicy`, `Vault` or `PackageAdmin`
- * that stores the value.
+ * Presale keys of `blast_admin` delayed values. Every schedule, cancel,
+ * apply and creation fact is emitted by `blast_admin` under one of these
+ * keys; `owner` names the `CreationPolicy` or `FeePolicy` that stores it. The
+ * package's upgrade key is the admin package's `upgradeDelayedKey`.
  */
 export const presaleDelayedKeys = {
-  MigrationWitnesses: {
-    key: "creation_policy::MigrationWitnessKey",
+  Venues: {
+    key: "creation_policy::VenueKey",
     family: "set",
     keyBcs: unitKeyBcs,
     valueBcs: moveTypeNameBcs,
     valueType: "0x1::type_name::TypeName",
-  },
-  Destination: {
-    key: "fee_policy::DestinationKey",
-    family: "setting",
-    keyBcs: unitKeyBcs,
-    valueBcs: addressBcs,
-    valueType: "address",
   },
   Fees: {
     key: "fee_policy::FeesKey",
@@ -572,36 +368,13 @@ export const presaleDelayedKeys = {
     valueBcs: protocolFeesBcs,
     valueType: "{package}::fee_policy::ProtocolFees",
   },
-  FeeSplit: {
-    key: "presale_vault::FeeSplitKey",
-    family: "setting",
-    keyBcs: unitKeyBcs,
-    valueBcs: presaleFeeSplitBcs,
-    valueType: "{package}::blast_presale::FeeSplit",
-  },
-  ProtocolLpFees: {
-    key: "presale_vault::ProtocolLpFeesKey",
-    family: "setting",
-    keyBcs: unitKeyBcs,
-    valueBcs: protocolFeesBcs,
-    valueType: "{package}::fee_policy::ProtocolFees",
-  },
-  /** One vault's holder-reward round slot; `ActionScheduled` carries the full terms. */
-  RoundPublication: {
-    key: "presale_vault::RoundPublicationKey",
-    family: "action",
-    keyBcs: unitKeyBcs,
-    valueBcs: rewardRoundTermsBcs,
-    valueType: "{package}::presale_vault::RoundTerms",
-  },
-  Upgrade: upgradeDelayedKey,
 } as const satisfies DelayedKeySpecs;
 
 export type DecodedPresaleDelayedEvent = DecodedDelayedEvent<
   typeof presaleDelayedKeys
 >;
 
-/** Decodes a `<adminPackageId>::delayed` event keyed by the presale package. */
+/** Decodes a `<adminPackageId>::delayed*` event keyed by the presale package. */
 export function decodePresaleDelayedEvent(
   event: SuiClientTypes.EventEntry,
   packages: { originalPackageId: string; adminPackageId: string },

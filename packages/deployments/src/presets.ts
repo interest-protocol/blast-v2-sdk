@@ -1,15 +1,11 @@
+import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
+import { normalizeFeeSplit } from "@interest-protocol/blast-core/fee-split";
 import {
   requirePositiveU64,
   requireU64,
 } from "@interest-protocol/blast-core/integers";
-import type {
-  CreatorAllocationPlan,
-  FeeSplit,
-} from "@interest-protocol/blast-launchpad-sdk/allocation";
-import {
-  normalizeAllocationPlan,
-  normalizeFeeSplit,
-} from "@interest-protocol/blast-launchpad-sdk/allocation";
+import type { CreatorAllocationPlan } from "@interest-protocol/blast-launchpad-sdk/allocation";
+import { normalizeAllocationPlan } from "@interest-protocol/blast-launchpad-sdk/allocation";
 import type { ProtocolAccess, SdkRelease } from "./identity.ts";
 import { SDK_RELEASE } from "./identity.ts";
 import { normalizeRoute } from "./registry.ts";
@@ -22,6 +18,7 @@ export type QuickPresetValues = Readonly<{
   openingRoundMs: bigint;
   route: Readonly<{ venue: string } & MigrationRouteTier>;
   allocationPlan: CreatorAllocationPlan;
+  /** The launch's core `FeeSplit` (`Owner`, `HolderRewards`, `AutoLp`, `Burn`, `Address` routes). */
   lpFeeSplit: FeeSplit;
 }>;
 

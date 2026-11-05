@@ -1,12 +1,13 @@
-import type { CoinSourceOptions } from "@interest-protocol/blast-core/coins";
-import type { RewardRoundState } from "@interest-protocol/blast-core/rewards/state";
-import { getRewardRound } from "@interest-protocol/blast-core/rewards/state";
 import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
-import type { LpFeePolicyState, LpFeeShares, LpVaultState } from "./state.ts";
-import { getLpFeePolicy, getLpFeeShares, getLpVault } from "./state.ts";
+import type { BluefinPoolTier } from "./state.ts";
+import {
+  getBluefinPoolTier,
+  getCetusPoolCreationCapId,
+  getCetusPoolTier,
+} from "./state.ts";
 import type { MigratorsDeployment } from "./transactions.ts";
 import { MigratorCalls, MigratorTransactions } from "./transactions.ts";
 
@@ -15,45 +16,29 @@ export class MigratorsClient {
   readonly tx: MigratorTransactions;
   readonly #client: ClientWithCoreApi;
 
-  constructor(
-    client: ClientWithCoreApi,
-    deployment: MigratorsDeployment,
-    options: CoinSourceOptions = {},
-  ) {
+  constructor(client: ClientWithCoreApi, deployment: MigratorsDeployment) {
     this.#client = client;
     this.call = new MigratorCalls(deployment);
-    this.tx = new MigratorTransactions(deployment, options);
+    this.tx = new MigratorTransactions(this.call.deployment);
   }
 
-  async getLpVault(objectId: string): Promise<LpVaultState> {
-    return getLpVault(
+  /** The Meme's recorded Cetus tick spacing, or null before `cetus::prepare`. */
+  getCetusPoolTier(memeType: string): Promise<number | null> {
+    return getCetusPoolTier(this.#client, this.call.deployment, memeType);
+  }
+
+  /** The Meme's Cetus `PoolCreationCap` ID, or null before `cetus::prepare`. */
+  getCetusPoolCreationCapId(memeType: string): Promise<string | null> {
+    return getCetusPoolCreationCapId(
       this.#client,
-      objectId,
-      this.call.deployment.originalPackageId,
+      this.call.deployment,
+      memeType,
     );
   }
 
-  async getLpFeePolicy(): Promise<LpFeePolicyState> {
-    return getLpFeePolicy(
-      this.#client,
-      this.call.deployment.lpFeePolicy.objectId,
-      this.call.deployment.originalPackageId,
-    );
-  }
-
-  /** Blast's live LP-fee shares for `memeType`: its own pair, else the defaults. */
-  async getLpFeeShares(
-    memeType: string,
-  ): Promise<LpFeeShares & { source: "coin" | "default" }> {
-    return getLpFeeShares(this.#client, await this.getLpFeePolicy(), memeType);
-  }
-
-  async getHolderRewardRound(objectId: string): Promise<RewardRoundState> {
-    return getRewardRound(
-      this.#client,
-      objectId,
-      this.call.deployment.originalPackageId,
-    );
+  /** The Meme's recorded Bluefin tier, or null before `bluefin::prepare`. */
+  getBluefinPoolTier(memeType: string): Promise<BluefinPoolTier | null> {
+    return getBluefinPoolTier(this.#client, this.call.deployment, memeType);
   }
 }
 

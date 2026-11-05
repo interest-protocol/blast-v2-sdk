@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-migrators-sdk",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Blast migrators SDK",
   "type": "module",
   "repository": {
@@ -14,13 +14,9 @@
     "src"
   ],
   "exports": {
-    "./bluefin-pool": {
-      "types": "./dist/bluefin-pool.d.ts",
-      "default": "./dist/bluefin-pool.js"
-    },
-    "./cetus-pool": {
-      "types": "./dist/cetus-pool.d.ts",
-      "default": "./dist/cetus-pool.js"
+    "./aborts": {
+      "types": "./dist/aborts.d.ts",
+      "default": "./dist/aborts.js"
     },
     "./client": {
       "types": "./dist/client.d.ts",
@@ -61,9 +57,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@interest-protocol/blast-admin-sdk": "0.1.0",
-    "@interest-protocol/blast-core": "0.1.0",
-    "@interest-protocol/blast-launchpad-sdk": "0.1.2"
+    "@interest-protocol/blast-admin-sdk": "0.2.0",
+    "@interest-protocol/blast-core": "0.2.0",
+    "@interest-protocol/blast-vault-sdk": "0.2.0"
   },
   "peerDependencies": {
     "@mysten/sui": "^2.26.2"

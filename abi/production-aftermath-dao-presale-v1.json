@@ -1,8 +1,12 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "01d7659617abcd552cece6d05b9db409ec4ff2c0",
+    "contractsCommit": "a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f",
     "workingTreeDifferedAtFreeze": false,
+    "approvedAbiAmendments": [
+      "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#215: the fresh one-way launch stack, first freeze",
+      "contracts #200: the vendor is a plain venue over blast_core (prepare, migrate)"
+    ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
   "packages": {
@@ -12,7 +16,7 @@
         "blast_aftermath_dao_presale": {
           "functions": [
             {
-              "name": "finalize",
+              "name": "migrate",
               "sdk": "builder",
               "entry": false,
               "typeParameters": [
@@ -34,42 +38,12 @@
               ],
               "parameters": [
                 {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_aftermath_dao_presale",
-                          "name": "blast_aftermath_dao_presale"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_package"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
                   "Datatype": {
                     "module": {
-                      "address": "blast_presale",
-                      "name": "blast_presale"
+                      "address": "blast_core",
+                      "name": "migration"
                     },
-                    "name": "PresaleInitializer",
+                    "name": "Migration",
                     "type_arguments": [
                       {
                         "argument": {
@@ -87,23 +61,114 @@
                   }
                 },
                 {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_aftermath_dao_presale",
+                      "name": "blast_aftermath_dao_presale"
+                    },
+                    "name": "PoolCreation",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Lp"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "SaleToken"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "amm",
+                          "name": "pool_registry"
+                        },
+                        "name": "PoolRegistry",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "dao_fee_amm",
+                          "name": "version"
+                        },
+                        "name": "Version",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
                   "Reference": [
                     true,
                     {
                       "Datatype": {
                         "module": {
                           "address": "sui",
-                          "name": "coin_registry"
+                          "name": "tx_context"
                         },
-                        "name": "Currency",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "SaleToken"
-                            },
-                            "phantom": true
-                          }
-                        ]
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "prepare",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Lp",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "SaleToken",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "PackageWitness",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_aftermath_dao_presale",
+                          "name": "blast_aftermath_dao_presale"
+                        },
+                        "name": "AdminCap",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -138,291 +203,10 @@
                 {
                   "Datatype": {
                     "module": {
-                      "address": "blast_presale",
-                      "name": "blast_presale"
+                      "address": "blast_core",
+                      "name": "migration"
                     },
-                    "name": "Presale",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "SaleToken"
-                        },
-                        "phantom": true
-                      },
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Quote"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "migrate",
-              "sdk": "builder",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Lp",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "SaleToken",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale"
-                        },
-                        "name": "Presale",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "SaleToken"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_package"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_aftermath_dao_presale",
-                      "name": "blast_aftermath_dao_presale"
-                    },
-                    "name": "PoolCreation",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Lp"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "fee_policy"
-                        },
-                        "name": "FeePolicy",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "amm",
-                          "name": "pool_registry"
-                        },
-                        "name": "PoolRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "dao_fee_amm",
-                          "name": "version"
-                        },
-                        "name": "Version",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "clock"
-                        },
-                        "name": "Clock",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "new",
-              "sdk": "builder",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "SaleToken",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Quote",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_aftermath_dao_presale",
-                          "name": "blast_aftermath_dao_presale"
-                        },
-                        "name": "AdminCap",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "blast_presale_package"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "TreasuryCap",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "SaleToken"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "creation_policy"
-                        },
-                        "name": "CreationPolicy",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_presale",
-                          "name": "fee_policy"
-                        },
-                        "name": "FeePolicy",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_presale",
-                      "name": "blast_presale"
-                    },
-                    "name": "PresaleInitializer",
+                    "name": "VenueTicket",
                     "type_arguments": [
                       {
                         "argument": {
@@ -477,6 +261,11 @@
                   "name": "Lp",
                   "phantom": true,
                   "constraints": []
+                },
+                {
+                  "name": "SaleToken",
+                  "phantom": true,
+                  "constraints": []
                 }
               ],
               "positional": false,
@@ -495,14 +284,14 @@
                   }
                 },
                 {
-                  "name": "presale_id",
+                  "name": "package_witness",
                   "type": {
                     "Datatype": {
                       "module": {
-                        "address": "sui",
-                        "name": "object"
+                        "address": "std",
+                        "name": "type_name"
                       },
-                      "name": "ID",
+                      "name": "TypeName",
                       "type_arguments": []
                     }
                   }
@@ -523,7 +312,7 @@
               ]
             },
             {
-              "name": "Witness",
+              "name": "Venue",
               "abilities": [
                 "Drop"
               ],
@@ -662,7 +451,7 @@
               "positional": false,
               "fields": [
                 {
-                  "name": "presale_id",
+                  "name": "pool_creation_id",
                   "type": {
                     "Datatype": {
                       "module": {
@@ -675,14 +464,14 @@
                   }
                 },
                 {
-                  "name": "pool_creation_id",
+                  "name": "package_witness",
                   "type": {
                     "Datatype": {
                       "module": {
-                        "address": "sui",
-                        "name": "object"
+                        "address": "std",
+                        "name": "type_name"
                       },
-                      "name": "ID",
+                      "name": "TypeName",
                       "type_arguments": []
                     }
                   }

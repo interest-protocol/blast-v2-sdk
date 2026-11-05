@@ -24,9 +24,9 @@ export type LaunchEconomicsInput = {
 export type LaunchEconomics = {
   /** The curve reserve at finalization. */
   curveMeme: bigint;
-  /** Meme handed to the adapter for the pool at migration. */
+  /** Meme handed to the venue for the pool at migration. */
   liquidityMeme: bigint;
-  /** Quote handed to the adapter for the pool at the graduation target. */
+  /** Quote handed to the venue for the pool at the graduation target. */
   liquidityQuote: bigint;
   /** Terminal Quote paid to the plan's recipients or accrued as Blast's fee. */
   allocatedQuote: bigint;

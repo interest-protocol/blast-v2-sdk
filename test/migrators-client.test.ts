@@ -1,42 +1,49 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
 import {
   blastMigrators,
   MigratorsClient,
 } from "@interest-protocol/blast-migrators-sdk/client";
-import { SuiGrpcClient } from "@mysten/sui/grpc";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { fromHex, normalizeStructTag } from "@mysten/sui/utils";
+import { MEME_A, MIGRATORS } from "./fixtures/migrators-deployment.ts";
 
-function shared<const Mutable extends boolean>(
-  objectId: string,
-  initialSharedVersion: string,
-  mutable: Mutable,
-): SharedObjectReference<Mutable> {
-  return { objectId, initialSharedVersion, mutable };
-}
+const tiers: Record<string, Uint8Array> = {
+  [normalizeStructTag(`0x3000::cetus::PoolTierKey<${MEME_A}>`)]:
+    fromHex("c8000000"),
+  [normalizeStructTag(`0x3000::bluefin::PoolTierKey<${MEME_A}>`)]: fromHex(
+    "3c000000b80b000000000000",
+  ),
+};
 
-test("registers the typed migrators client extension", () => {
-  const client = new SuiGrpcClient({
-    network: "mainnet",
-    baseUrl: "https://fullnode.mainnet.sui.io:443",
-  }).$extend(
-    blastMigrators({
-      packageId: "0x321",
-      originalPackageId: "0x320",
-      launchpad: {
-        packageId: "0x123",
-        originalPackageId: "0x122",
-        partnersPackageId: "0x112",
-        packageVersion: shared("0x2", "10", false),
-        launchConfig: shared("0x3", "11", false),
-        runtimeConfig: shared("0x4", "12", false),
-        admin: { packageId: "0x111", acl: shared("0x5", "13", false) },
-      },
-      migratorsVersion: shared("0x7", "15", false),
-      lpFeePolicy: shared("0x40", "18", false),
-      venueConfig: shared("0x6", "14", false),
+const core = {
+  core: {
+    getDynamicField: async ({ name }: { name: { type: string } }) => ({
+      dynamicField: { value: { type: "", bcs: tiers[name.type] } },
     }),
-  );
+    getDynamicObjectField: async () => ({ object: { objectId: "0xcab" } }),
+  },
+} as unknown as ClientWithCoreApi;
 
-  assert.equal(client.blastMigrators instanceof MigratorsClient, true);
+test("blastMigrators registers a deployment-bound client", async () => {
+  const registration = blastMigrators(MIGRATORS);
+  assert.equal(registration.name, "blastMigrators");
+  assert.equal(blastMigrators({ ...MIGRATORS, name: "venues" }).name, "venues");
+
+  const client = registration.register(core);
+  assert.ok(client instanceof MigratorsClient);
+  assert.equal(
+    client.call.deployment.venueConfig.objectId,
+    `0x${"0".repeat(60)}3020`,
+  );
+  assert.deepEqual(client.tx.call.deployment, client.call.deployment);
+  assert.equal(await client.getCetusPoolTier(MEME_A), 200);
+  assert.equal(
+    await client.getCetusPoolCreationCapId(MEME_A),
+    `0x${"0".repeat(61)}cab`,
+  );
+  assert.deepEqual(await client.getBluefinPoolTier(MEME_A), {
+    tickSpacing: 60,
+    feeRate: 3_000n,
+  });
 });

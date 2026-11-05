@@ -37,8 +37,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: interest-protocol/blast-v2-contracts
-          # Bump with every `npm run check:abi:write`.
-          ref: 9255e78751b70b22d8f33cc6577df126a3434424
+          # Bump with every `npm run check:abi:write`; the full history keeps the
+          # blast-sui and boosts artifacts' earlier baseline reachable.
+          ref: a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f
           fetch-depth: 0
           token: ${{ secrets.CONTRACTS_READ_TOKEN }}
           path: blast-v2-contracts
@@ -50,10 +51,4 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           tar -xzf sui.tgz -C "$HOME/.local/bin" ./sui
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Fetch the PR150 contracts source
-        if: env.CONTRACTS_READ_TOKEN != ''
-        run: git -C ../blast-v2-contracts fetch origin d8482986e71eea91d364babba7897ad68bd05046
-      - name: Check fresh PR150 source ABI
-        if: env.CONTRACTS_READ_TOKEN != ''
-        run: npm run check:abi:pr150
       - run: npm test

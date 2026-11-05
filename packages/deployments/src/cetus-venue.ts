@@ -15,7 +15,6 @@ import {
   exactPrice,
   priceImpactBps,
 } from "@interest-protocol/blast-launchpad-sdk/market-data";
-import type { LpVaultState } from "@interest-protocol/blast-migrators-sdk/state";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
@@ -343,20 +342,26 @@ export type CetusVenueRoute = Readonly<{
  * Resolves a migrated launch's recorded Cetus route and fails closed unless
  * every link holds: the deployment records the Cetus lineage and admits the
  * launch's tier; the launch migrated through this deployment's `cetus`
- * adapter; the pool is a Cetus pool of the launch's coins at that tier; and it
+ * venue; the pool is a Cetus pool of the launch's coins at that tier; and it
  * is the pool the launch's vault recorded. Read `vault` with the deployment's
- * migrators package (`getLpVault`) and `pool` with `getCetusPool`.
+ * vault package (`getVault`) and `pool` with `getCetusPool`.
  */
 export function resolveCetusVenueRoute(options: {
   deployment: BlastDeployment;
   launch: {
     memeType: string;
     quoteType: string;
-    migrationWitnessType: string;
+    /** The sale's `venue` `TypeName` (`Launch.venue`, `Presale.venue`). */
+    venue: string;
     poolTickSpacing: number;
     poolFeeRate: bigint;
   };
-  vault: Pick<LpVaultState, "objectId" | "poolId" | "memeType" | "quoteType">;
+  vault: {
+    objectId: string;
+    poolId: string;
+    memeType: string;
+    quoteType: string;
+  };
   pool: CetusPoolState;
 }): CetusVenueRoute {
   const { deployment, launch, vault, pool } = options;
@@ -369,14 +374,14 @@ export function resolveCetusVenueRoute(options: {
       "the deployment records no migrators or Cetus lineage",
     );
   }
-  const witness = parseStructTag(launch.migrationWitnessType);
+  const witness = parseStructTag(launch.venue);
   if (witness.address !== migrators.originalPackageId) {
     throw new CetusVenueError(
       "foreign-lineage",
-      "the launch migrated through another migrators package",
+      "the sale migrated through another migrators package",
     );
   }
-  if (witness.module !== "cetus" || witness.name !== "Witness") {
+  if (witness.module !== "cetus" || witness.name !== "Venue") {
     throw new CetusVenueError(
       "route-substitution",
       `the launch recorded ${witness.module}::${witness.name}, not Cetus`,

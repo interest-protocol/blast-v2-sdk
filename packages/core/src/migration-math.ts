@@ -5,7 +5,18 @@ const Q128 = 1n << 128n;
 /** Atoms of the other asset `auto_lp_fixed_side` keeps beyond its estimate. */
 export const AUTO_LP_MARGIN = 2n;
 
-/** Mirrors `blast_fun_migrators::migration_math::sqrt_price_x64` over atomic Meme/Quote units. */
+/**
+ * `tick_math` sqrt-price bounds, Q64.64, shared by Cetus and Bluefin
+ * (`blast_core::constants::{min,max}_sqrt_price_x64`).
+ */
+const MIN_SQRT_PRICE_X64 = 4_295_048_016n;
+const MAX_SQRT_PRICE_X64 = 79_226_673_515_401_279_992_447_579_055n;
+
+/**
+ * Mirrors `blast_core::migration::sqrt_price_x64` over atomic Meme/Quote
+ * units: `floor(sqrt(B / A) * 2^64)`, B / A being Quote / Meme when Meme is
+ * coin A and Meme / Quote otherwise.
+ */
 export function sqrtPriceX64(
   memeAmount: bigint,
   quoteAmount: bigint,
@@ -15,7 +26,21 @@ export function sqrtPriceX64(
 }
 
 /**
- * Mirrors `migration_math::auto_lp_fixed_side`, which Bluefin auto-LP uses to
+ * Mirrors `migration::is_seedable_price`: whether Cetus and Bluefin can both
+ * seed a full-range pool at `sqrtPriceX64`, within
+ * `[2 * MIN_SQRT_PRICE_X64, MAX_SQRT_PRICE_X64 / 2]` (the upper bound rounds
+ * down).
+ */
+export function isSeedablePrice(sqrtPriceX64: bigint): boolean {
+  requireU128("sqrtPriceX64", sqrtPriceX64);
+  return (
+    sqrtPriceX64 >= MIN_SQRT_PRICE_X64 * 2n &&
+    sqrtPriceX64 <= MAX_SQRT_PRICE_X64 / 2n
+  );
+}
+
+/**
+ * Mirrors `blast_migrators::bluefin`'s `auto_lp_fixed_side`, which Bluefin auto-LP uses to
  * choose the fixed side from the pool's and the position's Q64.64 sqrt prices.
  * Returns `{ fixA, amount }`; a zero amount means nothing is added now.
  * Divisions round down except the other side's requirement, which rounds up.
@@ -58,10 +83,17 @@ function ratioQ128(
   quoteAmount: bigint,
   memeIsCoinA: boolean,
 ): bigint {
-  requirePositiveU64("memeAmount", memeAmount);
-  requirePositiveU64("quoteAmount", quoteAmount);
-  const numerator = memeIsCoinA ? quoteAmount : memeAmount;
-  const denominator = memeIsCoinA ? memeAmount : quoteAmount;
+  // Move divides by the coin-A side (it aborts at zero) and allows a zero
+  // numerator, whose price is 0 and not seedable.
+  const [numerator, denominator] = memeIsCoinA
+    ? [
+        requireU64("quoteAmount", quoteAmount),
+        requirePositiveU64("memeAmount", memeAmount),
+      ]
+    : [
+        requireU64("memeAmount", memeAmount),
+        requirePositiveU64("quoteAmount", quoteAmount),
+      ];
   return (numerator << 128n) / denominator;
 }
 

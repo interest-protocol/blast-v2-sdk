@@ -6,7 +6,7 @@ import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
 
 type AbiFunction = {
   name: string;
-  sdk?: string;
+  sdk: string;
   typeParameters: unknown[];
   parameters: unknown[];
   returns: unknown[];
@@ -50,8 +50,7 @@ export function assertBuildersMatchAbi(
     );
     assert.ok(frozen, `${name} is in the frozen ABI`);
     assert.ok(
-      frozen.sdk === undefined ||
-        frozen.sdk === "builder" ||
+      frozen.sdk === "builder" ||
         frozen.sdk === "compositional" ||
         frozen.sdk === "read",
       `${name} is a builder`,
@@ -64,24 +63,82 @@ export function assertBuildersMatchAbi(
       ).length,
       name,
     );
-    if (
-      JSON.stringify(frozen.parameters[1])?.includes('"blast_presale_package"')
-    ) {
-      const argument = call.arguments[1];
-      assert.ok(argument?.$kind === "Input", `${name} borrows PackageVersion`);
+    const valueParameters = frozen.parameters.filter(
+      (parameter) => !JSON.stringify(parameter).includes('"TxContext"'),
+    );
+    call.arguments.forEach((argument, index) => {
+      if (argument.$kind !== "Input") return;
       const input = tx.getData().inputs[argument.Input];
+      const parameter = valueParameters[index];
+      const position = `${name} argument ${index}`;
+      if (input?.$kind === "Pure") {
+        assert.ok(isPureType(parameter), `${position} is a pure value`);
+        return;
+      }
+      assert.ok(!isPureType(parameter), `${position} is an object`);
+      if (input?.$kind !== "Object" || input.Object.$kind !== "SharedObject") {
+        return;
+      }
+      const reference = (parameter as { Reference?: [boolean, unknown] })
+        .Reference;
+      // By value or `&mut` needs a mutable input; `&` an immutable one unless
+      // another command in the PTB borrows the same object mutably.
+      const mutable = reference === undefined || reference[0];
+      if (mutable || !input.Object.SharedObject.mutable) {
+        assert.equal(
+          input.Object.SharedObject.mutable,
+          mutable,
+          `${position} has its Move mutability`,
+        );
+        return;
+      }
       assert.ok(
-        input?.$kind === "Object" && input.Object.$kind === "SharedObject",
+        inputUses(tx, argument.Input) > 1,
+        `${position} is borrowed immutably`,
       );
-      assert.equal(
-        input.Object.SharedObject.mutable,
-        (frozen.parameters[1] as { Reference?: [boolean, unknown] })
-          ?.Reference?.[0] ?? false,
-        `${name} has the correct PackageVersion mutability`,
-      );
-    }
+    });
     return [name];
   });
+}
+
+const PURE_DATATYPES = new Set([
+  "string::String",
+  "ascii::String",
+  "object::ID",
+  "option::Option",
+]);
+
+/** Whether a Move parameter type can be passed as a pure input. */
+function isPureType(type: unknown): boolean {
+  if (typeof type === "string") return true;
+  if (type === null || typeof type !== "object") return false;
+  if ("vector" in type) return isPureType((type as { vector: unknown }).vector);
+  const datatype = (
+    type as {
+      Datatype?: {
+        module: { name: string };
+        name: string;
+        type_arguments: { argument: unknown }[];
+      };
+    }
+  ).Datatype;
+  return (
+    datatype !== undefined &&
+    PURE_DATATYPES.has(`${datatype.module.name}::${datatype.name}`) &&
+    datatype.type_arguments.every(({ argument }) => isPureType(argument))
+  );
+}
+
+/** How many Move-call arguments read input `index`. */
+function inputUses(tx: Transaction, index: number): number {
+  return tx
+    .getData()
+    .commands.flatMap((command) =>
+      command.$kind === "MoveCall" ? command.MoveCall.arguments : [],
+    )
+    .filter(
+      (argument) => argument.$kind === "Input" && argument.Input === index,
+    ).length;
 }
 
 /** One descriptor per argument of the `index`th Move call. */
@@ -139,4 +196,37 @@ export function orderedEventFields(
       Object.entries(fields),
     ]),
   );
+}
+
+/**
+ * Checks every transaction a test file builds against one package's frozen
+ * ABI and records the builders it reaches; `assertEveryBuilder` then requires
+ * each classified `builder` of the package to have been exercised.
+ */
+export function abiCoverage(
+  modules: Record<string, AbiModule>,
+  packageId: string,
+) {
+  const covered = new Set<string>();
+  return {
+    check<T extends Transaction>(tx: T): T {
+      for (const name of assertBuildersMatchAbi(tx, modules, packageId)) {
+        covered.add(name);
+      }
+      return tx;
+    },
+    assertEveryBuilder(count: number) {
+      const builders = Object.entries(modules).flatMap(([module, frozen]) =>
+        frozen.functions
+          .filter((candidate) => candidate.sdk === "builder")
+          .map((candidate) => `${module}::${candidate.name}`),
+      );
+      assert.equal(builders.length, count, "classified builders");
+      assert.deepEqual(
+        builders.filter((name) => !covered.has(name)),
+        [],
+        "every builder is exercised",
+      );
+    },
+  };
 }

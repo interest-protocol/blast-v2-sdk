@@ -29,8 +29,6 @@ import { MAX_SELL_BURN_BPS } from "./curve.ts";
 
 /** Exact whole-token supply of every generated Meme. */
 export const MEME_TOTAL_SUPPLY_WHOLE_TOKENS = 1_000_000_000n;
-/** Longest Meme symbol, in UTF-8 bytes, that launch finalization accepts. */
-export const MAX_MEME_SYMBOL_BYTES = 32;
 
 const ZERO_ADDRESS = normalizeSuiObjectId("0x0");
 const SYSTEM_ADDRESSES = new Set([
@@ -39,13 +37,14 @@ const SYSTEM_ADDRESSES = new Set([
   SUI_FRAMEWORK_ADDRESS,
 ]);
 
-// Built from contracts/sui/meme_template/sources/meme.move at contracts commit
-// 97be709 with Sui CLI 1.77.2-51d177ad7d65, `blast_fun` bound to 0xda74. The
-// package is now `launch_ticket_template` (contracts ADR 0108); its module and
-// bytecode are unchanged. SHA-256:
-// 7a0303c62ce622ed2f0eb17de1ac4a8d0d8852ee859d4cdca3fdc2711b265da8
+// Built from contracts/sui/launch_ticket_template/sources/meme.move at contracts
+// commit a1a8f6c9 with Sui CLI 1.77.2-51d177ad7d65 (`sui move build
+// --with-unpublished-dependencies`), `blast_fun` bound to 0xda74 and its
+// dependencies to distinct placeholder addresses. Its initializer transfers the
+// `LaunchTicket<Meme>` and the `TreasuryCap<Meme>` to the publisher. SHA-256:
+// 14d907c7dbfd9a71eab59aaa64a9bcec0e245a590386ed563e9e916c54cb4e78
 const TEMPLATE_BYTECODE_BASE64 =
-  "oRzrCwcAAAUKAQAOAg4WAyQqBE4EBVJBB5MB0AEI4wKAAQbjA4cBCuoEBQzvBEUACwMGAwoBEQIFAhICEwACAgABAAYAAgEMAQABAwMHAAYEAgAACQABAAENAwQAAQ4FBAACDAgJAQIDFAMGAAQIAwUABQ8MAQEMBhAKBQADBwYLAggABwgEAAIIAQgBAQoCAQgBAQUBCAMBCAAKCQACCAMIAwgDCAMIAQEDBwgEAQsCAQkAAQYIBAELAgEIAAIJAAUQQ3JlYXRvclJlY2lwaWVudAxMYXVuY2hUaWNrZXQETUVNRQZTdHJpbmcJVHhDb250ZXh0B2FkZHJlc3MRY3JlYXRvcl9hdXRob3JpdHkLZHVtbXlfZmllbGQKZnJvbV9ieXRlcwRpbml0DWxhdW5jaF90aWNrZXQEbWVtZQNuZXcLbmV3X2FjY291bnQLbmV3X2FkZHJlc3MPcHVibGljX3RyYW5zZmVyBnNlbmRlcgZzdHJpbmcIdHJhbnNmZXIKdHhfY29udGV4dAR1dGY4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2nQKAgUETUVNRQoCCwpCbGFzdCBNZW1lCgIZGEEgTWVtZSBsYXVuY2hlZCBvbiBCbGFzdAoCGxpodHRwczovL2JsYXN0LmZ1bi9tZW1lLnBuZwoCISAAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHwEBAQIBCQEBAAMIAAAAAAAAAAAAAgEHAQAAAAACIAcFBAYHBBEBDAIFCgcEEQURAgwCCwIMAwsABwYHABEEBwERBAcCEQQHAxEECwMHBwcICgE4AAsBLhEHOAECAAA=";
+  "oRzrCwcAAAUKAQAQAhAcAywqBFYGBVxRB60B4QEIjgOAAQaOBIcBCpUFBQyaBVAADQMIAwwBEwIGAgcCFAIVAAICAAEABwACAQwBAAEDAwcABQQMAQABBwUCAAALAAEAAQ8DBAABEAUEAAIOCAkBAgMWAwYABAoDBQAGEQwBAQwHEgoFAAMHBgsGDQIIAAcIBQADCAEIAQsEAQgAAQoCAQgBAQUBCAMBCAAKCQACCAMIAwgDCAMIAQEDBwgFAgsCAQkACwQBCQABBggFAQsCAQgAAgkABQELBAEIABBDcmVhdG9yUmVjaXBpZW50DExhdW5jaFRpY2tldARNRU1FBlN0cmluZwtUcmVhc3VyeUNhcAlUeENvbnRleHQHYWRkcmVzcwRjb2luEWNyZWF0b3JfYXV0aG9yaXR5C2R1bW15X2ZpZWxkCmZyb21fYnl0ZXMEaW5pdA1sYXVuY2hfdGlja2V0BG1lbWUDbmV3C25ld19hY2NvdW50C25ld19hZGRyZXNzD3B1YmxpY190cmFuc2ZlcgZzZW5kZXIGc3RyaW5nCHRyYW5zZmVyCnR4X2NvbnRleHQEdXRmOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANp0CgIFBE1FTUUKAgsKQmxhc3QgTWVtZQoCGRhBIE1lbWUgbGF1bmNoZWQgb24gQmxhc3QKAhsaaHR0cHM6Ly9ibGFzdC5mdW4vbWVtZS5wbmcKAiEgAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8BAQECAQkBAQADCAAAAAAAAAAAAAIBCQEAAAAAAiYHBQQGBwQRAQwCBQoHBBEFEQIMAgsCDAMLAAcGBwARBAcBEQQHAhEEBwMRBAsDBwcHCAoBOAAMBAoBLhEHOAELBAsBLhEHOAICAAA=";
 
 const DEFAULT_CREATOR_RECIPIENT_BYTES = fromHex(
   "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
@@ -109,7 +108,8 @@ export function initializeMemeTemplate(
  *
  * Its initializer creates the selected address or Blast account recipient, calls
  * `blast_fun::launch_ticket::new` at the selected decimals, and transfers the
- * ticket to the publisher, who starts the launch with it through an adapter.
+ * ticket and the `TreasuryCap<Meme>` to the publisher, who prepares the venue
+ * and starts the launch with both (`LaunchpadTransactions.createLaunch`).
  */
 export async function buildMemePackageBytecode(
   options: MemeTemplateOptions,
@@ -237,11 +237,6 @@ function validateOptions(options: MemeTemplateOptions) {
   }
 
   const symbol = requireNonEmptyString("symbol", options.symbol);
-  if (new TextEncoder().encode(symbol).length > MAX_MEME_SYMBOL_BYTES) {
-    throw new RangeError(
-      `symbol must not exceed ${MAX_MEME_SYMBOL_BYTES} bytes; launch finalization rejects it`,
-    );
-  }
   memeAtomicSupply(options.decimals);
 
   return {

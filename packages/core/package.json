@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Blast core SDK",
   "type": "module",
   "repository": {
@@ -14,6 +14,10 @@
     "src"
   ],
   "exports": {
+    "./aborts": {
+      "types": "./dist/aborts.d.ts",
+      "default": "./dist/aborts.js"
+    },
     "./arrays": {
       "types": "./dist/arrays.d.ts",
       "default": "./dist/arrays.js"
@@ -21,6 +25,10 @@
     "./bcs": {
       "types": "./dist/bcs.d.ts",
       "default": "./dist/bcs.js"
+    },
+    "./bps": {
+      "types": "./dist/bps.d.ts",
+      "default": "./dist/bps.js"
     },
     "./bytecode-template": {
       "types": "./dist/bytecode-template.d.ts",
@@ -34,9 +42,17 @@
       "types": "./dist/coins.d.ts",
       "default": "./dist/coins.js"
     },
+    "./deployment": {
+      "types": "./dist/deployment.d.ts",
+      "default": "./dist/deployment.js"
+    },
     "./events": {
       "types": "./dist/events.d.ts",
       "default": "./dist/events.js"
+    },
+    "./fee-split": {
+      "types": "./dist/fee-split.d.ts",
+      "default": "./dist/fee-split.js"
     },
     "./gas": {
       "types": "./dist/gas.d.ts",
@@ -54,9 +70,21 @@
       "types": "./dist/merkle.d.ts",
       "default": "./dist/merkle.js"
     },
+    "./migration": {
+      "types": "./dist/migration.d.ts",
+      "default": "./dist/migration.js"
+    },
     "./migration-math": {
       "types": "./dist/migration-math.d.ts",
       "default": "./dist/migration-math.js"
+    },
+    "./payout": {
+      "types": "./dist/payout.d.ts",
+      "default": "./dist/payout.js"
+    },
+    "./protocol-fees": {
+      "types": "./dist/protocol-fees.d.ts",
+      "default": "./dist/protocol-fees.js"
     },
     "./ptb": {
       "types": "./dist/ptb.d.ts",
@@ -74,17 +102,17 @@
       "types": "./dist/rewards/holders.d.ts",
       "default": "./dist/rewards/holders.js"
     },
-    "./rewards/keeper": {
-      "types": "./dist/rewards/keeper.d.ts",
-      "default": "./dist/rewards/keeper.js"
-    },
-    "./rewards/state": {
-      "types": "./dist/rewards/state.d.ts",
-      "default": "./dist/rewards/state.js"
+    "./roles": {
+      "types": "./dist/roles.d.ts",
+      "default": "./dist/roles.js"
     },
     "./sui": {
       "types": "./dist/sui.d.ts",
       "default": "./dist/sui.js"
+    },
+    "./treasury": {
+      "types": "./dist/treasury.d.ts",
+      "default": "./dist/treasury.js"
     },
     "./package.json": "./package.json"
   },

@@ -18,6 +18,7 @@ import {
   normalizeSuiObjectId,
   parseStructTag,
 } from "@mysten/sui/utils";
+import type { AdminDeployment } from "./transactions.ts";
 
 /** BCS layout of `blast_admin::blast_acl::ACL`. */
 export const aclBcs = bcs.struct("ACL", {
@@ -175,124 +176,163 @@ export async function getAclAdminRoles(
   }
 }
 
-/** Launchpad and presale pause containers. Migrators hold only a generation. */
-export const packageVersionBcs = bcs.struct("PackageVersion", {
-  id: suiUidBcs,
-  paused: bcs.u8(),
-  generation: bcs.struct("OperationalVersion", { generation: u64Bcs }),
+const asciiBytesBcs = bcs.vector(bcs.u8()).transform({
+  input: (value: string) => Array.from(new TextEncoder().encode(value)),
+  output: (bytes) => new TextDecoder().decode(Uint8Array.from(bytes)),
 });
 
+/** `0x2::package::Publisher`; `package` and `module_name` are ASCII strings. */
+export const publisherBcs = bcs.struct("Publisher", {
+  id: suiUidBcs,
+  package: asciiBytesBcs,
+  module_name: asciiBytesBcs,
+});
+
+/** `0x2::package::UpgradeCap`. */
+export const upgradeCapBcs = bcs.struct("UpgradeCap", {
+  id: suiUidBcs,
+  package: suiObjectIdBcs,
+  version: u64Bcs,
+  policy: bcs.u8(),
+});
+
+/** `blast_admin::package_admin::UpgradeAction`. */
 export const upgradeActionBcs = bcs.enum("UpgradeAction", {
   Upgrade: bcs.vector(bcs.u8()),
   MakeImmutable: null,
 });
 export type UpgradeAction = ReturnType<typeof upgradeActionBcs.parse>;
 
-/** Sealed native custody remains readable without exposing its capabilities. */
+/**
+ * `blast_admin::package_version::PackageVersion<OTW>`: one package's
+ * version and pause bits. The `OTW` is phantom: only the object type names it.
+ */
+export const packageVersionBcs = bcs.struct("PackageVersion", {
+  id: suiUidBcs,
+  valid_pause_bits: bcs.u8(),
+  paused: bcs.u8(),
+  package_witness: moveTypeNameBcs,
+  version: u64Bcs,
+});
+
+/**
+ * `blast_admin::package_admin::PackageAdmin<OTW>`: the sealed Publisher and
+ * UpgradeCap and the delayed upgrade slot keyed by `UpgradeKey<OTW>`.
+ */
 export const packageAdminBcs = bcs.struct("PackageAdmin", {
   id: suiUidBcs,
-  custody: bcs.struct("UpgradeCustody", {
-    publisher: bcs.struct("Publisher", {
-      id: suiUidBcs,
-      package: bcs.vector(bcs.u8()),
-      module_name: bcs.vector(bcs.u8()),
-    }),
-    upgrade_cap: bcs.option(
-      bcs.struct("UpgradeCap", {
-        id: suiUidBcs,
-        package: suiObjectIdBcs,
-        version: u64Bcs,
-        policy: bcs.u8(),
-      }),
-    ),
-  }),
+  publisher: publisherBcs,
+  upgrade_cap: bcs.option(upgradeCapBcs),
   upgrade: delayedActionBcs(unitKeyBcs, upgradeActionBcs),
 });
 
-export const migratorsVersionBcs = bcs.struct("PackageVersion", {
+/** `blast_admin::package_version::Publication<OTW>`: the deployer's owned proof before `wrap`. */
+export const publicationBcs = bcs.struct("Publication", {
   id: suiUidBcs,
-  generation: bcs.struct("OperationalVersion", { generation: u64Bcs }),
+  publisher: publisherBcs,
+  valid_pause_bits: bcs.u8(),
+  package_witness: moveTypeNameBcs,
 });
 
-export type PackageVersionState = SharedObjectIdentity & {
-  paused: number | null;
-  generation: bigint;
+/** The package an administration object belongs to, by its one-time witness type. */
+export type PackageIdentity = {
+  admin: Pick<AdminDeployment, "packageId">;
+  /** The package's OTW type, original package ID form. */
+  otw: string;
 };
-export type PackageAdministrationState = SharedObjectIdentity & {
-  custody: ReturnType<typeof packageAdminBcs.parse>["custody"];
-  /** The applied notice for upgrade actions and notice changes. */
+
+export type PackageVersionState = SharedObjectIdentity & {
+  otw: string;
+  validPauseBits: number;
+  paused: number;
+  /** The package witness type, defining-ID form, pinned at publication. */
+  packageWitness: string;
+  version: bigint;
+};
+
+export type PackageAdminState = SharedObjectIdentity & {
+  otw: string;
+  publisherId: string;
+  /** Null once the package is immutable. */
+  upgradeCap: {
+    id: string;
+    package: string;
+    version: bigint;
+    policy: number;
+  } | null;
+  /** The applied delay of upgrade actions and delay changes. */
   delayMs: bigint;
-  /** The proposed upgrade action or notice change, if any. */
+  /** The proposed upgrade action or delay change, if any. */
   pending: DelayedAction<null, UpgradeAction>["pending"];
 };
 
-/** Explicit product identity prevents a version object from another package being accepted. */
+/** Decodes a `PackageVersion<otw>`; any other package's version is rejected. */
 export function decodePackageVersionObject(
   object: AclObject,
-  originalPackageId: string,
-  product: "launchpad" | "presale" | "migrators",
+  identity: PackageIdentity,
 ): PackageVersionState {
-  assertAdminObjectType(
+  const otw = assertPackageObjectType(
     object,
-    originalPackageId,
-    {
-      launchpad: "blast_fun",
-      presale: "blast_presale_package",
-      migrators: "blast_fun_migrators",
-    }[product],
+    identity,
+    "package_version",
     "PackageVersion",
   );
-  if (product === "migrators") {
-    const parsed = migratorsVersionBcs.parse(object.content);
-    return {
-      ...adminIdentity(object, parsed.id.id.bytes),
-      paused: null,
-      generation: parsed.generation.generation,
-    };
-  }
   const parsed = packageVersionBcs.parse(object.content);
   return {
     ...adminIdentity(object, parsed.id.id.bytes),
+    otw,
+    validPauseBits: parsed.valid_pause_bits,
     paused: parsed.paused,
-    generation: parsed.generation.generation,
+    packageWitness: parsed.package_witness,
+    version: parsed.version,
   };
 }
 
-export function decodePackageAdministrationObject(
+/** Decodes a `PackageAdmin<otw>`; any other package's administration is rejected. */
+export function decodePackageAdminObject(
   object: AclObject,
-  originalPackageId: string,
-): PackageAdministrationState {
-  assertAdminObjectType(
+  identity: PackageIdentity,
+): PackageAdminState {
+  const otw = assertPackageObjectType(
     object,
-    originalPackageId,
+    identity,
     "package_admin",
     "PackageAdmin",
   );
   const parsed = packageAdminBcs.parse(object.content);
   if (parsed.upgrade.owner !== normalizeSuiObjectId(parsed.id.id.bytes))
     throw new TypeError("administration object UID mismatch");
+  const cap = parsed.upgrade_cap;
   return {
     ...adminIdentity(object, parsed.id.id.bytes),
-    custody: parsed.custody,
+    otw,
+    publisherId: normalizeSuiObjectId(parsed.publisher.id.id.bytes),
+    upgradeCap: cap && {
+      id: normalizeSuiObjectId(cap.id.id.bytes),
+      package: cap.package,
+      version: cap.version,
+      policy: cap.policy,
+    },
     delayMs: parsed.upgrade.delay_ms,
     pending: parsed.upgrade.pending,
   };
 }
 
-function assertAdminObjectType(
+function assertPackageObjectType(
   object: AclObject,
-  packageId: string,
+  identity: PackageIdentity,
   module: string,
   name: string,
-): void {
-  const tag = parseStructTag(object.type);
+): string {
+  const otw = normalizeStructTag(identity.otw);
   if (
-    tag.address !== normalizeSuiObjectId(packageId) ||
-    tag.module !== module ||
-    tag.name !== name ||
-    tag.typeParams.length !== 0
+    normalizeStructTag(object.type) !==
+    normalizeStructTag(
+      `${normalizeSuiObjectId(identity.admin.packageId)}::${module}::${name}<${otw}>`,
+    )
   )
     throw new TypeError(`unexpected administration object ${object.objectId}`);
+  return otw;
 }
 
 function adminIdentity(object: AclObject, id: string): SharedObjectIdentity {
@@ -342,24 +382,22 @@ export function decodeAclAdminRolesField(
 export async function getPackageVersion(
   client: ClientWithCoreApi,
   objectId: string,
-  originalPackageId: string,
-  product: "launchpad" | "presale" | "migrators",
+  identity: PackageIdentity,
 ): Promise<PackageVersionState> {
   return decodePackageVersionObject(
     await readAdministrationObject(client, objectId),
-    originalPackageId,
-    product,
+    identity,
   );
 }
 
-export async function getPackageAdministration(
+export async function getPackageAdmin(
   client: ClientWithCoreApi,
   objectId: string,
-  originalPackageId: string,
-): Promise<PackageAdministrationState> {
-  return decodePackageAdministrationObject(
+  identity: PackageIdentity,
+): Promise<PackageAdminState> {
+  return decodePackageAdminObject(
     await readAdministrationObject(client, objectId),
-    originalPackageId,
+    identity,
   );
 }
 

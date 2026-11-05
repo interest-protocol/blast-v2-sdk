@@ -1,10 +1,9 @@
 import { suiUidBcs } from "@interest-protocol/blast-core/bcs";
 import type {
-  SharedObjectReference,
+  SharedObjectIdentity,
   SuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
-import { sharedObjectReference } from "@interest-protocol/blast-core/sui";
-import type { MigratorVenue } from "@interest-protocol/blast-migrators-sdk/state";
+import type { MigratorVenue } from "@interest-protocol/blast-migrators-sdk/transactions";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
@@ -14,12 +13,13 @@ import {
   SUI_TYPE_ARG,
 } from "@mysten/sui/utils";
 import type { DeploymentRejection, ProtocolAccess } from "./identity.ts";
-import type { BlastDeployment } from "./types.ts";
+import type { BlastDeployment, Venue } from "./types.ts";
 
 /**
- * A venue's recorded objects as the migrators builders take them, grouped by
- * action, each at the mutability that call needs. Spread a group into the
- * builder's options, e.g. `migrateCetus({ ...objects.migrate, ... })`.
+ * A migrators venue's recorded objects as the `MigratorCalls` builders take
+ * them, grouped by action; each builder adds the mutability its call needs.
+ * Spread a group into the builder's options, e.g.
+ * `migrateCetus({ ...objects.migrate, migration, memeType, quoteType })`.
  */
 export type CetusVenueObjects = Readonly<{
   venue: "cetus";
@@ -27,36 +27,40 @@ export type CetusVenueObjects = Readonly<{
     cetusClmm: SuiPackageReference;
     cetusLpBurn: SuiPackageReference;
   }>;
-  /** `newCetusLaunch` and `createCetusLaunch`. */
-  create: Readonly<{
-    cetusConfig: SharedObjectReference<false>;
-    cetusPools: SharedObjectReference<true>;
+  /** `prepareCetus`. */
+  prepare: Readonly<{
+    cetus: Readonly<{
+      config: SharedObjectIdentity;
+      pools: SharedObjectIdentity;
+    }>;
   }>;
   /** `migrateCetus`. */
   migrate: Readonly<{
-    cetusConfig: SharedObjectReference<false>;
-    cetusPools: SharedObjectReference<true>;
-    burnManager: SharedObjectReference<true>;
+    cetus: Readonly<{
+      config: SharedObjectIdentity;
+      pools: SharedObjectIdentity;
+      burnManager: SharedObjectIdentity;
+    }>;
   }>;
-  /** `collectCetusFees` and `settleAndUpdateCetusFeeSplit`. */
+  /** `collectCetusFees` and `settleAndApplyCetusFeeSplit`. */
   fees: Readonly<{
-    cetusConfig: SharedObjectReference<false>;
-    burnManager: SharedObjectReference<false>;
+    cetus: Readonly<{
+      config: SharedObjectIdentity;
+      burnManager: SharedObjectIdentity;
+    }>;
   }>;
   /** `buybackAndBurnCetus`. */
-  buyback: Readonly<{ cetusConfig: SharedObjectReference<false> }>;
+  buyback: Readonly<{ cetus: Readonly<{ config: SharedObjectIdentity }> }>;
 }>;
 
-/** Bluefin's builder inputs; `bluefin::new` itself takes no venue object. */
+/** Bluefin's builder inputs; `bluefin::prepare` takes no venue object. */
 export type BluefinVenueObjects = Readonly<{
   venue: "bluefin";
   packages: Readonly<{ bluefinSpot: SuiPackageReference }>;
-  /** `migrateBluefin`. */
-  migrate: Readonly<{ bluefinConfig: SharedObjectReference<true> }>;
-  /** `collectBluefinFees` and `settleAndUpdateBluefinFeeSplit`. */
-  fees: Readonly<{ bluefinConfig: SharedObjectReference<false> }>;
-  /** `buybackAndBurnBluefin`. */
-  buyback: Readonly<{ bluefinConfig: SharedObjectReference<false> }>;
+  /** `migrateBluefin`, `collectBluefinFees`, `settleAndApplyBluefinFeeSplit` and `buybackAndBurnBluefin`. */
+  migrate: Readonly<{ bluefinConfig: SharedObjectIdentity }>;
+  fees: Readonly<{ bluefinConfig: SharedObjectIdentity }>;
+  buyback: Readonly<{ bluefinConfig: SharedObjectIdentity }>;
 }>;
 
 export type VenueObjects = {
@@ -66,10 +70,10 @@ export type VenueObjects = {
 
 /** A venue action was refused: the venue is unavailable for these reasons. */
 export class VenueUnavailableError extends Error {
-  readonly venue: MigratorVenue;
+  readonly venue: Venue;
   readonly reasons: readonly DeploymentRejection[];
 
-  constructor(venue: MigratorVenue, reasons: readonly DeploymentRejection[]) {
+  constructor(venue: Venue, reasons: readonly DeploymentRejection[]) {
     super(
       `${venue} is unavailable: ${reasons.map(({ code }) => code).join(", ")}`,
     );
@@ -80,15 +84,16 @@ export class VenueUnavailableError extends Error {
 }
 
 /**
- * Returns `venue`'s builder inputs from the evaluated deployment. Refuses
- * with that venue's reasons unless signing is enabled and the venue is
- * available, so every venue action reads its identities only from a
- * lineage-checked manifest.
+ * Returns a migrators venue's builder inputs from the evaluated deployment.
+ * Refuses with that venue's reasons unless signing is enabled and the venue
+ * is available, so every venue action reads its identities only from a
+ * lineage-checked manifest. The vendor's objects come with
+ * `presaleDeployment`.
  */
-export function resolveVenueObjects<const Venue extends MigratorVenue>(
+export function resolveVenueObjects<const Name extends MigratorVenue>(
   access: ProtocolAccess,
-  venue: Venue,
-): VenueObjects[Venue] {
+  venue: Name,
+): VenueObjects[Name] {
   const availability = access.venues[venue];
   if (!availability.available) {
     throw new VenueUnavailableError(venue, availability.reasons);
@@ -100,7 +105,7 @@ export function resolveVenueObjects<const Venue extends MigratorVenue>(
     venue === "cetus"
       ? cetusObjects(access.deployment)
       : bluefinObjects(access.deployment);
-  return objects as VenueObjects[Venue];
+  return objects as VenueObjects[Name];
 }
 
 function cetusObjects(deployment: BlastDeployment): CetusVenueObjects {
@@ -109,24 +114,14 @@ function cetusObjects(deployment: BlastDeployment): CetusVenueObjects {
   if (!cetusClmm || !cetusLpBurn || !cetus) {
     throw new TypeError("an available Cetus venue records its whole set");
   }
-  const config = sharedObjectReference(cetus.config, false);
+  const { config, pools, burnManager } = cetus;
   return Object.freeze({
     venue: "cetus",
     packages: Object.freeze({ cetusClmm, cetusLpBurn }),
-    create: Object.freeze({
-      cetusConfig: config,
-      cetusPools: sharedObjectReference(cetus.pools, true),
-    }),
-    migrate: Object.freeze({
-      cetusConfig: config,
-      cetusPools: sharedObjectReference(cetus.pools, true),
-      burnManager: sharedObjectReference(cetus.burnManager, true),
-    }),
-    fees: Object.freeze({
-      cetusConfig: config,
-      burnManager: sharedObjectReference(cetus.burnManager, false),
-    }),
-    buyback: Object.freeze({ cetusConfig: config }),
+    prepare: Object.freeze({ cetus: Object.freeze({ config, pools }) }),
+    migrate: Object.freeze({ cetus }),
+    fees: Object.freeze({ cetus: Object.freeze({ config, burnManager }) }),
+    buyback: Object.freeze({ cetus: Object.freeze({ config }) }),
   });
 }
 
@@ -136,15 +131,13 @@ function bluefinObjects(deployment: BlastDeployment): BluefinVenueObjects {
   if (!bluefinSpot || !bluefin) {
     throw new TypeError("an available Bluefin venue records its whole set");
   }
-  const readOnly = sharedObjectReference(bluefin.config, false);
+  const objects = Object.freeze({ bluefinConfig: bluefin.config });
   return Object.freeze({
     venue: "bluefin",
     packages: Object.freeze({ bluefinSpot }),
-    migrate: Object.freeze({
-      bluefinConfig: sharedObjectReference(bluefin.config, true),
-    }),
-    fees: Object.freeze({ bluefinConfig: readOnly }),
-    buyback: Object.freeze({ bluefinConfig: readOnly }),
+    migrate: objects,
+    fees: objects,
+    buyback: objects,
   });
 }
 

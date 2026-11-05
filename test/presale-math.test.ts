@@ -9,41 +9,38 @@ import type {
 } from "@interest-protocol/blast-presale-sdk/math";
 import {
   allowlistedEligibility,
-  apportion,
-  apportionFee,
   apportionRaise,
   apportionSupply,
   canClosePresaleEarly,
-  isSeedable,
-  MAX_PRESALE_VESTING_DURATION_MS,
+  MIN_LIQUIDITY_WINDOW_DURATION_MS,
   openEligibility,
-  PRESALE_MAX_SQRT_PRICE_X64,
-  PRESALE_MIN_LIQUIDITY_WINDOW_MS,
-  PRESALE_MIN_SQRT_PRICE_X64,
   PresaleAbortError,
   presaleWindows,
   previewClaim,
   previewCommit,
   previewPresaleCreation,
   previewSettlement,
-  splitCollectedFee,
   uncappedForAnyone,
   uncappedForEligible,
-  validateBluefinPresaleTier,
-  validateFeeSplit,
-  vestingTerms,
 } from "@interest-protocol/blast-presale-sdk/math";
+import type { RecipientShare } from "@interest-protocol/blast-presale-sdk/state";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 // Fixture values of `blast_presale_tests.move`.
 const RAISE = 1_000n;
-const recipients = [
-  { recipient: "0xa110c", bps: 2_500n },
-  { recipient: "0xb110c", bps: 1_500n },
-];
-const feeRecipients = [
-  { recipient: "0xc0ffee", bps: 5_000n },
-  { recipient: "0xfee", bps: 2_000n },
-];
+/** One `recipient_share` paid outright to `destination`. */
+const share = (destination: string, bps: bigint): RecipientShare => ({
+  recipient: { destination, vestingTerms: null },
+  bps,
+});
+const recipients = [share("0xa110c", 2_500n), share("0xb110c", 1_500n)];
+const feeSplit = {
+  routes: [
+    { destination: { kind: "Address", address: "0xc0ffee" }, bps: 5_000n },
+    { destination: { kind: "Address", address: "0xfee" }, bps: 2_000n },
+    { destination: { kind: "HolderRewards" }, bps: 3_000n },
+  ],
+} as const satisfies PresaleCreationConfig["feeSplit"];
 const config: PresaleCreationConfig = {
   tokenSupply: 20_001n,
   tokenAllocationBps: 5_000n,
@@ -53,12 +50,11 @@ const config: PresaleCreationConfig = {
   raiseTarget: RAISE,
   raiseAllocations: [],
   durationMs: 100n,
-  liquidityWindowMs: PRESALE_MIN_LIQUIDITY_WINDOW_MS,
+  liquidityWindowMs: MIN_LIQUIDITY_WINDOW_DURATION_MS,
   eligibility: openEligibility(5_000n, 2n, RAISE / 2n),
   uncapped: null,
   hardCap: null,
-  feeRecipients,
-  holderRewardsBps: 3_000n,
+  feeSplit,
   protocolFees: {
     raiseBps: 0n,
     tokenBps: 0n,
@@ -90,11 +86,8 @@ test("apportions Blast's snapshotted token and raise shares like blast_presale::
   // `migration_pays_blast_its_snapshotted_shares_at_the_current_destination`.
   const preview = previewPresaleCreation({
     ...config,
-    recipientAllocations: [
-      itemAt(recipients, 0),
-      { recipient: "0xb110c", bps: 1_000n },
-    ],
-    raiseAllocations: [{ recipient: "0x5a1e", bps: 2_000n }],
+    recipientAllocations: [itemAt(recipients, 0), share("0xb110c", 1_000n)],
+    raiseAllocations: [share("0x5a1e", 2_000n)],
     protocolFees: {
       raiseBps: 333n,
       tokenBps: 500n,
@@ -134,78 +127,31 @@ test("apportions Blast's snapshotted token and raise shares like blast_presale::
   );
   // `raise_allocations_must_leave_the_lp_a_share_after_blasts`.
   aborts(
-    () => apportionRaise([{ recipient: "0x5a1e", bps: 9_667n }], 333n, RAISE),
+    () => apportionRaise([share("0x5a1e", 9_667n)], 333n, RAISE),
     "EInvalidRaiseAllocation",
   );
-});
-
-test("takes Blast's LP share first, rounded up, like presale_vault::split_fees", () => {
-  // `collected_fees_pay_blast_its_share_first`.
-  assert.deepEqual(splitCollectedFee(feeRecipients, 3_000n, 1_000n, 101n), {
-    protocol: 11n,
-    recipients: [45n, 18n],
-    holderRewards: 27n,
-  });
-  assert.deepEqual(splitCollectedFee(feeRecipients, 3_000n, 2_500n, 10n), {
-    protocol: 3n,
-    recipients: [4n, 1n],
-    holderRewards: 2n,
-  });
-  assert.deepEqual(splitCollectedFee(feeRecipients, 3_000n, 0n, 101n), {
-    protocol: 0n,
-    ...apportionFee(feeRecipients, 3_000n, 101n),
-  });
-  assert.deepEqual(splitCollectedFee([], 10_000n, 10_000n, 7n), {
-    protocol: 7n,
-    recipients: [],
-    holderRewards: 0n,
-  });
-});
-
-test("hands leftover atoms to the largest remainders, earlier shares on ties", () => {
-  // 3 atoms at 50/50: 1.5 each, the tie goes to the first share.
-  assert.deepEqual(apportion([5_000n, 5_000n], 3n), [2n, 1n]);
-  // 101 atoms at 50/20/30: remainders 0.5, 0.2, 0.3.
-  assert.deepEqual(apportion([5_000n, 2_000n, 3_000n], 101n), [51n, 20n, 30n]);
-  assert.deepEqual(apportion([3_333n, 3_333n, 3_334n], 2n), [1n, 0n, 1n]);
-  assert.deepEqual(apportion([10_000n], U64_MAX), [U64_MAX]);
-  assert.throws(() => apportion([5_000n], 1n), /10,000/);
-});
-
-test("splits LP fees like presale_vault::fee_shares", () => {
-  // `collected_fees_pay_recipients_and_keep_the_holder_share`.
-  assert.deepEqual(apportionFee(feeRecipients, 3_000n, 101n), {
-    recipients: [51n, 20n],
-    holderRewards: 30n,
-  });
-  assert.deepEqual(apportionFee(feeRecipients, 3_000n, 10n), {
-    recipients: [5n, 2n],
-    holderRewards: 3n,
-  });
-  // `a_remainder_tie_goes_to_the_fee_recipient_before_holders`.
-  assert.deepEqual(apportionFee(feeRecipients.slice(0, 1), 5_000n, 3n), {
-    recipients: [2n],
-    holderRewards: 1n,
-  });
-  assert.deepEqual(apportionFee([], 10_000n, 7n), {
-    recipients: [],
-    holderRewards: 7n,
-  });
+  // Above 10,000 the LP's `bps::new` aborts first.
+  aborts(
+    () => apportionRaise([share("0x5a1e", 9_668n)], 333n, RAISE),
+    "EInvalidBps",
+  );
 });
 
 test("apportions raise allocations with the LP keeping the last share", () => {
   // `raise_allocations_are_paid_at_migration_and_the_lp_takes_the_rest`.
-  const raise = apportionRaise(
-    [{ recipient: "0x5a1e", bps: 2_000n }],
-    0n,
-    RAISE,
-  );
+  const raise = apportionRaise([share("0x5a1e", 2_000n)], 0n, RAISE);
   assert.deepEqual(raise.raisePayouts, [
-    { recipient: `0x${"5a1e".padStart(64, "0")}`, amount: 200n, vesting: null },
+    {
+      recipient: {
+        destination: normalizeSuiAddress("0x5a1e"),
+        vestingTerms: null,
+      },
+      amount: 200n,
+    },
   ]);
   assert.equal(raise.liquidityQuote, 800n);
   aborts(
-    () => apportionRaise([{ recipient: "0x5a1e", bps: 9_999n }], 0n, 5n),
+    () => apportionRaise([share("0x5a1e", 9_999n)], 0n, 5n),
     "EInvalidRaiseAllocation",
   );
 });
@@ -215,19 +161,13 @@ test("rejects every creation shape blast_presale::new aborts on", () => {
     [{ raiseTarget: 0n }, "EInvalidRaiseTarget"],
     [
       {
-        raiseAllocations: [
-          { recipient: "0x5a1e", bps: 6_000n },
-          { recipient: "0xca201", bps: 4_000n },
-        ],
+        raiseAllocations: [share("0x5a1e", 6_000n), share("0xca201", 4_000n)],
       },
       "EInvalidRaiseAllocation",
     ],
     [
       {
-        raiseAllocations: [
-          { recipient: "0x5a1e", bps: 1_000n },
-          { recipient: "0x5a1e", bps: 1_000n },
-        ],
+        raiseAllocations: [share("0x5a1e", 1_000n), share("0x5a1e", 1_000n)],
       },
       "EInvalidRaiseAllocation",
     ],
@@ -238,29 +178,84 @@ test("rejects every creation shape blast_presale::new aborts on", () => {
     [{ tokenSupply: 1n }, "EInvalidTokenAllocation"],
     // `bps::new` rejects a rate above 10,000 before `new` runs.
     [{ liquidityTokenAllocationBps: U64_MAX }, "EInvalidBps"],
-    [
-      { raiseAllocations: [{ recipient: "0x5a1e", bps: 10_001n }] },
-      "EInvalidBps",
-    ],
-    [{ holderRewardsBps: 2_999n }, "EInvalidFeeSplit"],
-    [{ holderRewardsBps: U64_MAX }, "EInvalidBps"],
+    [{ raiseAllocations: [share("0x5a1e", 10_001n)] }, "EInvalidBps"],
     [
       {
-        feeRecipients: [
-          { recipient: "0xc0ffee", bps: 5_000n },
-          { recipient: "0xc0ffee", bps: 2_000n },
-        ],
+        feeSplit: {
+          routes: [{ destination: { kind: "Owner" }, bps: 9_999n }],
+        },
       },
       "EInvalidFeeSplit",
     ],
     [
-      { feeRecipients: [{ recipient: "0x0", bps: 7_000n }] },
+      {
+        feeSplit: {
+          routes: [
+            { destination: { kind: "Owner" }, bps: 5_000n },
+            { destination: { kind: "Owner" }, bps: 5_000n },
+          ],
+        },
+      },
       "EInvalidFeeSplit",
+    ],
+    [
+      {
+        feeSplit: {
+          routes: [
+            { destination: { kind: "Address", address: "0x0" }, bps: 10_000n },
+          ],
+        },
+      },
+      "EInvalidRoute",
+    ],
+    [
+      {
+        feeSplit: {
+          routes: [
+            { destination: { kind: "Owner" }, bps: 0n },
+            { destination: { kind: "Burn" }, bps: 10_000n },
+          ],
+        },
+      },
+      "EInvalidRoute",
+    ],
+    [
+      {
+        feeSplit: {
+          routes: [{ destination: { kind: "Owner" }, bps: U64_MAX }],
+        },
+      },
+      "EInvalidBps",
+    ],
+    [
+      {
+        recipientAllocations: [share("0x0", 2_500n), share("0xb110c", 1_500n)],
+      },
+      "EInvalidRecipient",
+    ],
+    [
+      {
+        recipientAllocations: [
+          share("0xa110c", 2_500n),
+          {
+            recipient: {
+              destination: "0xb110c",
+              vestingTerms: {
+                cliffDelayMs: 0n,
+                periodDurationMs: 0n,
+                periods: 1n,
+              },
+            },
+            bps: 1_500n,
+          },
+        ],
+      },
+      "EInvalidVestingTerms",
     ],
     [{ durationMs: 0n }, "EInvalidWindow"],
     // `a_liquidity_window_below_seven_days_is_rejected`.
     [
-      { liquidityWindowMs: PRESALE_MIN_LIQUIDITY_WINDOW_MS - 1n },
+      { liquidityWindowMs: MIN_LIQUIDITY_WINDOW_DURATION_MS - 1n },
       "EInvalidWindow",
     ],
     [
@@ -311,52 +306,12 @@ test("rejects every creation shape blast_presale::new aborts on", () => {
   for (const [override, code] of cases) {
     aborts(() => previewPresaleCreation({ ...config, ...override }), code);
   }
-  // Sixteen fee recipients fit; a seventeenth does not.
-  const set = (count: number) =>
-    Array.from({ length: count }, (_, i) => ({
-      recipient: `0x${(i + 1).toString(16)}`,
-      bps: 100n,
-    }));
-  validateFeeSplit(set(16), 10_000n - 1_600n);
-  aborts(() => validateFeeSplit(set(17), 10_000n - 1_700n), "EInvalidFeeSplit");
-  validateFeeSplit([], 10_000n);
 });
 
 test("mirrors the eligibility and uncapped constructors", () => {
   aborts(() => openEligibility(100n, 20n, 101n), "EInvalidEligibilityPolicy");
   aborts(() => openEligibility(100n, 65_537n, 1n), "EInvalidEligibilityPolicy");
   aborts(() => uncappedForAnyone(0n, 1n, 0n), "EInvalidUncappedPhase");
-});
-
-test("mirrors is_seedable at both venue bounds", () => {
-  assert.equal(isSeedable(PRESALE_MIN_SQRT_PRICE_X64 * 2n), true);
-  assert.equal(isSeedable(PRESALE_MIN_SQRT_PRICE_X64 * 2n - 1n), false);
-  assert.equal(isSeedable(PRESALE_MAX_SQRT_PRICE_X64 / 2n), true);
-  assert.equal(isSeedable(PRESALE_MAX_SQRT_PRICE_X64 / 2n + 1n), false);
-  assert.equal(isSeedable(1n << 64n), true);
-  // `migration_math::sqrt_price_x64(2_000, 800, true)` printed by a Move test.
-  assert.equal(
-    previewPresaleCreation({
-      ...config,
-      raiseAllocations: [{ recipient: "0x5a1e", bps: 2_000n }],
-    }).seedSqrtPriceX64,
-    11_666_745_337_427_031_769n,
-  );
-});
-
-test("mirrors the Bluefin tier and symbol bounds", () => {
-  validateBluefinPresaleTier(400, 20_000n, "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
-  aborts(
-    () =>
-      validateBluefinPresaleTier(
-        10,
-        1_000n,
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456",
-      ),
-    "ESymbolTooLong",
-  );
-  aborts(() => validateBluefinPresaleTier(401, 1n, "A"), "EInvalidTier");
-  aborts(() => validateBluefinPresaleTier(1, 0n, "A"), "EInvalidTier");
 });
 
 test("fixes the windows share starts", () => {
@@ -604,7 +559,7 @@ test("previews settlement and every claim, the last taking the remainder", () =>
     lifecycle: "Open" as const,
     startMs: 1_000n,
     endMs: 1_100n,
-    liquidityWindowMs: PRESALE_MIN_LIQUIDITY_WINDOW_MS,
+    liquidityWindowMs: MIN_LIQUIDITY_WINDOW_DURATION_MS,
     hardCap: null,
     hardCapFromMs: null,
     raiseTarget: RAISE,
@@ -616,7 +571,7 @@ test("previews settlement and every claim, the last taking the remainder", () =>
       acceptedQuote: RAISE,
       refundableQuote: 3_000n,
       endMs: 1_100n,
-      liquidityDeadlineMs: 1_100n + PRESALE_MIN_LIQUIDITY_WINDOW_MS,
+      liquidityDeadlineMs: 1_100n + MIN_LIQUIDITY_WINDOW_DURATION_MS,
     },
   );
   assert.deepEqual(
@@ -690,57 +645,18 @@ test("apportionSupply rejects a zero presale or LP allocation", () => {
   );
 });
 
-test("vesting terms mirror blast_presale::vesting_terms", () => {
-  assert.deepEqual(vestingTerms(0n, 1n, 1n), {
-    cliffMs: 0n,
-    periodMs: 1n,
-    periods: 1n,
-  });
-  const max = MAX_PRESALE_VESTING_DURATION_MS;
-  assert.deepEqual(vestingTerms(max, max, 1n).periodMs, max);
-  for (const [cliffMs, periodMs, periods] of [
-    [0n, 0n, 1n],
-    [0n, 1n, 0n],
-    [0n, max + 1n, 1n],
-    [0n, max / 2n + 1n, 2n],
-    [201n, 50n, 4n],
-  ] as const) {
-    assert.throws(
-      () => vestingTerms(cliffMs, periodMs, periods),
-      /EInvalidVestingTerms/,
-    );
-  }
-});
-
-test("fee recipients cannot vest; token and raise recipients can", () => {
-  const vesting = { cliffMs: 0n, periodMs: 10n, periods: 2n };
-  assert.throws(
-    () =>
-      validateFeeSplit(
-        [{ recipient: "0xc0ffee", bps: 7_000n, vesting }],
-        3_000n,
-      ),
-    /EInvalidFeeSplit/,
-  );
-  const { raisePayouts } = apportionRaise(
-    [{ recipient: "0x5a1e", bps: 2_000n, vesting }],
-    0n,
-    1_000n,
-  );
-  assert.deepEqual(
-    raisePayouts.map((payout) => payout.vesting),
-    [vesting],
-  );
-});
-
 test("participant vesting locks every positive claim in a schedule from the claim", () => {
-  const vesting = { cliffMs: 100n, periodMs: 50n, periods: 4n };
+  const vesting = { cliffDelayMs: 100n, periodDurationMs: 50n, periods: 4n };
   previewPresaleCreation({ ...config, participantVesting: vesting });
   aborts(
     () =>
       previewPresaleCreation({
         ...config,
-        participantVesting: { cliffMs: 0n, periodMs: 0n, periods: 1n },
+        participantVesting: {
+          cliffDelayMs: 0n,
+          periodDurationMs: 0n,
+          periods: 1n,
+        },
       }),
     "EInvalidVestingTerms",
   );
@@ -787,7 +703,7 @@ test("previews an early close once the raise is full under a hard cap that close
     lifecycle: "Open" as const,
     startMs: 1_000n,
     endMs: 1_100n,
-    liquidityWindowMs: PRESALE_MIN_LIQUIDITY_WINDOW_MS,
+    liquidityWindowMs: MIN_LIQUIDITY_WINDOW_DURATION_MS,
     hardCap: { startsAfterMs: 0n, closesWhenFilled: true },
     hardCapFromMs: 1_000n,
     totalCommitments: RAISE,
@@ -800,7 +716,7 @@ test("previews an early close once the raise is full under a hard cap that close
     acceptedQuote: RAISE,
     refundableQuote: 0n,
     endMs: 1_010n,
-    liquidityDeadlineMs: 1_010n + PRESALE_MIN_LIQUIDITY_WINDOW_MS,
+    liquidityDeadlineMs: 1_010n + MIN_LIQUIDITY_WINDOW_DURATION_MS,
   });
   // `a_full_sale_that_does_not_close_when_filled_waits_for_its_end`.
   aborts(

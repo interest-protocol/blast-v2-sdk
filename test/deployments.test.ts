@@ -3,30 +3,29 @@ import test from "node:test";
 import { AdminCalls } from "@interest-protocol/blast-admin-sdk/transactions";
 import type { BlastDeploymentInput } from "@interest-protocol/blast-deployments-sdk";
 import {
+  ARTIFACT_KEYS,
   adminDeployment,
+  BLAST_DEPLOYMENT_SCHEMA_VERSION,
   BLAST_DEPLOYMENTS,
-  BLAST_PRESALE_DEPLOYMENTS,
   blastSuiDeployment,
-  CANONICAL_MAINNET_PACKAGES,
-  CANONICAL_MAINNET_SHARED_OBJECTS,
+  coreDeployment,
+  DeploymentManifestError,
   defineBlastDeployment,
-  definePresaleDeployment,
   FROZEN_ABI,
   getBlastDeployment,
-  getPresaleDeployment,
   launchpadDeployment,
-  MAINNET_PRESALE_DEPLOYMENT,
   migratorsDeployment,
   partnersDeployment,
   presaleDeployment,
+  vaultDeployment,
 } from "@interest-protocol/blast-deployments-sdk";
-import { LaunchpadCalls } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import { MigratorCalls } from "@interest-protocol/blast-migrators-sdk/transactions";
 import { PartnersCalls } from "@interest-protocol/blast-partners-sdk/transactions";
-import { PresaleCalls } from "@interest-protocol/blast-presale-sdk/transactions";
 import { BlastSuiCalls } from "@interest-protocol/blast-sui-sdk/transactions";
+import { VaultCalls } from "@interest-protocol/blast-vault-sdk/transactions";
 import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
+import { manifestWithVenues } from "./fixtures/venue-deployment.ts";
 
 const id = (value: string) => normalizeSuiObjectId(value);
 const object = (objectId: string, initialSharedVersion: string) => ({
@@ -58,36 +57,36 @@ const input = {
 const deployment = defineBlastDeployment(input);
 const { packages, sharedObjects } = deployment;
 
-/** The core every manifest records, for the "only when requested" cases. */
-const corePackages = {
-  launchpad: packages.launchpad,
-  admin: packages.admin,
-  partners: packages.partners,
-};
-const coreObjects = {
-  admin: sharedObjects.admin,
-  launchpad: sharedObjects.launchpad,
-};
-
-test("normalizes, trims and freezes one complete deployment manifest", () => {
+test("normalizes, trims and freezes one complete schema-2 manifest", () => {
+  assert.equal(BLAST_DEPLOYMENT_SCHEMA_VERSION, 2);
   assert.equal(
     deployment.chainIdentifier,
     "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S",
   );
   assert.equal(deployment.network, "mainnet");
   assert.equal(deployment.environment, "non-production");
-  assert.equal(
-    packages.launchpad.packageId,
-    NON_PRODUCTION_MANIFEST.packages.launchpad.packageId,
-  );
   assert.equal(sharedObjects.blastSui?.vault.objectId, id("0x9"));
-  assert.equal(Object.isFrozen(deployment), true);
-  assert.equal(Object.isFrozen(packages), true);
-  assert.equal(Object.isFrozen(packages.launchpad), true);
-  assert.equal(Object.isFrozen(sharedObjects), true);
-  assert.equal(Object.isFrozen(sharedObjects.launchpad), true);
-  assert.equal(Object.isFrozen(sharedObjects.launchpad.packageVersion), true);
-  assert.equal(Object.isFrozen(sharedObjects.presale), true);
+  assert.deepEqual(deployment.source.abi, FROZEN_ABI.artifacts);
+  for (const value of [
+    deployment,
+    packages,
+    packages.vault,
+    sharedObjects,
+    sharedObjects.core,
+    sharedObjects.vault,
+    sharedObjects.launchpad.launchRegistry,
+    sharedObjects.presale.presaleRegistry,
+    sharedObjects.migrators.packageAdmin,
+    deployment.source.abi,
+  ])
+    assert.equal(Object.isFrozen(value), true);
+});
+
+test("refuses a schema-1 manifest", () => {
+  assert.throws(
+    () => defineBlastDeployment({ ...input, schemaVersion: 1 }),
+    /unsupported schemaVersion 1/,
+  );
 });
 
 test("derives every package's call-ready deployment", () => {
@@ -95,33 +94,30 @@ test("derives every package's call-ready deployment", () => {
     packageId: packages.admin.packageId,
     acl: sharedObjects.admin.acl,
   };
-  assert.deepEqual(adminDeployment(deployment), admin);
-  assert.deepEqual(partnersDeployment(deployment), {
-    packageId: packages.partners.packageId,
-    admin,
-  });
-  const launchpad = {
-    packageId: packages.launchpad.packageId,
-    originalPackageId: packages.launchpad.originalPackageId,
-    admin,
-    partnersPackageId: packages.partners.packageId,
-    packageVersion: sharedObjects.launchpad.packageVersion,
-    launchConfig: sharedObjects.launchpad.launchConfig,
-    runtimeConfig: sharedObjects.launchpad.runtimeConfig,
+  const core = { ...packages.core, treasury: sharedObjects.core.treasury };
+  const vault = { ...packages.vault, ...sharedObjects.vault, core, admin };
+  const migrators = {
+    ...packages.migrators,
+    ...sharedObjects.migrators,
+    vault,
   };
-  assert.deepEqual(launchpadDeployment(deployment), launchpad);
-  assert.deepEqual(migratorsDeployment(deployment), {
-    packageId: packages.migrators?.packageId,
-    originalPackageId: packages.migrators?.originalPackageId,
-    launchpad,
-    migratorsVersion: sharedObjects.migrators?.packageVersion,
-    lpFeePolicy: sharedObjects.migrators?.lpFeePolicy,
-    venueConfig: sharedObjects.migrators?.venueConfig,
+  const partners = { packageId: packages.partners.packageId, admin };
+  assert.deepEqual(adminDeployment(deployment), admin);
+  assert.deepEqual(partnersDeployment(deployment), partners);
+  assert.deepEqual(coreDeployment(deployment), core);
+  assert.deepEqual(vaultDeployment(deployment), vault);
+  assert.deepEqual(migratorsDeployment(deployment), migrators);
+  const stack = { core, admin, partners, vault, migrators };
+  assert.deepEqual(launchpadDeployment(deployment), {
+    ...packages.launchpad,
+    ...sharedObjects.launchpad,
+    ...stack,
+    vestingPackageId: packages.vesting.packageId,
   });
   assert.deepEqual(presaleDeployment(deployment), {
     ...packages.presale,
     ...sharedObjects.presale,
-    admin,
+    ...stack,
   });
   assert.deepEqual(blastSuiDeployment(deployment), {
     packageId: id("0x423"),
@@ -130,17 +126,34 @@ test("derives every package's call-ready deployment", () => {
     vault: { objectId: id("0x9"), initialSharedVersion: "17" },
     admin,
   });
-  // Each product accepts its derived deployment as is.
+  // Each package's calls accept its derived deployment as is.
   new AdminCalls(adminDeployment(deployment));
   new PartnersCalls(partnersDeployment(deployment));
-  new LaunchpadCalls(launchpadDeployment(deployment));
+  new VaultCalls(vaultDeployment(deployment));
   new MigratorCalls(migratorsDeployment(deployment));
-  new PresaleCalls(presaleDeployment(deployment));
   new BlastSuiCalls(blastSuiDeployment(deployment));
 });
 
-test("requires the core packages every manifest records", () => {
-  for (const name of ["launchpad", "admin", "partners"] as const) {
+test("the presale carries the vendor venue exactly when its set is recorded", () => {
+  const vendor = defineBlastDeployment(manifestWithVenues(["aftermathDao"]));
+  assert.deepEqual(presaleDeployment(vendor).aftermathDaoPresale, {
+    ...vendor.packages.aftermathDaoPresale,
+    aftermath: vendor.sharedObjects.aftermath,
+  });
+  assert.equal("aftermathDaoPresale" in presaleDeployment(deployment), false);
+});
+
+test("requires the launch stack's eight packages", () => {
+  for (const name of [
+    "admin",
+    "partners",
+    "core",
+    "vesting",
+    "vault",
+    "launchpad",
+    "presale",
+    "migrators",
+  ] as const) {
     const { [name]: _removed, ...rest } = input.packages;
     assert.throws(
       () =>
@@ -153,38 +166,52 @@ test("requires the core packages every manifest records", () => {
   }
 });
 
-test("requires every shared object a recorded group owns", () => {
-  const { venueConfig: _removed, ...migrators } = input.sharedObjects.migrators;
-  assert.throws(
-    () =>
-      defineBlastDeployment({
-        ...input,
-        sharedObjects: { ...input.sharedObjects, migrators },
-      }),
-    /sharedObjects\.migrators\.venueConfig is required/,
-  );
-  const { feePolicy: _dropped, ...presale } = input.sharedObjects.presale;
-  assert.throws(
-    () =>
-      defineBlastDeployment({
-        ...input,
-        sharedObjects: { ...input.sharedObjects, presale },
-      }),
-    /sharedObjects\.presale\.feePolicy is required/,
-  );
+test("requires every launch-stack group and every object it owns", () => {
+  for (const group of [
+    "admin",
+    "core",
+    "vault",
+    "launchpad",
+    "presale",
+    "migrators",
+  ] as const) {
+    const { [group]: _removed, ...rest } = input.sharedObjects;
+    assert.throws(
+      () =>
+        defineBlastDeployment({
+          ...input,
+          sharedObjects: rest as BlastDeploymentInput["sharedObjects"],
+        }),
+      new RegExp(`sharedObjects\\.${group} is required`),
+    );
+  }
+  for (const [group, name] of [
+    ["core", "treasury"],
+    ["vault", "registry"],
+    ["vault", "packageAdmin"],
+    ["launchpad", "launchRegistry"],
+    ["presale", "presaleRegistry"],
+    ["migrators", "packageAdmin"],
+  ] as const) {
+    const objects: Record<string, unknown> = {
+      ...input.sharedObjects[group],
+    };
+    delete objects[name];
+    assert.throws(
+      () =>
+        defineBlastDeployment({
+          ...input,
+          sharedObjects: {
+            ...input.sharedObjects,
+            [group]: objects,
+          } as BlastDeploymentInput["sharedObjects"],
+        }),
+      new RegExp(`sharedObjects\\.${group}\\.${name} is required`),
+    );
+  }
 });
 
-test("pairs each shared-object group with the package that owns it", () => {
-  const { migrators: _removed, ...withoutMigrators } = input.sharedObjects;
-  assert.throws(
-    () =>
-      defineBlastDeployment({
-        ...input,
-        sharedObjects:
-          withoutMigrators as BlastDeploymentInput["sharedObjects"],
-      }),
-    /sharedObjects\.migrators is required/,
-  );
+test("pairs each optional group with the package that owns it", () => {
   const { blastSui: _dropped, ...withoutBlastSuiPackage } = input.packages;
   assert.throws(
     () =>
@@ -194,37 +221,61 @@ test("pairs each shared-object group with the package that owns it", () => {
       }),
     /sharedObjects records no package for blastSui/,
   );
-});
-
-test("derives each optional package's constants only when recorded", () => {
-  const core = {
-    ...input,
-    routes: [],
-    packages: corePackages,
-    sharedObjects: coreObjects,
-  } satisfies BlastDeploymentInput;
-  const bare = defineBlastDeployment(core);
-  assert.equal(bare.sharedObjects.migrators, undefined);
+  const bare = defineBlastDeployment(NON_PRODUCTION_MANIFEST);
   assert.throws(
     () => blastSuiDeployment(bare),
     /packages\.blastSui is required/,
   );
-  assert.throws(
-    () => migratorsDeployment(bare),
-    /packages\.migrators is required/,
-  );
-  assert.throws(() => presaleDeployment(bare), /packages\.presale is required/);
 });
 
-test("routes need the migrators package", () => {
+test("records every frozen ABI artifact digest and each publication", () => {
+  for (const key of ARTIFACT_KEYS) {
+    const abi: Record<string, string> = { ...input.source.abi };
+    delete abi[key];
+    assert.throws(
+      () =>
+        defineBlastDeployment({ ...input, source: { ...input.source, abi } }),
+      new RegExp(`source\\.abi\\.${key} is malformed`),
+    );
+  }
+  for (const step of ["core", "vault", "migrators"]) {
+    const transactions: Record<string, string> = {
+      ...input.release.transactions,
+    };
+    delete transactions[step];
+    assert.throws(
+      () => defineBlastDeployment({ ...input, release: { transactions } }),
+      new RegExp(`release\\.transactions\\.${step} is required`),
+    );
+  }
+});
+
+test("the vendor route has no tiers; a migrators route needs one", () => {
+  const vendor = defineBlastDeployment(manifestWithVenues(["aftermathDao"]));
+  assert.deepEqual(
+    vendor.routes.find(({ venue }) => venue === "aftermathDao"),
+    { venue: "aftermathDao", tiers: [] },
+  );
   assert.throws(
     () =>
       defineBlastDeployment({
         ...input,
-        packages: corePackages,
-        sharedObjects: coreObjects,
+        routes: [
+          {
+            venue: "aftermathDao",
+            tiers: [{ tickSpacing: 60, feeRate: "3000" }],
+          },
+        ],
       }),
-    /routes require packages\.migrators/,
+    /aftermathDao route has no tiers/,
+  );
+  assert.throws(
+    () =>
+      defineBlastDeployment({
+        ...input,
+        routes: [{ venue: "cetus", tiers: [] }],
+      }),
+    /route cetus needs at least one tier/,
   );
 });
 
@@ -245,40 +296,13 @@ test("accepts only mainnet, bound to its genesis digest", () => {
   );
 });
 
-test("preserves the historical mainnet identity without relabeling its ABI", () => {
-  const released = getBlastDeployment("mainnet");
-  assert.equal(BLAST_DEPLOYMENTS.mainnet, released);
-  assert.equal(released.environment, "production");
-  for (const [name, reference] of Object.entries(CANONICAL_MAINNET_PACKAGES)) {
-    assert.deepEqual(
-      released.packages[name as keyof typeof released.packages],
-      reference,
-    );
-  }
-  for (const [group, objects] of Object.entries(
-    CANONICAL_MAINNET_SHARED_OBJECTS,
-  )) {
-    assert.deepEqual(
-      released.sharedObjects[group as keyof typeof released.sharedObjects],
-      objects,
-    );
-  }
-  assert.deepEqual(released.source, {
-    contractsCommit: "9255e78751b70b22d8f33cc6577df126a3434424",
-    abi: {
-      ...FROZEN_ABI.artifacts,
-      launchpad:
-        "7ca399dd441aeaa8f63df5e67e44cb7d93a678a47410e4c86193baede5661887",
-    },
-  });
-  assert.deepEqual(released.sdk, {
-    version: "0.1.4",
-    commit: "3e554d7ce8c0604ef1e79da5ffe02a90c7d4fc24",
-  });
-  assert.ok(released.evidence.length > 0);
-  assert.deepEqual(getPresaleDeployment("mainnet"), {
-    ...MAINNET_PRESALE_DEPLOYMENT,
-  });
+test("no deployment is registered until the fresh stack is published", () => {
+  assert.deepEqual(BLAST_DEPLOYMENTS, {});
+  assert.throws(
+    () => getBlastDeployment("mainnet"),
+    (error: unknown) =>
+      error instanceof DeploymentManifestError && error.code === "unpublished",
+  );
 });
 
 test("rejects placeholder package IDs", () => {
@@ -292,48 +316,5 @@ test("rejects placeholder package IDs", () => {
         },
       }),
     /packages\.launchpad\.packageId must not be the zero address/,
-  );
-});
-
-test("registers the canonical activated presale release", () => {
-  assert.deepEqual(
-    BLAST_PRESALE_DEPLOYMENTS.mainnet,
-    MAINNET_PRESALE_DEPLOYMENT,
-  );
-  assert.deepEqual(getPresaleDeployment("mainnet"), MAINNET_PRESALE_DEPLOYMENT);
-  assert.equal(
-    getPresaleDeployment("mainnet").packageId,
-    "0xb0279fbe54bfd1d920e985a4dba0916b2b73a5218514edeecb7b9dd30cf2863b",
-  );
-  assert.equal(
-    getPresaleDeployment("mainnet").packageVersion.initialSharedVersion,
-    "2",
-  );
-});
-
-test("normalizes a standalone presale manifest and requires every singleton", () => {
-  const manifest = presaleDeployment(deployment);
-  const presale = definePresaleDeployment(manifest);
-  assert.deepEqual(presale, manifest);
-  assert.equal(Object.isFrozen(presale), true);
-  assert.equal(Object.isFrozen(presale.feePolicy), true);
-  assert.equal(Object.isFrozen(presale.admin), true);
-  new PresaleCalls(presale);
-  for (const name of [
-    "packageVersion",
-    "venueConfig",
-    "creationPolicy",
-    "feePolicy",
-    "admin",
-  ] as const) {
-    const { [name]: _removed, ...rest } = manifest;
-    assert.throws(
-      () => definePresaleDeployment(rest as typeof manifest),
-      new RegExp(`presale\\.${name} is required`),
-    );
-  }
-  assert.throws(
-    () => definePresaleDeployment({ ...manifest, packageId: "0x0" }),
-    /presale\.packageId must not be the zero address/,
   );
 });

@@ -3,24 +3,19 @@ import type {
   ClientWithCoreApi,
   SuiClientRegistration,
 } from "@mysten/sui/client";
-import type { AftermathPoolCreation } from "./aftermath.ts";
-import { findAftermathPoolCreation } from "./aftermath.ts";
-import { findNativeAftermathPoolCreation } from "./aftermath-native.ts";
+import { findPoolCreation } from "./aftermath-dao.ts";
 import type {
   PresaleCommitment,
   PresaleCreationPolicyState,
   PresaleFeePolicyState,
-  PresaleRewardRoundState,
   PresaleState,
-  PresaleVaultState,
 } from "./state.ts";
 import {
   getPresale,
   getPresaleCommitment,
   getPresaleCreationPolicy,
   getPresaleFeePolicy,
-  getPresaleRewardRound,
-  getPresaleVault,
+  presaleId,
 } from "./state.ts";
 import type { PresaleDeployment } from "./transactions.ts";
 import { PresaleCalls, PresaleTransactions } from "./transactions.ts";
@@ -44,6 +39,11 @@ export class PresaleClient {
     return getPresale(this.#client, objectId, this.#originalPackageId);
   }
 
+  /** The one presale of `saleTokenType`, at its derived ID. */
+  async getPresaleBySaleToken(saleTokenType: string): Promise<PresaleState> {
+    return this.getPresale(presaleId(this.call.deployment, saleTokenType));
+  }
+
   /** `wallet`'s undelivered commitment; null if none or already claimed. */
   async getCommitment(
     presaleId: string,
@@ -57,11 +57,7 @@ export class PresaleClient {
     );
   }
 
-  async getVault(objectId: string): Promise<PresaleVaultState> {
-    return getPresaleVault(this.#client, objectId, this.#originalPackageId);
-  }
-
-  /** The deployment's `FeePolicy`: current rates and payout destination. */
+  /** The deployment's `FeePolicy`: the rates new sales snapshot. */
   async getFeePolicy(): Promise<PresaleFeePolicyState> {
     return getPresaleFeePolicy(
       this.#client,
@@ -70,7 +66,7 @@ export class PresaleClient {
     );
   }
 
-  /** The deployment's `CreationPolicy`: the Quote types and migrators new presales may use. */
+  /** The deployment's `CreationPolicy`: the Quotes, venues and partners new sales may use. */
   async getCreationPolicy(): Promise<PresaleCreationPolicyState> {
     return getPresaleCreationPolicy(
       this.#client,
@@ -79,48 +75,19 @@ export class PresaleClient {
     );
   }
 
-  /** Native reservation and verified shared input; the input is null once migration consumes it. */
-  async getNativeAftermathPoolCreation(
-    presaleId: string,
-    options: { creationDigest?: string; pageLimit?: number } = {},
-  ) {
-    return findNativeAftermathPoolCreation(this.#client, {
-      presaleId,
-      originalPackageId: this.#originalPackageId,
-      ...options,
-    });
-  }
-
   /**
-   * `presaleId`'s Aftermath binding: its `PoolCreation` (null once migrated)
-   * and `Lp` type, from the `PoolCreationReserved` event. Pass the sale's
-   * creation digest to read one transaction instead of scanning the vendor's
-   * events. Null for a sale the vendor did not create. Needs
-   * `deployment.aftermath`.
+   * A vendor sale's `PoolCreation`, from its creation transaction's
+   * `PoolCreationReserved`. Needs `deployment.aftermathDaoPresale`.
    */
-  async getAftermathPoolCreation(
-    presaleId: string,
-    options: { creationDigest?: string } = {},
-  ): Promise<AftermathPoolCreation | null> {
-    const { aftermath } = this.call.deployment;
-    if (!aftermath) {
-      throw new TypeError("deployment.aftermath is required for Aftermath");
+  async getPoolCreation(creationDigest: string) {
+    const { aftermathDaoPresale } = this.call.deployment;
+    if (!aftermathDaoPresale) {
+      throw new TypeError("deployment.aftermathDaoPresale is required");
     }
-    return findAftermathPoolCreation(this.#client, {
-      presaleId,
-      packageId: aftermath.packageId,
-      ...options,
+    return findPoolCreation(this.#client, {
+      deployment: aftermathDaoPresale,
+      creationDigest,
     });
-  }
-
-  async getHolderRewardRound(
-    objectId: string,
-  ): Promise<PresaleRewardRoundState> {
-    return getPresaleRewardRound(
-      this.#client,
-      objectId,
-      this.#originalPackageId,
-    );
   }
 
   get #originalPackageId(): string {

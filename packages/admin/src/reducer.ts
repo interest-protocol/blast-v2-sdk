@@ -1,10 +1,14 @@
+import type { DelayedChange } from "@interest-protocol/blast-core/bcs";
+import { suiEventId } from "@interest-protocol/blast-core/events";
 import type {
   AclEventKind,
   DecodedAclDelayedEvent,
   DecodedAclEvent,
+  DecodedPackageAdministrationEvent,
+  DecodedUpgradeDelayedEvent,
 } from "./events.ts";
 import { aclEventBcs, aclEventId } from "./events.ts";
-import type { PendingSuperAdmin } from "./state.ts";
+import type { PendingSuperAdmin, UpgradeAction } from "./state.ts";
 
 /**
  * The ACL rebuilt from its events. Its `init` emits nothing, so
@@ -112,4 +116,124 @@ function withRoles(
     ...state,
     admins: roles === null ? admins : { ...admins, [adminCapId]: roles },
   };
+}
+
+/** One package's administration, rebuilt from its `blast_admin` events. */
+export type PackageAdministration = {
+  packageVersionId: string | null;
+  packageAdminId: string | null;
+  /** The package witness, defining-ID form, pinned at publication. */
+  packageWitness: string | null;
+  version: bigint | null;
+  validPauseBits: number | null;
+  paused: number | null;
+  upgradeCapId: string | null;
+  upgradeCapVersion: bigint | null;
+  policy: number | null;
+  /** True once `make_immutable` destroyed the UpgradeCap. */
+  immutable: boolean;
+  /** The applied delay of upgrade actions; null before `ActionCreated`. */
+  upgradeDelayMs: bigint | null;
+  /** The scheduled upgrade action or delay change, if any. */
+  pendingUpgrade: {
+    change: DelayedChange<UpgradeAction>;
+    delayMs: bigint;
+    readyAtMs: bigint;
+  } | null;
+};
+
+/** Every package's administration by OTW type, from version, pause, upgrade and upgrade-slot events. */
+export type PackageAdministrationProjection = {
+  appliedEventIds: Readonly<Record<string, true>>;
+  packages: Readonly<Record<string, PackageAdministration>>;
+};
+
+export function createPackageAdministrationProjection(): PackageAdministrationProjection {
+  return { appliedEventIds: {}, packages: {} };
+}
+
+const EMPTY_ADMINISTRATION: PackageAdministration = {
+  packageVersionId: null,
+  packageAdminId: null,
+  packageWitness: null,
+  version: null,
+  validPauseBits: null,
+  paused: null,
+  upgradeCapId: null,
+  upgradeCapVersion: null,
+  policy: null,
+  immutable: false,
+  upgradeDelayMs: null,
+  pendingUpgrade: null,
+};
+
+/** Applies one event once; replaying an applied event returns `state` unchanged. */
+export function reducePackageAdministrationEvent(
+  state: PackageAdministrationProjection,
+  event: DecodedPackageAdministrationEvent | DecodedUpgradeDelayedEvent,
+): PackageAdministrationProjection {
+  const eventId = suiEventId(event.position);
+  if (state.appliedEventIds[eventId]) return state;
+  const current = state.packages[event.otw] ?? EMPTY_ADMINISTRATION;
+  return {
+    appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
+    packages: {
+      ...state.packages,
+      [event.otw]: { ...current, ...administrationChange(event) },
+    },
+  };
+}
+
+function administrationChange(
+  event: DecodedPackageAdministrationEvent | DecodedUpgradeDelayedEvent,
+): Partial<PackageAdministration> {
+  if (event.source === "delayed") {
+    switch (event.kind) {
+      case "ActionCreated":
+        return { upgradeDelayMs: event.payload.delay_ms };
+      case "ActionScheduled":
+        return {
+          pendingUpgrade: {
+            change: event.payload.change,
+            delayMs: event.payload.delay_ms,
+            readyAtMs: event.payload.ready_at_ms,
+          },
+        };
+      case "ActionCancelled":
+        return { pendingUpgrade: null };
+      case "ActionApplied":
+        return { pendingUpgrade: null, upgradeDelayMs: event.payload.delay_ms };
+      case "ActionDestroyed":
+        return {};
+    }
+  }
+  switch (event.kind) {
+    case "PackageVersionCreated":
+      return {
+        packageVersionId: event.payload.package_version_id,
+        packageAdminId: event.payload.package_admin_id,
+        packageWitness: event.payload.package_witness,
+        version: event.payload.version,
+        validPauseBits: event.payload.valid_pause_bits,
+        paused: event.payload.paused,
+      };
+    case "PackageAdminCreated":
+      return {
+        packageAdminId: event.payload.package_admin_id,
+        upgradeCapId: event.payload.upgrade_cap_id,
+        upgradeCapVersion: event.payload.upgrade_cap_version,
+        policy: event.payload.policy,
+      };
+    case "VersionAdvanced":
+      return { version: event.payload.new_version };
+    case "Paused":
+    case "Unpaused":
+      return { paused: event.payload.paused };
+    case "UpgradeAuthorized":
+      return {};
+    case "UpgradeCommitted":
+      return { upgradeCapVersion: event.payload.new_upgrade_cap_version };
+    case "UpgradeCapDestroyed":
+      return { immutable: true, upgradeCapId: null };
+  }
 }

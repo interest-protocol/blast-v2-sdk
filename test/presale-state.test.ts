@@ -1,581 +1,397 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  decodePoolCreationObject,
+  findPoolCreation,
+} from "@interest-protocol/blast-presale-sdk/aftermath-dao";
+import {
+  creationPolicyBcs,
   decodePresaleCreationPolicyObject,
   decodePresaleFeePolicyObject,
   decodePresaleObject,
-  decodePresaleRewardRoundObject,
-  decodePresaleVaultObject,
-  eligibilityPolicyBcs,
+  feePolicyBcs,
   getPresaleCommitment,
-  isVaultWithoutPresale,
-  presaleBcs,
-  presaleRewardIsClaimed,
-  uncappedPhaseBcs,
+  presaleId,
+  presaleVaultId,
 } from "@interest-protocol/blast-presale-sdk/state";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
-import { normalizeSuiAddress } from "@mysten/sui/utils";
+import {
+  fromHex,
+  normalizeStructTag,
+  normalizeSuiAddress,
+  normalizeSuiObjectId,
+} from "@mysten/sui/utils";
+import { DERIVED_ID_FIXTURE as derived } from "./fixtures/derived-ids.ts";
+import { PRESALE_FIXTURE as fixture } from "./fixtures/presale-a1a8f6c.ts";
 
-// Byte fixtures written field by field from the Move declarations (and the
-// `PresaleState` / `VaultState` serde mirrors in the contracts' presale venue
-// fork), independently of the SDK's BCS schemas.
-const pkg = "0x5e";
-const u8 = (value: number) => [value];
-const u64 = (value: bigint) => le(value, 8);
-const bool = (value: boolean) => [value ? 1 : 0];
-const addr = (value: string) =>
-  Array.from(Buffer.from(normalizeSuiAddress(value).slice(2), "hex"));
-const vec = (items: number[][]) => [items.length, ...items.flat()];
-const bytes = (value: number[]) => [value.length, ...value];
-const ascii = (value: string) => bytes(Array.from(Buffer.from(value)));
+// The Move fixture's presale and vendor test packages are published at 0x0.
+const pkg = "0x0";
+const zero = (name: string) =>
+  normalizeStructTag(`0x0::blast_presale_tests::${name}`);
+const saleToken = zero("BLAST_PRESALE_TESTS");
+const quote = zero("QUOTE");
+const presaleType = `0x0::blast_presale::Presale<${saleToken}, ${quote}>`;
+const id = `0x${fixture.presaleId}`;
+const partner = `0x${fixture.partnerId}`;
+const venue = normalizeStructTag(
+  new TextDecoder().decode(fromHex(fixture.venue)),
+);
+const witness = normalizeStructTag(
+  "0x0::blast_presale_package::PackageWitness",
+);
+const address = (value: string) => normalizeSuiAddress(value);
 
-function le(value: bigint, width: number): number[] {
-  return Array.from({ length: width }, (_, i) =>
-    Number((value >> BigInt(8 * i)) & 0xffn),
-  );
-}
-
-const root = Array.from({ length: 32 }, (_, i) => i);
-const witness = `${"5e".padStart(64, "0")}::cetus::Witness`;
-
-function presaleBytes(): Uint8Array {
-  return Uint8Array.from([
-    ...addr("0xab"), // id
-    ...addr("0xca"), // presale_cap_id
-    ...u8(2), // lifecycle: Funded
-    ...u64(100n), // duration_ms
-    ...u64(50n), // liquidity_window_ms
-    ...u64(1_000n), // start_ms; the contract derives every other window from it
-    ...u64(1_000n), // raise_target
-    ...u8(1), // eligibility: Allowlisted
-    ...bytes(root),
-    ...u64(3n),
-    ...u8(1), // uncapped: Some
-    ...u64(50n), // starts_after_ms
-    ...u8(1), // access: Anyone
-    ...u64(8n),
-    ...u64(250n),
-    ...u8(1), // hard_cap: Some
-    ...u64(50n), // starts_after_ms
-    ...bool(true), // closes_when_filled
-    ...ascii(witness), // migration_witness
-    ...vec([
-      [...addr("0xc0ffee"), ...u64(5_000n), ...u8(0)],
-      [...addr("0xfee"), ...u64(2_000n), ...u8(0)],
-    ]), // fee_split.shares: RecipientShare { recipient, bps: Bps(u64), vesting: None }
-    ...u64(3_000n), // fee_split.holder_rewards_bps: Bps(u64)
-    ...u64(4_000n), // total_commitments
-    ...u64(2n), // participants
-    ...u64(3_000n), // quote
-    ...u64(10_001n), // token_allocation
-    ...u8(1), // participant_vesting: Some
-    ...u64(0n), // cliff_ms
-    ...u64(30n), // period_ms
-    ...u64(6n), // periods
-    ...u64(7_501n), // sale_tokens
-    ...u64(0n), // liquidity_tokens
-    ...vec([
-      [
-        ...addr("0xa110c"),
-        ...u64(5_000n),
-        ...u8(1), // vesting: Some
-        ...u64(100n), // cliff_ms
-        ...u64(50n), // period_ms
-        ...u64(4n), // periods
-      ],
-    ]), // recipient_payouts
-    ...u64(0n), // recipient_tokens
-    ...vec([[...addr("0x5a1e"), ...u64(200n), ...u8(0)]]), // raise_payouts
-    ...u64(333n), // protocol_fees.raise_bps
-    ...u64(500n), // protocol_fees.token_bps
-    ...u64(1_000n), // protocol_fees.lp_fee_meme_bps
-    ...u64(2_500n), // protocol_fees.lp_fee_quote_bps
-    ...u64(33n), // protocol_quote
-    ...u64(1_000n), // protocol_tokens
-    ...u8(1),
-    ...addr("0x9a27"), // partner_id
-    ...u8(0), // unpaid_protocol_quote
-  ]);
-}
-
-const object = (type: string, content: Uint8Array, objectId = "0xab") => ({
-  objectId,
-  initialSharedVersion: "7",
-  type,
-  content,
-});
-
-test("decodes a Presale from bytes laid out in Move field order", () => {
-  const state = decodePresaleObject(
-    object(
-      `${pkg}::blast_presale::Presale<0xa::meme::MEME, 0x2::sui::SUI>`,
-      presaleBytes(),
-    ),
-    pkg,
-  );
-  assert.equal(state.lifecycle, "Funded");
-  assert.equal(state.presaleCapId, normalizeSuiAddress("0xca"));
-  assert.equal(state.memeType, `${normalizeSuiAddress("0xa")}::meme::MEME`);
-  assert.deepEqual(state.eligibility, {
-    kind: "allowlisted",
-    root: Buffer.from(root).toString("hex"),
-    leafCount: 3n,
-  });
-  assert.deepEqual(state.uncapped, {
-    startsAfterMs: 50n,
-    access: { kind: "anyone", maxParticipants: 8n, minCommitment: 250n },
-  });
-  assert.deepEqual(state.hardCap, {
-    startsAfterMs: 50n,
-    closesWhenFilled: true,
-  });
-  assert.deepEqual(
-    [
-      state.startMs,
-      state.endMs,
-      state.liquidityDeadlineMs,
-      state.uncappedFromMs,
-      state.hardCapFromMs,
-    ],
-    [1_000n, 1_100n, 1_150n, 1_050n, 1_050n],
-  );
-  assert.equal(state.migrationWitness, `0x${witness}`);
-  assert.equal(state.holderRewardsBps, 3_000n);
-  assert.deepEqual(state.feeRecipients, [
-    { recipient: normalizeSuiAddress("0xc0ffee"), bps: 5_000n, vesting: null },
-    { recipient: normalizeSuiAddress("0xfee"), bps: 2_000n, vesting: null },
-  ]);
-  assert.deepEqual(state.recipientPayouts, [
+function presaleObject(hex: string) {
+  return decodePresaleObject(
     {
-      recipient: normalizeSuiAddress("0xa110c"),
-      amount: 5_000n,
-      vesting: { cliffMs: 100n, periodMs: 50n, periods: 4n },
+      objectId: id,
+      initialSharedVersion: "7",
+      type: presaleType,
+      content: fromHex(hex),
     },
-  ]);
-  assert.deepEqual(
-    [
-      state.totalCommitments,
-      state.participants,
-      state.quote,
-      state.tokenAllocation,
-      state.saleTokens,
-      state.liquidityTokens,
-      state.recipientTokens,
-    ],
-    [4_000n, 2n, 3_000n, 10_001n, 7_501n, 0n, 0n],
-  );
-  assert.deepEqual(state.participantVesting, {
-    cliffMs: 0n,
-    periodMs: 30n,
-    periods: 6n,
-  });
-  assert.deepEqual(state.raisePayouts, [
-    { recipient: normalizeSuiAddress("0x5a1e"), amount: 200n, vesting: null },
-  ]);
-  assert.deepEqual(state.protocolFees, {
-    raiseBps: 333n,
-    tokenBps: 500n,
-    lpFeeMemeBps: 1_000n,
-    lpFeeQuoteBps: 2_500n,
-  });
-  assert.deepEqual([state.protocolQuote, state.protocolTokens], [33n, 1_000n]);
-  assert.deepEqual(
-    [state.partnerId, state.unpaidProtocolQuote],
-    [normalizeSuiAddress("0x9a27"), null],
-  );
-  // After a partnered migration, Blast's raise share is held until `pay_protocol_fees_with_partner`.
-  const held = decodePresaleObject(
-    object(
-      `${pkg}::blast_presale::Presale<0xa::meme::MEME, 0x2::sui::SUI>`,
-      Uint8Array.from([...presaleBytes().slice(0, -1), 1, ...u64(33n)]),
-    ),
     pkg,
   );
-  assert.equal(held.unpaidProtocolQuote, 33n);
-  const parsed = presaleBcs.parse(presaleBytes());
-  assert.deepEqual(
-    presaleBcs.parse(presaleBcs.serialize(parsed).toBytes()),
-    parsed,
-  );
-});
+}
 
-test("round-trips both eligibility policies and uncapped accesses", () => {
-  const open = Uint8Array.from([0, ...u64(5_000n), ...u64(2n), ...u64(500n)]);
-  assert.deepEqual(eligibilityPolicyBcs.parse(open), {
+test("decodes the Move-printed partnered sale through its lifecycle", () => {
+  const open = presaleObject(fixture.presaleOpenObject);
+  assert.equal(open.objectId, id);
+  assert.equal(open.initialSharedVersion, "7");
+  assert.equal(open.saleTokenType, saleToken);
+  assert.equal(open.quoteType, quote);
+  assert.equal(open.lifecycle, "Open");
+  assert.equal(open.venue, venue);
+  assert.equal(open.raiseTarget, 1_000n);
+  assert.deepEqual(open.eligibility, {
     kind: "open",
     walletCap: 5_000n,
     maxParticipants: 2n,
     minCommitment: 500n,
   });
   assert.deepEqual(
-    eligibilityPolicyBcs.serialize(eligibilityPolicyBcs.parse(open)).toBytes(),
-    open,
+    [open.startMs, open.endMs, open.durationMs],
+    [1_000n, 1_100n, 100n],
   );
-  const eligible = Uint8Array.from([...u64(50n), 0]);
-  assert.deepEqual(uncappedPhaseBcs.parse(eligible), {
-    startsAfterMs: 50n,
-    access: { kind: "eligible" },
-  });
-  assert.deepEqual(
-    uncappedPhaseBcs.serialize(uncappedPhaseBcs.parse(eligible)).toBytes(),
-    eligible,
-  );
-});
-
-test("rejects a foreign type, package, or mismatched UID", () => {
-  const type = `${pkg}::blast_presale::Presale<0xa::meme::MEME, 0x2::sui::SUI>`;
-  assert.throws(() =>
-    decodePresaleObject(object(type, presaleBytes()), "0x99"),
-  );
-  assert.throws(() =>
-    decodePresaleObject(
-      object(type.replace("Presale<", "Other<"), presaleBytes()),
-      pkg,
-    ),
-  );
-  assert.throws(
-    () => decodePresaleObject(object(type, presaleBytes(), "0xac"), pkg),
-    /mismatched UID/,
-  );
-});
-
-test("decodes a Vault from bytes laid out in Move field order", () => {
-  const content = Uint8Array.from([
-    ...addr("0xba"), // id
-    ...addr("0xab"), // presale_id
-    ...addr("0xca"), // presale_cap_id
-    ...addr("0x9001"), // pool_id
-    ...addr("0xba"), // fee_split.owner
-    ...u8(0), // fee_split.key: FeeSplitKey()
-    ...vec([[...addr("0xc0ffee"), ...u64(7_000n), ...u8(0)]]), // fee_split.shares
-    ...u64(3_000n), // fee_split.holder_rewards_bps
-    ...u64(172_800_000n),
-    ...u8(0), // applied notice, no proposal
-    ...addr("0xba"), // protocol_fees.owner
-    ...u8(0), // protocol_fees.key: ProtocolLpFeesKey()
-    ...u64(0n), // protocol_fees.raise_bps
-    ...u64(0n), // protocol_fees.token_bps
-    ...u64(1_000n), // protocol_fees.lp_fee_meme_bps
-    ...u64(2_500n), // protocol_fees.lp_fee_quote_bps
-    ...u64(172_800_000n),
-    ...u8(0), // applied notice, no proposal
-    ...u8(1), // partner_id: Some
-    ...addr("0x9a27"),
-    ...u64(11n), // unpaid_protocol_meme
-    ...u64(3n), // unpaid_protocol_quote
-    ...u64(1n), // migration_meme_residual
-    ...u64(0n), // migration_quote_residual
-    ...u64(3n), // holder_rewards_quote
-    ...u64(2n), // next_round
-    ...u8(1), // last_checkpoint: Some
-    ...u64(99n),
-    ...addr("0xba"), // round_publication.owner
-    ...u8(0), // round_publication.key: RoundPublicationKey()
-    ...u64(0n), // applied round notice
-    ...u8(1), // pending: Some
-    ...u8(0), // Change::Action(RoundTerms)
-    ...u64(2n), // number
-    ...u64(99n), // start_checkpoint
-    ...u64(120n), // end_checkpoint
-    ...bytes(Array(32).fill(0x11)), // root
-    ...bytes(Array(32).fill(0x22)), // manifest_digest
-    ...u64(1n), // leaf_count
-    ...u64(3n), // meme_amount
-    ...u64(2n), // quote_amount
-    ...u64(1n), // gas_reserve_amount
-    ...u64(604_800_000n), // claim_window_duration_ms
-    ...addr("0xc0"), // expected_treasury
-    ...u64(0n), // proposal delay_ms
-    ...u64(5n), // ready_at_ms
-  ]);
-  const vault = decodePresaleVaultObject(
-    object(
-      `${pkg}::presale_vault::Vault<0xa::meme::MEME, 0x2::sui::SUI>`,
-      content,
-      "0xba",
-    ),
-    pkg,
-  );
-  assert.deepEqual(
-    [
-      vault.presaleId,
-      vault.presaleCapId,
-      vault.poolId,
-      vault.holderRewardsBps,
-      vault.partnerId,
-      vault.unpaidProtocolMeme,
-      vault.unpaidProtocolQuote,
-      vault.migrationMemeResidual,
-      vault.migrationQuoteResidual,
-      vault.holderRewardsQuote,
-      vault.nextRound,
-      vault.lastCheckpoint,
-    ],
-    [
-      normalizeSuiAddress("0xab"),
-      normalizeSuiAddress("0xca"),
-      normalizeSuiAddress("0x9001"),
-      3_000n,
-      normalizeSuiAddress("0x9a27"),
-      11n,
-      3n,
-      1n,
-      0n,
-      3n,
-      2n,
-      99n,
-    ],
-  );
-  assert.deepEqual(vault.protocolFees, {
-    raiseBps: 0n,
-    tokenBps: 0n,
-    lpFeeMemeBps: 1_000n,
-    lpFeeQuoteBps: 2_500n,
-  });
-  assert.deepEqual(vault.roundPublication, {
-    owner: normalizeSuiAddress("0xba"),
-    key: null,
-    delay_ms: 0n,
-    pending: {
-      value: {
-        kind: "Action",
-        action: {
-          number: 2n,
-          start_checkpoint: 99n,
-          end_checkpoint: 120n,
-          root: "11".repeat(32),
-          manifest_digest: "22".repeat(32),
-          leaf_count: 1n,
-          meme_amount: 3n,
-          quote_amount: 2n,
-          gas_reserve_amount: 1n,
-          claim_window_duration_ms: 604_800_000n,
-          expected_treasury: normalizeSuiAddress("0xc0"),
-        },
+  assert.equal(open.liquidityDeadlineMs, 1_100n + 7n * 86_400_000n);
+  assert.deepEqual(open.feeSplit, {
+    routes: [
+      {
+        destination: { kind: "Address", address: address("0xc0ffee") },
+        bps: 5_000n,
       },
-      delay_ms: 0n,
-      ready_at_ms: 5n,
-    },
+      {
+        destination: { kind: "Address", address: address("0xfee") },
+        bps: 2_000n,
+      },
+      { destination: { kind: "HolderRewards" }, bps: 3_000n },
+    ],
   });
-});
-
-test("decodes the FeePolicy from bytes laid out in Move field order", () => {
-  const content = Uint8Array.from([
-    ...addr("0xfe"), // id
-    ...addr("0xfe"), // destination.owner
-    ...u8(0), // destination.key: DestinationKey()
-    ...addr("0x7ea5"), // destination
-    ...u64(0n),
-    ...u8(0), // applied notice, no proposal
-    ...addr("0xfe"), // fees.owner
-    ...u8(0), // fees.key: FeesKey()
-    ...u64(333n), // fees.raise_bps
-    ...u64(500n), // fees.token_bps
-    ...u64(1_000n), // fees.lp_fee_meme_bps
-    ...u64(1_000n), // fees.lp_fee_quote_bps
-    ...u64(0n),
-    ...u8(0), // applied notice, no proposal
-  ]);
-  const policy = decodePresaleFeePolicyObject(
-    object(`${pkg}::fee_policy::FeePolicy`, content, "0xfe"),
-    pkg,
+  // 20,001 tokens over [5,000, 1,000, 500, 2,500, 1,000] BPS: the sale's
+  // half-unit remainder takes the leftover atom.
+  assert.deepEqual(
+    [open.tokenAllocation, open.liquidityTokens, open.protocolTokens],
+    [10_001n, 2_000n, 1_000n],
   );
-  assert.equal(policy.destination, normalizeSuiAddress("0x7ea5"));
-  assert.deepEqual(policy.fees, {
+  assert.deepEqual(open.recipientPayouts, [
+    {
+      recipient: { destination: address("0xa110c"), vestingTerms: null },
+      amount: 5_000n,
+    },
+    {
+      recipient: { destination: address("0xb110c"), vestingTerms: null },
+      amount: 2_000n,
+    },
+  ]);
+  assert.deepEqual(open.raisePayouts, [
+    {
+      recipient: { destination: address("0x5a1e"), vestingTerms: null },
+      amount: 200n,
+    },
+  ]);
+  assert.deepEqual(open.protocolFees, {
     raiseBps: 333n,
     tokenBps: 500n,
-    lpFeeMemeBps: 1_000n,
-    lpFeeQuoteBps: 1_000n,
+    lpFeeMemeBps: 0n,
+    lpFeeQuoteBps: 0n,
   });
-  assert.throws(() =>
-    decodePresaleFeePolicyObject(
-      object(`${pkg}::fee_policy::FeePolicy`, content, "0xfe"),
-      "0x99",
-    ),
+  assert.equal(open.protocolQuote, 33n);
+  assert.equal(open.partnerId, partner);
+  assert.deepEqual(open.feeLedger, {
+    packageWitness: witness,
+    origin: id,
+    partnerId: partner,
+    meme: 0n,
+    quote: 0n,
+    sui: 0n,
+  });
+
+  const funded = presaleObject(fixture.presaleFundedObject);
+  assert.equal(funded.lifecycle, "Funded");
+  assert.deepEqual(
+    [funded.totalCommitments, funded.participants, funded.quote],
+    [4_000n, 2n, 4_000n],
   );
-  assert.throws(() =>
-    decodePresaleFeePolicyObject(
-      object(`${pkg}::fee_policy::Other`, content, "0xfe"),
-    ),
+
+  // Migration moves the raise out, Blast's share into the partner-bound ledger.
+  const migrated = presaleObject(fixture.presaleMigratedObject);
+  assert.equal(migrated.lifecycle, "Migrated");
+  assert.deepEqual(
+    [
+      migrated.quote,
+      migrated.liquidityTokens,
+      migrated.recipientTokens,
+      migrated.protocolTokens,
+    ],
+    [3_000n, 0n, 0n, 0n],
   );
-  // Each delayed value must belong to the policy that stores it.
-  const foreignOwner = Uint8Array.from(content);
-  foreignOwner.set(addr("0xff"), 32);
+  assert.deepEqual(
+    [migrated.feeLedger.meme, migrated.feeLedger.quote],
+    [1_000n, 33n],
+  );
+});
+
+test("decodes a sale whose rates changed before it was cancelled", () => {
+  const cancelled = presaleObject(fixture.presaleCancelledObject);
+  assert.equal(cancelled.lifecycle, "Cancelled");
+  assert.deepEqual(cancelled.protocolFees, {
+    raiseBps: 500n,
+    tokenBps: 250n,
+    lpFeeMemeBps: 100n,
+    lpFeeQuoteBps: 200n,
+  });
+  assert.deepEqual(
+    [
+      cancelled.protocolQuote,
+      cancelled.protocolTokens,
+      cancelled.tokenAllocation,
+    ],
+    [50n, 500n, 10_501n],
+  );
+  assert.equal(cancelled.partnerId, null);
+  assert.equal(cancelled.feeLedger.partnerId, null);
+  assert.deepEqual([cancelled.quote, cancelled.totalCommitments], [500n, 500n]);
+});
+
+test("rejects a look-alike presale type or a mismatched UID", () => {
+  const content = fromHex(fixture.presaleOpenObject);
   assert.throws(
     () =>
-      decodePresaleFeePolicyObject(
-        object(`${pkg}::fee_policy::FeePolicy`, foreignOwner, "0xfe"),
+      decodePresaleObject(
+        { objectId: id, initialSharedVersion: 1, type: presaleType, content },
+        "0x5e",
+      ),
+    /not a presale Presale/,
+  );
+  assert.throws(
+    () =>
+      decodePresaleObject(
+        {
+          objectId: "0xab",
+          initialSharedVersion: 1,
+          type: presaleType,
+          content,
+        },
         pkg,
       ),
     /mismatched UID/,
   );
 });
 
-test("decodes the CreationPolicy's allowed Quote types and migrators", () => {
-  const suiName = `${"2".padStart(64, "0")}::sui::SUI`;
-  const otherWitness = `${"5e".padStart(64, "0")}::bluefin::Witness`;
-  const content = Uint8Array.from([
-    ...addr("0xcf"), // id
-    ...vec([ascii(suiName)]), // allowed_quotes: VecSet<TypeName>
-    ...addr("0xcf"), // migration_witnesses.owner
-    ...u8(0), // migration_witnesses.key: MigrationWitnessKey()
-    ...vec([ascii(witness)]), // migration_witnesses.members
-    ...u64(172_800_000n), // migration_witnesses.delay_ms
-    ...vec([[...ascii(otherWitness), ...u64(5n), ...u64(9n)]]), // admissions
-    ...u8(1), // pending_delay: Some
-    ...u64(0n),
-    ...u64(11n),
-  ]);
-  const policy = decodePresaleCreationPolicyObject(
-    object(`${pkg}::creation_policy::CreationPolicy`, content, "0xcf"),
-    pkg,
-  );
-  assert.deepEqual(policy.allowedQuotes, [`0x${suiName}`]);
-  assert.deepEqual(policy.allowedMigrationWitnesses, [`0x${witness}`]);
-  assert.equal(policy.witnessDelayMs, 172_800_000n);
-  assert.deepEqual(policy.pendingWitnesses, {
-    [`0x${otherWitness}`]: { delay_ms: 5n, ready_at_ms: 9n },
-  });
-  assert.deepEqual(policy.pendingWitnessDelay, {
-    delay_ms: 0n,
-    ready_at_ms: 11n,
-  });
-  assert.throws(() =>
-    decodePresaleCreationPolicyObject(
-      object(`${pkg}::fee_policy::FeePolicy`, content, "0xcf"),
-    ),
-  );
-});
-
-test("decodes a holder-reward Round and its claim bitmap", () => {
-  const content = Uint8Array.from([
-    ...addr("0xd0"), // id
-    ...addr("0xba"), // vault_id
-    ...u64(1n), // number
-    ...u64(5_000n), // claim_deadline_ms
-    ...bytes(root),
-    ...u64(300n), // leaf_count
-    ...vec([le(1n << 5n, 32), le(1n, 32)]), // claimed_bitmap: leaves 5 and 256
-    ...u64(40n), // meme
-    ...u64(5n), // quote
-    ...addr("0x7ea5"), // treasury
-    0, // no gas reserve
-  ]);
-  const round = decodePresaleRewardRoundObject(
-    object(
-      `${pkg}::holder_rewards::Round<0xa::meme::MEME, 0x2::sui::SUI>`,
-      content,
-      "0xd0",
-    ),
-    pkg,
-  );
-  assert.equal(round.vaultId, normalizeSuiAddress("0xba"));
-  assert.deepEqual(
-    [
-      round.number,
-      round.claimDeadlineMs,
-      round.leafCount,
-      round.memeRemaining,
-      round.quoteRemaining,
-    ],
-    [1n, 5_000n, 300n, 40n, 5n],
-  );
-  assert.equal(presaleRewardIsClaimed(round, 5n), true);
-  assert.equal(presaleRewardIsClaimed(round, 256n), true);
-  assert.equal(presaleRewardIsClaimed(round, 4n), false);
-  assert.throws(() => presaleRewardIsClaimed(round, 300n), /out of bounds/);
-});
-
-test("reads canonical optional gas custody in Move field order and rejects another type", () => {
-  const type = `${pkg}::holder_rewards::Round<0xa::meme::MEME, 0x2::sui::SUI>`;
-  const fields = [
-    ...addr("0xd1"),
-    ...addr("0xba"),
-    ...u64(2n),
-    ...u64(5_000n),
-    ...bytes(root),
-    ...u64(300n),
-    ...vec([le(1n << 5n, 32), le(1n, 32)]),
-    ...u64(40n),
-    ...u64(970n),
-    ...addr("0x7ea5"),
-  ];
-  for (const reserve of [30n, 0n, null]) {
-    const value = object(
-      type,
-      Uint8Array.from([
-        ...fields,
-        ...(reserve === null ? [0] : [1, ...u64(reserve)]),
-      ]),
-      "0xd1",
-    );
-    const round = decodePresaleRewardRoundObject(value, pkg);
-    assert.equal(round.treasury, normalizeSuiAddress("0x7ea5"));
-    assert.equal(round.gasReserveRemaining, reserve);
-    assert.equal(round.quoteRemaining, 970n);
-    assert.equal(presaleRewardIsClaimed(round, 256n), true);
-    assert.throws(
-      () =>
-        decodePresaleRewardRoundObject(
-          {
-            ...value,
-            type: type.replace("Round", "OtherRound"),
+test("decodes the fee and creation policies", () => {
+  const policy = "0xf1";
+  const fees = {
+    raiseBps: 200n,
+    tokenBps: 100n,
+    lpFeeMemeBps: 1_500n,
+    lpFeeQuoteBps: 1_500n,
+  };
+  const feePolicy = decodePresaleFeePolicyObject(
+    {
+      objectId: policy,
+      initialSharedVersion: 3,
+      type: "0x5e::fee_policy::FeePolicy",
+      content: feePolicyBcs
+        .serialize({
+          id: { id: { bytes: address(policy) } },
+          fees: {
+            owner: policy,
+            key: null,
+            value: fees,
+            delay_ms: 0n,
+            pending: null,
           },
-          pkg,
-        ),
-      /not a presale/,
-    );
-    assert.throws(
-      () => decodePresaleRewardRoundObject(value, "0x99"),
-      /not a presale/,
-    );
-    assert.throws(
-      () => decodePresaleRewardRoundObject({ ...value, objectId: "0xd2" }, pkg),
-      /mismatched UID/,
-    );
-  }
+        })
+        .toBytes(),
+    },
+    "0x5e",
+  );
+  assert.deepEqual(feePolicy.fees, fees);
+  assert.equal(feePolicy.feesPolicy.delay_ms, 0n);
+
+  const cetusVenue = normalizeStructTag("0x9::cetus::Venue");
+  const vendorVenue = normalizeStructTag(
+    "0x7::blast_aftermath_dao_presale::Venue",
+  );
+  const sui = normalizeStructTag("0x2::sui::SUI");
+  const creation = decodePresaleCreationPolicyObject(
+    {
+      objectId: policy,
+      initialSharedVersion: 3,
+      type: "0x5e::creation_policy::CreationPolicy",
+      content: creationPolicyBcs
+        .serialize({
+          id: { id: { bytes: address(policy) } },
+          allowed_quotes: [sui],
+          venues: {
+            owner: policy,
+            key: null,
+            members: [cetusVenue],
+            delay_ms: 172_800_000n,
+            admissions: [
+              { member: vendorVenue, delay: { delay_ms: 0n, ready_at_ms: 9n } },
+            ],
+            pending_delay: null,
+          },
+          partners: {
+            owner: policy,
+            acceptance_ends_at_ms: { id: "0x7ab1e", size: 2n },
+          },
+        })
+        .toBytes(),
+    },
+    "0x5e",
+  );
+  assert.deepEqual(creation.allowedQuotes, [sui]);
+  assert.deepEqual(creation.venues, [cetusVenue]);
+  assert.equal(creation.venueDelayMs, 172_800_000n);
+  assert.deepEqual(creation.pendingVenues, {
+    [vendorVenue]: { delay_ms: 0n, ready_at_ms: 9n },
+  });
+  assert.deepEqual(creation.partners, {
+    owner: address(policy),
+    acceptanceTableId: address("0x7ab1e"),
+    size: 2n,
+  });
 });
 
-test("reads a wallet's commitment dynamic field, null when absent", async () => {
-  const requests: unknown[] = [];
-  const client = (value: Uint8Array | null) =>
-    ({
-      core: {
-        getDynamicField: async (request: unknown) => {
-          requests.push(request);
-          if (!value) {
-            throw new ObjectError("notExists", "missing", {
-              reason: "notFound",
-            });
-          }
-          return { dynamicField: { value: { bcs: value } } };
+test("presaleId and presaleVaultId match the Move-derived IDs", () => {
+  const presale = {
+    originalPackageId: derived.presaleOriginalPackageId,
+    presaleRegistry: {
+      objectId: derived.presaleRegistryId,
+      initialSharedVersion: 1,
+    },
+  };
+  assert.equal(presaleId(presale, derived.memeType), derived.presaleId);
+  assert.equal(
+    presaleVaultId(
+      {
+        originalPackageId: derived.vaultOriginalPackageId,
+        registry: {
+          objectId: derived.vaultRegistryId,
+          initialSharedVersion: 1,
         },
       },
-    }) as unknown as ClientWithCoreApi;
-
-  const commitment = await getPresaleCommitment(
-    client(Uint8Array.from([...u64(501n), ...u64(5_000n)])),
-    "0xab",
-    "0xa11ce",
-    pkg,
+      presale,
+      derived.presaleOriginId,
+    ),
+    derived.presaleVaultId,
   );
-  assert.deepEqual(commitment, { quote: 501n, walletCap: 5_000n });
-  assert.deepEqual(requests[0], {
-    parentId: normalizeSuiAddress("0xab"),
-    name: {
-      type: `${normalizeSuiAddress(pkg)}::blast_presale::CommitmentKey`,
-      bcs: Uint8Array.from(addr("0xa11ce")),
+});
+
+test("reads a wallet's commitment, null once claimed", async () => {
+  let found = true;
+  const client = {
+    core: {
+      getDynamicField: async (options: {
+        parentId: string;
+        name: { type: string; bcs: Uint8Array };
+      }) => {
+        assert.equal(options.parentId, normalizeSuiObjectId(id));
+        assert.equal(
+          options.name.type,
+          `${normalizeSuiAddress(pkg)}::blast_presale::CommitmentKey`,
+        );
+        if (!found)
+          throw new ObjectError("notExists", "missing", { reason: "notFound" });
+        return {
+          dynamicField: {
+            value: { bcs: Uint8Array.from([...le(1_000n), ...le(5_000n)]) },
+          },
+        };
+      },
     },
+  } as unknown as ClientWithCoreApi;
+  assert.deepEqual(await getPresaleCommitment(client, id, "0xa11ce", pkg), {
+    quote: 1_000n,
+    walletCap: 5_000n,
   });
-  assert.equal(
-    await getPresaleCommitment(client(null), "0xab", "0xa11ce", pkg),
-    null,
-  );
+  found = false;
+  assert.equal(await getPresaleCommitment(client, id, "0xa11ce", pkg), null);
 });
 
-test("tells a vault without a presale by its zero presale ID", () => {
-  assert.equal(isVaultWithoutPresale("0x0"), true);
-  assert.equal(isVaultWithoutPresale(normalizeSuiAddress("0x0")), true);
-  assert.equal(isVaultWithoutPresale("0xab"), false);
+const vendorType = (name: string) =>
+  normalizeStructTag(`0x0::blast_aftermath_dao_presale_tests::${name}`);
+const issuer = normalizeStructTag("0x77eb::migration::TestIssuer");
+
+test("decodes the Move-printed vendor PoolCreation", () => {
+  const objectId = `0x${fixture.poolCreationId}`;
+  const decoded = decodePoolCreationObject(
+    {
+      objectId,
+      type: `0x0::blast_aftermath_dao_presale::PoolCreation<${vendorType("LP")}, ${vendorType("SALE")}>`,
+      content: fromHex(fixture.poolCreation),
+    },
+    { originalPackageId: "0x0" },
+  );
+  assert.deepEqual(decoded, {
+    objectId,
+    lpType: vendorType("LP"),
+    saleTokenType: vendorType("SALE"),
+    packageWitness: issuer,
+    createPoolCapId: normalizeSuiObjectId(
+      `0x${fixture.poolCreation.slice(-64)}`,
+    ),
+  });
 });
+
+test("finds a vendor sale's live PoolCreation from its creation transaction", async () => {
+  const objectId = `0x${fixture.poolCreationId}`;
+  const eventType = `0x0::blast_aftermath_dao_presale::PoolCreationReserved<${vendorType("LP")}, ${vendorType("SALE")}, ${vendorType("QUOTE")}>`;
+  const client = {
+    core: {
+      getTransaction: async () => ({
+        Transaction: {
+          events: [{ eventType, bcs: fromHex(fixture.poolCreationReserved) }],
+        },
+      }),
+      getObjects: async () => ({
+        objects: [
+          {
+            objectId,
+            type: `0x0::blast_aftermath_dao_presale::PoolCreation<${vendorType("LP")}, ${vendorType("SALE")}>`,
+            owner: { $kind: "Shared", Shared: { initialSharedVersion: "12" } },
+            content: fromHex(fixture.poolCreation),
+          },
+        ],
+      }),
+    },
+  } as unknown as ClientWithCoreApi;
+  const found = await findPoolCreation(client, {
+    deployment: { originalPackageId: "0x0" },
+    creationDigest: "digest",
+  });
+  assert.ok(found);
+  assert.equal(found.poolCreationId, objectId);
+  assert.equal(found.lpType, vendorType("LP"));
+  assert.equal(found.quoteType, vendorType("QUOTE"));
+  assert.equal(found.packageWitness, issuer);
+  assert.equal(found.poolCreation?.initialSharedVersion, "12");
+});
+
+function le(value: bigint): number[] {
+  return Array.from({ length: 8 }, (_, i) =>
+    Number((value >> BigInt(8 * i)) & 0xffn),
+  );
+}

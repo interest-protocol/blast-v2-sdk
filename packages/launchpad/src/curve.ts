@@ -95,11 +95,15 @@ export function previewOpeningRoundSettlement(
 }
 
 /**
- * Mirrors `launch::sell` for one live launch.
+ * Mirrors `launch::sell` for one live launch (`curve::sell` in Move).
  *
  * Inputs and outputs use atomic units. Fees and pending burn round up to their
  * recipients. The creator-selected burn is applied after the Meme fee; Quote
- * output and progress telemetry round down.
+ * output rounds down. Two fields are SDK-only display values that Move does
+ * not compute: `progressBps`, the launch's graduation progress before the
+ * sale (rounded down, capped at 10,000), and `burnBps`, the launch's
+ * `sell_burn_bps` echoed back. Every other field matches the contract's
+ * arithmetic and the `Sold` event.
  */
 export function previewSell(
   state: CurveState,

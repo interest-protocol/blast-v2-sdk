@@ -6,6 +6,10 @@ import {
   delayedEventBcs,
   delayedEventModule,
 } from "@interest-protocol/blast-admin-sdk/events";
+import {
+  decodeProtocolFeesPaid,
+  protocolFeesPaidBcs,
+} from "@interest-protocol/blast-core/protocol-fees";
 import type {
   LaunchpadEventKind,
   LaunchpadEventPackageIdentity,
@@ -21,14 +25,24 @@ import {
   createLaunchpadEventProjection,
   reduceLaunchpadEvent,
 } from "@interest-protocol/blast-launchpad-sdk/reducer";
+import { decodeLaunchObject } from "@interest-protocol/blast-launchpad-sdk/state";
 import type { BcsType } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { normalizeSuiObjectId } from "@mysten/sui/utils";
+import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 import { orderedEventFields } from "./abi.ts";
+import type { LaunchpadFixture } from "./fixtures/launchpad-a1a8f6c.ts";
+import {
+  FIXTURE_PACKAGE_ID,
+  LAUNCHPAD_FIXTURE_HEX,
+  launchpadFixture,
+} from "./fixtures/launchpad-a1a8f6c.ts";
 
 const packages: LaunchpadEventPackageIdentity = {
   originalPackageId: "0x122",
 };
+const CORE = "0xc0";
+const MEME = "0xa::meme::MEME";
+const QUOTE = "0x2::sui::SUI";
 const samplePlan = {
   curveMemeBps: 8_000n,
   lpMemeBps: 2_000n,
@@ -38,11 +52,7 @@ const samplePlan = {
   recipients: [],
 };
 const sampleSplit = {
-  creatorBps: 10_000n,
-  autoLpBps: 0n,
-  rewardsBps: 0n,
-  burnBps: 0n,
-  recipients: [],
+  routes: [{ destination: { kind: "Owner" }, bps: 10_000n }],
 };
 
 test("decodes and idempotently reduces every frozen launchpad event", () => {
@@ -59,7 +69,7 @@ test("decodes and idempotently reduces every frozen launchpad event", () => {
     orderedEventFields(frozenSpecs),
   );
   const kinds = Object.keys(frozenSpecs) as LaunchpadEventKind[];
-  assert.equal(kinds.length, 23);
+  assert.equal(kinds.length, 18);
 
   let projection = createLaunchpadEventProjection();
   for (const [eventIndex, kind] of orderedForReplay(kinds).entries()) {
@@ -85,7 +95,13 @@ test("replays lifecycle, reserves, and fees from ordered events", () => {
     lpQuoteBps: 9_000n,
     protocolMemeBps: 500n,
     protocolQuoteBps: 500n,
-    recipients: [{ destination: "0xb", memeBps: 500n, quoteBps: 500n }],
+    recipients: [
+      {
+        recipient: { destination: "0xb", vestingTerms: null },
+        memeBps: 500n,
+        quoteBps: 500n,
+      },
+    ],
   };
   const fees = (
     protocolMeme: bigint,
@@ -106,8 +122,7 @@ test("replays lifecycle, reserves, and fees from ordered events", () => {
       {
         launch_id: "0xc",
         ticket_id: "0xb",
-        pool_tick_spacing: 200,
-        pool_fee_rate: 10_000n,
+        venue: "0xb0::cetus::Venue",
         lp_fee_split: sampleSplit,
         graduation_target: 200n,
         allocation_plan: plan,
@@ -190,11 +205,9 @@ test("replays lifecycle, reserves, and fees from ordered events", () => {
       },
       10,
     ),
-    decoded(
-      "ProtocolFeesClaimed",
+    protocolFeesPaid(
       {
-        launch_id: "0xc",
-        treasury: "0x7ea5",
+        origin: "0xc",
         meme_amount: 30_000_007n,
         quote_amount: 13n,
         sui_amount: 601n,
@@ -224,7 +237,9 @@ test("replays lifecycle, reserves, and fees from ordered events", () => {
   assert.equal(created?.memeReserve, 700_000_000n);
   assert.equal(created?.allocatedMeme, 300_000_000n);
   assert.equal(created?.graduationTarget, 200n);
-  assert.equal(created?.poolTickSpacing, 200);
+  assert.equal(created?.venue, normalizeStructTag("0xb0::cetus::Venue"));
+  assert.equal(created?.quoteType, normalizeStructTag(QUOTE));
+  assert.equal(created?.memeType, normalizeStructTag(MEME));
   assert.equal(created?.creationFee, 1_001n);
   assert.equal(created?.protocolSuiFees, 1_001n);
   assert.equal(created?.partnerId, normalizeSuiObjectId("0x9a"));
@@ -255,10 +270,12 @@ test("replays lifecycle, reserves, and fees from ordered events", () => {
   ]);
 
   const claimed = events.at(-1);
-  assert.equal(claimed?.kind, "ProtocolFeesClaimed");
-  if (claimed?.kind === "ProtocolFeesClaimed") {
-    assert.equal(claimed.payload.treasury, normalizeSuiObjectId("0x7ea5"));
-  }
+  assert.equal(claimed?.source, "core");
+  // Core events count nowhere in the launchpad's event counts.
+  assert.equal(
+    Object.values(states.at(-1)?.eventCounts ?? {}).reduce((a, b) => a + b),
+    11,
+  );
 
   const launch = states.at(-1)?.launches[launchId];
   assert.ok(launch);
@@ -390,12 +407,12 @@ test("replays pre-share purchases that reach the graduation target", () => {
 
 test("replays launch configuration policy", () => {
   const sui = normalizedType("0x2::sui::SUI");
-  const witness = normalizedType("0xf::cetus::CETUS");
-  const admit = { kind: "Admission", member: witness } as const;
+  const venue = normalizedType("0xf::cetus::Venue");
+  const admit = { kind: "Admission", member: venue } as const;
   const configured = [
-    decoded("QuoteSet", { quote: "0x2::sui::SUI", allowed: true }, 0),
-    decoded("MemeDecimalsSet", { decimals: 8, allowed: true }, 1),
-    decoded("MemeDecimalsSet", { decimals: 6, allowed: false }, 2),
+    decoded("QuoteAllowed", { allowed: true }, 0),
+    decoded("MemeDecimalsAllowed", { decimals: 8, allowed: true }, 1),
+    decoded("MemeDecimalsAllowed", { decimals: 6, allowed: false }, 2),
     delayed(
       "ProtocolAllocation",
       "DelayedApplied",
@@ -406,50 +423,55 @@ test("replays launch configuration policy", () => {
       },
       3,
     ),
-    delayed(
-      "MigrationWitnesses",
-      "SetApplied",
-      { change: admit, delay_ms: 0n },
-      4,
-    ),
+    delayed("Venues", "SetApplied", { change: admit, delay_ms: 0n }, 4),
     delayed(
       "CreationFee",
       "DelayedApplied",
       { previous_value: 0n, value: 1_001n, delay_ms: 0n },
       5,
     ),
-    decoded("PartnerAdded", { partner_id: "0x9a" }, 6),
-    decoded("PartnerAdded", { partner_id: "0x9b" }, 7),
-    decoded(
-      "PartnerRemoved",
-      { partner_id: "0x9b", accepted_until_ms: 604_800_000n },
-      8,
+    delayed(
+      "ProtocolLpFees",
+      "DelayedApplied",
+      {
+        previous_value: { meme_bps: 1_500n, quote_bps: 1_500n },
+        value: { meme_bps: 2_000n, quote_bps: 1_000n },
+        delay_ms: 0n,
+      },
+      6,
     ),
-    delayed("Treasury", "DelayedCreated", { value: "0x7ea5", delay_ms: 0n }, 9),
+    delayed(
+      "ProtocolFeeShare",
+      "DelayedApplied",
+      { previous_value: 5_000n, value: 3_000n, delay_ms: 0n },
+      7,
+    ),
   ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
 
   assert.deepEqual(configured.config.quotes, { [sui]: true });
   assert.deepEqual(configured.config.memeDecimals, { 8: true, 9: true });
-  assert.deepEqual(configured.config.migrationWitnesses, { [witness]: true });
+  assert.deepEqual(configured.config.venues, { [venue]: true });
   assert.deepEqual(configured.config.protocolAllocation, {
     memeBps: 100n,
     quoteBps: 200n,
   });
   assert.equal(configured.config.creationFee, 1_001n);
-  assert.deepEqual(configured.config.partners, {
-    [normalizeSuiObjectId("0x9a")]: (1n << 64n) - 1n,
-    [normalizeSuiObjectId("0x9b")]: 604_800_000n,
+  assert.deepEqual(configured.config.protocolLpFees, {
+    memeBps: 2_000n,
+    quoteBps: 1_000n,
   });
-  // `RuntimeConfig` reports its first treasury when it is created.
-  assert.equal(configured.config.treasury, normalizeSuiObjectId("0x7ea5"));
-  assert.equal(createLaunchpadEventProjection().config.treasury, null);
+  assert.equal(configured.config.protocolFeeShareBps, 3_000n);
+  assert.deepEqual(createLaunchpadEventProjection().config.protocolLpFees, {
+    memeBps: 1_500n,
+    quoteBps: 1_500n,
+  });
 
   const removed = [
-    decoded("QuoteSet", { quote: "0x2::sui::SUI", allowed: false }, 10),
-    delayed("MigrationWitnesses", "MemberRemoved", { member: witness }, 11),
+    decoded("QuoteAllowed", { allowed: false }, 10),
+    delayed("Venues", "MemberRemoved", { member: venue }, 11),
   ].reduce(reduceLaunchpadEvent, configured);
   assert.deepEqual(removed.config.quotes, {});
-  assert.deepEqual(removed.config.migrationWitnesses, {});
+  assert.deepEqual(removed.config.venues, {});
   assert.deepEqual(createLaunchpadEventProjection().config.protocolAllocation, {
     memeBps: 250n,
     quoteBps: 150n,
@@ -462,11 +484,7 @@ test("replays creator claims and signer changes", () => {
   const admitted = [
     decoded(
       "CreatorCapsClaimed",
-      {
-        meme: "0xa::meme::MEME",
-        curve_fee_cap_id: "0x20",
-        blast_metadata_cap_id: "0x21",
-      },
+      { curve_fee_cap_id: "0x20", creator_metadata_cap_id: "0x21" },
       30,
     ),
     delayed(
@@ -509,7 +527,7 @@ test("replays creator claims and signer changes", () => {
       memeType: normalizedType("0xa::meme::MEME"),
       claimant: normalizeSuiObjectId("0xd"),
       curveFeeCapId: normalizeSuiObjectId("0x20"),
-      blastMetadataCapId: normalizeSuiObjectId("0x21"),
+      creatorMetadataCapId: normalizeSuiObjectId("0x21"),
     },
   );
   assert.deepEqual(projection.administration.creatorClaimSigners, {
@@ -532,18 +550,14 @@ test("replays creator capability claims, reassignments, and metadata", () => {
   ].reduce(reduceLaunchpadEvent, createLaunchpadEventProjection());
   const launchId = normalizeSuiObjectId("0xc");
   assert.equal(created.launches[launchId]?.curveFeeCapId, null);
-  assert.equal(created.launches[launchId]?.blastMetadataCapId, null);
+  assert.equal(created.launches[launchId]?.creatorMetadataCapId, null);
   assert.equal(created.launches[launchId]?.memeMetadata, null);
 
   const claimed = reduceLaunchpadEvent(
     created,
     decoded(
       "CreatorCapsClaimed",
-      {
-        meme: "0xa::meme::MEME",
-        curve_fee_cap_id: "0x20",
-        blast_metadata_cap_id: "0x21",
-      },
+      { curve_fee_cap_id: "0x20", creator_metadata_cap_id: "0x21" },
       2,
     ),
   );
@@ -552,7 +566,7 @@ test("replays creator capability claims, reassignments, and metadata", () => {
     normalizeSuiObjectId("0x20"),
   );
   assert.equal(
-    claimed.launches[launchId]?.blastMetadataCapId,
+    claimed.launches[launchId]?.creatorMetadataCapId,
     normalizeSuiObjectId("0x21"),
   );
 
@@ -567,10 +581,10 @@ test("replays creator capability claims, reassignments, and metadata", () => {
       3,
     ),
     decoded(
-      "MetadataCapReassigned",
+      "CreatorMetadataCapReassigned",
       {
         launch_id: "0xc",
-        blast_metadata_cap_id: "0x31",
+        creator_metadata_cap_id: "0x31",
         recipient: "0xe",
       },
       4,
@@ -589,7 +603,7 @@ test("replays creator capability claims, reassignments, and metadata", () => {
   const launch = projection.launches[launchId];
 
   assert.equal(launch?.curveFeeCapId, normalizeSuiObjectId("0x30"));
-  assert.equal(launch?.blastMetadataCapId, normalizeSuiObjectId("0x31"));
+  assert.equal(launch?.creatorMetadataCapId, normalizeSuiObjectId("0x31"));
   assert.equal(launch?.metadataCapId, normalizeSuiObjectId("0x11"));
   assert.equal(
     projection.tickets[normalizeSuiObjectId("0xb")]?.metadataCapId,
@@ -608,7 +622,7 @@ test("authenticates events by type, not by the transaction's called package", ()
     () => decodeLaunchpadEvent({ ...valid, checkpoint: null }, packages),
     /checkpoint metadata/,
   );
-  // Adapters in the migrators package emit `Migrated` from their own entry.
+  // A venue's `migrate` in the same PTB may carry `Migrated`.
   assert.equal(
     decodeLaunchpadEvent(
       { ...valid, packageId: "0x999", module: "cetus" },
@@ -616,16 +630,144 @@ test("authenticates events by type, not by the transaction's called package", ()
     ).kind,
     "Migrated",
   );
-  assert.throws(
-    () =>
-      decodeLaunchpadEvent(
-        {
-          ...valid,
-          eventType: "0x999::blast_events::Event<0x999::events::LaunchCreated>",
-        },
-        packages,
-      ),
-    /unexpected event package/,
+  for (const eventType of [
+    `0x999::events::Migrated<${MEME}, ${QUOTE}>`,
+    `0x122::launch::Migrated<${MEME}, ${QUOTE}>`,
+    `0x122::events::Migrated<${MEME}>`,
+    `0x122::events::QuoteAllowed<${MEME}, ${QUOTE}>`,
+    "0x122::events::MemeDecimalsAllowed<0x2::sui::SUI>",
+    `0x122::events::ProtocolFeesClaimed<${MEME}, ${QUOTE}>`,
+  ]) {
+    assert.throws(
+      () => decodeLaunchpadEvent({ ...valid, eventType }, packages),
+      /unexpected launchpad event type/,
+      eventType,
+    );
+  }
+  const quote = decoded("QuoteAllowed", {}, 1);
+  assert.deepEqual(
+    [quote.memeType, quote.quoteType],
+    [null, normalizeStructTag(QUOTE)],
+  );
+  const ticket = decoded("LaunchTicketCreated", {}, 2);
+  assert.deepEqual(
+    [ticket.memeType, ticket.quoteType],
+    [normalizeStructTag(MEME), null],
+  );
+});
+
+test("replays the Move-printed launch events into the Move-printed launch", () => {
+  const fixture = normalizeSuiObjectId(FIXTURE_PACKAGE_ID);
+  const meme = `${fixture}::sdk_fixture_tests::SDK_FIXTURE_TESTS`;
+  const quote = `${fixture}::sdk_fixture_tests::TEST_QUOTE`;
+  const launcher = normalizeSuiObjectId("0xb1a57");
+  const alice = normalizeSuiObjectId("0xa11ce");
+  const printed: [LaunchpadEventKind, LaunchpadFixture, string][] = [
+    ["LaunchTicketCreated", "launchTicketCreated", launcher],
+    ["LaunchCreated", "launchCreated", launcher],
+    ["OpeningRoundJoined", "openingRoundJoinedCreator", launcher],
+    ["LaunchShared", "launchShared", launcher],
+    ["OpeningRoundJoined", "openingRoundJoinedAlice", alice],
+    ["Bought", "boughtSettlement", alice],
+    ["OpeningRoundSettled", "openingRoundSettled", alice],
+    ["OpeningRoundDelivered", "openingRoundDelivered", alice],
+    ["Sold", "sold", alice],
+    ["Bought", "boughtGraduation", alice],
+    ["MigrationAllocationPaid", "migrationAllocationPaid", alice],
+    ["ProtocolFeesAccrued", "protocolFeesAccrued", alice],
+    ["Migrated", "migrated", alice],
+  ];
+  const typeArguments = (kind: LaunchpadEventKind) =>
+    kind === "LaunchTicketCreated" ? `<${meme}>` : `<${meme}, ${quote}>`;
+  const events = printed.map(([kind, name, sender], eventIndex) =>
+    decodeLaunchpadEvent(
+      {
+        packageId: fixture,
+        module: "launch",
+        sender,
+        eventType: `${fixture}::events::${kind}${typeArguments(kind)}`,
+        bcs: launchpadFixture(name),
+        json: null,
+        checkpoint: "9",
+        transactionDigest: `fixture-${eventIndex}`,
+        eventIndex,
+      },
+      { originalPackageId: FIXTURE_PACKAGE_ID },
+    ),
+  );
+  const launchId = `0x${LAUNCHPAD_FIXTURE_HEX.launchId}`;
+  const decode = (name: LaunchpadFixture) =>
+    decodeLaunchObject({
+      objectId: launchId,
+      initialSharedVersion: "7",
+      mutable: true,
+      type: `${fixture}::launch::Launch<${meme}, ${quote}>`,
+      content: launchpadFixture(name),
+    });
+  const ready = events
+    .slice(0, 10)
+    .reduce(reduceLaunchpadEvent, createLaunchpadEventProjection()).launches[
+    launchId
+  ];
+  const readyState = decode("launchMigrationReady");
+  assert.ok(ready);
+  assert.equal(ready.lifecycle, readyState.lifecycle);
+  assert.equal(ready.memeReserve, readyState.memeReserve);
+  assert.equal(ready.realQuoteReserve, readyState.realQuoteReserve);
+  assert.equal(ready.pendingBurn, readyState.pendingBurn);
+  assert.equal(ready.openingRoundBids, readyState.openingRoundBids);
+  assert.equal(ready.openingRoundMeme, readyState.openingRoundMeme);
+  assert.deepEqual(ready.openingRoundBidders, { [launcher]: 1_000_000_000n });
+  assert.equal(ready.protocolMemeFees, readyState.protocolFees.meme);
+  assert.equal(ready.protocolQuoteFees, readyState.protocolFees.quote);
+  assert.equal(ready.protocolSuiFees, readyState.protocolFees.sui);
+  assert.equal(ready.creatorMemeFees, readyState.creatorMemeFees);
+  assert.equal(ready.creatorQuoteFees, readyState.creatorQuoteFees);
+  assert.equal(ready.venue, readyState.venue);
+  assert.deepEqual(ready.lpFeeSplit, readyState.lpFeeSplit);
+  assert.deepEqual(ready.allocationPlan, readyState.allocationPlan);
+
+  const migrated = events.reduce(
+    reduceLaunchpadEvent,
+    createLaunchpadEventProjection(),
+  ).launches[launchId];
+  const migratedState = decode("launchMigrated");
+  assert.ok(migrated);
+  assert.equal(migrated.lifecycle, "Migrated");
+  assert.equal(migrated.protocolMemeFees, migratedState.protocolFees.meme);
+  assert.equal(migrated.protocolQuoteFees, migratedState.protocolFees.quote);
+  assert.deepEqual(migrated.allocationPayments, [
+    {
+      destination: normalizeSuiObjectId("0xfeed"),
+      meme: 25_000_000_000_000_000n,
+      quote: 308_641_972_531n,
+    },
+  ]);
+  const paid = decodeProtocolFeesPaid(
+    {
+      packageId: fixture,
+      module: "launch",
+      sender: alice,
+      eventType: `0x173a::blast_core_events::ProtocolFeesPaid<${meme}, ${quote}>`,
+      bcs: launchpadFixture("protocolFeesPaid"),
+      json: null,
+      checkpoint: "9",
+      transactionDigest: "fixture-paid",
+      eventIndex: 0,
+    },
+    { originalPackageId: "0x173a" },
+  );
+  const claimed = reduceLaunchpadEvent(
+    events.reduce(reduceLaunchpadEvent, createLaunchpadEventProjection()),
+    paid,
+  ).launches[launchId];
+  assert.deepEqual(
+    [
+      claimed?.protocolMemeFees,
+      claimed?.protocolQuoteFees,
+      claimed?.protocolSuiFees,
+    ],
+    [0n, 0n, 0n],
   );
 });
 
@@ -661,12 +803,15 @@ function delayed(
 ) {
   const original = normalizeSuiObjectId(packages.originalPackageId);
   const spec = launchpadDelayedKeys[name];
+  const valueType = spec.valueType
+    .replaceAll("{package}", original)
+    .replaceAll("{core}", normalizeSuiObjectId(CORE));
   return decodeLaunchpadDelayedEvent(
     {
       packageId: "0x123",
       module: "launch_config",
       sender: "0xd",
-      eventType: `0xad::${delayedEventModule(kind)}::${kind}<${original}::${spec.key}, ${spec.valueType.replaceAll("{package}", original)}>`,
+      eventType: `0xad::${delayedEventModule(kind)}::${kind}<${original}::${spec.key}, ${valueType}>`,
       bcs: delayedEventBcs(kind, spec)
         .serialize({ owner: "0xc0", key: null, ...payload } as never)
         .toBytes(),
@@ -675,7 +820,42 @@ function delayed(
       transactionDigest: `transaction-${eventIndex}`,
       eventIndex,
     },
-    { ...packages, adminPackageId: "0xad" },
+    { ...packages, adminPackageId: "0xad", coreOriginalPackageId: CORE },
+  );
+}
+
+/** A core `ProtocolFeesPaid<MEME, SUI>` paid from the launch's ledger. */
+function protocolFeesPaid(
+  overrides: Record<string, unknown>,
+  eventIndex: number,
+) {
+  return decodeProtocolFeesPaid(
+    {
+      packageId: "0x123",
+      module: "launch",
+      sender: "0xd",
+      eventType: `${CORE}::blast_core_events::ProtocolFeesPaid<${MEME}, ${QUOTE}>`,
+      bcs: protocolFeesPaidBcs
+        .serialize({
+          package_witness: "0x122::blast_fun::PackageWitness",
+          origin: "0xc",
+          treasury: "0x7ea5",
+          meme_amount: 0n,
+          quote_amount: 0n,
+          sui_amount: 0n,
+          partner_id: "0x9a",
+          partner_meme_amount: 0n,
+          partner_quote_amount: 0n,
+          partner_sui_amount: 0n,
+          ...overrides,
+        } as never)
+        .toBytes(),
+      json: null,
+      checkpoint: "9",
+      transactionDigest: `transaction-${eventIndex}`,
+      eventIndex,
+    },
+    { originalPackageId: CORE },
   );
 }
 
@@ -691,10 +871,10 @@ function readFrozenLaunchpadEventSpecs(): Record<
   string,
   Record<string, string>
 > {
-  // The fresh stack's compiler ABI: every struct in `events` is an event.
+  // The frozen production ABI: every struct in `events` is an event.
   const artifact = JSON.parse(
     readFileSync(
-      new URL("../abi/pr150-consumers.json", import.meta.url),
+      new URL("../abi/production-launchpad-v1.json", import.meta.url),
       "utf8",
     ),
   ) as {
@@ -702,7 +882,7 @@ function readFrozenLaunchpadEventSpecs(): Record<
       launchpad: {
         modules: {
           events: {
-            structs: Array<{
+            events: Array<{
               name: string;
               fields: Array<{ name: string; type: unknown }>;
             }>;
@@ -712,7 +892,7 @@ function readFrozenLaunchpadEventSpecs(): Record<
     };
   };
   return Object.fromEntries(
-    artifact.packages.launchpad.modules.events.structs.map((event) => [
+    artifact.packages.launchpad.modules.events.events.map((event) => [
       event.name,
       Object.fromEntries(
         event.fields.map((field) => [field.name, abiDescriptor(field.type)]),
@@ -765,11 +945,19 @@ function suiEvent(
   eventIndex: number,
 ): SuiClientTypes.EventEntry {
   const original = normalizeSuiObjectId(packages.originalPackageId);
+  const typeArguments =
+    kind === "MemeDecimalsAllowed"
+      ? ""
+      : kind === "QuoteAllowed"
+        ? `<${QUOTE}>`
+        : kind === "LaunchTicketCreated"
+          ? `<${MEME}>`
+          : `<${MEME}, ${QUOTE}>`;
   return {
     packageId: "0x123",
     module: "launch",
     sender: "0xd",
-    eventType: `${original}::blast_events::Event<${original}::events::${kind}>`,
+    eventType: `${original}::events::${kind}${typeArguments}`,
     bcs: encodePayload(kind, overrides),
     json: null,
     checkpoint: "9",
@@ -843,7 +1031,6 @@ function orderedForReplay(kinds: LaunchpadEventKind[]): LaunchpadEventKind[] {
     "OpeningRoundDelivered",
     "Sold",
     "CreatorFeesClaimed",
-    "ProtocolFeesClaimed",
     "MigrationAllocationPaid",
     "ProtocolFeesAccrued",
     "Migrated",

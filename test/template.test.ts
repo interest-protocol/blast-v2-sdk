@@ -14,11 +14,14 @@ import {
   normalizeSuiObjectId,
   SUI_FRAMEWORK_ADDRESS,
 } from "@mysten/sui/utils";
+import { LAUNCHPAD_DEPLOYMENT } from "./fixtures/launchpad-deployment.ts";
 
 const blastPackageId = normalizeSuiObjectId("0xb1a57");
 const latestBlastPackageId = normalizeSuiObjectId("0xb1a58");
 const adminPackageId = normalizeSuiObjectId("0xad");
 const partnersPackageId = normalizeSuiObjectId("0xae");
+const corePackageId = normalizeSuiObjectId("0xc0");
+const vestingPackageId = normalizeSuiObjectId("0xf4");
 const options = {
   decimals: 6,
   symbol: "DOG COIN",
@@ -52,7 +55,7 @@ test("locks the embedded artifact to the nine source constants", async () => {
 
   assert.equal(
     createHash("sha256").update(bytecode).digest("hex"),
-    "7a0303c62ce622ed2f0eb17de1ac4a8d0d8852ee859d4cdca3fdc2711b265da8",
+    "14d907c7dbfd9a71eab59aaa64a9bcec0e245a590386ed563e9e916c54cb4e78",
   );
   assert.deepEqual(get_constants(bytecode), [
     {
@@ -262,27 +265,18 @@ test("keeps constant fields independent when values match placeholders", async (
   }
 });
 
-test("publishes against 0x1, 0x2, blast_admin, blast_partners, and Blast, then makes the package immutable", async () => {
+test("publishes against every transitive dependency, then makes the package immutable", async () => {
   const tx = new LaunchpadTransactions({
+    ...LAUNCHPAD_DEPLOYMENT,
     packageId: latestBlastPackageId,
     originalPackageId: blastPackageId,
-    partnersPackageId,
-    packageVersion: {
-      objectId: "0x3",
-      initialSharedVersion: "10",
+    partners: {
+      ...LAUNCHPAD_DEPLOYMENT.partners,
+      packageId: partnersPackageId,
     },
-    launchConfig: {
-      objectId: "0x4",
-      initialSharedVersion: "11",
-    },
-    runtimeConfig: {
-      objectId: "0x5",
-      initialSharedVersion: "12",
-    },
-    admin: {
-      packageId: adminPackageId,
-      acl: { objectId: "0x6", initialSharedVersion: "13" },
-    },
+    admin: { ...LAUNCHPAD_DEPLOYMENT.admin, packageId: adminPackageId },
+    core: { ...LAUNCHPAD_DEPLOYMENT.core, packageId: corePackageId },
+    vestingPackageId,
   }).publishMeme(options);
 
   await tx.prepareForSerialization({});
@@ -295,6 +289,8 @@ test("publishes against 0x1, 0x2, blast_admin, blast_partners, and Blast, then m
       SUI_FRAMEWORK_ADDRESS,
       adminPackageId,
       partnersPackageId,
+      vestingPackageId,
+      corePackageId,
       latestBlastPackageId,
     ]);
     const publishedModule = Buffer.from(
@@ -368,13 +364,6 @@ test("rejects invalid policy, dependency, and identifier inputs", async () => {
   await assert.rejects(
     buildMemePackageBytecode({ ...options, decimals: 1.5 }, blastPackageId),
     /decimals must be a u8/,
-  );
-  await assert.rejects(
-    buildMemePackageBytecode(
-      { ...options, symbol: "A".repeat(33) },
-      blastPackageId,
-    ),
-    /must not exceed 32 bytes/,
   );
   await assert.rejects(
     buildMemePackageBytecode({ ...options, symbol: "BAD!" }, blastPackageId),

@@ -1,23 +1,25 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { rewardRoundBcs } from "@interest-protocol/blast-core/rewards/state";
-import {
-  allocationPlanBcs,
-  feeSplitBcs,
-  protocolAllocationBcs,
-} from "@interest-protocol/blast-launchpad-sdk/allocation";
+import { vaultTermsBcs } from "@interest-protocol/blast-core/migration";
 import {
   launchBcs,
   launchConfigBcs,
+  launchTicketBcs,
+  runtimeConfigBcs,
 } from "@interest-protocol/blast-launchpad-sdk/state";
+import { poolCreationBcs } from "@interest-protocol/blast-presale-sdk/aftermath-dao";
+import { presaleBcs } from "@interest-protocol/blast-presale-sdk/state";
 import {
-  lpFeePolicyBcs,
-  lpFeeSharePairBcs,
-  lpVaultBcs,
-} from "@interest-protocol/blast-migrators-sdk/state";
+  roundBcs,
+  vaultBcs,
+  vaultRegistryBcs,
+} from "@interest-protocol/blast-vault-sdk/state";
 import type { BcsType } from "@mysten/sui/bcs";
-import { normalizeSuiAddress } from "@mysten/sui/utils";
+import { fromHex } from "@mysten/sui/utils";
+import { launchpadFixture } from "./fixtures/launchpad-a1a8f6c.ts";
+import { PRESALE_FIXTURE } from "./fixtures/presale-a1a8f6c.ts";
+import { VAULT_FIXTURE } from "./fixtures/vault-a1a8f6c.ts";
 
 type FrozenStruct = { name: string; fields: { name: string }[] };
 type Artifact = {
@@ -27,226 +29,136 @@ type Artifact = {
   >;
 };
 
-const owned = { owner: normalizeSuiAddress("0x1"), key: null };
-const delayed = <T>(value: T) => ({
-  ...owned,
-  value,
-  delay_ms: 172_800_000n,
-  pending: null,
-});
-const artifact = JSON.parse(
-  readFileSync(new URL("../abi/pr150-consumers.json", import.meta.url), "utf8"),
-) as Artifact;
-
-const uid = (id: string) => ({ id: { bytes: id } });
-const balance = { value: 0n };
-const feeSplit = {
-  creatorBps: 10_000n,
-  autoLpBps: 0n,
-  rewardsBps: 0n,
-  burnBps: 0n,
-  recipients: [],
-};
-const plan = {
-  curveMemeBps: 0n,
-  lpMemeBps: 0n,
-  lpQuoteBps: 0n,
-  protocolMemeBps: 0n,
-  protocolQuoteBps: 0n,
-  recipients: [],
-};
+function frozenFields(
+  file: string,
+  packageKey: string,
+  moduleName: string,
+  structName: string,
+): string[] {
+  const artifact = JSON.parse(
+    readFileSync(new URL(`../abi/${file}`, import.meta.url), "utf8"),
+  ) as Artifact;
+  const frozen = artifact.packages[packageKey]?.modules[
+    moduleName
+  ]?.structs.find(({ name }) => name === structName);
+  assert.ok(frozen, `${moduleName}::${structName} is in abi/${file}`);
+  return frozen.fields.map(({ name }) => name);
+}
 
 /**
- * A BCS struct reads its fields in declaration order, so the keys of a parsed
- * value list the SDK layout; they must be the frozen Move fields in order.
+ * Each layout parses bytes the Move test runner printed at the baseline, and a
+ * BCS struct reads its fields in declaration order, so the parsed keys must be
+ * the frozen Move fields in order.
  */
-test("SDK object layouts follow the frozen Move field order", () => {
+test("SDK object layouts parse Move bytes in the frozen field order", () => {
   const layouts: [
-    string,
-    string,
-    string,
-    BcsType<unknown, unknown>,
-    unknown,
+    file: string,
+    packageKey: string,
+    moduleName: string,
+    structName: string,
+    schema: BcsType<unknown, unknown>,
+    bytes: Uint8Array,
   ][] = [
-    ["launchpad", "launch", "Launch", launchBcs as never, launch()],
     [
+      "production-launchpad-v1.json",
       "launchpad",
-      "allocation",
-      "AllocationPlan",
-      allocationPlanBcs as never,
-      plan,
-    ],
-    ["launchpad", "allocation", "FeeSplit", feeSplitBcs as never, feeSplit],
-    [
-      "launchpad",
-      "allocation",
-      "ProtocolAllocation",
-      protocolAllocationBcs as never,
-      { memeBps: 0n, quoteBps: 0n },
+      "launch",
+      "Launch",
+      launchBcs as never,
+      launchpadFixture("launchFinalized"),
     ],
     [
+      "production-launchpad-v1.json",
       "launchpad",
       "launch_config",
       "LaunchConfig",
       launchConfigBcs as never,
-      {
-        id: uid("0x1"),
-        meme_decimals: [],
-        quotes: { id: uid("0x2"), size: 0n },
-        trade_fees: delayed({ quote_fee_bps: 0n, meme_fee_bps: 0n }),
-        migration_witnesses: {
-          ...owned,
-          members: [],
-          delay_ms: 172_800_000n,
-          admissions: [],
-          pending_delay: null,
-        },
-        protocol_allocation: delayed({ memeBps: 0n, quoteBps: 0n }),
-        creation_fee: delayed(0n),
-      },
-    ],
-    ["migrators", "vault", "LpVault", lpVaultBcs as never, vault()],
-    [
-      "migrators",
-      "lp_fee_policy",
-      "LpFeePolicy",
-      lpFeePolicyBcs as never,
-      {
-        id: uid("0x1"),
-        destination: delayed("0x2"),
-        defaults: delayed({ meme_bps: 0n, quote_bps: 0n }),
-        coins: {
-          ...owned,
-          entries: { id: normalizeSuiAddress("0x3"), size: 0n },
-          delay_ms: 172_800_000n,
-          pending: [],
-          pending_delay: null,
-        },
-      },
+      launchpadFixture("launchConfig"),
     ],
     [
-      "migrators",
-      "lp_fee_policy",
-      "SharePair",
-      lpFeeSharePairBcs as never,
-      { meme_bps: 0n, quote_bps: 0n },
+      "production-launchpad-v1.json",
+      "launchpad",
+      "runtime_config",
+      "RuntimeConfig",
+      runtimeConfigBcs as never,
+      launchpadFixture("runtimeConfig"),
     ],
     [
-      "migrators",
-      "blast_holder_rewards",
+      "production-launchpad-v1.json",
+      "launchpad",
+      "launch_ticket",
+      "LaunchTicket",
+      launchTicketBcs as never,
+      launchpadFixture("launchTicket"),
+    ],
+    [
+      "production-core-v1.json",
+      "core",
+      "migration",
+      "VaultTerms",
+      vaultTermsBcs as never,
+      launchpadFixture("migrationTerms"),
+    ],
+    [
+      "production-presale-v1.json",
+      "presale",
+      "blast_presale",
+      "Presale",
+      presaleBcs as never,
+      fromHex(PRESALE_FIXTURE.presaleOpenObject),
+    ],
+    [
+      "production-core-v1.json",
+      "core",
+      "migration",
+      "VaultTerms",
+      vaultTermsBcs as never,
+      fromHex(PRESALE_FIXTURE.vaultTerms),
+    ],
+    [
+      "production-aftermath-dao-presale-v1.json",
+      "aftermathDaoPresale",
+      "blast_aftermath_dao_presale",
+      "PoolCreation",
+      poolCreationBcs as never,
+      fromHex(PRESALE_FIXTURE.poolCreation),
+    ],
+    [
+      "production-vault-v1.json",
+      "vault",
+      "vault",
+      "Vault",
+      vaultBcs as never,
+      fromHex(VAULT_FIXTURE.objects.vault),
+    ],
+    [
+      "production-vault-v1.json",
+      "vault",
+      "blast_vault_package",
+      "VaultRegistry",
+      vaultRegistryBcs as never,
+      fromHex(VAULT_FIXTURE.objects.registry),
+    ],
+    [
+      "production-vault-v1.json",
+      "vault",
+      "holder_rewards",
       "Round",
-      rewardRoundBcs as never,
-      round(),
+      roundBcs as never,
+      fromHex(VAULT_FIXTURE.objects.roundPublished),
     ],
   ];
-  for (const [packageName, moduleName, structName, schema, value] of layouts) {
-    const frozen = artifact.packages[packageName]?.modules[
-      moduleName
-    ]?.structs.find(({ name }) => name === structName);
-    assert.ok(frozen, `${structName} is frozen`);
-    let parsed: unknown;
-    try {
-      parsed = schema.parse(schema.serialize(value).toBytes());
-    } catch (cause) {
-      throw new Error(`invalid ${structName} fixture`, { cause });
-    }
+  for (const [file, packageKey, moduleName, structName, schema, bytes] of [
+    ...layouts,
+  ]) {
+    const parsed = schema.parse(bytes);
+    // Transformed layouts (VaultTerms) read camelCase keys.
     assert.deepEqual(
-      Object.keys(parsed as object).map(snakeCase),
-      frozen.fields.map(({ name }) => name),
+      Object.keys(parsed as object).map((key) =>
+        key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+      ),
+      frozenFields(file, packageKey, moduleName, structName),
       structName,
     );
   }
 });
-
-function snakeCase(name: string): string {
-  return name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
-}
-
-function launch() {
-  return {
-    id: uid("0x1"),
-    lifecycle: { Live: true },
-    public_start_ms: null,
-    opening_round_ms: 0n,
-    opening_round_bids: 0n,
-    opening_round_quote: balance,
-    opening_round_meme: balance,
-    sell_burn_bps: 0n,
-    virtual_quote: 0n,
-    graduation_target: 0n,
-    quote_fee_bps: 0n,
-    meme_fee_bps: 0n,
-    migration_witness: "0x2::m::W",
-    pool_tick_spacing: 0,
-    pool_fee_rate: 0n,
-    lp_fee_split: feeSplit,
-    atomic_supply: 0n,
-    meme_reserve: balance,
-    real_quote_reserve: balance,
-    pending_burn: balance,
-    allocation_plan: plan,
-    allocated_meme: balance,
-    fee_ledger: {
-      protocol_meme: balance,
-      creator_meme: balance,
-      protocol_quote: balance,
-      creator_quote: balance,
-      protocol_sui: balance,
-    },
-    metadata_cap: { id: uid("0x2") },
-    curve_fee_cap_reassignment: {
-      ...owned,
-      delay_ms: 172_800_000n,
-      pending: null,
-    },
-    metadata_cap_reassignment: {
-      ...owned,
-      delay_ms: 172_800_000n,
-      pending: null,
-    },
-    creator: null,
-    curve_fee_cap_id: null,
-    blast_metadata_cap_id: null,
-    partner_id: null,
-  };
-}
-
-function vault() {
-  return {
-    id: uid("0x1"),
-    launch_id: { bytes: "0x3" },
-    pool_id: { bytes: "0x2" },
-    partner_id: null,
-    protocol_meme_residual: balance,
-    protocol_quote_residual: balance,
-    unpaid_protocol_meme: balance,
-    unpaid_protocol_quote: balance,
-    fee_split: delayed(feeSplit),
-    creator_meme: balance,
-    creator_quote: balance,
-    auto_lp_meme: balance,
-    auto_lp_quote: balance,
-    rewards_meme: balance,
-    rewards_quote: balance,
-    burn_quote: balance,
-    next_round: 0n,
-    last_checkpoint: null,
-    round_publication: { ...owned, delay_ms: 0n, pending: null },
-  };
-}
-
-function round() {
-  return {
-    id: uid("0x1"),
-    vault: { bytes: "0x2" },
-    claim_deadline_at_ms: 42n,
-    treasury: "0xb",
-    gas_reserve: null,
-    number: 0n,
-    root: [],
-    leaf_count: 0n,
-    claimed: [],
-    meme: balance,
-    quote: balance,
-  };
-}

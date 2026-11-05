@@ -7,8 +7,9 @@ import {
 } from "@interest-protocol/blast-launchpad-sdk/effects";
 import { LaunchpadTransactions } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { Inputs, Transaction } from "@mysten/sui/transactions";
+import { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
+import { LAUNCHPAD_DEPLOYMENT } from "./fixtures/launchpad-deployment.ts";
 
 const launchpad = normalizeSuiObjectId("0x122");
 const memePackage = normalizeSuiObjectId("0xabc");
@@ -16,6 +17,7 @@ const memeType = `${memePackage}::dog::DOG`;
 const quoteType = normalizeStructTag("0x2::sui::SUI");
 const publisher = normalizeSuiObjectId("0xb1a57");
 const registry = normalizeSuiObjectId("0xc");
+const coinRegistry = { objectId: registry, initialSharedVersion: "1" };
 // A valid base58 object digest; `build` rejects the placeholder digests above.
 const CURRENCY_DIGEST = "11111111111111111111111111111111";
 
@@ -83,6 +85,7 @@ const publication = {
     changed("0xd1", owner(publisher)),
     changed("0xd2", owner(registry)),
     changed("0xd3", owner(publisher)),
+    changed("0xd4", owner(publisher)),
   ]),
   objectTypes: {
     [memePackage]: "package",
@@ -90,10 +93,11 @@ const publication = {
       `${launchpad}::launch_ticket::LaunchTicket<${memeType}>`,
     [normalizeSuiObjectId("0xd2")]: `0x2::coin_registry::Currency<${memeType}>`,
     [normalizeSuiObjectId("0xd3")]: "0x2::package::UpgradeCap",
+    [normalizeSuiObjectId("0xd4")]: `0x2::coin::TreasuryCap<${memeType}>`,
   },
 };
 
-test("reads the published Meme, ticket, and currency with the Core API package marker", () => {
+test("reads the published Meme, ticket, treasury cap and currency with the Core API package marker", () => {
   assert.deepEqual(readMemePublication(publication, "0x122"), {
     packageId: memePackage,
     memeType: normalizeStructTag(memeType),
@@ -101,6 +105,12 @@ test("reads the published Meme, ticket, and currency with the Core API package m
       objectId: normalizeSuiObjectId("0xd1"),
       version: "7",
       digest: "digest-0xd1",
+      owner: publisher,
+    },
+    treasuryCap: {
+      objectId: normalizeSuiObjectId("0xd4"),
+      version: "7",
+      digest: "digest-0xd4",
       owner: publisher,
     },
     pendingCurrency: {
@@ -182,24 +192,37 @@ test("rejects publication effects without exactly one ticket from the launchpad"
   );
 });
 
-const deployment = {
-  packageId: "0x123",
-  originalPackageId: "0x122",
-  admin: {
-    packageId: "0xad",
-    acl: { objectId: "0x5", initialSharedVersion: "1" },
-  },
-  partnersPackageId: "0xbe",
-  packageVersion: { objectId: "0x2", initialSharedVersion: "1" },
-  launchConfig: { objectId: "0x3", initialSharedVersion: "1" },
-  runtimeConfig: { objectId: "0x4", initialSharedVersion: "1" },
-};
+const deployment = { ...LAUNCHPAD_DEPLOYMENT, originalPackageId: "0x122" };
+
+test("refuses a publication without the TreasuryCap beside the ticket", () => {
+  const { [normalizeSuiObjectId("0xd4")]: _, ...objectTypes } =
+    publication.objectTypes;
+  assert.throws(
+    () => readMemePublication({ ...publication, objectTypes }, "0x122"),
+    /exactly one TreasuryCap<Meme> beside the ticket/,
+  );
+  const elsewhere = {
+    ...publication,
+    effects: effects(
+      publication.effects.changedObjects.map((object) =>
+        object.objectId === normalizeSuiObjectId("0xd4")
+          ? changed("0xd4", owner("0xdead"))
+          : object,
+      ),
+    ),
+  };
+  assert.throws(
+    () => readMemePublication(elsewhere, "0x122"),
+    /exactly one TreasuryCap<Meme> beside the ticket/,
+  );
+});
 
 test("finalizes the currency registration and reads the shared Currency", () => {
   const sdk = new LaunchpadTransactions(deployment);
   const tx: Transaction = sdk.finalizeCurrencyRegistration({
     memeType,
     currency: readMemePublication(publication, "0x122").pendingCurrency,
+    coinRegistry,
   });
   const command = tx.getData().commands[0];
   assert.ok(command?.$kind === "MoveCall");
@@ -211,10 +234,11 @@ test("finalizes the currency registration and reads the shared Currency", () => 
   const [registryArgument, currencyArgument] = command.MoveCall.arguments;
   const inputs = tx.getData().inputs;
   assert.ok(registryArgument?.$kind === "Input");
-  assert.equal(
-    inputs[registryArgument.Input]?.UnresolvedObject?.objectId,
-    registry,
-  );
+  assert.deepEqual(inputs[registryArgument.Input]?.Object?.SharedObject, {
+    objectId: registry,
+    initialSharedVersion: "1",
+    mutable: true,
+  });
   assert.ok(currencyArgument?.$kind === "Input");
   assert.deepEqual(inputs[currencyArgument.Input]?.Object?.Receiving, {
     objectId: normalizeSuiObjectId("0xd2"),
@@ -242,20 +266,8 @@ test("finalizes the currency registration and reads the shared Currency", () => 
   });
 });
 
-/** Builds `tx` offline: the Coin Registry input is pinned instead of fetched. */
-async function kindBytes(tx: Transaction): Promise<Uint8Array> {
-  tx.addBuildPlugin(async (data, _options, next) => {
-    for (const [index, input] of data.inputs.entries()) {
-      if (input.UnresolvedObject?.objectId === registry) {
-        data.inputs[index] = Inputs.SharedObjectRef({
-          objectId: registry,
-          initialSharedVersion: "1",
-          mutable: true,
-        });
-      }
-    }
-    await next();
-  });
+/** Builds `tx` offline: every input is fully specified. */
+function kindBytes(tx: Transaction): Promise<Uint8Array> {
   return tx.build({ onlyTransactionKind: true });
 }
 
@@ -264,6 +276,7 @@ test("the composable registration builds the same bytes as the transaction", asy
   const options = {
     memeType,
     currency: { objectId: "0xd2", version: "7", digest: CURRENCY_DIGEST },
+    coinRegistry,
   };
   const composed = new Transaction();
   composed.add(sdk.call.finalizeCurrencyRegistration(options));
@@ -281,12 +294,14 @@ test("registrations in one PTB share the Coin Registry input", () => {
     call.finalizeCurrencyRegistration({
       memeType,
       currency: { objectId: "0xd2", version: "7", digest: CURRENCY_DIGEST },
+      coinRegistry,
     }),
   );
   tx.add(
     call.finalizeCurrencyRegistration({
       memeType: `${normalizeSuiObjectId("0xabd")}::cat::CAT`,
       currency: { objectId: "0xd3", version: "8", digest: CURRENCY_DIGEST },
+      coinRegistry,
     }),
   );
 
@@ -294,8 +309,8 @@ test("registrations in one PTB share the Coin Registry input", () => {
   assert.equal(commands.length, 2);
   assert.deepEqual(
     inputs.map((input) =>
-      input.UnresolvedObject
-        ? input.UnresolvedObject.objectId
+      input.Object?.SharedObject
+        ? input.Object.SharedObject.objectId
         : input.Object?.Receiving?.objectId,
     ),
     [registry, normalizeSuiObjectId("0xd2"), normalizeSuiObjectId("0xd3")],

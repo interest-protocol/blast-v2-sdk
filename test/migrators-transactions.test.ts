@@ -1,809 +1,487 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  buildRewardManifest,
-  MIGRATOR_REWARD_LEAF_DOMAIN,
-} from "@interest-protocol/blast-core/rewards/allocations";
-import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
-import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
-import {
+  BLUEFIN_MAX_FEE_RATE,
+  BLUEFIN_MAX_TICK_SPACING,
+  MIGRATOR_VENUES,
   MigratorCalls,
   MigratorTransactions,
+  venueOf,
+  venueWitnessType,
 } from "@interest-protocol/blast-migrators-sdk/transactions";
 import { bcs } from "@mysten/sui/bcs";
-import type { Transaction } from "@mysten/sui/transactions";
+import { Transaction } from "@mysten/sui/transactions";
 import {
   fromBase64,
-  normalizeSuiObjectId,
-  SUI_CLOCK_OBJECT_ID,
+  normalizeStructTag,
+  normalizeSuiAddress,
 } from "@mysten/sui/utils";
+import {
+  abiCoverage,
+  moveCallArguments,
+  moveCallTypeArguments,
+  readAbi,
+} from "./abi.ts";
+import {
+  MEME_A,
+  MEME_B,
+  MIGRATORS,
+  VENUE_OBJECTS as O,
+  SUI,
+} from "./fixtures/migrators-deployment.ts";
 
-function shared<const Mutable extends boolean>(
-  objectId: string,
-  initialSharedVersion: number | string,
-  mutable: Mutable,
-): SharedObjectReference<Mutable> {
-  return { objectId, initialSharedVersion, mutable };
-}
+const calls = new MigratorCalls(MIGRATORS);
+const coverage = abiCoverage(
+  readAbi("production-migrators-v1.json", "migrators"),
+  MIGRATORS.packageId,
+);
+const meme = normalizeStructTag(MEME_A);
+const memeB = normalizeStructTag(MEME_B);
+const sui = normalizeStructTag(SUI);
 
-const deployment: MigratorsDeployment = {
-  packageId: "0x321",
-  originalPackageId: "0x320",
-  launchpad: {
-    packageId: "0x123",
-    originalPackageId: "0x122",
-    partnersPackageId: "0xae",
-    packageVersion: shared("0x2", "10", false),
-    launchConfig: shared("0x3", "11", false),
-    runtimeConfig: shared("0x4", "12", false),
-    admin: { packageId: "0xad", acl: shared("0x5", "13", false) },
-  },
-  migratorsVersion: shared("0x61", "15", false),
-  lpFeePolicy: shared("0x40", "18", false),
-  venueConfig: shared("0x60", "14", false),
-};
-const types = {
-  memeType: "0xa::meme::MEME",
-  quoteType: "0x2::sui::SUI",
-};
-const lpFeeSplit = {
-  creatorBps: 5_000n,
-  autoLpBps: 2_000n,
-  rewardsBps: 1_000n,
-  burnBps: 1_000n,
-  recipients: [{ destination: "0xf", bps: 1_000n }],
-};
-const settings = {
-  virtualQuote: 1_000n,
-  graduationTarget: 3_000n,
-  creationFee: 1_001n,
-  allocationPlan: {
-    curveMemeBps: 8_000n,
-    lpMemeBps: 1_900n,
-    lpQuoteBps: 9_900n,
-    recipients: [],
-  },
-  lpFeeSplit,
-};
-const cetus = {
-  cetusConfig: shared("0x70", "30", false),
-  cetusPools: shared("0x71", "31", true),
-};
-const CLOCK = `shared:${SUI_CLOCK_OBJECT_ID}`;
-const meme = normalizedType(types.memeType);
-const quote = normalizedType(types.quoteType);
-/** Cetus routes name the pool's coins in Cetus order after Meme and Quote (contracts ADR 0100). */
-const cetusTypeArguments = {
-  a: [meme, quote, meme, quote],
-  b: [meme, quote, quote, meme],
-};
+// Shared-object descriptors, named for the Move parameter each one fills.
+const migratorsVersion = "shared:0x3010";
+const venueConfig = (mutable: boolean) =>
+  `${mutable ? "shared-mut" : "shared"}:0x3020`;
+const registry = "shared-mut:0x2020";
+const vaultVersion = "shared:0x2010";
+const treasury = "shared:0x1030";
 
-test("starts, configures, finalizes, and shares a Cetus launch in one PTB", () => {
-  const tx = new MigratorTransactions(deployment).createCetusLaunch({
-    ...types,
-    ...settings,
-    ...cetus,
-    ticket: "0xb",
-    memeCurrency: shared("0xd", "22", true),
-    tickSpacing: 200,
-    preShareBuy: { quoteAmount: 100n, minMemeOut: 1n, recipient: "0xe" },
-  });
-
-  const launchCalls = moveFunctions(tx).filter(
-    (name) => name.startsWith("launch::") || name.startsWith("cetus::"),
-  );
-  assert.deepEqual(launchCalls, [
-    "cetus::new",
-    "launch::set_virtual_quote",
-    "launch::set_graduation_target",
-    "launch::set_allocation_plan",
-    "launch::set_lp_fee_split",
-    "launch::finalize",
-    "launch::buy",
-    "launch::share",
-  ]);
-  const start = moveCall(tx, "cetus::new");
-  assert.equal(start.package, normalizeSuiObjectId("0x321"));
-  assert.deepEqual(start.typeArguments.length, 2);
-  assert.deepEqual(argumentKinds(tx, start), [
-    "object:0xb",
-    "shared:0x61",
-    "shared:0x2",
-    "shared:0x3",
-    "shared-mut:0x60",
-    "shared:0x70",
-    "shared-mut:0x71",
-    "pure",
-  ]);
-  const finalize = moveCall(tx, "launch::finalize");
-  assert.equal(finalize.package, normalizeSuiObjectId("0x123"));
-  // The creation fee is an exact-balance SUI coin intent resolved at build.
-  assert.deepEqual(argumentKinds(tx, finalize), [
-    `Result:${commandIndex(tx, "cetus::new")}`,
-    "shared:0x2",
-    "shared-mut:0xd",
-    "shared:0x3",
-    "Result:1",
-  ]);
-  assert.equal(tx.getData().commands[1]?.$kind, "$Intent");
-  assert.equal(tx.getData().commands.at(-1)?.$kind, "TransferObjects");
-});
-
-test("starts a Bluefin launch at the creator's tier", () => {
-  const tx = new MigratorTransactions(deployment).createBluefinLaunch({
-    ...types,
-    ...settings,
-    ticket: "0xb",
-    memeCurrency: shared("0xd", "22", true),
-    tickSpacing: 200,
-    feeRate: 10_000n,
-    openingRoundMs: 120_000n,
-    creationFee: 0n,
-  });
-
-  const start = moveCall(tx, "bluefin::new");
-  assert.deepEqual(argumentKinds(tx, start), [
-    "object:0xb",
-    "shared:0x61",
-    "shared:0x2",
-    "shared:0x3",
-    "pure",
-    "pure",
-  ]);
-  assert.ok(moveFunctions(tx).includes("launch::set_opening_round"));
-  assert.equal(moveFunctions(tx).at(-1), "launch::share");
-  assert.throws(
-    () =>
-      new MigratorCalls(deployment).newBluefinLaunch({
-        ...types,
-        ticket: "0xb",
-        tickSpacing: 2 ** 32,
-        feeRate: 1n,
-      }),
-    /tickSpacing must be a u32/,
-  );
-});
-
-test("migrates Cetus with the reserved tier and the LP Burn manager", () => {
-  for (const memeSide of ["a", "b"] as const) {
-    const tx = new MigratorTransactions(deployment).migrateCetus({
-      ...types,
-      ...cetus,
-      memeSide,
-      launch: shared("0xc", "20", true),
-      memeCurrency: shared("0xd", "22", true),
-      burnManager: shared("0x72", "32", true),
+/** Every Move call's `module::function`, in command order. */
+function targets(tx: Transaction): string[] {
+  return coverage
+    .check(tx)
+    .getData()
+    .commands.flatMap((command) => {
+      if (command.$kind !== "MoveCall") return [];
+      const call = command.MoveCall;
+      return [
+        `${normalizeSuiAddress(call.package)}::${call.module}::${call.function}`,
+      ];
     });
-    const call = moveCall(tx, "cetus::migrate");
-    assert.deepEqual(call.typeArguments, cetusTypeArguments[memeSide]);
-    assert.deepEqual(argumentKinds(tx, call), [
-      "shared-mut:0xc",
-      "shared:0x61",
-      "shared:0x2",
-      "shared-mut:0xd",
-      "shared:0x60",
-      "shared:0x70",
-      "shared-mut:0x71",
-      "shared-mut:0x72",
-      CLOCK,
-    ]);
+}
+
+/** The pure inputs of the `index`th Move call, decoded in argument order. */
+function pureBytes(tx: Transaction, index: number): Uint8Array[] {
+  const data = tx.getData();
+  const call = data.commands.filter((command) => command.$kind === "MoveCall")[
+    index
+  ]?.MoveCall;
+  assert.ok(call);
+  return call.arguments.flatMap((argument) => {
+    if (argument.$kind !== "Input") return [];
+    const input = data.inputs[argument.Input];
+    return input?.$kind === "Pure" ? [fromBase64(input.Pure.bytes)] : [];
+  });
+}
+
+const target = (module: string, name: string) =>
+  `${normalizeSuiAddress("0x3001")}::${module}::${name}`;
+
+/** A stand-in for the product's `migrate`, returning the `Migration` result. */
+function productMigration(tx: Transaction) {
+  return tx.moveCall({ target: "0x99::launch::migrate" });
+}
+
+test("venue witnesses are <migrators original>::<venue>::Venue and map back", () => {
+  assert.deepEqual(MIGRATOR_VENUES, ["bluefin", "cetus"]);
+  for (const venue of MIGRATOR_VENUES) {
+    const type = venueWitnessType(MIGRATORS, venue);
+    assert.equal(type, normalizeStructTag(`0x3000::${venue}::Venue`));
+    assert.equal(venueOf(MIGRATORS, type), venue);
   }
-});
-
-test("migrates Bluefin and pays its SUI pool-creation fee", () => {
-  const tx = new MigratorTransactions(deployment).migrateBluefin({
-    ...types,
-    launch: shared("0xc", "20", true),
-    memeCurrency: shared("0xd", "22", true),
-    quoteCurrency: shared("0xe", "23", false),
-    bluefinConfig: shared("0x80", "40", true),
-    creationFee: 5_000_000n,
-  });
-
-  assert.equal(tx.getData().commands[0]?.$kind, "$Intent");
-  const call = moveCall(tx, "bluefin::migrate");
-  assert.deepEqual(argumentKinds(tx, call), [
-    "shared-mut:0xc",
-    "shared:0x61",
-    "shared:0x2",
-    "shared-mut:0xd",
-    "shared:0xe",
-    "shared-mut:0x80",
-    "Result:0",
-    CLOCK,
-  ]);
-});
-
-test("collects fees permissionlessly with the live LP-fee policy", () => {
-  const sdk = new MigratorTransactions(deployment);
-  const cetusTx = sdk.collectCetusFees({
-    ...types,
-    cetusConfig: cetus.cetusConfig,
-    memeSide: "b",
-    vault: shared("0xc", "20", true),
-    memeCurrency: shared("0xd", "22", true),
-    burnManager: shared("0x72", "32", false),
-    pool: shared("0x73", "33", true),
-  });
-  const collect = moveCall(cetusTx, "cetus::collect_fees");
-  assert.deepEqual(collect.typeArguments, cetusTypeArguments.b);
-  assert.deepEqual(argumentKinds(cetusTx, collect), [
-    "shared-mut:0xc",
-    "shared:0x61",
-    "shared:0x40",
-    "shared-mut:0xd",
-    "shared:0x70",
-    "shared:0x72",
-    "shared-mut:0x73",
-    CLOCK,
-  ]);
-
-  const bluefinTx = sdk.collectBluefinFees({
-    ...types,
-    vault: shared("0xc", "20", true),
-    memeCurrency: shared("0xd", "22", true),
-    bluefinConfig: shared("0x80", "40", false),
-    pool: shared("0x81", "41", true),
-  });
-  assert.deepEqual(
-    argumentKinds(bluefinTx, moveCall(bluefinTx, "bluefin::collect_fees")),
-    [
-      "shared-mut:0xc",
-      "shared:0x61",
-      "shared:0x40",
-      "shared-mut:0xd",
-      "shared:0x80",
-      "shared-mut:0x81",
-      CLOCK,
-    ],
-  );
-});
-
-test("settles fees and permissionlessly applies a scheduled split", () => {
-  const sdk = new MigratorTransactions(deployment);
-  const tx = sdk.settleAndApplyCetusFeeSplit({
-    ...types,
-    cetusConfig: cetus.cetusConfig,
-    memeSide: "a",
-    vault: shared("0xc", "20", true),
-    memeCurrency: shared("0xd", "22", true),
-    burnManager: shared("0x72", "32", false),
-    pool: shared("0x73", "33", true),
-  });
-  const call = moveCall(tx, "cetus::settle_and_apply_fee_split");
-  assert.deepEqual(call.typeArguments, cetusTypeArguments.a);
-  assert.deepEqual(argumentKinds(tx, call), [
-    "shared-mut:0xc",
-    "shared:0x61",
-    "shared:0x40",
-    "shared-mut:0xd",
-    "shared:0x70",
-    "shared:0x72",
-    "shared-mut:0x73",
-    CLOCK,
-  ]);
-
-  const bluefinTx = sdk.settleAndApplyBluefinFeeSplit({
-    ...types,
-    vault: shared("0xc", "20", true),
-    memeCurrency: shared("0xd", "22", true),
-    bluefinConfig: shared("0x80", "40", false),
-    pool: shared("0x81", "41", true),
-  });
-  assert.ok(
-    moveFunctions(bluefinTx).includes("bluefin::settle_and_apply_fee_split"),
-  );
-});
-
-test("buys back and burns a chosen Quote amount under admin sign-in with a minimum Meme out", () => {
-  const sdk = new MigratorTransactions(deployment);
-  const cetusTx = sdk.buybackAndBurnCetus({
-    ...types,
-    cetusConfig: cetus.cetusConfig,
-    memeSide: "b",
-    vault: shared("0xc", "20", true),
-    adminCapId: "0xad1",
-    memeCurrency: shared("0xd", "22", true),
-    pool: shared("0x73", "33", true),
-    quoteIn: 7n,
-    minMemeOut: 5n,
-  });
-  assert.deepEqual(moveFunctions(cetusTx), [
-    "blast_acl::sign_in",
-    "cetus::buyback_and_burn",
-  ]);
-  assert.equal(signInRole(cetusTx), "BuybackAdmin");
-  const buyback = moveCall(cetusTx, "cetus::buyback_and_burn");
-  assert.deepEqual(buyback.typeArguments, cetusTypeArguments.b);
-  assert.deepEqual(argumentKinds(cetusTx, buyback), [
-    "shared-mut:0xc",
-    "shared:0x61",
-    `Result:${commandIndex(cetusTx, "blast_acl::sign_in")}`,
-    "shared-mut:0xd",
-    "shared:0x70",
-    "shared-mut:0x73",
-    "pure",
-    "pure",
-    CLOCK,
-  ]);
-  assert.deepEqual(
-    buyback.arguments.slice(6, 8).map((argument) => pureU64(cetusTx, argument)),
-    [7n, 5n],
-  );
-
-  const bluefinTx = sdk.buybackAndBurnBluefin({
-    ...types,
-    vault: shared("0xc", "20", true),
-    adminCapId: "0xad1",
-    memeCurrency: shared("0xd", "22", true),
-    bluefinConfig: shared("0x80", "40", false),
-    pool: shared("0x81", "41", true),
-    quoteIn: 3n,
-    minMemeOut: 5n,
-  });
-  const bluefinBuyback = moveCall(bluefinTx, "bluefin::buyback_and_burn");
-  assert.deepEqual(argumentKinds(bluefinTx, bluefinBuyback), [
-    "shared-mut:0xc",
-    "shared:0x61",
-    `Result:${commandIndex(bluefinTx, "blast_acl::sign_in")}`,
-    "shared-mut:0xd",
-    "shared:0x80",
-    "shared-mut:0x81",
-    "pure",
-    "pure",
-    CLOCK,
-  ]);
-  assert.deepEqual(
-    bluefinBuyback.arguments
-      .slice(6, 8)
-      .map((argument) => pureU64(bluefinTx, argument)),
-    [3n, 5n],
-  );
-  const bluefinOptions = {
-    ...types,
-    vault: shared("0xc", "20", true),
-    adminCapId: "0xad1",
-    memeCurrency: shared("0xd", "22", true),
-    bluefinConfig: shared("0x80", "40", false),
-    pool: shared("0x81", "41", true),
-  };
-  assert.throws(
-    () =>
-      sdk.buybackAndBurnBluefin({
-        ...bluefinOptions,
-        quoteIn: 1n,
-        minMemeOut: -1n,
-      }),
-    /minMemeOut must be a u64/,
-  );
-  for (const quoteIn of [0n, -1n, 1n << 64n]) {
-    assert.throws(
-      () =>
-        sdk.buybackAndBurnBluefin({
-          ...bluefinOptions,
-          quoteIn,
-          minMemeOut: 0n,
-        }),
-      /quoteIn must be a positive u64/,
-    );
-    assert.throws(
-      () =>
-        sdk.buybackAndBurnCetus({
-          ...types,
-          cetusConfig: cetus.cetusConfig,
-          memeSide: "b",
-          vault: shared("0xc", "20", true),
-          adminCapId: "0xad1",
-          memeCurrency: shared("0xd", "22", true),
-          pool: shared("0x73", "33", true),
-          quoteIn,
-          minMemeOut: 0n,
-        }),
-      /quoteIn must be a positive u64/,
-    );
-  }
-});
-
-test("claims a partnered vault's held LP fees after each collection", () => {
-  const sdk = new MigratorTransactions(deployment);
-  const vault = shared("0xc", "20", true);
-  const partner = shared("0x9a27", "27", false);
-  const claim = sdk.claimProtocolLpFeesWithPartner({
-    ...types,
-    vault,
-    partner,
-  });
-  const claimCall = moveCall(
-    claim,
-    "vault::claim_protocol_lp_fees_with_partner",
-  );
-  assert.deepEqual(claimCall.typeArguments, [meme, quote]);
-  assert.deepEqual(argumentKinds(claim, claimCall), [
-    "shared-mut:0xc",
-    "shared:0x61",
-    "shared:0x40",
-    "shared:0x9a27",
-  ]);
-
-  // A collection on a partnered vault claims what it held in the same PTB.
-  const cetusTx = sdk.collectCetusFees({
-    ...types,
-    cetusConfig: cetus.cetusConfig,
-    memeSide: "b",
-    vault,
-    memeCurrency: shared("0xd", "22", true),
-    burnManager: shared("0x72", "32", false),
-    pool: shared("0x73", "33", true),
-    partner,
-  });
-  assert.deepEqual(moveFunctions(cetusTx), [
-    "cetus::collect_fees",
-    "vault::claim_protocol_lp_fees_with_partner",
-  ]);
-  const bluefinTx = sdk.collectBluefinFees({
-    ...types,
-    vault,
-    memeCurrency: shared("0xd", "22", true),
-    bluefinConfig: shared("0x80", "40", false),
-    pool: shared("0x81", "41", true),
-    partner,
-  });
-  assert.deepEqual(moveFunctions(bluefinTx), [
-    "bluefin::collect_fees",
-    "vault::claim_protocol_lp_fees_with_partner",
-  ]);
-});
-
-test("claims creator LP fees with the launch's live curve-fee cap", () => {
-  const tx = new MigratorTransactions(deployment).claimCreatorFees({
-    ...types,
-    vault: shared("0xc", "20", true),
-    launch: shared("0x9", "19", false),
-    curveFeeCapId: "0xcf",
-    recipient: "0xe",
-  });
-  assert.deepEqual(
-    argumentKinds(tx, moveCall(tx, "vault::claim_creator_fees")),
-    ["shared-mut:0xc", "shared:0x61", "shared:0x9", "object:0xcf"],
-  );
-  assert.equal(transferObjectCount(tx), 2);
-});
-
-test("composes admin sign-in with residual claims and LP-fee policy changes", () => {
-  const sdk = new MigratorTransactions(deployment);
-  const claim = sdk.claimProtocolFees({
-    ...types,
-    vault: shared("0xc", "20", true),
-    adminCapId: "0xad1",
-    recipient: "0xe",
-  });
-  assert.deepEqual(moveFunctions(claim), [
-    "blast_acl::sign_in",
-    "vault::claim_protocol_fees",
-  ]);
-  assert.equal(signInRole(claim), "TreasuryAdmin");
-
-  const cases = [
-    [
-      "schedule_default_shares",
-      "FeeAdmin",
-      sdk.scheduleLpFeeDefaultShares({
-        delayMs: 172_800_000n,
-        adminCapId: "0xad1",
-        memeBps: 100n,
-        quoteBps: 200n,
-      }),
-      [],
-    ],
-    [
-      "schedule_coin_shares",
-      "FeeAdmin",
-      sdk.scheduleLpFeeCoinShares({
-        memeType: types.memeType,
-        adminCapId: "0xad1",
-        memeBps: 100n,
-        quoteBps: 200n,
-      }),
-      [normalizedType(types.memeType)],
-    ],
-    [
-      "schedule_coin_shares_delay",
-      "FeeAdmin",
-      sdk.scheduleLpFeeCoinSharesDelay({
-        delayMs: 172_800_000n,
-        adminCapId: "0xad1",
-      }),
-      [],
-    ],
-    [
-      "schedule_clear_coin_shares",
-      "FeeAdmin",
-      sdk.scheduleClearLpFeeCoinShares({
-        memeType: types.memeType,
-        adminCapId: "0xad1",
-      }),
-      [normalizedType(types.memeType)],
-    ],
-    [
-      "schedule_protocol_destination",
-      "TreasuryAdmin",
-      sdk.scheduleLpFeeProtocolDestination({
-        delayMs: 172_800_000n,
-        adminCapId: "0xad1",
-        destination: "0xb",
-      }),
-      [],
-    ],
-  ] as const;
-  for (const [functionName, role, tx, typeArguments] of cases) {
-    assert.equal(signInRole(tx), role);
-    const call = moveCall(tx, `lp_fee_policy::${functionName}`);
-    assert.deepEqual(call.typeArguments, typeArguments);
-    const kinds = argumentKinds(tx, call);
-    assert.deepEqual(kinds.slice(0, 3), [
-      "shared-mut:0x40",
-      "shared:0x61",
-      `Result:${commandIndex(tx, "blast_acl::sign_in")}`,
-    ]);
-  }
-  assert.throws(
-    () =>
-      sdk.scheduleLpFeeDefaultShares({
-        delayMs: 172_800_000n,
-        adminCapId: "0xad1",
-        memeBps: 10_001n,
-        quoteBps: 0n,
-      }),
-    /10,000 basis points/,
-  );
-});
-
-test("publishes a holder-reward round and relays its claims", () => {
-  const vault = shared("0xd", "20", true);
-  const manifest = buildRewardManifest({
-    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
-    vaultId: "0xd",
-    number: 0n,
-    startCheckpoint: 10n,
-    endCheckpoint: 20n,
-    allocations: [
-      { beneficiary: "0xa", memeAmount: 10n, quoteAmount: 20n },
-      { beneficiary: "0xb", memeAmount: 30n, quoteAmount: 40n },
-      { beneficiary: "0xc", memeAmount: 50n, quoteAmount: 60n },
-    ],
-  });
-  const sdk = new MigratorTransactions(deployment);
-  const round = {
-    ...types,
-    vault,
-    adminCapId: "0xad1",
-    manifest,
-    claimWindowMs: 604_800_000n,
-    gasReserveAmount: 7n,
-    expectedTreasury: "0xb",
-  };
-  const schedule = sdk.scheduleHolderRewardRound(round);
-  assert.equal(signInRole(schedule), "RewardsAdmin");
-  const call = moveCall(schedule, "blast_holder_rewards::schedule_round");
-  assert.deepEqual(argumentKinds(schedule, call).slice(0, 3), [
-    "shared-mut:0xd",
-    "shared:0x61",
-    `Result:${commandIndex(schedule, "blast_acl::sign_in")}`,
-  ]);
-  assert.equal(call.arguments.length, 15);
-  // Publication takes no terms and no admin: the vault's scheduled round is the input.
-  const publish = sdk.publishHolderRewardRound({ ...types, vault });
-  assert.deepEqual(moveFunctions(publish), [
-    "blast_holder_rewards::publish_round",
-  ]);
+  assert.equal(venueOf(MIGRATORS, "0x3001::cetus::Venue"), null);
+  assert.equal(venueOf(MIGRATORS, "0x3000::cetus::PoolTierKey"), null);
   assert.equal(
-    moveCall(publish, "blast_holder_rewards::publish_round").arguments.length,
-    4,
-  );
-  // At the default zero notice, one PTB schedules and publishes.
-  assert.deepEqual(
-    moveFunctions(sdk.scheduleAndPublishHolderRewardRound(round)),
-    [
-      "blast_acl::sign_in",
-      "blast_holder_rewards::schedule_round",
-      "blast_holder_rewards::publish_round",
-    ],
+    calls.otw,
+    normalizeStructTag("0x3000::blast_migrators::BLAST_MIGRATORS"),
   );
   assert.throws(
-    () =>
-      sdk.scheduleHolderRewardRound({
-        ...round,
-        vault: shared("0xe", "20", true),
-      }),
-    /another vault/,
-  );
-
-  const relay = sdk.claimHolderRewards({
-    ...types,
-    round: shared("0x50", "30", true),
-    allocations: manifest.allocations,
-  });
-  assert.deepEqual(moveFunctions(relay), [
-    "blast_holder_rewards::claim",
-    "blast_holder_rewards::claim",
-    "blast_holder_rewards::claim",
-  ]);
-  const claim = moveCalls(relay)[0];
-  assert.ok(claim);
-  assert.deepEqual(argumentKinds(relay, claim), [
-    "shared-mut:0x50",
-    "shared:0x61",
-    "pure",
-    "pure",
-    "pure",
-    "pure",
-    "pure",
-    CLOCK,
-  ]);
-});
-
-function moveFunctions(tx: Transaction): string[] {
-  return moveCalls(tx).map((call) => `${call.module}::${call.function}`);
-}
-
-function moveCalls(tx: Transaction) {
-  return tx
-    .getData()
-    .commands.flatMap((command) =>
-      command.$kind === "MoveCall" ? [command.MoveCall] : [],
-    );
-}
-
-function commandIndex(tx: Transaction, name: string): number {
-  return tx
-    .getData()
-    .commands.findIndex(
-      (command) =>
-        command.$kind === "MoveCall" &&
-        `${command.MoveCall.module}::${command.MoveCall.function}` === name,
-    );
-}
-
-/** The `blast_fun_domain` role the transaction signs in with. */
-function signInRole(tx: Transaction): string | undefined {
-  return moveCall(tx, "blast_acl::sign_in").typeArguments[0]?.split("::")[2];
-}
-
-function moveCall(tx: Transaction, name: string) {
-  const command = tx.getData().commands[commandIndex(tx, name)];
-  assert.ok(command?.$kind === "MoveCall", `missing ${name}`);
-  return command.MoveCall;
-}
-
-function argumentKinds(
-  tx: Transaction,
-  call: ReturnType<typeof moveCall>,
-): string[] {
-  return call.arguments.map((argument) => {
-    if (argument.$kind === "Result") return `Result:${argument.Result}`;
-    if (argument.$kind !== "Input") return argument.$kind;
-    return describeInput(tx.getData().inputs[argument.Input]);
-  });
-}
-
-/** Decodes the pure `u64` input `argument` names. */
-function pureU64(
-  tx: Transaction,
-  argument: ReturnType<typeof moveCall>["arguments"][number] | undefined,
-): bigint {
-  assert.ok(argument?.$kind === "Input");
-  const input = tx.getData().inputs[argument.Input];
-  assert.ok(input?.$kind === "Pure");
-  return BigInt(bcs.u64().parse(fromBase64(input.Pure.bytes)));
-}
-
-function describeInput(
-  input: ReturnType<Transaction["getData"]>["inputs"][number] | undefined,
-): string {
-  if (input?.$kind === "Pure") return "pure";
-  if (input?.$kind === "UnresolvedObject") {
-    return `object:0x${BigInt(input.UnresolvedObject.objectId).toString(16)}`;
-  }
-  if (input?.$kind !== "Object" || input.Object.$kind !== "SharedObject") {
-    return String(input?.$kind);
-  }
-  const reference = input.Object.SharedObject;
-  if (reference.objectId === SUI_CLOCK_OBJECT_ID) {
-    return `shared:${SUI_CLOCK_OBJECT_ID}`;
-  }
-  const prefix = reference.mutable ? "shared-mut" : "shared";
-  return `${prefix}:0x${BigInt(reference.objectId).toString(16)}`;
-}
-
-function transferObjectCount(tx: Transaction): number {
-  const transfer = tx.getData().commands.at(-1);
-  return transfer?.$kind === "TransferObjects"
-    ? transfer.TransferObjects.objects.length
-    : 0;
-}
-
-function normalizedType(type: string): string {
-  return type.replace(
-    /^0x([0-9a-f]+)::/,
-    (_match, address: string) => `0x${address.padStart(64, "0")}::`,
-  );
-}
-
-test("schedules and cancels splits with the creator cap, then applies without it", () => {
-  const sdk = new MigratorTransactions(deployment);
-  const options = {
-    ...types,
-    vault: shared("0xc", "20", true),
-    launch: shared("0x9", "19", false),
-    curveFeeCap: "0xcf",
-  };
-  const scheduled = sdk.scheduleFeeSplit({
-    ...options,
-    feeSplit: lpFeeSplit,
-    delayMs: 0n,
-  });
-  assert.deepEqual(
-    argumentKinds(scheduled, moveCall(scheduled, "vault::schedule_fee_split")),
-    [
-      "shared-mut:0xc",
-      "shared:0x61",
-      "shared:0x9",
-      "object:0xcf",
-      `Result:${commandIndex(scheduled, "allocation::fee_split")}`,
-      "pure",
-      CLOCK,
-    ],
-  );
-  const cancelled = sdk.cancelFeeSplit(options);
-  assert.deepEqual(
-    argumentKinds(cancelled, moveCall(cancelled, "vault::cancel_fee_split")),
-    ["shared-mut:0xc", "shared:0x61", "shared:0x9", "object:0xcf"],
-  );
-  assert.throws(
-    () =>
-      sdk.scheduleFeeSplit({ ...options, feeSplit: lpFeeSplit, delayMs: -1n }),
-    /delayMs/,
+    () => venueWitnessType(MIGRATORS, "aftermath" as "cetus"),
+    /unknown migrators venue/,
   );
 });
 
-test("bonding gas settlement signs in as RewardsAdmin and close is permissionless", () => {
-  const sdk = new MigratorTransactions(deployment);
-  const options = {
-    ...types,
-    vault: shared("0xc", "20", true),
-    round: shared("0x50", "30", true),
-  };
-  const settle = sdk.settleHolderRewardGasReserve({
-    ...options,
-    adminCapId: "0xad1",
-    reimbursementAmount: 0n,
-  });
-  assert.equal(signInRole(settle), "RewardsAdmin");
-  assert.deepEqual(
-    argumentKinds(
-      settle,
-      moveCall(settle, "blast_holder_rewards::settle_gas_reserve"),
-    ),
-    [
-      "shared-mut:0x50",
-      "shared:0x61",
-      `Result:${commandIndex(settle, "blast_acl::sign_in")}`,
-      "shared-mut:0xc",
-      "pure",
-    ],
+test("prepareCetus calls cetus::prepare with the Move arity and returns the ticket", () => {
+  const tx = new Transaction();
+  const ticket = tx.add(
+    calls.prepareCetus({
+      memeType: MEME_A,
+      quoteType: SUI,
+      cetus: { config: O.cetusConfig, pools: O.cetusPools },
+      treasuryCap: "0x7c",
+      tickSpacing: 200,
+    }),
   );
-  const close = sdk.closeHolderRewardRound(options);
-  assert.deepEqual(
-    argumentKinds(close, moveCall(close, "blast_holder_rewards::close_round")),
-    ["shared-mut:0x50", "shared:0x61", "shared-mut:0xc", CLOCK],
+  tx.moveCall({ target: "0x99::launch::new", arguments: [ticket] });
+  assert.deepEqual(targets(tx), [
+    target("cetus", "prepare"),
+    "0x0000000000000000000000000000000000000000000000000000000000000099::launch::new",
+  ]);
+  assert.deepEqual(moveCallTypeArguments(tx)[0], [meme, sui]);
+  // (migrators_version, &mut venue_config, cetus_config, &mut pools, &mut treasury_cap, tick_spacing)
+  assert.deepEqual(moveCallArguments(tx, 0), [
+    migratorsVersion,
+    venueConfig(true),
+    "shared:0xc0f",
+    "shared-mut:0xc00",
+    "object:0x7c",
+    "pure",
+  ]);
+  assert.equal(bcs.u32().parse(pureBytes(tx, 0)[0] as Uint8Array), 200);
+  assert.deepEqual(moveCallArguments(tx, 1), ["result:0"]);
+});
+
+test("prepareBluefin calls bluefin::prepare and mirrors Bluefin's tier bounds", () => {
+  const tx = new Transaction();
+  tx.add(
+    calls.prepareBluefin({
+      memeType: MEME_A,
+      quoteType: SUI,
+      treasuryCap: "0x7c",
+      currency: O.currency,
+      tickSpacing: 60,
+      feeRate: 3_000n,
+    }),
+  );
+  assert.deepEqual(targets(tx), [target("bluefin", "prepare")]);
+  assert.deepEqual(moveCallTypeArguments(tx)[0], [meme, sui]);
+  // (migrators_version, &mut venue_config, &treasury_cap, &currency, tick_spacing, fee_rate)
+  assert.deepEqual(moveCallArguments(tx, 0), [
+    migratorsVersion,
+    venueConfig(true),
+    "object:0x7c",
+    "shared:0xcc",
+    "pure",
+    "pure",
+  ]);
+  const [tick, fee] = pureBytes(tx, 0);
+  assert.equal(bcs.u32().parse(tick as Uint8Array), 60);
+  assert.equal(bcs.u64().parse(fee as Uint8Array), "3000");
+
+  const base = {
+    memeType: MEME_A,
+    quoteType: SUI,
+    treasuryCap: "0x7c",
+    currency: O.currency,
+  };
+  assert.equal(BLUEFIN_MAX_TICK_SPACING, 400);
+  assert.equal(BLUEFIN_MAX_FEE_RATE, 20_000n);
+  calls.prepareBluefin({ ...base, tickSpacing: 400, feeRate: 20_000n });
+  calls.prepareBluefin({ ...base, tickSpacing: 1, feeRate: 1n });
+  for (const [tickSpacing, feeRate] of [
+    [0, 1n],
+    [401, 1n],
+    [1, 0n],
+    [1, 20_001n],
+  ] as const) {
+    assert.throws(
+      () => calls.prepareBluefin({ ...base, tickSpacing, feeRate }),
+      /Bluefin tier/,
+    );
+  }
+  assert.throws(
+    () => calls.prepareBluefin({ ...base, tickSpacing: 1.5, feeRate: 1n }),
+    /u32/,
+  );
+});
+
+for (const [memeType, memeIsA] of [
+  [MEME_A, true],
+  [MEME_B, false],
+] as const) {
+  const m = normalizeStructTag(memeType);
+  const cetusTypes = memeIsA ? [m, sui, m, sui] : [m, sui, sui, m];
+
+  test(`migrateCetus redeems the product's Migration in Cetus coin order (Meme is A=${memeIsA})`, () => {
+    const tx = new Transaction();
+    const migration = productMigration(tx);
+    tx.add(
+      calls.migrateCetus({
+        migration,
+        memeType,
+        quoteType: SUI,
+        cetus: {
+          config: O.cetusConfig,
+          pools: O.cetusPools,
+          burnManager: O.burnManager,
+        },
+      }),
+    );
+    assert.equal(targets(tx)[1], target("cetus", "migrate"));
+    assert.deepEqual(moveCallTypeArguments(tx)[1], cetusTypes);
+    // (migration, migrators_version, venue_config, cetus_config, &mut pools,
+    //  &mut burn_manager, &mut registry, vault_version, treasury, clock)
+    assert.deepEqual(moveCallArguments(tx, 1), [
+      "result:0",
+      migratorsVersion,
+      venueConfig(false),
+      "shared:0xc0f",
+      "shared-mut:0xc00",
+      "shared-mut:0xb0",
+      registry,
+      vaultVersion,
+      treasury,
+      "clock",
+    ]);
+  });
+
+  test(`Cetus fee routes and buyback take <Meme, Quote, CoinA, CoinB> (Meme is A=${memeIsA})`, () => {
+    const vault = {
+      memeType,
+      quoteType: SUI,
+      vault: O.vault,
+      currency: O.currency,
+      cetus: { config: O.cetusConfig, burnManager: O.burnManager },
+      pool: O.pool,
+    };
+    // (&mut vault, migrators_version, vault_version, treasury, &mut currency,
+    //  cetus_config, burn_manager, &mut pool, clock)
+    const feeArguments = [
+      "shared-mut:0x7a",
+      migratorsVersion,
+      vaultVersion,
+      treasury,
+      "shared-mut:0xcc",
+      "shared:0xc0f",
+      "shared:0xb0",
+      "shared-mut:0x9001",
+      "clock",
+    ];
+    for (const [name, step] of [
+      ["collect_fees", calls.collectCetusFees(vault)],
+      ["settle_and_apply_fee_split", calls.settleAndApplyCetusFeeSplit(vault)],
+    ] as const) {
+      const tx = new Transaction();
+      tx.add(step);
+      assert.deepEqual(targets(tx), [target("cetus", name)]);
+      assert.deepEqual(moveCallTypeArguments(tx)[0], cetusTypes);
+      assert.deepEqual(moveCallArguments(tx, 0), feeArguments);
+    }
+
+    const tx = new Transaction();
+    const witness = tx.moveCall({ target: "0xad::blast_acl::sign_in" });
+    tx.add(
+      calls.buybackAndBurnCetus({
+        memeType,
+        quoteType: SUI,
+        vault: O.vault,
+        adminWitness: witness,
+        currency: O.currency,
+        cetus: { config: O.cetusConfig },
+        pool: O.pool,
+        quoteIn: 5_000n,
+        minMemeOut: 0n,
+      }),
+    );
+    assert.equal(targets(tx)[1], target("cetus", "buyback_and_burn"));
+    assert.deepEqual(moveCallTypeArguments(tx)[1], cetusTypes);
+    // (&mut vault, migrators_version, vault_version, &admin_witness, &mut currency,
+    //  cetus_config, &mut pool, quote_in, min_meme_out, clock)
+    assert.deepEqual(moveCallArguments(tx, 1), [
+      "shared-mut:0x7a",
+      migratorsVersion,
+      vaultVersion,
+      "result:0",
+      "shared-mut:0xcc",
+      "shared:0xc0f",
+      "shared-mut:0x9001",
+      "pure",
+      "pure",
+      "clock",
+    ]);
+    assert.deepEqual(
+      pureBytes(tx, 1).map((bytes) => bcs.u64().parse(bytes)),
+      ["5000", "0"],
+    );
+  });
+}
+
+test("migrateBluefin redeems the Migration and pays the creation fee coin", () => {
+  const tx = new Transaction();
+  const migration = productMigration(tx);
+  const [creationFee] = tx.splitCoins(tx.gas, [1_000n]);
+  assert.ok(creationFee);
+  tx.add(
+    calls.migrateBluefin({
+      migration,
+      memeType: MEME_B,
+      quoteType: SUI,
+      currency: O.currency,
+      quoteCurrency: O.quoteCurrency,
+      bluefinConfig: O.bluefinConfig,
+      creationFee,
+    }),
+  );
+  assert.equal(targets(tx)[1], target("bluefin", "migrate"));
+  // Bluefin pools are always `Pool<Meme, Quote>`.
+  assert.deepEqual(moveCallTypeArguments(tx)[1], [memeB, sui]);
+  // (migration, migrators_version, venue_config, &currency, &quote_currency,
+  //  &mut bluefin_config, &mut registry, vault_version, treasury, creation_fee, clock)
+  assert.deepEqual(moveCallArguments(tx, 1), [
+    "result:0",
+    migratorsVersion,
+    venueConfig(false),
+    "shared:0xcc",
+    "shared:0xcd",
+    "shared-mut:0xbf",
+    registry,
+    vaultVersion,
+    treasury,
+    "result:1:0",
+    "clock",
+  ]);
+});
+
+test("Bluefin fee routes and buyback take <Meme, Quote> in Move order", () => {
+  const vault = {
+    memeType: MEME_B,
+    quoteType: SUI,
+    vault: O.vault,
+    currency: O.currency,
+    bluefinConfig: O.bluefinConfig,
+    pool: O.pool,
+  };
+  // (&mut vault, migrators_version, vault_version, treasury, &mut currency,
+  //  bluefin_config, &mut pool, clock)
+  for (const [name, step] of [
+    ["collect_fees", calls.collectBluefinFees(vault)],
+    ["settle_and_apply_fee_split", calls.settleAndApplyBluefinFeeSplit(vault)],
+  ] as const) {
+    const tx = new Transaction();
+    tx.add(step);
+    assert.deepEqual(targets(tx), [target("bluefin", name)]);
+    assert.deepEqual(moveCallTypeArguments(tx)[0], [memeB, sui]);
+    assert.deepEqual(moveCallArguments(tx, 0), [
+      "shared-mut:0x7a",
+      migratorsVersion,
+      vaultVersion,
+      treasury,
+      "shared-mut:0xcc",
+      "shared:0xbf",
+      "shared-mut:0x9001",
+      "clock",
+    ]);
+  }
+
+  const tx = new Transaction();
+  tx.add(
+    calls.buybackAndBurnBluefin({
+      ...vault,
+      adminWitness: "0x5e",
+      quoteIn: 1n,
+      minMemeOut: 9n,
+    }),
+  );
+  assert.deepEqual(targets(tx), [target("bluefin", "buyback_and_burn")]);
+  // (&mut vault, migrators_version, vault_version, &admin_witness, &mut currency,
+  //  bluefin_config, &mut pool, quote_in, min_meme_out, clock)
+  assert.deepEqual(moveCallArguments(tx, 0), [
+    "shared-mut:0x7a",
+    migratorsVersion,
+    vaultVersion,
+    "object:0x5e",
+    "shared-mut:0xcc",
+    "shared:0xbf",
+    "shared-mut:0x9001",
+    "pure",
+    "pure",
+    "clock",
+  ]);
+  assert.throws(
+    () =>
+      calls.buybackAndBurnBluefin({
+        ...vault,
+        adminWitness: "0x5e",
+        quoteIn: 0n,
+        minMemeOut: 0n,
+      }),
+    /quoteIn must be a positive u64/,
+  );
+});
+
+test("MigratorTransactions signs in as BuybackAdmin before the buyback", () => {
+  const txs = new MigratorTransactions(MIGRATORS);
+  const tx = txs.buybackAndBurnCetus({
+    memeType: MEME_A,
+    quoteType: SUI,
+    vault: O.vault,
+    currency: O.currency,
+    cetus: { config: O.cetusConfig },
+    pool: O.pool,
+    quoteIn: 10n,
+    minMemeOut: 1n,
+    adminCapId: "0xca9",
+  });
+  assert.deepEqual(targets(tx), [
+    `${normalizeSuiAddress("0xad")}::blast_acl::sign_in`,
+    target("cetus", "buyback_and_burn"),
+  ]);
+  assert.deepEqual(moveCallTypeArguments(tx)[0], [
+    normalizeStructTag("0x1000::blast_domain::BuybackAdmin"),
+  ]);
+  assert.deepEqual(moveCallArguments(tx, 0), ["shared:0xac1", "object:0xca9"]);
+  assert.equal(moveCallArguments(tx, 1)[3], "result:0");
+
+  const bluefin = txs.buybackAndBurnBluefin({
+    memeType: MEME_A,
+    quoteType: SUI,
+    vault: O.vault,
+    currency: O.currency,
+    bluefinConfig: O.bluefinConfig,
+    pool: O.pool,
+    quoteIn: 10n,
+    minMemeOut: 1n,
+    adminCapId: "0xca9",
+  });
+  assert.equal(targets(bluefin)[1], target("bluefin", "buyback_and_burn"));
+  assert.equal(moveCallArguments(bluefin, 1)[3], "result:0");
+
+  const vault = {
+    memeType: MEME_A,
+    quoteType: SUI,
+    vault: O.vault,
+    currency: O.currency,
+    pool: O.pool,
+  };
+  const cetus = {
+    ...vault,
+    cetus: { config: O.cetusConfig, burnManager: O.burnManager },
+  };
+  const bluefinVault = { ...vault, bluefinConfig: O.bluefinConfig };
+  assert.deepEqual(targets(txs.collectCetusFees(cetus)), [
+    target("cetus", "collect_fees"),
+  ]);
+  assert.deepEqual(targets(txs.settleAndApplyCetusFeeSplit(cetus)), [
+    target("cetus", "settle_and_apply_fee_split"),
+  ]);
+  assert.deepEqual(targets(txs.collectBluefinFees(bluefinVault)), [
+    target("bluefin", "collect_fees"),
+  ]);
+  assert.deepEqual(targets(txs.settleAndApplyBluefinFeeSplit(bluefinVault)), [
+    target("bluefin", "settle_and_apply_fee_split"),
+  ]);
+});
+
+test("rejects an incomplete deployment", () => {
+  assert.throws(
+    () =>
+      new MigratorCalls({
+        ...MIGRATORS,
+        venueConfig: { objectId: "0x0", initialSharedVersion: "1" },
+      }),
+    /migrators.venueConfig.objectId must not be the zero address/,
   );
   assert.throws(
     () =>
-      sdk.settleHolderRewardGasReserve({
-        ...options,
-        adminCapId: "0xad1",
-        reimbursementAmount: -1n,
+      new MigratorCalls({
+        ...MIGRATORS,
+        vault: { ...MIGRATORS.vault, registry: undefined as never },
       }),
-    /reimbursementAmount/,
+    /vault.registry must be a shared object identity/,
   );
+});
+
+test("every classified blast_migrators builder is built and matches the frozen ABI", () => {
+  coverage.assertEveryBuilder(10);
 });

@@ -1,5 +1,5 @@
 import type { AdminDeployment } from "@interest-protocol/blast-admin-sdk/transactions";
-import { normalizeAdminDeployment } from "@interest-protocol/blast-admin-sdk/transactions";
+import type { CoreDeployment } from "@interest-protocol/blast-core/deployment";
 import {
   requirePositiveU64,
   requireU64,
@@ -9,18 +9,13 @@ import {
   normalizeSharedObjectIdentity,
   normalizeSuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
-import type { MigratorVenue } from "@interest-protocol/blast-migrators-sdk/state";
-import { MIGRATOR_VENUES } from "@interest-protocol/blast-migrators-sdk/state";
+import type { LaunchpadDeployment } from "@interest-protocol/blast-launchpad-sdk/transactions";
+import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
 import type { PartnersDeployment } from "@interest-protocol/blast-partners-sdk/transactions";
-import { defineAftermathPresaleDeployment } from "@interest-protocol/blast-presale-sdk/aftermath";
 import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
+import type { BlastSuiDeployment } from "@interest-protocol/blast-sui-sdk/types";
+import type { VaultDeployment } from "@interest-protocol/blast-vault-sdk/transactions";
 import { isValidTransactionDigest } from "@mysten/sui/utils";
-import {
-  CANONICAL_MAINNET_PACKAGES,
-  CANONICAL_MAINNET_SHARED_OBJECTS,
-  MAINNET_PRESALE_DEPLOYMENT,
-} from "./mainnet.ts";
-
 import type {
   BlastDeployment,
   BlastDeploymentInput,
@@ -28,41 +23,83 @@ import type {
   BlastNetwork,
   BlastPackages,
   BlastSharedObjects,
-  BlastSuiDeploymentConstants,
-  LaunchpadDeploymentConstants,
   MigrationRoute,
-  MigratorsDeploymentConstants,
   PostDeployEvidence,
   SharedObjectGroup,
+  Venue,
 } from "./types.ts";
 import {
+  ARTIFACT_KEYS,
   BLAST_DEPLOYMENT_SCHEMA_VERSION,
   BLAST_NETWORKS,
   VENUE_IDENTITY_SETS,
+  VENUES,
 } from "./types.ts";
 
 /** The packages every manifest records, whatever else it carries. */
-const REQUIRED_PACKAGES = ["launchpad", "admin", "partners"];
+const REQUIRED_PACKAGES = [
+  "admin",
+  "partners",
+  "core",
+  "vesting",
+  "vault",
+  "launchpad",
+  "presale",
+  "migrators",
+] as const satisfies readonly (keyof BlastPackages)[];
+
+/** The fresh-stack publications every release records a transaction for. */
+const PUBLISHED_PACKAGES = [
+  "admin",
+  "partners",
+  "core",
+  "vault",
+  "launchpad",
+  "presale",
+  "migrators",
+] as const;
 
 /** Each shared-object group's complete key set, in canonical order. */
 const SHARED_OBJECT_KEYS = {
   admin: ["acl"],
-  launchpad: ["packageVersion", "launchConfig", "runtimeConfig"],
-  migrators: ["packageVersion", "lpFeePolicy", "venueConfig"],
-  presale: ["packageVersion", "venueConfig", "creationPolicy", "feePolicy"],
+  core: ["treasury"],
+  vault: ["registry", "packageVersion", "packageAdmin"],
+  launchpad: [
+    "packageVersion",
+    "packageAdmin",
+    "launchConfig",
+    "runtimeConfig",
+    "launchRegistry",
+  ],
+  presale: [
+    "packageVersion",
+    "packageAdmin",
+    "creationPolicy",
+    "feePolicy",
+    "presaleRegistry",
+  ],
+  migrators: ["packageVersion", "packageAdmin", "venueConfig"],
   blastSui: ["packageVersion", "vault"],
   cetus: ["config", "pools", "burnManager"],
   bluefin: ["config"],
+  aftermath: ["poolRegistry", "daoFeeVersion"],
 } as const satisfies Record<SharedObjectGroup, readonly string[]>;
 
-/** Groups every manifest records: the launchpad and the ACL it signs in through. */
-const CORE_GROUPS = ["admin", "launchpad"] as const;
+/** Groups every manifest records: the launch stack's singletons. */
+const STACK_GROUPS = [
+  "admin",
+  "core",
+  "vault",
+  "launchpad",
+  "presale",
+  "migrators",
+] as const;
 
 /**
  * Groups a manifest records exactly when it records the package that owns
  * them. A venue's group follows `VENUE_IDENTITY_SETS` instead.
  */
-const PACKAGE_GROUPS = ["migrators", "presale", "blastSui"] as const;
+const PACKAGE_GROUPS = ["blastSui"] as const;
 
 /**
  * Genesis checkpoint digest of Sui mainnet, the only chain Blast deploys to
@@ -78,9 +115,9 @@ const COMMIT = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
-/** Why a manifest is not a valid deployment identity. */
+/** Why a manifest is not a valid deployment identity, or why none exists. */
 export class DeploymentManifestError extends Error {
-  readonly code: "invalid-manifest" | "unsupported-route";
+  readonly code: "invalid-manifest" | "unsupported-route" | "unpublished";
 
   constructor(code: DeploymentManifestError["code"], message: string) {
     super(message);
@@ -89,227 +126,12 @@ export class DeploymentManifestError extends Error {
   }
 }
 
-/** When the canonical stack's publish and custody were verified on mainnet. */
-const CANONICAL_MAINNET_VERIFIED_AT_MS = "1793192079762";
-
 /**
- * Publish and seal transactions of the canonical stack, with their
- * checkpoints. Source: contracts
- * `deployments/sui/mainnet/2026-10-28-canonical-mvr-launch-stack.json`.
+ * Released deployments, the only production identities. The fresh launch
+ * stack (contracts ADR 0137) is unpublished: its publish script writes the
+ * mainnet entry.
  */
-const CANONICAL_MAINNET_TRANSACTIONS = {
-  admin: ["9QPC85nBDcKvM3NsWc24qMYGQ9LSMP54eJVWgkAwArBh", "339055856"],
-  partners: ["76Z3rwhNrZxTz5th9Knu8QgCqveCAxMzWGrmeWGBLbYY", "339055930"],
-  launchpad: ["3Qqc2DnEDucks229oFvRWBzkxD6DhDw44ZbToqZKHQHo", "339055980"],
-  launchpadSeal: ["DAnSTzxqR3B79NfdrWrfh5V3ATPewpEh7XsbzKgmDWMD", "339056167"],
-  migrators: ["4UXZoF2hwvhz5WxA8tC6nMqYYD8RaPsBdqVsnsRLRqsw", "339056212"],
-  migratorsSeal: ["6hMFmSSYT4T8JKwe9gvxqdAHCRzF7H8mS21NskCjTTuN", "339056352"],
-  presale: ["FdT1SiwhaXHzscenaYzmhNwr7GDRGmGrCXFsUfmx2T2P", "339056472"],
-  presaleSeal: ["HrWaVvBh2ukHj3foiwXbreMCNwkFc8LCueTMXzqTRPfE", "339056547"],
-} as const;
-
-/**
- * Canonical released deployments, the only production identities. Mainnet is
- * the 2026-10-28 canonical stack, with the Cetus and Bluefin revisions its
- * migrators package links against. Routes are the pool tiers creators may
- * pick; the launchpad's `LaunchConfig` admits both venues' witnesses.
- */
-export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({
-  mainnet: defineBlastDeployment({
-    schemaVersion: BLAST_DEPLOYMENT_SCHEMA_VERSION,
-    environment: "production",
-    network: "mainnet",
-    chainIdentifier: SUI_CHAIN_IDENTIFIERS.mainnet,
-    explorer: { baseUrl: "https://suiscan.xyz/mainnet" },
-    packages: {
-      ...CANONICAL_MAINNET_PACKAGES,
-      // Cetus CLMM revision 15, Cetus LP Burn revision 8, Bluefin Spot revision 17.
-      cetusClmm: {
-        packageId:
-          "0x260693ec785a6e6c9d81d58c7d2ff72f1288ae0fa6a9725abe05a6478b11f084",
-        originalPackageId:
-          "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb",
-      },
-      cetusLpBurn: {
-        packageId:
-          "0xc4aabc874f5060d3147d8f74c14e3a8a1f9f8d92edea138a51635395ed167cd9",
-        originalPackageId:
-          "0x12d73de9a6bc3cb658ec9dc0fe7de2662be1cea5c76c092fcc3606048cdbac27",
-      },
-      bluefinSpot: {
-        packageId:
-          "0xd075338d105482f1527cbfd363d6413558f184dec36d9138a70261e87f486e9c",
-        originalPackageId:
-          "0x3492c874c1e3b3e2984e8c41b589e642d4d0a5d6459e5a9cfc2d52fd7c89c267",
-      },
-    },
-    sharedObjects: {
-      ...CANONICAL_MAINNET_SHARED_OBJECTS,
-      cetus: {
-        config: {
-          objectId:
-            "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f",
-          initialSharedVersion: "1574190",
-        },
-        pools: {
-          objectId:
-            "0xf699e7f2276f5c9a75944b37a0c5b5d9ddfd2471bf6242483b03ab2887d198d0",
-          initialSharedVersion: "1574190",
-        },
-        burnManager: {
-          objectId:
-            "0x1d94aa32518d0cb00f9de6ed60d450c9a2090761f326752ffad06b2e9404f845",
-          initialSharedVersion: "327723159",
-        },
-      },
-      bluefin: {
-        config: {
-          objectId:
-            "0x03db251ba509a8d5d8777b6338836082335d93eecbdd09a11e190a1cff51c352",
-          initialSharedVersion: "406496849",
-        },
-      },
-    },
-    // Owner, 2026-10-28: every tier the DEXes support. Cetus: each tick spacing its mainnet
-    // `GlobalConfig.fee_tiers` registers. Bluefin has no registry, so the same pairs within its
-    // bounds (fee rate at most 20,000). Fee rates are parts per million.
-    routes: [
-      {
-        venue: "cetus",
-        tiers: [
-          { tickSpacing: 2, feeRate: "100" },
-          { tickSpacing: 4, feeRate: "200" },
-          { tickSpacing: 6, feeRate: "300" },
-          { tickSpacing: 8, feeRate: "400" },
-          { tickSpacing: 10, feeRate: "500" },
-          { tickSpacing: 20, feeRate: "1000" },
-          { tickSpacing: 30, feeRate: "1500" },
-          { tickSpacing: 40, feeRate: "2000" },
-          { tickSpacing: 60, feeRate: "2500" },
-          { tickSpacing: 80, feeRate: "3000" },
-          { tickSpacing: 100, feeRate: "4000" },
-          { tickSpacing: 120, feeRate: "6000" },
-          { tickSpacing: 160, feeRate: "8000" },
-          { tickSpacing: 200, feeRate: "10000" },
-          { tickSpacing: 220, feeRate: "20000" },
-          { tickSpacing: 260, feeRate: "40000" },
-        ],
-      },
-      {
-        venue: "bluefin",
-        tiers: [
-          { tickSpacing: 2, feeRate: "100" },
-          { tickSpacing: 4, feeRate: "200" },
-          { tickSpacing: 6, feeRate: "300" },
-          { tickSpacing: 8, feeRate: "400" },
-          { tickSpacing: 10, feeRate: "500" },
-          { tickSpacing: 20, feeRate: "1000" },
-          { tickSpacing: 30, feeRate: "1500" },
-          { tickSpacing: 40, feeRate: "2000" },
-          { tickSpacing: 60, feeRate: "2500" },
-          { tickSpacing: 80, feeRate: "3000" },
-          { tickSpacing: 100, feeRate: "4000" },
-          { tickSpacing: 120, feeRate: "6000" },
-          { tickSpacing: 160, feeRate: "8000" },
-          { tickSpacing: 200, feeRate: "10000" },
-          { tickSpacing: 220, feeRate: "20000" },
-        ],
-      },
-    ],
-    source: {
-      // Historical publication; never relabel these package IDs with a new ABI.
-      contractsCommit: "9255e78751b70b22d8f33cc6577df126a3434424",
-      abi: {
-        launchpad:
-          "7ca399dd441aeaa8f63df5e67e44cb7d93a678a47410e4c86193baede5661887",
-        blastSui:
-          "943236915134897494c1a1eb7f18d2a0ea8a012e6e657321abc5fc274ee3587f",
-      },
-    },
-    release: {
-      transactions: Object.fromEntries(
-        Object.entries(CANONICAL_MAINNET_TRANSACTIONS).map(
-          ([step, [digest]]) => [step, digest],
-        ),
-      ),
-    },
-    sdk: {
-      version: "0.1.4",
-      commit: "3e554d7ce8c0604ef1e79da5ffe02a90c7d4fc24",
-    },
-    evidence: Object.entries(CANONICAL_MAINNET_TRANSACTIONS).map(
-      ([step, [transactionDigest, checkpoint]]) => ({
-        check: `${step}-published`,
-        transactionDigest,
-        checkpoint,
-        verifiedAtMs: CANONICAL_MAINNET_VERIFIED_AT_MS,
-      }),
-    ),
-  }),
-});
-
-const PRESALE_SHARED_OBJECTS = SHARED_OBJECT_KEYS.presale;
-
-/**
- * Normalizes and freezes one standalone presale deployment. Presale publishes
- * on its own (contracts ADR 0099), so it registers before a complete
- * `BlastDeployment` exists; it still needs the published `blast_admin` ACL.
- * `aftermath`, the vendor package's configuration, is kept when given.
- */
-export function definePresaleDeployment(
-  deployment: PresaleDeployment,
-): PresaleDeployment {
-  const reference = normalizeSuiPackageReference("presale", deployment);
-  return Object.freeze({
-    ...reference,
-    ...Object.fromEntries(
-      PRESALE_SHARED_OBJECTS.map((name) => [
-        name,
-        Object.freeze(
-          normalizeSharedObjectIdentity(
-            `presale.${name}`,
-            required<SharedObjectIdentity>(deployment, "presale", name),
-          ),
-        ),
-      ]),
-    ),
-    ...(deployment.aftermath === undefined
-      ? {}
-      : { aftermath: defineAftermathPresaleDeployment(deployment.aftermath) }),
-    admin: Object.freeze(
-      normalizeAdminDeployment(
-        required<AdminDeployment>(deployment, "presale", "admin"),
-      ),
-    ),
-  }) as PresaleDeployment;
-}
-
-/**
- * Canonical versioned presale, freshly published and activated on mainnet.
- * Venue admission and economics remain governed by the live policies.
- */
-export const BLAST_PRESALE_DEPLOYMENTS: Readonly<
-  Partial<Record<BlastNetwork, PresaleDeployment>>
-> = Object.freeze({
-  mainnet: definePresaleDeployment(MAINNET_PRESALE_DEPLOYMENT),
-});
-
-/**
- * The released presale deployment on `network`: the complete Blast release's
- * when one is registered and records the presale, otherwise the standalone
- * presale release.
- */
-export function getPresaleDeployment(network: BlastNetwork): PresaleDeployment {
-  const blast = BLAST_DEPLOYMENTS[network];
-  if (blast?.packages.presale && blast.sharedObjects.presale) {
-    return presaleDeployment(blast);
-  }
-  const presale = BLAST_PRESALE_DEPLOYMENTS[network];
-  if (!presale) {
-    throw new RangeError(`Blast presale is not deployed on Sui ${network}`);
-  }
-  return presale;
-}
+export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({});
 
 /**
  * Validates, normalizes, and freezes one manifest into the runtime identity
@@ -332,11 +154,14 @@ export function defineBlastDeployment(
   }
 }
 
-/** The released deployment on `network`; throws while none is released. */
+/** The released deployment on `network`; throws while none is published. */
 export function getBlastDeployment(network: BlastNetwork): BlastDeployment {
   const deployment = BLAST_DEPLOYMENTS[network];
   if (!deployment) {
-    throw new RangeError(`Blast V2 is not deployed on Sui ${network}`);
+    throw new DeploymentManifestError(
+      "unpublished",
+      `Blast is not yet published on Sui ${network}`,
+    );
   }
   return deployment;
 }
@@ -357,26 +182,74 @@ export function partnersDeployment(
   };
 }
 
-export function launchpadDeployment(
-  deployment: BlastDeployment,
-): LaunchpadDeploymentConstants {
-  const { packages, sharedObjects } = deployment;
-  const objects = sharedObjects.launchpad;
+export function coreDeployment(deployment: BlastDeployment): CoreDeployment {
   return {
-    packageId: packages.launchpad.packageId,
-    originalPackageId: packages.launchpad.originalPackageId,
-    admin: adminDeployment(deployment),
-    partnersPackageId: packages.partners.packageId,
-    packageVersion: objects.packageVersion,
-    launchConfig: objects.launchConfig,
-    runtimeConfig: objects.runtimeConfig,
+    ...deployment.packages.core,
+    treasury: deployment.sharedObjects.core.treasury,
   };
 }
 
-/** Returns the call-ready blast Sui identities from a canonical deployment. */
+export function vaultDeployment(deployment: BlastDeployment): VaultDeployment {
+  return {
+    ...deployment.packages.vault,
+    ...deployment.sharedObjects.vault,
+    core: coreDeployment(deployment),
+    admin: adminDeployment(deployment),
+  };
+}
+
+export function migratorsDeployment(
+  deployment: BlastDeployment,
+): MigratorsDeployment {
+  return {
+    ...deployment.packages.migrators,
+    ...deployment.sharedObjects.migrators,
+    vault: vaultDeployment(deployment),
+  };
+}
+
+export function launchpadDeployment(
+  deployment: BlastDeployment,
+): LaunchpadDeployment {
+  return {
+    ...deployment.packages.launchpad,
+    ...deployment.sharedObjects.launchpad,
+    core: coreDeployment(deployment),
+    admin: adminDeployment(deployment),
+    partners: partnersDeployment(deployment),
+    vault: vaultDeployment(deployment),
+    migrators: migratorsDeployment(deployment),
+    vestingPackageId: deployment.packages.vesting.packageId,
+  };
+}
+
+/**
+ * The presale's call-ready identities. `aftermathDaoPresale` is present
+ * exactly when the manifest records the vendor venue's whole set.
+ */
+export function presaleDeployment(
+  deployment: BlastDeployment,
+): PresaleDeployment {
+  const { aftermathDaoPresale } = deployment.packages;
+  const aftermath = deployment.sharedObjects.aftermath;
+  return {
+    ...deployment.packages.presale,
+    ...deployment.sharedObjects.presale,
+    core: coreDeployment(deployment),
+    admin: adminDeployment(deployment),
+    partners: partnersDeployment(deployment),
+    vault: vaultDeployment(deployment),
+    migrators: migratorsDeployment(deployment),
+    ...(aftermathDaoPresale && aftermath
+      ? { aftermathDaoPresale: { ...aftermathDaoPresale, aftermath } }
+      : {}),
+  };
+}
+
+/** Returns the call-ready blast Sui identities from a deployment. */
 export function blastSuiDeployment(
   deployment: BlastDeployment,
-): BlastSuiDeploymentConstants {
+): BlastSuiDeployment {
   const packageReference = requireGroup(
     deployment.packages.blastSui,
     "packages.blastSui",
@@ -386,67 +259,37 @@ export function blastSuiDeployment(
     "sharedObjects.blastSui",
   );
   return {
-    packageId: packageReference.packageId,
-    originalPackageId: packageReference.originalPackageId,
-    packageVersion: objects.packageVersion,
-    vault: objects.vault,
-    admin: adminDeployment(deployment),
-  };
-}
-
-export function migratorsDeployment(
-  deployment: BlastDeployment,
-): MigratorsDeploymentConstants {
-  const packageReference = requireGroup(
-    deployment.packages.migrators,
-    "packages.migrators",
-  );
-  const objects = requireGroup(
-    deployment.sharedObjects.migrators,
-    "sharedObjects.migrators",
-  );
-  return {
-    packageId: packageReference.packageId,
-    originalPackageId: packageReference.originalPackageId,
-    launchpad: launchpadDeployment(deployment),
-    migratorsVersion: objects.packageVersion,
-    lpFeePolicy: objects.lpFeePolicy,
-    venueConfig: objects.venueConfig,
-  };
-}
-
-/** Returns the call-ready presale identities from a canonical deployment. */
-export function presaleDeployment(
-  deployment: BlastDeployment,
-): PresaleDeployment {
-  const packageReference = requireGroup(
-    deployment.packages.presale,
-    "packages.presale",
-  );
-  const objects = requireGroup(
-    deployment.sharedObjects.presale,
-    "sharedObjects.presale",
-  );
-  return {
     ...packageReference,
     ...objects,
     admin: adminDeployment(deployment),
   };
 }
 
-/** Checks one route tier in its venue's native units. */
+/**
+ * Checks one route in its venue's native units: a migrators venue names at
+ * least one pool tier; the vendor's `aftermathDao` names none.
+ */
 export function normalizeRoute(route: {
   venue: string;
   tiers: readonly { tickSpacing: number; feeRate: string | number | bigint }[];
 }): MigrationRoute {
-  if (!(MIGRATOR_VENUES as readonly string[]).includes(route.venue)) {
+  if (!(VENUES as readonly string[]).includes(route.venue)) {
     throw new DeploymentManifestError(
       "unsupported-route",
       `unsupported route ${String(route.venue)}`,
     );
   }
-  const venue = route.venue as MigratorVenue;
-  if (!Array.isArray(route.tiers) || route.tiers.length === 0) {
+  const venue = route.venue as Venue;
+  if (!Array.isArray(route.tiers)) {
+    throw new TypeError(`route ${venue} needs a tier list`);
+  }
+  if (venue === "aftermathDao") {
+    if (route.tiers.length > 0) {
+      throw new RangeError("the aftermathDao route has no tiers");
+    }
+    return Object.freeze({ venue, tiers: Object.freeze([]) });
+  }
+  if (route.tiers.length === 0) {
     throw new RangeError(`route ${venue} needs at least one tier`);
   }
   return Object.freeze({
@@ -471,9 +314,6 @@ function normalizeDeployment(input: BlastDeploymentInput): BlastDeployment {
   }
   const packages = normalizePackages(input.packages);
   const routes = Object.freeze((input.routes ?? []).map(normalizeRoute));
-  if (routes.length > 0 && !packages.migrators) {
-    throw new TypeError("routes require packages.migrators");
-  }
   return Object.freeze({
     schemaVersion: BLAST_DEPLOYMENT_SCHEMA_VERSION,
     environment: input.environment,
@@ -489,18 +329,18 @@ function normalizeDeployment(input: BlastDeploymentInput): BlastDeployment {
         input.source?.contractsCommit,
         COMMIT,
       ),
-      abi: Object.freeze({
-        launchpad: requirePattern(
-          "source.abi.launchpad",
-          input.source?.abi?.launchpad,
-          SHA256,
-        ),
-        blastSui: requirePattern(
-          "source.abi.blastSui",
-          input.source?.abi?.blastSui,
-          SHA256,
-        ),
-      }),
+      abi: Object.freeze(
+        Object.fromEntries(
+          ARTIFACT_KEYS.map((key) => [
+            key,
+            requirePattern(
+              `source.abi.${key}`,
+              input.source?.abi?.[key],
+              SHA256,
+            ),
+          ]),
+        ) as Record<(typeof ARTIFACT_KEYS)[number], string>,
+      ),
     }),
     release: Object.freeze({
       transactions: normalizeReleaseTransactions(input.release?.transactions),
@@ -532,7 +372,7 @@ function normalizePackages(
 }
 
 /**
- * Normalizes every recorded group. The launchpad and ACL groups are always
+ * Normalizes every recorded group. The launch stack's groups are always
  * required; a package's group is required exactly when the manifest records
  * that package, and a venue's whole set is required when any part of it is
  * recorded. Within a group every key is required, so no call can read a
@@ -542,13 +382,13 @@ function normalizeSharedObjects(
   objects: BlastDeploymentInput["sharedObjects"],
   packages: BlastPackages,
 ): BlastSharedObjects {
-  const groups: SharedObjectGroup[] = [...CORE_GROUPS];
+  const groups: SharedObjectGroup[] = [...STACK_GROUPS];
   for (const group of PACKAGE_GROUPS) {
     if (packages[group]) groups.push(group);
   }
   requireCompleteVenueSets(packages, objects);
-  for (const venue of MIGRATOR_VENUES) {
-    if (objects?.[venue]) groups.push(venue);
+  for (const { group } of Object.values(VENUE_IDENTITY_SETS)) {
+    if (objects?.[group]) groups.push(group);
   }
   for (const group of groups) {
     if (!objects?.[group]) {
@@ -603,14 +443,14 @@ function requireCompleteVenueSets(
   objects: BlastDeploymentInput["sharedObjects"],
 ): void {
   for (const [venue, set] of Object.entries(VENUE_IDENTITY_SETS)) {
-    const group = objects?.[venue];
+    const group = objects?.[set.group];
     const paths = [
       ...set.packages.map((name) => ({
         path: `packages.${name}`,
         present: Boolean(packages[name as keyof BlastPackages]),
       })),
       ...Object.keys(set.sharedObjects).map((name) => ({
-        path: `sharedObjects.${venue}.${name}`,
+        path: `sharedObjects.${set.group}.${name}`,
         present: Boolean(group?.[name]),
       })),
     ];
@@ -624,7 +464,7 @@ function requireCompleteVenueSets(
 }
 
 function normalizeTier(
-  venue: MigratorVenue,
+  venue: Venue,
   tier: { tickSpacing: number; feeRate: string | number | bigint },
 ) {
   const tickSpacing = tier.tickSpacing;
@@ -648,10 +488,12 @@ function normalizeTier(
 function normalizeReleaseTransactions(
   transactions: Readonly<Record<string, string>> | undefined,
 ): Readonly<Record<string, string>> {
-  if (!transactions?.launchpad) {
-    throw new TypeError("release.transactions.launchpad is required");
+  for (const name of PUBLISHED_PACKAGES) {
+    if (!transactions?.[name]) {
+      throw new TypeError(`release.transactions.${name} is required`);
+    }
   }
-  for (const [step, digest] of Object.entries(transactions)) {
+  for (const [step, digest] of Object.entries(transactions ?? {})) {
     if (!isValidTransactionDigest(digest)) {
       throw new TypeError(
         `release.transactions.${step} must be a transaction digest`,

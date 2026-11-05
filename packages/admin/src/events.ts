@@ -32,7 +32,7 @@ const roles = bcs.vector(moveTypeNameBcs);
 
 /**
  * The `blast_admin::blast_admin_events` the ACL emits, in Move field order.
- * Generic custody and version facts use packageAdministrationEventBcs below;
+ * Package version and administration facts use packageAdministrationEventBcs;
  * the super admin transfer's lifecycle uses the `delayed` events under
  * `aclDelayedKeys`.
  */
@@ -84,7 +84,11 @@ export type DecodedAclEvent = {
   };
 }[AclEventKind];
 
-/** Decodes one `<adminPackageId>::blast_admin_events::<Kind>` ACL event. */
+/**
+ * Decodes one `<adminPackageId>::blast_admin_events::<Kind>` ACL event. Its
+ * `role` names are `type_name::with_defining_ids` in Move; for the immutable
+ * v1 `blast_admin` and `blast_core` they equal the original-ID names.
+ */
 export function decodeAclEvent(
   event: SuiClientTypes.EventEntry,
   adminPackageId: string,
@@ -112,52 +116,65 @@ export function aclEventId(event: { position: SuiEventPosition }): string {
   return suiEventId(event.position);
 }
 
-/** Native custody and operational generation facts, authenticated by the consumer's package marker. */
+/**
+ * The eight `blast_admin_events` structs generic over a package's OTW, in
+ * Move field order. The OTW is only in the event type.
+ */
 export const packageAdministrationEventBcs = {
-  OperationalVersionAdvanced: bcs.struct("OperationalVersionAdvanced", {
+  VersionAdvanced: bcs.struct("VersionAdvanced", {
     container_id: suiObjectIdBcs,
     original_package_id: addressBcs,
-    previous_generation: u64Bcs,
-    new_generation: u64Bcs,
+    previous_version: u64Bcs,
+    new_version: u64Bcs,
   }),
-  UpgradeAuthorized: bcs.struct("UpgradeAuthorized", {
-    custodian_id: suiObjectIdBcs,
-    upgrade_cap_id: suiObjectIdBcs,
-    current_package_id: suiObjectIdBcs,
-    native_version: u64Bcs,
-    policy: bcs.u8(),
-    digest: bcs.vector(bcs.u8()),
+  PackageVersionCreated: bcs.struct("PackageVersionCreated", {
+    package_version_id: suiObjectIdBcs,
+    package_admin_id: suiObjectIdBcs,
+    valid_pause_bits: bcs.u8(),
+    paused: bcs.u8(),
+    package_witness: moveTypeNameBcs,
+    version: u64Bcs,
   }),
-  UpgradeCapDestroyed: bcs.struct("UpgradeCapDestroyed", {
-    custodian_id: suiObjectIdBcs,
-    upgrade_cap_id: suiObjectIdBcs,
-    original_package_id: addressBcs,
-    final_native_version: u64Bcs,
-    final_policy: bcs.u8(),
-  }),
-  UpgradeCommitted: bcs.struct("UpgradeCommitted", {
-    custodian_id: suiObjectIdBcs,
-    upgrade_cap_id: suiObjectIdBcs,
-    original_package_id: addressBcs,
-    new_package_id: suiObjectIdBcs,
-    previous_native_version: u64Bcs,
-    new_native_version: u64Bcs,
-  }),
-  UpgradeCustodyCreated: bcs.struct("UpgradeCustodyCreated", {
-    custodian_id: suiObjectIdBcs,
+  PackageAdminCreated: bcs.struct("PackageAdminCreated", {
+    package_admin_id: suiObjectIdBcs,
     publisher_id: suiObjectIdBcs,
     upgrade_cap_id: suiObjectIdBcs,
     original_package_id: suiObjectIdBcs,
-    native_version: u64Bcs,
+    upgrade_cap_version: u64Bcs,
     policy: bcs.u8(),
   }),
-  UpgradePolicyRestricted: bcs.struct("UpgradePolicyRestricted", {
-    custodian_id: suiObjectIdBcs,
+  UpgradeAuthorized: bcs.struct("UpgradeAuthorized", {
+    package_admin_id: suiObjectIdBcs,
+    upgrade_cap_id: suiObjectIdBcs,
+    current_package_id: suiObjectIdBcs,
+    upgrade_cap_version: u64Bcs,
+    policy: bcs.u8(),
+    digest: bcs.vector(bcs.u8()),
+  }),
+  UpgradeCommitted: bcs.struct("UpgradeCommitted", {
+    package_admin_id: suiObjectIdBcs,
     upgrade_cap_id: suiObjectIdBcs,
     original_package_id: addressBcs,
-    native_version: u64Bcs,
-    previous_policy: bcs.u8(),
-    new_policy: bcs.u8(),
+    new_package_id: suiObjectIdBcs,
+    previous_upgrade_cap_version: u64Bcs,
+    new_upgrade_cap_version: u64Bcs,
+  }),
+  UpgradeCapDestroyed: bcs.struct("UpgradeCapDestroyed", {
+    package_admin_id: suiObjectIdBcs,
+    upgrade_cap_id: suiObjectIdBcs,
+    original_package_id: addressBcs,
+    final_upgrade_cap_version: u64Bcs,
+    final_policy: bcs.u8(),
+  }),
+  Paused: bcs.struct("Paused", {
+    package_version_id: suiObjectIdBcs,
+    bits: bcs.u8(),
+    paused: bcs.u8(),
+  }),
+  Unpaused: bcs.struct("Unpaused", {
+    package_version_id: suiObjectIdBcs,
+    bits: bcs.u8(),
+    paused: bcs.u8(),
   }),
 };
 export type PackageAdministrationEventKind =
@@ -166,32 +183,43 @@ export type DecodedPackageAdministrationEvent = {
   [Kind in PackageAdministrationEventKind]: {
     source: "package-administration";
     kind: Kind;
-    packageMarker: string;
+    /** The package's OTW type, from the event type. */
+    otw: string;
     payload: ReturnType<(typeof packageAdministrationEventBcs)[Kind]["parse"]>;
     sender: string;
     position: SuiEventPosition;
   };
 }[PackageAdministrationEventKind];
 
+/**
+ * Decodes one `<adminPackageId>::blast_admin_events::<Kind><OTW>` of any package.
+ * Move records `package_witness` with `type_name::with_defining_ids`; each
+ * product defines its `PackageWitness` in its first version, so the defining
+ * ID is the original ID the SDK compares against. The event type names the
+ * immutable v1 `blast_admin`.
+ */
 export function decodePackageAdministrationEvent(
   event: SuiClientTypes.EventEntry,
-  identity: { adminPackageId: string; packageMarker: string },
+  adminPackageId: string,
 ): DecodedPackageAdministrationEvent {
   const tag = parseStructTag(event.eventType);
+  const otw = tag.typeParams[0];
   if (
-    tag.address !== normalizeSuiAddress(identity.adminPackageId) ||
+    tag.address !== normalizeSuiAddress(adminPackageId) ||
     tag.module !== "blast_admin_events" ||
     tag.typeParams.length !== 1 ||
-    normalizeStructTag(tag.typeParams[0]!) !==
-      normalizeStructTag(identity.packageMarker) ||
+    otw === undefined ||
+    typeof otw === "string" ||
     !Object.hasOwn(packageAdministrationEventBcs, tag.name)
   )
-    throw new TypeError("unexpected package administration event identity");
+    throw new TypeError(
+      `unexpected package administration event ${event.eventType}`,
+    );
   const kind = tag.name as PackageAdministrationEventKind;
   return {
     source: "package-administration",
     kind,
-    packageMarker: normalizeStructTag(identity.packageMarker),
+    otw: normalizeStructTag(otw),
     payload: packageAdministrationEventBcs[kind].parse(event.bcs),
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
@@ -202,7 +230,7 @@ export function decodePackageAdministrationEvent(
  * Every lifecycle event the `blast_admin` delayed modules emit, generic in the
  * owner's key `K` and the value types: `delayed` (`Delayed*`),
  * `delayed_action` (`Action*`), `delayed_set` (`Set*`, `MemberRemoved`) and
- * `delayed_map` (`Map*`).
+ * `delayed_map` (`Map*`): 21 kinds.
  */
 export const DELAYED_EVENT_KINDS = [
   "DelayedCreated",
@@ -225,6 +253,7 @@ export const DELAYED_EVENT_KINDS = [
   "MapScheduled",
   "MapCancelled",
   "MapApplied",
+  "MapDestroyed",
 ] as const;
 export type DelayedEventKind = (typeof DELAYED_EVENT_KINDS)[number];
 
@@ -274,7 +303,13 @@ const FAMILY_KINDS: {
     "SetDestroyed",
     "MemberRemoved",
   ],
-  map: ["MapCreated", "MapScheduled", "MapCancelled", "MapApplied"],
+  map: [
+    "MapCreated",
+    "MapScheduled",
+    "MapCancelled",
+    "MapApplied",
+    "MapDestroyed",
+  ],
 };
 
 /** Any `BcsType` decoding `T`, whatever it serializes from. */
@@ -391,6 +426,7 @@ export type DelayedEventPayloads<Key, Value, Entry> = {
     change: DelayedMapChange<Entry, Value>;
     delay_ms: bigint;
   };
+  MapDestroyed: { owner: string; key: Key };
 };
 
 type SpecKey<Spec> =
@@ -532,6 +568,7 @@ export function delayedEventBcs(
     MapScheduled: { change: mapChange, ...timing },
     MapCancelled: { change: mapChange, ...timing },
     MapApplied: { change: mapChange, delay_ms: u64Bcs },
+    MapDestroyed: {},
   }[kind];
   return bcs.struct(kind, { ...head, ...fields }) as unknown as BcsType<
     Record<string, unknown>,
@@ -540,16 +577,52 @@ export function delayedEventBcs(
 }
 
 /**
- * Each product's `package_admin::UpgradeKey`: its upgrade and make-immutable
- * slot, `DelayedAction<UpgradeKey, UpgradeAction>`.
+ * `package_admin::UpgradeKey<otw>`: one package's upgrade and immutability
+ * slot, `DelayedAction<UpgradeKey<OTW>, UpgradeAction>`. The key lives in the
+ * admin package, so decode with `packageId` = the admin package ID.
  */
-export const upgradeDelayedKey = {
-  key: "package_admin::UpgradeKey",
-  family: "action",
-  keyBcs: unitKeyBcs,
-  valueBcs: upgradeActionBcs,
-  valueType: "{package}::package_admin::UpgradeAction",
-} as const satisfies DelayedKeySpec;
+export function upgradeDelayedKey(otw: string) {
+  return {
+    key: `package_admin::UpgradeKey<${normalizeStructTag(otw)}>`,
+    family: "action",
+    keyBcs: unitKeyBcs,
+    valueBcs: upgradeActionBcs,
+    valueType: "{package}::package_admin::UpgradeAction",
+  } as const satisfies DelayedKeySpec;
+}
+
+export type DecodedUpgradeDelayedEvent = DecodedDelayedEvent<{
+  Upgrade: ReturnType<typeof upgradeDelayedKey>;
+}> & { otw: string };
+
+/** Decodes a `delayed_action` event keyed by any package's `UpgradeKey<OTW>`. */
+export function decodeUpgradeDelayedEvent(
+  event: SuiClientTypes.EventEntry,
+  adminPackageId: string,
+): DecodedUpgradeDelayedEvent {
+  const keyTag = parseStructTag(event.eventType).typeParams[0];
+  const otw =
+    keyTag !== undefined && typeof keyTag !== "string"
+      ? keyTag.typeParams[0]
+      : undefined;
+  if (
+    keyTag === undefined ||
+    typeof keyTag === "string" ||
+    keyTag.address !== normalizeSuiAddress(adminPackageId) ||
+    keyTag.module !== "package_admin" ||
+    keyTag.name !== "UpgradeKey" ||
+    otw === undefined ||
+    typeof otw === "string"
+  )
+    throw new TypeError(`unexpected upgrade delayed event ${event.eventType}`);
+  const type = normalizeStructTag(otw);
+  const decoded = decodeDelayedEvent(event, {
+    adminPackageId,
+    packageId: adminPackageId,
+    keys: { Upgrade: upgradeDelayedKey(type) },
+  });
+  return { ...decoded, otw: type };
+}
 
 /** The ACL's one key: the super admin transfer slot, `DelayedAction<SuperAdminTransfer, address>`. */
 export const aclDelayedKeys = {

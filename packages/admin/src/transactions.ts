@@ -1,6 +1,8 @@
+import { requireU64 } from "@interest-protocol/blast-core/integers";
 import type { SharedObjectIdentity } from "@interest-protocol/blast-core/sui";
 import { normalizeSharedObjectIdentity } from "@interest-protocol/blast-core/sui";
 import type {
+  TransactionArgument,
   TransactionObjectArgument,
   TransactionObjectInput,
 } from "@mysten/sui/transactions";
@@ -26,10 +28,38 @@ export function normalizeAdminDeployment(
   };
 }
 
+/** `blast_admin::package_admin`'s roles, each generic over one package's OTW. */
+export const PACKAGE_ROLES = [
+  "UpgradeAdmin",
+  "PauseAdmin",
+  "UnpauseAdmin",
+  "CancelAdmin",
+] as const;
+export type PackageRole = (typeof PACKAGE_ROLES)[number];
+
+/** `<admin>::package_admin::<role><otw>`: one package's infrastructure role. */
+export function packageRoleType(
+  admin: Pick<AdminDeployment, "packageId">,
+  otw: string,
+  role: PackageRole,
+): string {
+  if (!PACKAGE_ROLES.includes(role))
+    throw new TypeError(`unknown package_admin role ${String(role)}`);
+  return normalizeStructTag(
+    `${normalizeSuiObjectId(admin.packageId)}::package_admin::${role}<${normalizeStructTag(otw)}>`,
+  );
+}
+
+/** One package's shared `PackageVersion<OTW>` or `PackageAdmin<OTW>` and its OTW type. */
+type PackageObjectOptions<Name extends "packageVersion" | "packageAdmin"> = {
+  otw: string;
+} & Record<Name, SharedObjectIdentity>;
+
 /**
- * `blast_admin::blast_acl` calls. A role is a Move type its consumer package
- * declares (for example `<launchpad>::blast_fun_domain::FeeAdmin`); each
- * product's `roleType` names its own.
+ * `blast_admin::blast_acl` and `blast_admin::package_admin` calls. A product
+ * role is a `blast_core::blast_domain` type (`coreRoleType`); a package role
+ * is `package_admin::<Role><OTW>` (`packageRoleType`). A product's own
+ * `unpause` and `make_immutable` wrappers live with the product.
  */
 export class AdminCalls {
   readonly deployment: AdminDeployment;
@@ -166,6 +196,111 @@ export class AdminCalls {
     };
   }
 
+  /** `package_admin::pause<OTW>` with a `PauseAdmin<OTW>` witness: sets `bits` now. */
+  pause(
+    options: PackageObjectOptions<"packageVersion"> & {
+      adminWitness: TransactionObjectInput;
+      bits: number;
+    },
+  ) {
+    const bits = requirePauseBits(options.bits);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: this.#packageAdminTarget("pause"),
+        typeArguments: [normalizeStructTag(options.otw)],
+        arguments: [
+          tx.sharedObjectRef({ ...options.packageVersion, mutable: true }),
+          tx.object(options.adminWitness),
+          tx.pure.u8(bits),
+        ],
+      });
+    };
+  }
+
+  /** `package_admin::schedule_upgrade<OTW>` of one 32-byte package digest. */
+  scheduleUpgrade(
+    options: PackageObjectOptions<"packageAdmin"> & {
+      adminWitness: TransactionObjectInput;
+      digest: Uint8Array;
+    },
+  ) {
+    if (options.digest.length !== 32)
+      throw new RangeError("a package digest is 32 bytes");
+    const digest = Array.from(options.digest);
+    return this.#upgradeCall(options, "schedule_upgrade", (tx) => [
+      tx.object(options.adminWitness),
+      tx.pure.vector("u8", digest),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `package_admin::schedule_make_immutable<OTW>`. */
+  scheduleMakeImmutable(
+    options: PackageObjectOptions<"packageAdmin"> & {
+      adminWitness: TransactionObjectInput;
+    },
+  ) {
+    return this.#upgradeCall(options, "schedule_make_immutable", (tx) => [
+      tx.object(options.adminWitness),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `package_admin::cancel_upgrade_action<OTW>` with a `CancelAdmin<OTW>` witness. */
+  cancelUpgradeAction(
+    options: PackageObjectOptions<"packageAdmin"> & {
+      adminWitness: TransactionObjectInput;
+    },
+  ) {
+    return this.#upgradeCall(options, "cancel_upgrade_action", (tx) => [
+      tx.object(options.adminWitness),
+    ]);
+  }
+
+  /** `package_admin::schedule_upgrade_delay<OTW>`: proposes only a new delay. */
+  scheduleUpgradeDelay(
+    options: PackageObjectOptions<"packageAdmin"> & {
+      adminWitness: TransactionObjectInput;
+      delayMs: bigint;
+    },
+  ) {
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#upgradeCall(options, "schedule_upgrade_delay", (tx) => [
+      tx.object(options.adminWitness),
+      tx.pure.u64(delayMs),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `package_admin::apply_upgrade_delay<OTW>`: anyone, once ready. */
+  applyUpgradeDelay(options: PackageObjectOptions<"packageAdmin">) {
+    return this.#upgradeCall(options, "apply_upgrade_delay", (tx) => [
+      tx.object.clock(),
+    ]);
+  }
+
+  #upgradeCall(
+    options: PackageObjectOptions<"packageAdmin">,
+    functionName: string,
+    rest: (tx: Transaction) => TransactionArgument[],
+  ) {
+    const otw = normalizeStructTag(options.otw);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: this.#packageAdminTarget(functionName),
+        typeArguments: [otw],
+        arguments: [
+          tx.sharedObjectRef({ ...options.packageAdmin, mutable: true }),
+          ...rest(tx),
+        ],
+      });
+    };
+  }
+
+  #packageAdminTarget(functionName: string): string {
+    return `${this.deployment.packageId}::package_admin::${functionName}`;
+  }
+
   #roleCall(
     functionName: "grant_role" | "revoke_role",
     options: {
@@ -285,6 +420,16 @@ export class AdminTransactions {
       }),
     );
   }
+}
+
+/**
+ * Pause bits are a nonzero mask within `valid` (a package's
+ * `valid_pause_bits`; any `u8` when the package checks them itself).
+ */
+export function requirePauseBits(bits: number, valid = 0xff): number {
+  if (!Number.isInteger(bits) || bits <= 0 || (bits & ~valid) !== 0)
+    throw new RangeError(`pause bits must be a nonzero mask within ${valid}`);
+  return bits;
 }
 
 function single(call: (tx: Transaction) => void): Transaction {

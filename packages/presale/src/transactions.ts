@@ -1,42 +1,48 @@
-import type { AdminDeployment } from "@interest-protocol/blast-admin-sdk/transactions";
+import type {
+  AdminDeployment,
+  PackageRole,
+} from "@interest-protocol/blast-admin-sdk/transactions";
 import {
   AdminCalls,
   normalizeAdminDeployment,
+  packageRoleType,
+  requirePauseBits,
 } from "@interest-protocol/blast-admin-sdk/transactions";
-import { cetusMemeSide } from "@interest-protocol/blast-core/cetus";
+import { MAX_LP_FEE_BPS } from "@interest-protocol/blast-core/bps";
 import type { CoinSourceOptions } from "@interest-protocol/blast-core/coins";
-import { grossGasBudget } from "@interest-protocol/blast-core/gas";
+import type { CoreDeployment } from "@interest-protocol/blast-core/deployment";
+import {
+  CoreCalls,
+  normalizeCoreDeployment,
+} from "@interest-protocol/blast-core/deployment";
+import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
 import {
   requireBasisPointsAtMost,
   requireU64,
 } from "@interest-protocol/blast-core/integers";
+import type { VestingTerms } from "@interest-protocol/blast-core/payout";
 import {
   deploymentObject,
   moveResults,
 } from "@interest-protocol/blast-core/ptb";
-import type {
-  RewardManifest,
-  RewardManifestSummary,
-  RewardProof,
-} from "@interest-protocol/blast-core/rewards/allocations";
-import {
-  PRESALE_REWARD_LEAF_DOMAIN,
-  rewardAddress,
-  rewardDigest,
-  validateRewardManifest,
-  validateRewardManifestSummary,
-} from "@interest-protocol/blast-core/rewards/allocations";
-import type {
-  SharedObjectIdentity,
-  SharedObjectReference,
-} from "@interest-protocol/blast-core/sui";
+import type { CoreRole } from "@interest-protocol/blast-core/roles";
+import { coreRoleType } from "@interest-protocol/blast-core/roles";
+import type { SharedObjectIdentity } from "@interest-protocol/blast-core/sui";
 import {
   normalizeSharedObjectIdentity,
-  normalizeSharedObjectReference,
   normalizeSuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
-import type { LaunchTypes } from "@interest-protocol/blast-launchpad-sdk/transactions";
-import { normalizeLaunchTypes } from "@interest-protocol/blast-launchpad-sdk/transactions";
+import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
+import {
+  MigratorCalls,
+  normalizeMigratorsDeployment,
+} from "@interest-protocol/blast-migrators-sdk/transactions";
+import type { PartnersDeployment } from "@interest-protocol/blast-partners-sdk/transactions";
+import type { VaultDeployment } from "@interest-protocol/blast-vault-sdk/transactions";
+import {
+  normalizeVaultDeployment,
+  VaultCalls,
+} from "@interest-protocol/blast-vault-sdk/transactions";
 import type {
   TransactionArgument,
   TransactionObjectArgument,
@@ -52,16 +58,11 @@ import {
   normalizeSuiObjectId,
   parseStructTag,
 } from "@mysten/sui/utils";
-
-export { cetusMemeSide } from "@interest-protocol/blast-core/cetus";
-
-import type { AftermathPresaleDeployment } from "./aftermath.ts";
+import type { AftermathDaoPresaleDeployment } from "./aftermath-dao.ts";
 import {
-  AFTERMATH_MAINNET_OBJECTS,
-  AFTERMATH_PRESALE_MODULE,
-  aftermathWitnessType,
-  defineAftermathPresaleDeployment,
-} from "./aftermath.ts";
+  AftermathDaoPresaleCalls,
+  normalizeAftermathDaoPresaleDeployment,
+} from "./aftermath-dao.ts";
 import type { AftermathLpCoin } from "./aftermath-lp.ts";
 import { assertAftermathLpCoin } from "./aftermath-lp.ts";
 import type { AllowlistProof } from "./allowlist.ts";
@@ -69,1472 +70,375 @@ import {
   allowlistedEligibility,
   openEligibility,
   uncappedForAnyone,
-  validateBps,
-  vestingTerms,
 } from "./math.ts";
 import type {
-  BpsShare,
   EligibilityPolicy,
   HardCap,
   ProtocolFees,
+  RecipientShare,
   UncappedPhase,
-  VestingTerms,
 } from "./state.ts";
 
 /**
- * `getPresaleDeployment(network)` returns a registered release. For another
- * deployment, pass the IDs the publish and `package_admin::wrap` activation effects
- * return. Publication shares `VenueConfig`,
- * `CreationPolicy`, and `FeePolicy`. Blast administers the package through the
- * shared `blast_admin` ACL with the `blast_presale_domain` roles (contracts
- * ADR 0099), and it links `blast_partners` to pay a sale's partner.
+ * The `blast_presale` package and every package its calls and compositions
+ * read: its shared `PackageVersion<BLAST_PRESALE_PACKAGE>`,
+ * `PackageAdmin<BLAST_PRESALE_PACKAGE>`, `CreationPolicy`, `FeePolicy` and
+ * `PresaleRegistry`; core (the treasury), admin (the ACL), partners, the
+ * vault, the migrators venues, and the Aftermath DAO-pool vendor when
+ * published. Calls target `packageId`; types name `originalPackageId`.
  */
 export type PresaleDeployment = {
   packageId: string;
   originalPackageId: string;
-  /** Shared by activation: `blast_presale_package::PackageVersion`. */
   packageVersion: SharedObjectIdentity;
-  /** `venue_config::VenueConfig`, holding each Meme's Cetus `PoolCreationCap`. */
-  venueConfig: SharedObjectIdentity;
-  /** `creation_policy::CreationPolicy`: the Quote types, migrators, and partners creation admits. */
+  packageAdmin: SharedObjectIdentity;
   creationPolicy: SharedObjectIdentity;
-  /** `fee_policy::FeePolicy`: creation, migration, and fee collection read it. */
   feePolicy: SharedObjectIdentity;
-  /** `blast_admin` and its ACL, where every administrator call signs in. */
+  presaleRegistry: SharedObjectIdentity;
+  core: CoreDeployment;
   admin: AdminDeployment;
-  /**
-   * The Aftermath DAO-pool vendor package and the Aftermath objects its
-   * migration takes (`defineAftermathPresaleDeployment`); absent until it is
-   * published. Vendor builders require it; native builders use the core package.
-   */
-  aftermath?: AftermathPresaleDeployment;
+  partners: PartnersDeployment;
+  vault: VaultDeployment;
+  migrators: MigratorsDeployment;
+  aftermathDaoPresale?: AftermathDaoPresaleDeployment;
 };
 
-/**
- * The typed `blast_presale::blast_presale_domain` roles (contracts ADR 0099).
- * Each administrator action takes the `AdminWitness` of exactly one of them.
- */
-export type PresaleAdminRole =
-  | "PauseAdmin"
-  | "UnpauseAdmin"
-  | "CancelAdmin"
-  | "UpgradeAdmin"
-  | "TreasuryAdmin"
-  | "FeeAdmin"
-  | "ListingAdmin"
-  | "AdapterAdmin"
-  | "RewardsAdmin";
+/** A sale's type arguments: `<SaleToken, Quote>`. */
+export type PresaleTypes = { saleTokenType: string; quoteType: string };
 
-/**
- * Venues include this package's `cetus`, `bluefin`, and `aftermath-native`, and
- * `aftermath`, the vendor package `blast_aftermath_dao_presale`, whose witness
- * is `<vendor>::blast_aftermath_dao_presale::Witness` (contracts ADR 0104).
- */
-export type PresaleVenue =
-  | "cetus"
-  | "bluefin"
-  | "aftermath"
-  | "aftermath-native";
-
-/**
- * A migrator the `CreationPolicy` can allow: one of this package's venues, or
- * the `Witness` struct type of a migrator in another package, such as
- * `<vendor>::blast_aftermath_dao_presale::Witness` (contracts ADR 0104).
- */
-export type PresaleMigrator =
-  | { venue: PresaleVenue; witnessType?: never }
-  | { witnessType: string; venue?: never };
-
-/**
- * Per-sale terms the `PresaleInitializer` setters record, in setter order
- * (contracts ADR 0110).
- */
-export type PresaleSettings = LaunchTypes & {
-  tokenSupply: bigint;
-  tokenAllocationBps: bigint;
-  /**
-   * Terms each claim locks a participant's tokens under, in an irrevocable
-   * schedule that starts at the claim; null pays them out.
-   */
-  participantVesting: VestingTerms | null;
-  liquidityTokenAllocationBps: bigint;
-  recipientAllocations: readonly BpsShare[];
-  /** Coin Registry supply state after minting: burn-only when true, else fixed. */
-  burnable: boolean;
-  raiseTarget: bigint;
-  raiseAllocations: readonly BpsShare[];
-  durationMs: bigint;
-  liquidityWindowMs: bigint;
-  eligibility: EligibilityPolicy;
-  uncapped: UncappedPhase | null;
-  /**
-   * Holds the sale to its raise from `startsAfterMs` into the window; with
-   * `closesWhenFilled` anyone may settle it once the raise is full. Null
-   * overflows for the whole window.
-   */
-  hardCap: HardCap | null;
-  feeRecipients: readonly BpsShare[];
-  holderRewardsBps: bigint;
-  /**
-   * A Blast partner the `CreationPolicy` accepts; it becomes the sale's
-   * partner for good, paid its cut of Blast's raise fee after migration.
-   */
-  partner?: SharedObjectReference<false>;
-};
-
-/** A sale's settings without its LP-fee split, which some migrators fix themselves. */
-export type PresaleTermsSettings = Omit<
-  PresaleSettings,
-  "feeRecipients" | "holderRewardsBps"
->;
-
-/** A sale's settings plus the coin objects its creation consumes and finalizes. */
-export type PresaleTerms = PresaleSettings & {
-  /** The zero-supply `TreasuryCap<Meme>`, consumed. */
-  treasuryCap: TransactionObjectInput;
-  /** Confirmed unregulated `Currency<Meme>`; regulated and legacy Unknown abort at finalize. */
-  memeCurrency: SharedObjectReference<true>;
-};
-
-export type CetusPresaleObjects = {
-  /** Cetus CLMM `config::GlobalConfig`. */
-  cetusConfig: SharedObjectReference<false>;
-  /** Cetus CLMM `factory::Pools`. */
-  cetusPools: SharedObjectReference<true>;
-};
-
-/**
- * An Aftermath DAO-pool vendor sale's terms (contracts ADRs 0104 and 0110):
- * every setting but the LP-fee split, which the vendor's `finalize` fixes (its
- * treasury takes every LP fee), the coin objects creation consumes, and the
- * verified LP coin whose pool-creation capability the sale binds. The sale
- * has no pool tier: its pool's weights and fees are the vendor's constants
- * (ADR 0111).
- */
-export type AftermathPresaleTerms = PresaleTermsSettings & {
-  /** The zero-supply `TreasuryCap<SaleToken>`, consumed. */
-  treasuryCap: TransactionObjectInput;
-  /** The sale token's Coin Registry `Currency`, which `finalize` takes. */
-  memeCurrency: SharedObjectReference<true>;
-  /** The vendor package's `AdminCap`. */
-  adminCap: TransactionObjectInput;
-  /**
-   * The fresh LP coin `Lp` and its `CreatePoolCapV2`, consumed: only the
-   * `AftermathLpCoin` that `verifyAftermathLpCoin` returned after reading the
-   * capability from the chain. A capability ID or a look-alike is refused,
-   * because a capability for another coin would leave the sale unable to
-   * migrate.
-   */
-  lpCoin: AftermathLpCoin;
-};
-
-/** Native `blast_presale::aftermath` terms; the creator chooses the vault's fee split. */
-export type NativeAftermathPresaleTerms = PresaleTerms & {
-  lpCoin: AftermathLpCoin;
-  /** Integer basis points, 1..10,000, charged by the DAO-fee pool to the vault. */
-  daoFeeBps: number;
-};
-
-/** External Aftermath shared objects. Pass network-specific objects outside mainnet. */
-export type AftermathPoolObjects = Pick<
-  AftermathPresaleDeployment,
-  "poolRegistry" | "daoFeeVersion"
->;
-
-export type NativeAftermathMigration = AftermathMigration & {
-  /** Defaults to the documented `AFTERMATH_MAINNET_OBJECTS`. */
-  aftermathObjects?: AftermathPoolObjects;
-};
-
-/** A sale's Aftermath binding, which `migrate` consumes. */
-export type AftermathMigration = LaunchTypes & {
-  presale: SharedObjectReference<true>;
-  /** The sale's shared `PoolCreation<Lp>`, taken by value. */
-  poolCreation: SharedObjectReference<true>;
-  /** The fresh LP coin, from `findAftermathPoolCreation` or the event. */
-  lpType: string;
-};
-
-/** What `createCetusPresale` and `createBluefinPresale` add to creation. */
-export type PresaleCreation = {
-  startMs: bigint;
-  capRecipient: string;
-};
-
-/**
- * The sale's partner, when `PresaleState.partnerId` (or, after migration,
- * `PresaleVaultState.partnerId`) is set: the migration or collection
- * transaction then pays it and Blast the fees the sale or its vault held.
- */
-export type PresalePayout = {
-  partner?: SharedObjectReference<false> | null;
-};
-
-/** Maximum Merkle proof depth for 65,536 leaves. */
-export const MAX_PRESALE_PROOF_DEPTH = 16;
+/** One shared `Presale<SaleToken, Quote>` and its types. */
+export type PresaleInput = PresaleTypes & { presale: SharedObjectIdentity };
 
 /** Largest Blast share of a sale's raise `fee_policy` accepts. */
 export const MAX_PROTOCOL_RAISE_BPS = 1_000n;
 /** Largest Blast share of a sale's tokens `fee_policy` accepts. */
 export const MAX_PROTOCOL_TOKEN_BPS = 1_000n;
-/** Largest Blast share of each LP fee, Meme and Quote, `fee_policy` accepts. */
-export const MAX_PROTOCOL_LP_FEE_BPS = 3_000n;
 
-/**
- * The normalized struct type of an external migrator's witness. The contract
- * rejects a primitive or vector witness, which any caller can construct, and
- * neither parses as a struct here.
- */
-function externalWitnessType(witnessType: string): string {
-  const tag = parseStructTag(witnessType);
-  if (!isValidSuiAddress(tag.address)) {
-    throw new TypeError(
-      `migration witness must be a struct type: ${witnessType}`,
+/** `constants::{create,commit,migration}_pause_bit`; flags may be ORed together. */
+export const PRESALE_PAUSE_BITS = { Create: 1, Commit: 2, Migrate: 4 } as const;
+const PRESALE_PAUSE_MASK =
+  PRESALE_PAUSE_BITS.Create |
+  PRESALE_PAUSE_BITS.Commit |
+  PRESALE_PAUSE_BITS.Migrate;
+
+export function normalizePresaleDeployment(
+  deployment: PresaleDeployment,
+): PresaleDeployment {
+  const shared = (name: keyof PresaleDeployment) =>
+    normalizeSharedObjectIdentity(
+      `presale.${name}`,
+      deployment[name] as SharedObjectIdentity,
     );
-  }
-  // Anyone can construct the framework's droppable structs, such as
-  // `TypeName`, `Option<T>`, or `ID`, so the contract rejects them too.
-  if (FRAMEWORK_ADDRESSES.has(normalizeSuiAddress(tag.address))) {
-    throw new TypeError(
-      `migration witness must not be a framework type: ${witnessType}`,
-    );
-  }
-  return normalizeStructTag(tag);
+  return {
+    ...normalizeSuiPackageReference("presale", deployment),
+    packageVersion: shared("packageVersion"),
+    packageAdmin: shared("packageAdmin"),
+    creationPolicy: shared("creationPolicy"),
+    feePolicy: shared("feePolicy"),
+    presaleRegistry: shared("presaleRegistry"),
+    core: normalizeCoreDeployment(deployment.core),
+    admin: normalizeAdminDeployment(deployment.admin),
+    partners: {
+      packageId: normalizeSuiObjectId(deployment.partners.packageId),
+      admin: normalizeAdminDeployment(deployment.partners.admin),
+    },
+    vault: normalizeVaultDeployment(deployment.vault),
+    migrators: normalizeMigratorsDeployment(deployment.migrators),
+    ...(deployment.aftermathDaoPresale === undefined
+      ? {}
+      : {
+          aftermathDaoPresale: normalizeAftermathDaoPresaleDeployment(
+            deployment.aftermathDaoPresale,
+          ),
+        }),
+  };
 }
 
-const FRAMEWORK_ADDRESSES = new Set(
-  ["0x1", "0x2"].map((address) => normalizeSuiAddress(address)),
-);
-
+/**
+ * `blast_presale` calls, one per public function the SDK builds, in Move
+ * argument order; `&mut TxContext` is implicit, the `Clock` is `0x6`, and the
+ * package version, policies, registry and core treasury come from the
+ * deployment. An `adminWitness` is `AdminCalls.signIn`'s result for the named
+ * `blast_core::blast_domain` role. Value constructors return the value as a
+ * transaction result for the setter that takes it.
+ */
 export class PresaleCalls {
   readonly deployment: PresaleDeployment;
-  readonly admin: AdminCalls;
+  /** `blast_presale_package::BLAST_PRESALE_PACKAGE`, the package's OTW. */
+  readonly otw: string;
+  /** `blast_presale_package::PackageWitness`, which seals every sale's vault terms. */
+  readonly packageWitnessType: string;
+  readonly core: CoreCalls;
 
   constructor(deployment: PresaleDeployment) {
-    this.deployment = {
-      ...normalizeSuiPackageReference("presale", deployment),
-      packageVersion: normalizeSharedObjectIdentity(
-        "packageVersion",
-        deployment.packageVersion,
-      ),
-      venueConfig: normalizeSharedObjectIdentity(
-        "venueConfig",
-        deployment.venueConfig,
-      ),
-      creationPolicy: normalizeSharedObjectIdentity(
-        "creationPolicy",
-        deployment.creationPolicy,
-      ),
-      feePolicy: normalizeSharedObjectIdentity(
-        "feePolicy",
-        deployment.feePolicy,
-      ),
-      admin: normalizeAdminDeployment(deployment.admin),
-      ...(deployment.aftermath === undefined
-        ? {}
-        : {
-            aftermath: defineAftermathPresaleDeployment(deployment.aftermath),
-          }),
-    };
-    this.admin = new AdminCalls(this.deployment.admin);
+    this.deployment = normalizePresaleDeployment(deployment);
+    this.otw = this.#type("blast_presale_package::BLAST_PRESALE_PACKAGE");
+    this.packageWitnessType = this.#type(
+      "blast_presale_package::PackageWitness",
+    );
+    this.core = new CoreCalls(this.deployment.core);
   }
 
-  /** The Move type of one `blast_presale_domain` role, for `AdminCalls.grantRole`. */
-  roleType(role: PresaleAdminRole): string {
-    return this.#type(`blast_presale_domain::${role}`);
-  }
+  // Value constructors.
 
-  /** This PTB's `AdminWitness<Role>`; the `AdminCap` must hold `role`. */
-  signIn(options: {
-    adminCap: TransactionObjectInput;
-    role: PresaleAdminRole;
+  /** `blast_presale::open_eligibility`. */
+  openEligibility(options: {
+    walletCap: bigint;
+    maxParticipants: bigint;
+    minCommitment: bigint;
   }) {
-    return this.admin.signIn({
-      adminCap: options.adminCap,
-      role: this.roleType(options.role),
-    });
-  }
-
-  /**
-   * The type a presale stores as its `migration_witness`. `aftermath` needs
-   * `deployment.aftermath`.
-   */
-  migrationWitnessType(venue: PresaleVenue): string {
-    if (venue === "aftermath") {
-      return aftermathWitnessType(this.#aftermath().packageId);
-    }
-    return this.#type(
-      `${venue === "aftermath-native" ? "aftermath" : venue}::Witness`,
-    );
-  }
-
-  /**
-   * The venue a sale's `migration_witness` names, or null for any other
-   * migrator; `aftermath` only when `deployment.aftermath` is set.
-   */
-  venueOf(migrationWitness: string): PresaleVenue | null {
-    const witness = normalizeStructTag(migrationWitness);
-    const venues: PresaleVenue[] = ["cetus", "bluefin", "aftermath-native"];
-    if (this.deployment.aftermath) venues.push("aftermath");
-    return (
-      venues.find((venue) => this.migrationWitnessType(venue) === witness) ??
-      null
-    );
-  }
-
-  /** `blast_presale::open_eligibility` or `allowlisted_eligibility`. */
-  eligibility(policy: EligibilityPolicy) {
-    if (policy.kind === "open") {
-      openEligibility(
-        policy.walletCap,
-        policy.maxParticipants,
-        policy.minCommitment,
-      );
-      return (tx: Transaction): TransactionResult =>
-        this.#presaleCall(tx, "open_eligibility", [
-          tx.pure.u64(policy.walletCap),
-          tx.pure.u64(policy.maxParticipants),
-          tx.pure.u64(policy.minCommitment),
-        ]);
-    }
-    allowlistedEligibility(policy.root, policy.leafCount);
+    const { walletCap, maxParticipants, minCommitment } = options;
+    openEligibility(walletCap, maxParticipants, minCommitment);
     return (tx: Transaction): TransactionResult =>
-      this.#presaleCall(tx, "allowlisted_eligibility", [
-        tx.pure.vector("u8", fromHex(policy.root)),
-        tx.pure.u64(policy.leafCount),
+      this.#call(tx, "open_eligibility", [
+        tx.pure.u64(walletCap),
+        tx.pure.u64(maxParticipants),
+        tx.pure.u64(minCommitment),
       ]);
   }
 
-  /** `uncapped_for_eligible` or `uncapped_for_anyone`. */
-  uncapped(phase: UncappedPhase) {
-    requireU64("startsAfterMs", phase.startsAfterMs);
-    const { access } = phase;
-    if (access.kind === "anyone") {
-      uncappedForAnyone(
-        phase.startsAfterMs,
-        access.maxParticipants,
-        access.minCommitment,
-      );
-    }
+  /** `blast_presale::allowlisted_eligibility`; `root` is 32 hex bytes. */
+  allowlistedEligibility(options: { root: string; leafCount: bigint }) {
+    allowlistedEligibility(options.root, options.leafCount);
     return (tx: Transaction): TransactionResult =>
-      access.kind === "anyone"
-        ? this.#presaleCall(tx, "uncapped_for_anyone", [
-            tx.pure.u64(phase.startsAfterMs),
-            tx.pure.u64(access.maxParticipants),
-            tx.pure.u64(access.minCommitment),
-          ])
-        : this.#presaleCall(tx, "uncapped_for_eligible", [
-            tx.pure.u64(phase.startsAfterMs),
-          ]);
+      this.#call(tx, "allowlisted_eligibility", [
+        tx.pure.vector("u8", fromHex(options.root)),
+        tx.pure.u64(options.leafCount),
+      ]);
   }
 
-  /** `vesting_terms`. */
-  vesting(terms: VestingTerms) {
-    const vesting = vestingTerms(terms.cliffMs, terms.periodMs, terms.periods);
+  /** `blast_presale::uncapped_for_eligible`. */
+  uncappedForEligible(options: { startDelayMs: bigint }) {
+    const startDelayMs = requireU64("startDelayMs", options.startDelayMs);
     return (tx: Transaction): TransactionResult =>
-      this.#vestingTerms(tx, vesting);
+      this.#call(tx, "uncapped_for_eligible", [tx.pure.u64(startDelayMs)]);
   }
 
-  /** One `bps::Bps` through `bps::new`. */
-  bps(value: bigint) {
-    validateBps(value);
+  /** `blast_presale::uncapped_for_anyone`. */
+  uncappedForAnyone(options: {
+    startDelayMs: bigint;
+    maxParticipants: bigint;
+    minCommitment: bigint;
+  }) {
+    const startDelayMs = requireU64("startDelayMs", options.startDelayMs);
+    uncappedForAnyone(
+      startDelayMs,
+      options.maxParticipants,
+      options.minCommitment,
+    );
     return (tx: Transaction): TransactionResult =>
-      this.#presaleCall(tx, "new", [tx.pure.u64(value)], undefined, "bps");
-  }
-
-  /**
-   * `vector<RecipientShare>` from `recipient_share` calls, each rate through
-   * `bps::new`; a share with `vesting` goes through `vesting_terms` and
-   * `vested_recipient_share` instead. Only token and raise shares may vest.
-   */
-  recipientShares(shares: readonly BpsShare[]) {
-    const normalized = shares.map((share) => {
-      const bps = validateBps(share.bps);
-      const { vesting } = share;
-      return {
-        recipient: normalizeSuiAddress(share.recipient),
-        bps,
-        vesting:
-          vesting &&
-          vestingTerms(vesting.cliffMs, vesting.periodMs, vesting.periods),
-      };
-    });
-    return (tx: Transaction): TransactionResult =>
-      tx.makeMoveVec({
-        type: this.#type("blast_presale::RecipientShare"),
-        elements: normalized.map(({ recipient, bps, vesting }) => {
-          const address = tx.pure.address(recipient);
-          const rate = tx.add(this.bps(bps));
-          if (!vesting) {
-            return this.#presaleCall(tx, "recipient_share", [address, rate]);
-          }
-          return this.#presaleCall(tx, "vested_recipient_share", [
-            address,
-            rate,
-            this.#vestingTerms(tx, vesting),
-          ]);
-        }),
-      });
-  }
-
-  /**
-   * `blast_presale::fee_split`: the LP-fee split, each recipient's share then
-   * the holder-reward share, totalling 10,000 BPS. Fee shares cannot vest.
-   */
-  feeSplit(feeRecipients: readonly BpsShare[], holderRewardsBps: bigint) {
-    if (feeRecipients.some((recipient) => recipient.vesting)) {
-      throw new RangeError("fee recipients cannot vest");
-    }
-    const shares = this.recipientShares(feeRecipients);
-    const holderRewards = this.bps(holderRewardsBps);
-    return (tx: Transaction): TransactionResult =>
-      this.#presaleCall(tx, "fee_split", [
-        tx.add(shares),
-        tx.add(holderRewards),
+      this.#call(tx, "uncapped_for_anyone", [
+        tx.pure.u64(startDelayMs),
+        tx.pure.u64(options.maxParticipants),
+        tx.pure.u64(options.minCommitment),
       ]);
   }
 
   /**
-   * `cetus::new`: reserves the pair's Cetus pool creation at `tickSpacing`
-   * (Cetus derives the fee rate) and returns the sale's `PresaleInitializer`,
-   * which the same PTB must `configurePresale` and `finalizePresale`.
+   * `blast_presale::recipient_share` over core `payout::recipient` (with
+   * `vesting_terms` when the recipient vests) and `bps::new`.
    */
-  startCetusPresale(
-    options: LaunchTypes &
-      CetusPresaleObjects & {
-        treasuryCap: TransactionObjectInput;
-        tickSpacing: number;
-      },
-  ) {
-    const tickSpacing = requireU32("tickSpacing", options.tickSpacing);
+  recipientShare(share: RecipientShare) {
+    const recipient = this.core.recipient(share.recipient);
+    const bps = this.core.bps(share.bps);
     return (tx: Transaction): TransactionResult =>
-      this.#presaleCall(
-        tx,
-        "new",
-        [
-          tx.object(options.treasuryCap),
-          this.#version(tx),
-          this.#creationPolicy(tx),
-          this.#feePolicy(tx),
-          deploymentObject(tx, this.deployment.venueConfig, true),
-          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
-          sharedObject(tx, "cetusPools", options.cetusPools, true),
-          tx.pure.u32(tickSpacing),
-        ],
-        options,
-        "cetus",
-      );
+      this.#call(tx, "recipient_share", [recipient(tx), bps(tx)]);
   }
 
+  // Creation, in one PTB: a venue's `prepare`, `new`, the setters, `finalize`
+  // and `share`.
+
   /**
-   * `bluefin::new` at the creator's tier; returns the sale's
-   * `PresaleInitializer`, which the same PTB must configure and finalize.
+   * `blast_presale::new(treasury_cap, package_version, venue_ticket,
+   * creation_policy, fee_policy)`: redeems the venue's `VenueTicket` and
+   * returns the `PresaleInitializer` the same PTB configures and finalizes.
    */
-  startBluefinPresale(
-    options: LaunchTypes & {
+  new(
+    options: PresaleTypes & {
       treasuryCap: TransactionObjectInput;
-      memeCurrency: SharedObjectReference<true>;
-      tickSpacing: number;
-      feeRate: bigint;
+      venueTicket: TransactionArgument;
     },
   ) {
-    const tickSpacing = requireU32("tickSpacing", options.tickSpacing);
-    const feeRate = requireU64("feeRate", options.feeRate);
     return (tx: Transaction): TransactionResult =>
-      this.#presaleCall(
+      this.#call(
         tx,
         "new",
         [
           tx.object(options.treasuryCap),
           this.#version(tx),
-          // The same PTB's `finalize` takes the currency mutably.
-          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          this.#creationPolicy(tx),
-          this.#feePolicy(tx),
-          // Records the tier for the migration (contracts ADR 0111).
-          deploymentObject(tx, this.deployment.venueConfig, true),
-          tx.pure.u32(tickSpacing),
-          tx.pure.u64(feeRate),
+          options.venueTicket,
+          deploymentObject(tx, this.deployment.creationPolicy, false),
+          deploymentObject(tx, this.deployment.feePolicy, false),
         ],
         options,
-        "bluefin",
       );
   }
 
-  /**
-   * Records every one of `options` on `initializer` through the
-   * `PresaleInitializer` setters, optional ones only when given: supply, token
-   * allocations, participant vesting, raise, windows, eligibility, uncapped
-   * phase, hard cap, LP-fee split, then the partner, which the
-   * `CreationPolicy` must accept now and which `finalize` fixes for good.
-   */
-  configurePresale(
-    options: PresaleSettings & { initializer: TransactionArgument },
-  ) {
-    return this.#configure(options, {
-      feeRecipients: options.feeRecipients,
-      holderRewardsBps: options.holderRewardsBps,
-    });
-  }
-
-  /**
-   * Every `PresaleInitializer` setter `configurePresale` calls except
-   * `set_fee_split`, for a migrator whose own `finalize` fixes the LP-fee
-   * split, such as the Aftermath DAO-pool vendor (`AftermathDaoPresaleCalls`).
-   */
-  configurePresaleTerms(
-    options: PresaleTermsSettings & { initializer: TransactionArgument },
-  ) {
-    return this.#configure(options, null);
-  }
-
-  /** `creation_policy::apply_migration_delay`. Permissionless; the contract validates readiness and ownership. */
-  applyMigrationDelay() {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::creation_policy::apply_migration_delay`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.creationPolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `creation_policy::apply_migration_witness`. Permissionless; the contract validates readiness and ownership. */
-  applyMigrationWitness(
-    options: (PresaleMigrator | { migrationWitnessType: string }) & {},
-  ) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::creation_policy::apply_migration_witness`,
-        typeArguments: [
-          "migrationWitnessType" in options
-            ? externalWitnessType(options.migrationWitnessType)
-            : options.venue === undefined
-              ? externalWitnessType(options.witnessType)
-              : this.migrationWitnessType(options.venue),
-        ],
-        arguments: [
-          deploymentObject(tx, this.deployment.creationPolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `creation_policy::cancel_migration_delay`. Requires CancelAdmin. */
-  cancelMigrationDelay(options: { adminWitness: TransactionObjectInput }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::creation_policy::cancel_migration_delay`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.creationPolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `creation_policy::cancel_migration_witness`. Requires CancelAdmin. */
-  cancelMigrationWitness(
-    options: (PresaleMigrator | { migrationWitnessType: string }) & {
-      adminWitness: TransactionObjectInput;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::creation_policy::cancel_migration_witness`,
-        typeArguments: [
-          "migrationWitnessType" in options
-            ? externalWitnessType(options.migrationWitnessType)
-            : options.venue === undefined
-              ? externalWitnessType(options.witnessType)
-              : this.migrationWitnessType(options.venue),
-        ],
-        arguments: [
-          deploymentObject(tx, this.deployment.creationPolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `creation_policy::remove_migration_witness`. Requires AdapterAdmin. */
-  removeMigrationWitness(
-    options: (PresaleMigrator | { migrationWitnessType: string }) & {
-      adminWitness: TransactionObjectInput;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::creation_policy::remove_migration_witness`,
-        typeArguments: [
-          "migrationWitnessType" in options
-            ? externalWitnessType(options.migrationWitnessType)
-            : options.venue === undefined
-              ? externalWitnessType(options.witnessType)
-              : this.migrationWitnessType(options.venue),
-        ],
-        arguments: [
-          deploymentObject(tx, this.deployment.creationPolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `creation_policy::schedule_migration_delay`. Requires AdapterAdmin. */
-  scheduleMigrationDelay(options: {
-    adminWitness: TransactionObjectInput;
-    delayMs: bigint;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::creation_policy::schedule_migration_delay`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.creationPolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `creation_policy::schedule_migration_witness`. Requires AdapterAdmin. */
-  scheduleMigrationWitness(
-    options: (PresaleMigrator | { migrationWitnessType: string }) & {
-      adminWitness: TransactionObjectInput;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::creation_policy::schedule_migration_witness`,
-        typeArguments: [
-          "migrationWitnessType" in options
-            ? externalWitnessType(options.migrationWitnessType)
-            : options.venue === undefined
-              ? externalWitnessType(options.witnessType)
-              : this.migrationWitnessType(options.venue),
-        ],
-        arguments: [
-          deploymentObject(tx, this.deployment.creationPolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `fee_policy::apply_destination`. Permissionless; the contract validates readiness and ownership. */
-  applyProtocolDestination() {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::fee_policy::apply_destination`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.feePolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `fee_policy::apply_fees`. Permissionless; the contract validates readiness and ownership. */
-  applyProtocolFees() {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::fee_policy::apply_fees`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.feePolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `fee_policy::cancel_destination`. Requires CancelAdmin. */
-  cancelProtocolDestination(options: { adminWitness: TransactionObjectInput }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::fee_policy::cancel_destination`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.feePolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `fee_policy::cancel_fees`. Requires CancelAdmin. */
-  cancelProtocolFees(options: { adminWitness: TransactionObjectInput }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::fee_policy::cancel_fees`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.feePolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `fee_policy::schedule_destination`. Requires TreasuryAdmin. */
-  scheduleProtocolDestination(options: {
-    adminWitness: TransactionObjectInput;
-    destination: string;
-    delayMs: bigint;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::fee_policy::schedule_destination`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.feePolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.address(normalizeSuiAddress(options.destination)),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /**
-   * `fee_policy::schedule_fees`. Requires FeeAdmin. Throws when the raise or
-   * token rate exceeds 1,000 BPS or an LP rate exceeds 3,000, which the
-   * contract rejects with `fee_policy::EInvalidFees` (0).
-   */
-  scheduleProtocolFees(options: {
-    adminWitness: TransactionObjectInput;
-    fees: ProtocolFees;
-    delayMs: bigint;
-  }) {
-    const fees = cappedProtocolFees(options.fees);
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::fee_policy::schedule_fees`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.feePolicy, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.add(this.bps(fees.raiseBps)),
-          tx.add(this.bps(fees.tokenBps)),
-          tx.add(this.bps(fees.lpFeeMemeBps)),
-          tx.add(this.bps(fees.lpFeeQuoteBps)),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `presale_vault::apply_protocol_lp_fees`. Permissionless; the contract validates readiness and ownership. */
-  applyProtocolLpFees(options: {
-    memeType: string;
-    quoteType: string;
-    vault: SharedObjectReference<true>;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::presale_vault::apply_protocol_lp_fees`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `presale_vault::cancel_protocol_lp_fees`. Requires CancelAdmin. */
-  cancelProtocolLpFees(options: {
-    memeType: string;
-    quoteType: string;
-    vault: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::presale_vault::cancel_protocol_lp_fees`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /**
-   * `presale_vault::schedule_protocol_lp_fees`. Requires FeeAdmin. Throws when
-   * either rate exceeds `MAX_PROTOCOL_LP_FEE_BPS` (3,000), which the contract
-   * rejects with `fee_policy::EInvalidFees` (0).
-   */
-  scheduleProtocolLpFees(options: {
-    memeType: string;
-    quoteType: string;
-    vault: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    lpFeeMemeBps: bigint;
-    lpFeeQuoteBps: bigint;
-    delayMs: bigint;
-  }) {
-    const lpFeeMemeBps = requireBasisPointsAtMost(
-      "lpFeeMemeBps",
-      options.lpFeeMemeBps,
-      MAX_PROTOCOL_LP_FEE_BPS,
-    );
-    const lpFeeQuoteBps = requireBasisPointsAtMost(
-      "lpFeeQuoteBps",
-      options.lpFeeQuoteBps,
-      MAX_PROTOCOL_LP_FEE_BPS,
-    );
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::presale_vault::schedule_protocol_lp_fees`,
-        typeArguments: [
-          normalizeStructTag(options.memeType),
-          normalizeStructTag(options.quoteType),
-        ],
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.add(this.bps(lpFeeMemeBps)),
-          tx.add(this.bps(lpFeeQuoteBps)),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `blast_presale_package::pause`. Requires PauseAdmin. */
-  pause(options: { adminWitness: TransactionObjectInput; bits: number }) {
-    if (
-      !Number.isInteger(options.bits) ||
-      options.bits <= 0 ||
-      options.bits > 255 ||
-      (options.bits & ~11) !== 0
-    )
-      throw new RangeError("invalid pause bits");
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::blast_presale_package::pause`,
-        typeArguments: [],
-        arguments: [
-          deploymentObject(tx, this.deployment.packageVersion, true),
-          tx.object(options.adminWitness),
-          tx.pure.u8(options.bits),
-        ],
-      });
-    };
-  }
-  /**
-   * `package_admin::unpause`. Requires UnpauseAdmin. Aborts with
-   * `package_admin::EUnguardedNotice` (2) unless the upgrade, fee-policy and
-   * creation-policy notices are all nonzero, with no pending zero notice or
-   * admission.
-   */
-  unpause(options: {
-    packageAdmin: SharedObjectReference<false>;
-    adminWitness: TransactionObjectInput;
-    bits: number;
-  }) {
-    if (
-      !Number.isInteger(options.bits) ||
-      options.bits <= 0 ||
-      options.bits > 255 ||
-      (options.bits & ~11) !== 0
-    )
-      throw new RangeError("invalid pause bits");
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::unpause`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, false),
-          deploymentObject(tx, this.deployment.packageVersion, true),
-          tx.object(options.adminWitness),
-          this.#feePolicy(tx),
-          this.#creationPolicy(tx),
-          tx.pure.u8(options.bits),
-        ],
-      });
-    };
-  }
-  /** `package_admin::apply_upgrade_delay`. Permissionless; the contract validates readiness and ownership. */
-  applyUpgradeDelay(options: { packageAdmin: SharedObjectReference<true> }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::apply_upgrade_delay`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::authorize_upgrade`. Requires UpgradeAdmin. */
-  authorizeUpgrade(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    digest: Uint8Array;
-  }) {
-    if (options.digest.length !== 32)
-      throw new RangeError("digest must contain 32 bytes");
-    return (tx: Transaction): TransactionResult => {
-      return tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::authorize_upgrade`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.vector("u8", Array.from(options.digest)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::cancel_upgrade_action`. Requires CancelAdmin. */
-  cancelUpgradeAction(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::cancel_upgrade_action`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-        ],
-      });
-    };
-  }
-  /** `package_admin::commit_upgrade_and_advance`. Requires UpgradeAdmin. */
-  commitUpgradeAndAdvance(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    receipt: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::commit_upgrade_and_advance`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, true),
-          tx.object(options.adminWitness),
-          tx.object(options.receipt),
-        ],
-      });
-    };
-  }
-  /** `package_admin::make_immutable`. Requires UpgradeAdmin. */
-  makeImmutable(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::make_immutable`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::schedule_make_immutable`. Requires UpgradeAdmin. */
-  scheduleMakeImmutable(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::schedule_make_immutable`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::schedule_upgrade`. Requires UpgradeAdmin. */
-  scheduleUpgrade(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    digest: Uint8Array;
-  }) {
-    if (options.digest.length !== 32)
-      throw new RangeError("digest must contain 32 bytes");
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::schedule_upgrade`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.vector("u8", Array.from(options.digest)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::schedule_upgrade_delay`. Requires UpgradeAdmin. */
-  scheduleUpgradeDelay(options: {
-    packageAdmin: SharedObjectReference<true>;
-    adminWitness: TransactionObjectInput;
-    delayMs: bigint;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::schedule_upgrade_delay`,
-        typeArguments: [],
-        arguments: [
-          sharedObject(tx, "packageAdmin", options.packageAdmin, true),
-          deploymentObject(tx, this.deployment.packageVersion, false),
-          tx.object(options.adminWitness),
-          tx.pure.u64(requireU64("delayMs", options.delayMs)),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-  /** `package_admin::wrap`. Permissionless; the contract validates readiness and ownership. */
-  wrapPublication(options: {
-    publication: TransactionObjectInput;
-    upgradeCap: TransactionObjectInput;
-  }) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::package_admin::wrap`,
-        typeArguments: [],
-        arguments: [
-          tx.object(options.publication),
-          tx.object(options.upgradeCap),
-        ],
-      });
-    };
-  }
-
-  #configure(
-    options: PresaleTermsSettings & { initializer: TransactionArgument },
-    feeSplit: Pick<
-      PresaleSettings,
-      "feeRecipients" | "holderRewardsBps"
-    > | null,
-  ) {
+  /** `set_supply`: the complete supply `finalize` mints, then burn-only or fixed. */
+  setSupply(options: Initializer & { tokenSupply: bigint; burnable: boolean }) {
     const tokenSupply = requireU64("tokenSupply", options.tokenSupply);
-    const raiseTarget = requireU64("raiseTarget", options.raiseTarget);
-    const durationMs = requireU64("durationMs", options.durationMs);
-    const liquidityWindowMs = requireU64(
-      "liquidityWindowMs",
-      options.liquidityWindowMs,
-    );
-    const { hardCap, participantVesting, uncapped, partner } = options;
-    if (hardCap) requireU64("hardCap.startsAfterMs", hardCap.startsAfterMs);
-    return (tx: Transaction): void => {
-      const set = (name: string, args: TransactionArgument[]) =>
-        this.#presaleCall(
-          tx,
-          name,
-          [options.initializer, this.#version(tx), ...args],
-          options,
-        );
+    return this.#setter(options, "set_supply", (tx) => [
+      tx.pure.u64(tokenSupply),
+      tx.pure.bool(options.burnable),
+    ]);
+  }
 
-      set("set_supply", [
-        tx.pure.u64(tokenSupply),
-        tx.pure.bool(options.burnable),
-      ]);
-      set("set_token_allocations", [
-        tx.add(this.bps(options.tokenAllocationBps)),
-        tx.add(this.bps(options.liquidityTokenAllocationBps)),
-        tx.add(this.recipientShares(options.recipientAllocations)),
-      ]);
-      if (participantVesting) {
-        set("set_participant_vesting", [
-          tx.add(this.vesting(participantVesting)),
-        ]);
-      }
-      set("set_raise", [
-        tx.pure.u64(raiseTarget),
-        tx.add(this.recipientShares(options.raiseAllocations)),
-      ]);
-      set("set_windows", [
-        tx.pure.u64(durationMs),
-        tx.pure.u64(liquidityWindowMs),
-      ]);
-      set("set_eligibility", [tx.add(this.eligibility(options.eligibility))]);
-      if (uncapped)
-        set("set_uncapped_phase", [tx.add(this.uncapped(uncapped))]);
-      if (hardCap) {
-        set("set_hard_cap", [
-          tx.pure.u64(hardCap.startsAfterMs),
-          tx.pure.bool(hardCap.closesWhenFilled),
-        ]);
-      }
-      if (feeSplit) {
-        set("set_fee_split", [
-          tx.add(
-            this.feeSplit(feeSplit.feeRecipients, feeSplit.holderRewardsBps),
-          ),
-        ]);
-      }
-      if (partner) {
-        set("set_partner", [
-          this.#creationPolicy(tx),
-          sharedObject(tx, "partner", partner, false),
-          tx.object.clock(),
-        ]);
-      }
-    };
+  /** `set_token_allocations`: the buyers', LP's and each recipient's BPS of the supply. */
+  setTokenAllocations(
+    options: Initializer & {
+      tokenAllocationBps: bigint;
+      liquidityTokenAllocationBps: bigint;
+      recipientAllocations: readonly RecipientShare[];
+    },
+  ) {
+    const token = this.core.bps(options.tokenAllocationBps);
+    const liquidity = this.core.bps(options.liquidityTokenAllocationBps);
+    const recipients = this.#recipientShares(options.recipientAllocations);
+    return this.#setter(options, "set_token_allocations", (tx) => [
+      token(tx),
+      liquidity(tx),
+      recipients(tx),
+    ]);
+  }
+
+  /** `set_participant_vesting`: each claim locks its tokens under `vestingTerms`. */
+  setParticipantVesting(options: Initializer & { vestingTerms: VestingTerms }) {
+    const terms = this.core.vestingTerms(options.vestingTerms);
+    return this.#setter(options, "set_participant_vesting", (tx) => [
+      terms(tx),
+    ]);
+  }
+
+  /** `set_raise`: the Quote raised and each recipient's BPS of it. */
+  setRaise(
+    options: Initializer & {
+      raiseTarget: bigint;
+      raiseAllocations: readonly RecipientShare[];
+    },
+  ) {
+    const raiseTarget = requireU64("raiseTarget", options.raiseTarget);
+    const recipients = this.#recipientShares(options.raiseAllocations);
+    return this.#setter(options, "set_raise", (tx) => [
+      tx.pure.u64(raiseTarget),
+      recipients(tx),
+    ]);
+  }
+
+  /** `set_windows`: the commitment window and the liquidity window after it. */
+  setWindows(
+    options: Initializer & {
+      commitmentDurationMs: bigint;
+      liquidityWindowDurationMs: bigint;
+    },
+  ) {
+    const commitment = requireU64(
+      "commitmentDurationMs",
+      options.commitmentDurationMs,
+    );
+    const liquidity = requireU64(
+      "liquidityWindowDurationMs",
+      options.liquidityWindowDurationMs,
+    );
+    return this.#setter(options, "set_windows", (tx) => [
+      tx.pure.u64(commitment),
+      tx.pure.u64(liquidity),
+    ]);
+  }
+
+  /** `set_eligibility` of an `open_eligibility` or `allowlisted_eligibility` value. */
+  setEligibility(options: Initializer & { eligibility: EligibilityPolicy }) {
+    const { eligibility } = options;
+    const policy =
+      eligibility.kind === "open"
+        ? this.openEligibility(eligibility)
+        : this.allowlistedEligibility(eligibility);
+    return this.#setter(options, "set_eligibility", (tx) => [policy(tx)]);
+  }
+
+  /** `set_uncapped_phase` of an `uncapped_for_eligible` or `uncapped_for_anyone` value. */
+  setUncappedPhase(options: Initializer & { uncapped: UncappedPhase }) {
+    const { startsAfterMs: startDelayMs, access } = options.uncapped;
+    const phase =
+      access.kind === "anyone"
+        ? this.uncappedForAnyone({ startDelayMs, ...access })
+        : this.uncappedForEligible({ startDelayMs });
+    return this.#setter(options, "set_uncapped_phase", (tx) => [phase(tx)]);
+  }
+
+  /** `set_hard_cap(start_delay_ms, closes_when_filled)`. */
+  setHardCap(
+    options: Initializer & { startDelayMs: bigint; closesWhenFilled: boolean },
+  ) {
+    const startDelayMs = requireU64("startDelayMs", options.startDelayMs);
+    return this.#setter(options, "set_hard_cap", (tx) => [
+      tx.pure.u64(startDelayMs),
+      tx.pure.bool(options.closesWhenFilled),
+    ]);
+  }
+
+  /** `set_fee_split` of a core `fee_split::new` value: the vault's LP-fee split. */
+  setFeeSplit(options: Initializer & { feeSplit: FeeSplit }) {
+    const split = this.core.feeSplit(options.feeSplit);
+    return this.#setter(options, "set_fee_split", (tx) => [split(tx)]);
+  }
+
+  /** `set_partner`: a Blast partner the `CreationPolicy` accepts now. */
+  setPartner(options: Initializer & { partner: SharedObjectIdentity }) {
+    return this.#setter(options, "set_partner", (tx) => [
+      deploymentObject(tx, this.deployment.creationPolicy, false),
+      deploymentObject(tx, options.partner, false),
+      tx.object.clock(),
+    ]);
   }
 
   /**
-   * `blast_presale::finalize`: checks every setting together, mints and seals
-   * the supply, and returns `(Presale, PresaleCap)`; the same PTB must `share`
-   * the presale.
+   * `finalize(initializer, package_version, registry, currency)`: checks every
+   * setting, mints and seals the supply, and returns `[Presale, PresaleCap]`;
+   * the same PTB must `share` the presale.
    */
-  finalizePresale(
-    options: LaunchTypes & {
-      initializer: TransactionArgument;
-      memeCurrency: SharedObjectReference<true>;
+  finalize(
+    options: Initializer & {
+      /** The sale token's confirmed unregulated Coin Registry `Currency`. */
+      currency: SharedObjectIdentity;
     },
   ) {
     return (tx: Transaction): TransactionResult =>
-      this.#presaleCall(
+      this.#call(
         tx,
         "finalize",
         [
           options.initializer,
           this.#version(tx),
-          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
+          deploymentObject(tx, this.deployment.presaleRegistry, true),
+          deploymentObject(tx, options.currency, true),
         ],
         options,
       );
   }
 
   /**
-   * `cetus::new`, every setter, and `finalize`: returns `(Presale,
-   * PresaleCap)`; the same PTB must `share` the presale.
-   */
-  newCetusPresale(
-    options: PresaleTerms & CetusPresaleObjects & { tickSpacing: number },
-  ) {
-    return this.#newPresale(this.startCetusPresale(options), options);
-  }
-
-  /** `bluefin::new`, every setter, and `finalize`; returns `(Presale, PresaleCap)`. */
-  newBluefinPresale(
-    options: PresaleTerms & { tickSpacing: number; feeRate: bigint },
-  ) {
-    return this.#newPresale(this.startBluefinPresale(options), options);
-  }
-
-  /** Returns `(initializer, ticket)`. Both must be consumed by native finalize in this PTB. */
-  startNativeAftermathPresale(
-    options: LaunchTypes & {
-      treasuryCap: TransactionObjectInput;
-      daoFeeBps: number;
-    },
-  ) {
-    if (
-      !Number.isInteger(options.daoFeeBps) ||
-      options.daoFeeBps < 1 ||
-      options.daoFeeBps > 10_000
-    ) {
-      throw new RangeError("daoFeeBps must be an integer from 1 to 10,000");
-    }
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::aftermath::new`,
-        typeArguments: this.#saleTypes(options),
-        arguments: [
-          tx.object(options.treasuryCap),
-          this.#version(tx),
-          this.#creationPolicy(tx),
-          this.#feePolicy(tx),
-          deploymentObject(tx, this.deployment.venueConfig, true),
-          tx.pure.u16(options.daoFeeBps),
-        ],
-      });
-  }
-
-  /** Consumes the matching ticket; returns `(Presale, PresaleCap, PoolCreation<Lp, Meme, Quote>)`. */
-  finalizeNativeAftermathPresale(
-    options: LaunchTypes & {
-      initializer: TransactionArgument;
-      ticket: TransactionArgument;
-      memeCurrency: SharedObjectReference<true>;
-      lpCoin: AftermathLpCoin;
-    },
-  ) {
-    const lpCoin = assertAftermathLpCoin(options.lpCoin);
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${this.deployment.packageId}::aftermath::finalize`,
-        typeArguments: this.#aftermathTypes({
-          ...options,
-          lpType: lpCoin.lpType,
-        }),
-        arguments: [
-          options.initializer,
-          this.#version(tx),
-          options.ticket,
-          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          tx.object(lpCoin.createPoolCapId),
-        ],
-      });
-  }
-
-  /** Shares the reservation returned by native finalize in its creation PTB. */
-  shareNativeAftermathPoolCreation(
-    options: LaunchTypes & {
-      lpType: string;
-      poolCreation: TransactionArgument;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::aftermath::share`,
-        typeArguments: this.#aftermathTypes(options),
-        arguments: [options.poolCreation, this.#version(tx)],
-      });
-    };
-  }
-
-  /** Configures and finalizes a native sale; returns all three objects for the caller to share/transfer. */
-  newNativeAftermathPresale(options: NativeAftermathPresaleTerms) {
-    // Verify the brand before constructing any commands.
-    assertAftermathLpCoin(options.lpCoin);
-    const start = this.startNativeAftermathPresale(options);
-    return (tx: Transaction): TransactionResult => {
-      const [initializer, ticket] = moveResults(tx.add(start), 2);
-      tx.add(this.configurePresale({ ...options, initializer }));
-      return tx.add(
-        this.finalizeNativeAftermathPresale({
-          ...options,
-          initializer,
-          ticket,
-        }),
-      );
-    };
-  }
-
-  /** Creates the native 50/50 DAO-fee pool, consumes its reservation and locks LP/owner capability. */
-  migrateNativeAftermath(options: NativeAftermathMigration) {
-    const objects = options.aftermathObjects ?? AFTERMATH_MAINNET_OBJECTS;
-    const poolRegistry = normalizeSharedObjectIdentity(
-      "aftermath.poolRegistry",
-      objects.poolRegistry,
-    );
-    const daoFeeVersion = normalizeSharedObjectIdentity(
-      "aftermath.daoFeeVersion",
-      objects.daoFeeVersion,
-    );
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::aftermath::migrate`,
-        typeArguments: this.#aftermathTypes(options),
-        arguments: [
-          this.#presale(tx, options),
-          this.#version(tx),
-          sharedObject(tx, "poolCreation", options.poolCreation, true),
-          this.#feePolicy(tx),
-          deploymentObject(tx, this.deployment.venueConfig, false),
-          deploymentObject(tx, poolRegistry, true),
-          deploymentObject(tx, daoFeeVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-
-  /** Receives DAO-fee coins owned by the vault and splits them under its fee terms. */
-  collectNativeAftermathFees(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      memeFees: readonly {
-        objectId: string;
-        version: string;
-        digest: string;
-      }[];
-      quoteFees: readonly {
-        objectId: string;
-        version: string;
-        digest: string;
-      }[];
-    },
-  ) {
-    const { memeType, quoteType } = normalizeLaunchTypes(options);
-    return (tx: Transaction): void => {
-      const receiving = (type: string, coins: typeof options.memeFees) =>
-        tx.makeMoveVec({
-          type: `0x2::transfer::Receiving<0x2::coin::Coin<${type}>>`,
-          elements: coins.map((coin) => tx.receivingRef(coin)),
-        });
-      tx.moveCall({
-        target: `${this.deployment.packageId}::aftermath::collect_fees`,
-        typeArguments: [memeType, quoteType],
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          this.#feePolicy(tx),
-          receiving(memeType, options.memeFees),
-          receiving(quoteType, options.quoteFees),
-        ],
-      });
-    };
-  }
-
-  /**
-   * `blast_aftermath_dao_presale::new<SaleToken, Quote>` with the vendor's
-   * `AdminCap`: starts a sale migrating through the vendor and returns its
-   * `PresaleInitializer`. The `CreationPolicy` must allow the vendor's witness
-   * (`migrationWitnessType("aftermath")`) and Quote. Configure it with
-   * `configurePresaleTerms`, then `finalizeAftermathPresale`: the vendor
-   * aborts with `EWrongMigrator` if `blast_presale::finalize` is used instead.
-   */
-  startAftermathPresale(
-    options: LaunchTypes & {
-      adminCap: TransactionObjectInput;
-      treasuryCap: TransactionObjectInput;
-    },
-  ) {
-    const { packageId } = this.#aftermath();
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${packageId}::${AFTERMATH_PRESALE_MODULE}::new`,
-        typeArguments: this.#saleTypes(options),
-        arguments: [
-          tx.object(options.adminCap),
-          this.#version(tx),
-          tx.object(options.treasuryCap),
-          this.#creationPolicy(tx),
-          this.#feePolicy(tx),
-        ],
-      });
-  }
-
-  /**
-   * `blast_aftermath_dao_presale::finalize<Lp, SaleToken, Quote>` with the
-   * vendor's `AdminCap`: names the vendor's treasury as the sale's only LP-fee
-   * recipient, finalizes it, sends its `PresaleCap` to the treasury, shares
-   * the `PoolCreation<Lp>` binding the verified LP coin's `CreatePoolCapV2`
-   * to it, and returns the `Presale`, which the same PTB must `share`. Throws
-   * unless `lpCoin` is the `AftermathLpCoin` `verifyAftermathLpCoin`
-   * returned.
-   */
-  finalizeAftermathPresale(
-    options: LaunchTypes & {
-      adminCap: TransactionObjectInput;
-      initializer: TransactionArgument;
-      memeCurrency: SharedObjectReference<true>;
-      lpCoin: AftermathLpCoin;
-    },
-  ) {
-    const { packageId } = this.#aftermath();
-    const lpCoin = assertAftermathLpCoin(options.lpCoin);
-    const typeArguments = [lpCoin.lpType, ...this.#saleTypes(options)];
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${packageId}::${AFTERMATH_PRESALE_MODULE}::finalize`,
-        typeArguments,
-        arguments: [
-          tx.object(options.adminCap),
-          this.#version(tx),
-          options.initializer,
-          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          tx.object(lpCoin.createPoolCapId),
-        ],
-      });
-  }
-
-  /**
-   * The vendor's `new`, every setter but the LP-fee split (`set_partner` when
-   * `partner` is given), and the vendor's `finalize`: returns the `Presale`,
-   * which the same PTB must `share`. The `PresaleCap` goes to the vendor's
-   * treasury.
-   */
-  newAftermathPresale(options: AftermathPresaleTerms) {
-    return (tx: Transaction): TransactionResult => {
-      const initializer = tx.add(this.startAftermathPresale(options));
-      tx.add(this.configurePresaleTerms({ ...options, initializer }));
-      return tx.add(this.finalizeAftermathPresale({ ...options, initializer }));
-    };
-  }
-
-  /**
-   * `blast_aftermath_dao_presale::migrate<Lp, SaleToken, Quote>`: consumes the
-   * sale's `PoolCreation`, seeds a 50/50 Aftermath pool with all the sale's LP
-   * tokens and Quote in Aftermath's coin order (`aftermathPoolCoinTypes`; the
-   * contract orders them itself), wraps it in a DAO-fee pool paying the
-   * vendor's treasury, and locks the LP. Anyone may call.
-   */
-  migrateAftermath(options: AftermathMigration) {
-    const aftermath = this.#aftermath();
-    const typeArguments = this.#aftermathTypes(options);
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${aftermath.packageId}::${AFTERMATH_PRESALE_MODULE}::migrate`,
-        typeArguments,
-        arguments: [
-          this.#presale(tx, options),
-          this.#version(tx),
-          sharedObject(tx, "poolCreation", options.poolCreation, true),
-          this.#feePolicy(tx),
-          deploymentObject(tx, aftermath.poolRegistry, true),
-          deploymentObject(tx, aftermath.daoFeeVersion, false),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-
-  /**
-   * `blast_presale::share`: shares the new presale and fixes its windows from
-   * `startMs`, or from execution once that has passed (`0n` opens it at once).
-   * Commitments open at the start; until then Blast's `FeeAdmin` may change the
-   * sale's Blast rates (`setPresaleProtocolFees`).
+   * `share(presale, package_version, commitment_starts_at_ms, clock)`: shares
+   * the new sale and fixes its windows from `commitmentStartsAtMs`, or from
+   * execution once that has passed.
    */
   share(
-    options: LaunchTypes & { presale: TransactionArgument; startMs: bigint },
+    options: PresaleTypes & {
+      presale: TransactionArgument;
+      commitmentStartsAtMs: bigint;
+    },
   ) {
-    const startMs = requireU64("startMs", options.startMs);
+    const startsAtMs = requireU64(
+      "commitmentStartsAtMs",
+      options.commitmentStartsAtMs,
+    );
     return (tx: Transaction): void => {
-      this.#presaleCall(
+      this.#call(
         tx,
         "share",
         [
           options.presale,
           this.#version(tx),
-          tx.pure.u64(startMs),
+          tx.pure.u64(startsAtMs),
           tx.object.clock(),
         ],
         options,
@@ -1542,1012 +446,428 @@ export class PresaleCalls {
     };
   }
 
-  /** `commit_open`; returns the `Coin<Quote>` a hard cap did not accept. */
-  commitOpen(
-    options: LaunchTypes & {
-      presale: SharedObjectReference<true>;
-      quote: TransactionArgument;
+  /**
+   * `set_protocol_fees` (`FeeAdmin`): replaces the sale's snapshot of Blast's
+   * rates before its window starts, within the applied `FeePolicy`; once
+   * shared each rate may only stay or fall. `presale` is the shared sale or
+   * `finalize`'s result in its creation PTB.
+   */
+  setProtocolFees(
+    options: PresaleTypes & {
+      presale: SharedObjectIdentity | TransactionArgument;
+      adminWitness: TransactionObjectInput;
+      fees: ProtocolFees;
     },
   ) {
-    return (tx: Transaction): TransactionResult =>
-      this.#presaleCall(
+    const rates = rateCalls(this.core, options.fees);
+    const { presale } = options;
+    return (tx: Transaction): void => {
+      this.#call(
         tx,
-        "commit_open",
+        "set_protocol_fees",
         [
-          this.#presale(tx, options),
+          "objectId" in presale ? deploymentObject(tx, presale, true) : presale,
           this.#version(tx),
-          options.quote,
+          tx.object(options.adminWitness),
+          deploymentObject(tx, this.deployment.feePolicy, false),
+          ...rates.map((rate) => rate(tx)),
           tx.object.clock(),
         ],
         options,
       );
+    };
+  }
+
+  // Sale.
+
+  /** `commit_open`; returns the `Coin<Quote>` a hard cap did not accept. */
+  commitOpen(options: PresaleInput & { quoteIn: TransactionArgument }) {
+    return this.#presaleCall(options, "commit_open", (tx) => [
+      options.quoteIn,
+      tx.object.clock(),
+    ]);
   }
 
   /** `commit_allowlisted` with the sender's leaf; returns the change coin. */
   commitAllowlisted(
-    options: LaunchTypes & {
-      presale: SharedObjectReference<true>;
-      quote: TransactionArgument;
+    options: PresaleInput & {
+      quoteIn: TransactionArgument;
       allowlist: AllowlistProof;
     },
   ) {
     const { index, walletCap, proof } = options.allowlist;
     requireU64("index", index);
     requireU64("walletCap", walletCap);
-    const siblings = digests(proof);
-    return (tx: Transaction): TransactionResult =>
-      this.#presaleCall(
-        tx,
-        "commit_allowlisted",
-        [
-          this.#presale(tx, options),
-          this.#version(tx),
-          options.quote,
-          tx.pure.u64(index),
-          tx.pure.u64(walletCap),
-          tx.pure.vector("vector<u8>", siblings),
-          tx.object.clock(),
-        ],
-        options,
-      );
-  }
-
-  /** `commit_uncapped` once a phase open to anyone started; returns the change coin. */
-  commitUncapped(
-    options: LaunchTypes & {
-      presale: SharedObjectReference<true>;
-      quote: TransactionArgument;
-    },
-  ) {
-    return (tx: Transaction): TransactionResult =>
-      this.#presaleCall(
-        tx,
-        "commit_uncapped",
-        [
-          this.#presale(tx, options),
-          this.#version(tx),
-          options.quote,
-          tx.object.clock(),
-        ],
-        options,
-      );
-  }
-
-  /** `settle`: funds or cancels the sale after its window. Anyone may call. */
-  settle(options: LaunchTypes & { presale: SharedObjectReference<true> }) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "settle",
-        [this.#presale(tx, options), this.#version(tx), tx.object.clock()],
-        options,
-      );
-    };
-  }
-
-  /** `cancel_unlaunched`: from the LP deadline, cancels an unmigrated funded sale. */
-  cancelUnlaunched(
-    options: LaunchTypes & { presale: SharedObjectReference<true> },
-  ) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "cancel_unlaunched",
-        [this.#presale(tx, options), this.#version(tx), tx.object.clock()],
-        options,
-      );
-    };
-  }
-
-  /**
-   * `claim`: pays `participant` its Quote refund and its tokens, or under
-   * participant vesting locks the tokens in a new shared schedule that starts
-   * at this claim. Anyone may relay.
-   */
-  claim(
-    options: LaunchTypes & {
-      presale: SharedObjectReference<true>;
-      participant: string;
-    },
-  ) {
-    const participant = normalizeSuiAddress(options.participant);
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "claim",
-        [
-          this.#presale(tx, options),
-          this.#version(tx),
-          tx.pure.address(participant),
-          tx.object.clock(),
-        ],
-        options,
-      );
-    };
-  }
-
-  /** `destroy_cap`: deletes the `PresaleCap` of a cancelled sale. */
-  destroyCap(
-    options: LaunchTypes & {
-      presale: SharedObjectReference;
-      presaleCap: TransactionObjectInput;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "destroy_cap",
-        [
-          sharedObject(
-            tx,
-            "presale",
-            { ...options.presale, mutable: false },
-            false,
-          ),
-          tx.object(options.presaleCap),
-        ],
-        options,
-      );
-    };
-  }
-
-  /**
-   * `cetus::migrate<Meme, Quote, CoinA, CoinB>`: creates the reserved Cetus
-   * pool, seeds full range, burns the position through LP Burn into a new
-   * `Vault`. The coin order comes from `cetusMemeSide`. Anyone may call.
-   */
-  migrateCetus(
-    options: LaunchTypes & {
-      presale: SharedObjectReference<true>;
-      cetusConfig: SharedObjectReference<false>;
-      cetusPools: SharedObjectReference<true>;
-      /** Cetus LP Burn `lp_burn::BurnManager`. */
-      burnManager: SharedObjectReference<true>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): void => {
-      // Cetus seeds a new pool's tick skip list from the clock, so its storage
-      // differs between simulation and execution by up to 18 bytes, more than
-      // the default budget's headroom: budget this transaction at gross cost.
-      tx.addBuildPlugin(grossGasBudget());
-      tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::migrate`,
-        typeArguments: cetusTypeArguments(types),
-        arguments: [
-          this.#presale(tx, options),
-          this.#version(tx),
-          this.#feePolicy(tx),
-          deploymentObject(tx, this.deployment.venueConfig, false),
-          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
-          sharedObject(tx, "cetusPools", options.cetusPools, true),
-          sharedObject(tx, "burnManager", options.burnManager, true),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-
-  /**
-   * `bluefin::migrate`: creates `Pool<Meme, Quote>`, seeds full range, and seals
-   * the position in a new `Vault`. `creationFee` must be exactly
-   * Bluefin's configured SUI pool-creation fee. Anyone may call.
-   */
-  migrateBluefin(
-    options: LaunchTypes & {
-      presale: SharedObjectReference<true>;
-      memeCurrency: SharedObjectReference<false>;
-      quoteCurrency: SharedObjectReference<false>;
-      bluefinConfig: SharedObjectReference<true>;
-      creationFee: TransactionArgument;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "migrate",
-        [
-          this.#presale(tx, options),
-          this.#version(tx),
-          this.#feePolicy(tx),
-          deploymentObject(tx, this.deployment.venueConfig, false),
-          sharedObject(tx, "memeCurrency", options.memeCurrency, false),
-          sharedObject(tx, "quoteCurrency", options.quoteCurrency, false),
-          sharedObject(tx, "bluefinConfig", options.bluefinConfig, true),
-          options.creationFee,
-          tx.object.clock(),
-        ],
-        options,
-        "bluefin",
-      );
-    };
-  }
-
-  /**
-   * `blast_presale::pay_protocol_fees_with_partner`: once a partnered sale migrates, pays its
-   * partner its applied cut of Blast's raise fee, rounded down, and
-   * Blast the rest and its token share. Anyone may call it, once.
-   */
-  payProtocolFeesWithPartner(
-    options: LaunchTypes & {
-      presale: SharedObjectReference<true>;
-      partner: SharedObjectReference<false>;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "pay_protocol_fees_with_partner",
-        [
-          this.#presale(tx, options),
-          this.#version(tx),
-          this.#feePolicy(tx),
-          sharedObject(tx, "partner", options.partner, false),
-        ],
-        options,
-      );
-    };
-  }
-
-  /**
-   * `presale_vault::pay_protocol_lp_fees_with_partner`: pays a partnered
-   * vault's held Blast LP fees, the partner its applied cut of each asset,
-   * rounded down, and Blast the rest. Anyone may call it; holding nothing
-   * pays nothing.
-   */
-  payProtocolLpFeesWithPartner(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      partner: SharedObjectReference<false>;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "pay_protocol_lp_fees_with_partner",
-        [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          this.#feePolicy(tx),
-          sharedObject(tx, "partner", options.partner, false),
-        ],
-        options,
-        "presale_vault",
-      );
-    };
-  }
-
-  /** Schedules a creator split and next notice; waits the currently applied notice. */
-  scheduleFeeSplit(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      presaleCap: TransactionObjectInput;
-      feeRecipients: readonly BpsShare[];
-      holderRewardsBps: bigint;
-      delayMs: bigint;
-    },
-  ) {
-    const split = this.feeSplit(
-      options.feeRecipients,
-      options.holderRewardsBps,
-    );
-    const delay = requireU64("delayMs", options.delayMs);
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "schedule_fee_split",
-        [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          tx.object(options.presaleCap),
-          tx.add(split),
-          tx.pure.u64(delay),
-          tx.object.clock(),
-        ],
-        options,
-        "presale_vault",
-      );
-    };
-  }
-
-  cancelFeeSplit(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      presaleCap: TransactionObjectInput;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "cancel_fee_split",
-        [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          tx.object(options.presaleCap),
-        ],
-        options,
-        "presale_vault",
-      );
-    };
-  }
-
-  /** Aftermath fees are coins delivered to the vault; activation splits each later receipt under the active split. */
-  applyAftermathFeeSplit(
-    options: LaunchTypes & { vault: SharedObjectReference<true> },
-  ) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "apply_fee_split",
-        [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          tx.object.clock(),
-        ],
-        options,
-        "aftermath",
-      );
-    };
-  }
-
-  settleAndApplyCetusFeeSplit(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      cetusConfig: SharedObjectReference<false>;
-      burnManager: SharedObjectReference<false>;
-      pool: SharedObjectReference<true>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::settle_and_apply_fee_split`,
-        typeArguments: cetusTypeArguments(types),
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          this.#feePolicy(tx),
-          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
-          sharedObject(tx, "burnManager", options.burnManager, false),
-          sharedObject(tx, "pool", options.pool, true),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-
-  settleAndApplyBluefinFeeSplit(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      bluefinConfig: SharedObjectReference<false>;
-      pool: SharedObjectReference<true>;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "settle_and_apply_fee_split",
-        [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          this.#feePolicy(tx),
-          sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
-          sharedObject(tx, "pool", options.pool, true),
-          tx.object.clock(),
-        ],
-        options,
-        "bluefin",
-      );
-    };
-  }
-
-  /**
-   * `cetus::collect_fees`: pays Blast, or holds its LP fees on a partnered
-   * vault, then pays every fee recipient and keeps the holder share.
-   */
-  collectCetusFees(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      cetusConfig: SharedObjectReference<false>;
-      burnManager: SharedObjectReference<false>;
-      pool: SharedObjectReference<true>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::collect_fees`,
-        typeArguments: cetusTypeArguments(types),
-        arguments: [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          this.#feePolicy(tx),
-          sharedObject(tx, "cetusConfig", options.cetusConfig, false),
-          sharedObject(tx, "burnManager", options.burnManager, false),
-          sharedObject(tx, "pool", options.pool, true),
-        ],
-      });
-    };
-  }
-
-  /**
-   * `bluefin::collect_fees`: pays Blast, or holds its LP fees on a partnered
-   * vault, then pays every fee recipient and keeps the holder share.
-   */
-  collectBluefinFees(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      bluefinConfig: SharedObjectReference<false>;
-      pool: SharedObjectReference<true>;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "collect_fees",
-        [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          this.#feePolicy(tx),
-          sharedObject(tx, "bluefinConfig", options.bluefinConfig, false),
-          sharedObject(tx, "pool", options.pool, true),
-          tx.object.clock(),
-        ],
-        options,
-        "bluefin",
-      );
-    };
-  }
-
-  /**
-   * `cetus::new_vault`: burns the caller's own Cetus `position` in `pool`
-   * through Cetus LP Burn and seals the proof in a new shared `Vault` that
-   * splits its LP fees by the fee split, after Blast's current rates. The
-   * coin order comes from `cetusMemeSide`. Blast must allow Quote and the
-   * Cetus migrator, and accept `partnerId` when given (contracts ADR 0109).
-   */
-  newCetusVault(
-    options: LaunchTypes & {
-      position: TransactionObjectInput;
-      feeRecipients: readonly BpsShare[];
-      holderRewardsBps: bigint;
-      partnerId?: string | null;
-      pool: SharedObjectReference<false>;
-      /** Cetus LP Burn `lp_burn::BurnManager`. */
-      burnManager: SharedObjectReference<true>;
-    },
-  ) {
-    const types = normalizeLaunchTypes(options);
-    const partnerId = optionalObjectId(options.partnerId);
-    return (tx: Transaction): void => {
-      tx.moveCall({
-        target: `${this.deployment.packageId}::cetus::new_vault`,
-        typeArguments: cetusTypeArguments(types),
-        arguments: [
-          tx.object(options.position),
-          this.#version(tx),
-          tx.add(
-            this.feeSplit(options.feeRecipients, options.holderRewardsBps),
-          ),
-          tx.pure.option("address", partnerId),
-          this.#creationPolicy(tx),
-          this.#feePolicy(tx),
-          sharedObject(tx, "pool", options.pool, false),
-          sharedObject(tx, "burnManager", options.burnManager, true),
-          tx.object.clock(),
-        ],
-      });
-    };
-  }
-
-  /**
-   * `bluefin::new_vault`: seals the caller's own Bluefin `position` in `pool`,
-   * whose first coin must be Meme, in a new shared `Vault` splitting its LP
-   * fees by the fee split, after Blast's current rates (contracts ADR 0109).
-   * Accepts an existing shared pool or a fresh pool handle in this PTB.
-   */
-  newBluefinVault(
-    options: LaunchTypes & {
-      position: TransactionObjectInput;
-      feeRecipients: readonly BpsShare[];
-      holderRewardsBps: bigint;
-      partnerId?: string | null;
-      pool: SharedObjectReference<false> | TransactionObjectArgument;
-    },
-  ) {
-    const partnerId = optionalObjectId(options.partnerId);
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "new_vault",
-        [
-          tx.object(options.position),
-          this.#version(tx),
-          tx.add(
-            this.feeSplit(options.feeRecipients, options.holderRewardsBps),
-          ),
-          tx.pure.option("address", partnerId),
-          this.#creationPolicy(tx),
-          this.#feePolicy(tx),
-          "objectId" in options.pool
-            ? sharedObject(tx, "pool", options.pool, false)
-            : tx.object(options.pool),
-          tx.object.clock(),
-        ],
-        options,
-        "bluefin",
-      );
-    };
-  }
-
-  /** `presale_vault::claim_migration_residuals`; returns `(Coin<Meme>, Coin<Quote>)`. */
-  claimMigrationResiduals(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      presaleCap: TransactionObjectInput;
-    },
-  ) {
-    return (tx: Transaction): TransactionResult =>
-      this.#presaleCall(
-        tx,
-        "claim_migration_residuals",
-        [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          tx.object(options.presaleCap),
-        ],
-        options,
-        "presale_vault",
-      );
-  }
-
-  /**
-   * `blast_presale::set_protocol_fees`: replaces one sale's Blast rates before
-   * its window starts, either once shared or, in its creation PTB, before
-   * `share` (with the `Presale` result as `presale`). Blast's token difference moves to or from the buyers'
-   * sale allocation and its raise difference to or from the LP's Quote, each
-   * rounded down. The contract applies `scheduleProtocolFees`'s bounds and rejects
-   * an unchanged set, a started sale, an LP left without Quote or an
-   * unpoolable price, and buyers left without tokens. Once the sale is shared
-   * it may only lower each rate (`EProtocolFeesIncreased`).
-   */
-  setPresaleProtocolFees(
-    options: LaunchTypes & {
-      presale: SharedObjectReference<true> | TransactionArgument;
-      adminWitness: TransactionObjectInput;
-      fees: ProtocolFees;
-    },
-  ) {
-    const { presale } = options;
-    const { raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps } =
-      cappedProtocolFees(options.fees);
-    const rates = [raiseBps, tokenBps, lpFeeMemeBps, lpFeeQuoteBps].map(
-      (rate) => this.bps(rate),
-    );
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "set_protocol_fees",
-        [
-          "objectId" in presale ? this.#presale(tx, { presale }) : presale,
-          this.#version(tx),
-          tx.object(options.adminWitness),
-          this.#feePolicy(tx),
-          ...rates.map((rate) => tx.add(rate)),
-          tx.object.clock(),
-        ],
-        options,
-      );
-    };
-  }
-
-  /** `creation_policy::set_quote_allowed<Quote>`: whether presales created afterward may raise it. */
-  setQuoteAllowed(options: {
-    adminWitness: TransactionObjectInput;
-    quoteType: string;
-    allowed: boolean;
-  }) {
-    const quoteType = normalizeStructTag(options.quoteType);
-    return (tx: Transaction): void => {
-      this.#setAllowed(tx, "set_quote_allowed", quoteType, options);
-    };
-  }
-
-  /** `creation_policy::add_partner`: new presales may name `partner` at once. */
-  addPartner(options: {
-    adminWitness: TransactionObjectInput;
-    partner: SharedObjectReference<false>;
-  }) {
-    return (tx: Transaction): void => {
-      this.#partnerCall(tx, "add_partner", options, []);
-    };
-  }
-
-  /**
-   * `creation_policy::remove_partner`: new presales stop naming `partner`
-   * after `PARTNER_DELAY_MS`; sales that name it keep paying it.
-   */
-  removePartner(options: {
-    adminWitness: TransactionObjectInput;
-    partner: SharedObjectReference<false>;
-  }) {
-    return (tx: Transaction): void => {
-      this.#partnerCall(tx, "remove_partner", options, [tx.object.clock()]);
-    };
-  }
-
-  /**
-   * `holder_rewards::schedule_round` (`RewardsAdmin`): schedules a round from
-   * a manifest built with `PRESALE_REWARD_LEAF_DOMAIN`, replacing any
-   * scheduled round or notice change. Nothing is reserved until
-   * `publishHolderRewardRound`, which anyone may call once the vault's round
-   * notice (two hours from creation) has passed; claims stay open for
-   * `claimWindowMs` from publication. `gasReserveAmount` may be at most 10% of
-   * the manifest's Quote, or scheduling aborts with
-   * `presale_vault::EGasReserveTooLarge` (12). Rounds pay only Quote (holder
-   * Meme fees go to the treasury): a manifest with a nonzero Meme amount is
-   * rejected here, as the contract would with
-   * `presale_vault::EMemeRewardsUnsupported` (13).
-   */
-  scheduleHolderRewardRound(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-      manifest: RewardManifest | RewardManifestSummary;
-      gasReserveAmount: bigint;
-      expectedTreasury: string;
-      claimWindowMs: bigint;
-    },
-  ) {
-    const manifest =
-      "allocations" in options.manifest
-        ? validateRewardManifest(options.manifest, PRESALE_REWARD_LEAF_DOMAIN)
-        : validateRewardManifestSummary(
-            options.manifest,
-            PRESALE_REWARD_LEAF_DOMAIN,
-          );
-    const leafCount =
-      "allocations" in manifest
-        ? manifest.allocations.length
-        : manifest.leafCount;
-    if (
-      rewardAddress(manifest.vaultId) !== rewardAddress(options.vault.objectId)
-    )
-      throw new TypeError("manifest belongs to another vault");
-    if (BigInt(manifest.memeAmount) !== 0n)
-      throw new RangeError("presale holder rounds pay only Quote");
-    const expectedTreasury = normalizeSuiAddress(options.expectedTreasury);
-    if (!isValidSuiAddress(expectedTreasury))
-      throw new TypeError("invalid expectedTreasury address");
-    const gasReserveAmount = requireU64(
-      "gasReserveAmount",
-      options.gasReserveAmount,
-    );
-    const claimWindowMs = requireU64("claimWindowMs", options.claimWindowMs);
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "schedule_round",
-        [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          tx.object(options.adminWitness),
-          tx.pure.u64(manifest.number),
-          tx.pure.u64(manifest.startCheckpoint),
-          tx.pure.u64(manifest.endCheckpoint),
-          tx.pure.vector("u8", rewardDigest(manifest.root)),
-          tx.pure.vector("u8", rewardDigest(manifest.manifestDigest)),
-          tx.pure.u64(leafCount),
-          tx.pure.u64(manifest.memeAmount),
-          tx.pure.u64(manifest.quoteAmount),
-          tx.pure.u64(gasReserveAmount),
-          tx.pure.u64(claimWindowMs),
-          tx.pure.address(expectedTreasury),
-          tx.object.clock(),
-        ],
-        options,
-        "holder_rewards",
-      );
-    };
-  }
-
-  /**
-   * `holder_rewards::publish_round`: anyone publishes the vault's ready
-   * round, reserving its budget and sharing the `Round`. It aborts unless
-   * the `FeePolicy` destination is still the round's expected treasury.
-   */
-  publishHolderRewardRound(
-    options: LaunchTypes & { vault: SharedObjectReference<true> },
-  ) {
-    return this.#roundCall("publish_round", options, (tx) => [
-      this.#feePolicy(tx),
+    const siblings = proof.map((sibling) => {
+      const bytes = fromHex(sibling);
+      if (bytes.length !== 32) throw new RangeError("a proof node is 32 bytes");
+      return Array.from(bytes);
+    });
+    return this.#presaleCall(options, "commit_allowlisted", (tx) => [
+      options.quoteIn,
+      tx.pure.u64(index),
+      tx.pure.u64(walletCap),
+      tx.pure.vector("vector<u8>", siblings),
       tx.object.clock(),
     ]);
   }
 
-  /** `holder_rewards::cancel_round` (`CancelAdmin`): discards the scheduled round, even a ready one. */
-  cancelHolderRewardRound(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-    },
-  ) {
-    return this.#roundCall("cancel_round", options, (tx) => [
-      tx.object(options.adminWitness),
+  /** `commit_uncapped` once a phase open to anyone started; returns the change coin. */
+  commitUncapped(options: PresaleInput & { quoteIn: TransactionArgument }) {
+    return this.#presaleCall(options, "commit_uncapped", (tx) => [
+      options.quoteIn,
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `settle`: funds or cancels the sale after its window, or once it can close early. */
+  settle(options: PresaleInput) {
+    return this.#presaleCall(options, "settle", (tx) => [tx.object.clock()]);
+  }
+
+  /** `cancel_unlaunched`: from the LP deadline, cancels an unmigrated funded sale. */
+  cancelUnlaunched(options: PresaleInput) {
+    return this.#presaleCall(options, "cancel_unlaunched", (tx) => [
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `claim`: pays or vests `participant`'s tokens and refunds its Quote. Anyone may relay. */
+  claim(options: PresaleInput & { participant: string }) {
+    const participant = normalizeSuiAddress(options.participant);
+    return this.#presaleCall(options, "claim", (tx) => [
+      tx.pure.address(participant),
+      tx.object.clock(),
     ]);
   }
 
   /**
-   * `holder_rewards::schedule_round_delay` (`RewardsAdmin`): proposes the
-   * vault's next round notice after the applied one, replacing any scheduled
-   * round.
+   * `migrate(presale, package_version, treasury, clock)`: pays Blast's and
+   * the raise recipients' shares (or holds Blast's for a partnered sale),
+   * releases the recipients' tokens and returns the `Migration<SaleToken,
+   * Quote>` the sale's venue must redeem in the same PTB.
    */
-  scheduleHolderRewardRoundDelay(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-      delayMs: bigint;
-    },
+  migrate(options: PresaleInput) {
+    return this.#presaleCall(options, "migrate", (tx) => [
+      deploymentObject(tx, this.deployment.core.treasury, false),
+      tx.object.clock(),
+    ]);
+  }
+
+  /**
+   * `prove_owner(presale, package_version, cap)`: the `OwnerProof` the sale's
+   * vault takes for one owner call in the same PTB.
+   */
+  proveOwner(options: PresaleInput & { presaleCap: TransactionObjectInput }) {
+    return (tx: Transaction): TransactionResult =>
+      this.#call(
+        tx,
+        "prove_owner",
+        [
+          deploymentObject(tx, options.presale, false),
+          this.#version(tx),
+          tx.object(options.presaleCap),
+        ],
+        options,
+      );
+  }
+
+  /**
+   * `pay_protocol_fees_with_partner(presale, package_version, treasury,
+   * partner)`: pays a migrated partnered sale's held Blast fees, the partner
+   * its cut of each rounded down and the treasury the rest. Anyone may call.
+   */
+  payProtocolFeesWithPartner(
+    options: PresaleInput & { partner: SharedObjectIdentity },
   ) {
+    return this.#presaleCall(
+      options,
+      "pay_protocol_fees_with_partner",
+      (tx) => [
+        deploymentObject(tx, this.deployment.core.treasury, false),
+        deploymentObject(tx, options.partner, false),
+      ],
+    );
+  }
+
+  /** `destroy_cap(presale, cap)`: deletes a cancelled sale's `PresaleCap`. */
+  destroyCap(options: PresaleInput & { presaleCap: TransactionObjectInput }) {
+    return (tx: Transaction): void => {
+      this.#call(
+        tx,
+        "destroy_cap",
+        [
+          deploymentObject(tx, options.presale, false),
+          tx.object(options.presaleCap),
+        ],
+        options,
+      );
+    };
+  }
+
+  // `creation_policy`.
+
+  /** `creation_policy::set_quote_allowed<Quote>` (`ListingAdmin`). */
+  setQuoteAllowed(options: {
+    quoteType: string;
+    adminWitness: TransactionObjectInput;
+    allowed: boolean;
+  }) {
+    return this.#policyCall(
+      "set_quote_allowed",
+      [normalizeStructTag(options.quoteType)],
+      (tx) => [tx.object(options.adminWitness), tx.pure.bool(options.allowed)],
+    );
+  }
+
+  /** `creation_policy::schedule_venue<Venue>` (`VenueAdmin`). */
+  scheduleVenue(options: {
+    venueType: string;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return this.#policyCall(
+      "schedule_venue",
+      [venueType(options.venueType)],
+      (tx) => [tx.object(options.adminWitness), tx.object.clock()],
+    );
+  }
+
+  /** `creation_policy::apply_venue<Venue>`: anyone, once ready. */
+  applyVenue(options: { venueType: string }) {
+    return this.#policyCall(
+      "apply_venue",
+      [venueType(options.venueType)],
+      (tx) => [tx.object.clock()],
+    );
+  }
+
+  /** `creation_policy::cancel_venue<Venue>` (`CancelAdmin`). */
+  cancelVenue(options: {
+    venueType: string;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return this.#policyCall(
+      "cancel_venue",
+      [venueType(options.venueType)],
+      (tx) => [tx.object(options.adminWitness)],
+    );
+  }
+
+  /** `creation_policy::remove_venue<Venue>` (`VenueAdmin`): at once, for new sales. */
+  removeVenue(options: {
+    venueType: string;
+    adminWitness: TransactionObjectInput;
+  }) {
+    return this.#policyCall(
+      "remove_venue",
+      [venueType(options.venueType)],
+      (tx) => [tx.object(options.adminWitness)],
+    );
+  }
+
+  /** `creation_policy::schedule_venue_delay` (`VenueAdmin`). */
+  scheduleVenueDelay(options: {
+    adminWitness: TransactionObjectInput;
+    delayMs: bigint;
+  }) {
     const delayMs = requireU64("delayMs", options.delayMs);
-    return this.#roundCall("schedule_round_delay", options, (tx) => [
+    return this.#policyCall("schedule_venue_delay", [], (tx) => [
       tx.object(options.adminWitness),
       tx.pure.u64(delayMs),
       tx.object.clock(),
     ]);
   }
 
-  /** `holder_rewards::apply_round_delay`: anyone applies a ready round notice. */
-  applyHolderRewardRoundDelay(
-    options: LaunchTypes & { vault: SharedObjectReference<true> },
-  ) {
-    return this.#roundCall("apply_round_delay", options, (tx) => [
+  /** `creation_policy::apply_venue_delay`: anyone, once ready. */
+  applyVenueDelay() {
+    return this.#policyCall("apply_venue_delay", [], (tx) => [
       tx.object.clock(),
     ]);
   }
 
-  /** `holder_rewards::cancel_round_delay` (`CancelAdmin`). */
-  cancelHolderRewardRoundDelay(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-    },
-  ) {
-    return this.#roundCall("cancel_round_delay", options, (tx) => [
+  /** `creation_policy::cancel_venue_delay` (`CancelAdmin`). */
+  cancelVenueDelay(options: { adminWitness: TransactionObjectInput }) {
+    return this.#policyCall("cancel_venue_delay", [], (tx) => [
       tx.object(options.adminWitness),
     ]);
   }
 
-  /**
-   * `holder_rewards::claim`: relays one proof; the round pays its beneficiary.
-   * It aborts with `holder_rewards::EClaimsClosed` (14) once the round's claim
-   * deadline is reached.
-   */
-  claimHolderReward(
-    options: LaunchTypes & {
-      round: SharedObjectReference<true>;
-      allocation: RewardProof;
-    },
-  ) {
-    const { allocation } = options;
-    const index = requireU64("index", BigInt(allocation.index));
-    const memeAmount = requireU64("memeAmount", BigInt(allocation.memeAmount));
-    const quoteAmount = requireU64(
-      "quoteAmount",
-      BigInt(allocation.quoteAmount),
-    );
-    const beneficiary = rewardAddress(allocation.beneficiary);
-    const proof = digests(allocation.proof);
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "claim",
-        [
-          sharedObject(tx, "round", options.round, true),
-          this.#version(tx),
-          tx.pure.u64(index),
-          tx.pure.address(beneficiary),
-          tx.pure.u64(memeAmount),
-          tx.pure.u64(quoteAmount),
-          tx.pure.vector("vector<u8>", proof),
-          tx.object.clock(),
-        ],
-        options,
-        "holder_rewards",
-      );
-    };
-  }
-
-  /**
-   * `holder_rewards::close_round`: after the claim deadline, deletes the round
-   * and returns its unclaimed balances to the vault. Anyone may call.
-   */
-  closeHolderRewardRound(
-    options: LaunchTypes & {
-      round: SharedObjectReference<true>;
-      vault: SharedObjectReference<true>;
-    },
-  ) {
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "close_round",
-        [
-          sharedObject(tx, "round", options.round, true),
-          this.#version(tx),
-          sharedObject(tx, "vault", options.vault, true),
-          tx.object.clock(),
-        ],
-        options,
-        "holder_rewards",
-      );
-    };
-  }
-
-  /** One terminal reimbursement to the round's bound treasury; contract caps it by reserved Quote atoms. */
-  settleHolderRewardGasReserve(
-    options: LaunchTypes & {
-      round: SharedObjectReference<true>;
-      vault: SharedObjectReference<true>;
-      adminWitness: TransactionObjectInput;
-      reimbursementAmount: bigint;
-    },
-  ) {
-    const reimbursement = requireU64(
-      "reimbursementAmount",
-      options.reimbursementAmount,
-    );
-    return (tx: Transaction): void => {
-      this.#presaleCall(
-        tx,
-        "settle_gas_reserve",
-        [
-          sharedObject(tx, "round", options.round, true),
-          this.#version(tx),
-          tx.object(options.adminWitness),
-          sharedObject(tx, "vault", options.vault, true),
-          tx.pure.u64(reimbursement),
-        ],
-        options,
-        "holder_rewards",
-      );
-    };
-  }
-
-  /** Permissionless actual close returns holder custody and any unsettled reserve to the bound vault. */
-
-  #newPresale(
-    start: (tx: Transaction) => TransactionResult,
-    options: PresaleTerms,
-  ) {
-    return (tx: Transaction): TransactionResult => {
-      const initializer = tx.add(start);
-      tx.add(this.configurePresale({ ...options, initializer }));
-      return tx.add(this.finalizePresale({ ...options, initializer }));
-    };
-  }
-
-  #aftermath(): AftermathPresaleDeployment {
-    const { aftermath } = this.deployment;
-    if (!aftermath) {
-      throw new TypeError("deployment.aftermath is required for Aftermath");
-    }
-    return aftermath;
-  }
-
-  /** `<SaleToken, Quote>`, the vendor's `new` type arguments. */
-  #saleTypes(options: LaunchTypes): string[] {
-    const { memeType, quoteType } = normalizeLaunchTypes(options);
-    return [memeType, quoteType];
-  }
-
-  /** `<Lp, SaleToken, Quote>`, the vendor's `migrate` type arguments. */
-  #aftermathTypes(options: LaunchTypes & { lpType: string }): string[] {
-    return [normalizeStructTag(options.lpType), ...this.#saleTypes(options)];
-  }
-
-  #setAllowed(
-    tx: Transaction,
-    functionName: string,
-    typeArgument: string,
-    options: { adminWitness: TransactionObjectInput; allowed: boolean },
-  ): void {
-    tx.moveCall({
-      target: `${this.deployment.packageId}::creation_policy::${functionName}`,
-      typeArguments: [typeArgument],
-      arguments: [
-        this.#creationPolicy(tx, true),
-        this.#version(tx),
-        tx.object(options.adminWitness),
-        tx.pure.bool(options.allowed),
-      ],
-    });
-  }
-
-  #partnerCall(
-    tx: Transaction,
-    functionName: "add_partner" | "remove_partner",
-    options: {
-      adminWitness: TransactionObjectInput;
-      partner: SharedObjectReference<false>;
-    },
-    trailing: TransactionArgument[],
-  ): void {
-    tx.moveCall({
-      target: `${this.deployment.packageId}::creation_policy::${functionName}`,
-      arguments: [
-        this.#creationPolicy(tx, true),
-        this.#version(tx),
-        tx.object(options.adminWitness),
-        sharedObject(tx, "partner", options.partner, false),
-        ...trailing,
-      ],
-    });
-  }
-
-  #vestingTerms(tx: Transaction, terms: VestingTerms): TransactionResult {
-    return this.#presaleCall(tx, "vesting_terms", [
-      tx.pure.u64(terms.cliffMs),
-      tx.pure.u64(terms.periodMs),
-      tx.pure.u64(terms.periods),
+  /** `creation_policy::add_partner` (`FeeAdmin`): new sales may name `partner` at once. */
+  addPartner(options: {
+    adminWitness: TransactionObjectInput;
+    partner: SharedObjectIdentity;
+  }) {
+    return this.#policyCall("add_partner", [], (tx) => [
+      tx.object(options.adminWitness),
+      deploymentObject(tx, options.partner, false),
     ]);
   }
 
-  /** Calls `module::functionName` of this package, typed `<Meme, Quote>` when given. */
-  #presaleCall(
-    tx: Transaction,
-    functionName: string,
-    args: TransactionArgument[],
-    types?: LaunchTypes,
-    module = "blast_presale",
-  ): TransactionResult {
-    const normalized = types && normalizeLaunchTypes(types);
-    return tx.moveCall({
-      target: `${this.deployment.packageId}::${module}::${functionName}`,
-      typeArguments: normalized
-        ? [normalized.memeType, normalized.quoteType]
-        : [],
-      arguments: args,
-    });
+  /**
+   * `creation_policy::remove_partner` (`FeeAdmin`): new sales stop naming
+   * `partner` after `blast_partners`' delay; sales naming it keep paying it.
+   */
+  removePartner(options: {
+    adminWitness: TransactionObjectInput;
+    partner: SharedObjectIdentity;
+  }) {
+    return this.#policyCall("remove_partner", [], (tx) => [
+      tx.object(options.adminWitness),
+      deploymentObject(tx, options.partner, false),
+      tx.object.clock(),
+    ]);
   }
 
-  #roundCall(
+  /**
+   * `creation_policy::unpause(creation_policy, package_version,
+   * unpause_admin, package_admin, fee_policy, bits)` with an
+   * `UnpauseAdmin<BLAST_PRESALE_PACKAGE>` witness: aborts with
+   * `EUnguardedDelay` unless the venue and fee delays are guarded.
+   */
+  unpause(options: { unpauseAdmin: TransactionObjectInput; bits: number }) {
+    const bits = requirePauseBits(options.bits, PRESALE_PAUSE_MASK);
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: this.#target("creation_policy", "unpause"),
+        arguments: [
+          deploymentObject(tx, this.deployment.creationPolicy, false),
+          deploymentObject(tx, this.deployment.packageVersion, true),
+          tx.object(options.unpauseAdmin),
+          deploymentObject(tx, this.deployment.packageAdmin, false),
+          deploymentObject(tx, this.deployment.feePolicy, false),
+          tx.pure.u8(bits),
+        ],
+      });
+    };
+  }
+
+  // `fee_policy`.
+
+  /** `fee_policy::schedule_fees` (`FeeAdmin`): the rates new sales snapshot, after the delay. */
+  scheduleFees(options: {
+    adminWitness: TransactionObjectInput;
+    fees: ProtocolFees;
+    delayMs: bigint;
+  }) {
+    const rates = rateCalls(this.core, options.fees);
+    const delayMs = requireU64("delayMs", options.delayMs);
+    return this.#feePolicyCall("schedule_fees", (tx) => [
+      tx.object(options.adminWitness),
+      ...rates.map((rate) => rate(tx)),
+      tx.pure.u64(delayMs),
+      tx.object.clock(),
+    ]);
+  }
+
+  /** `fee_policy::apply_fees`: anyone, once ready. */
+  applyFees() {
+    return this.#feePolicyCall("apply_fees", (tx) => [tx.object.clock()]);
+  }
+
+  /** `fee_policy::cancel_fees` (`CancelAdmin`). */
+  cancelFees(options: { adminWitness: TransactionObjectInput }) {
+    return this.#feePolicyCall("cancel_fees", (tx) => [
+      tx.object(options.adminWitness),
+    ]);
+  }
+
+  #recipientShares(shares: readonly RecipientShare[]) {
+    const elements = shares.map((share) => this.recipientShare(share));
+    return (tx: Transaction): TransactionResult =>
+      tx.makeMoveVec({
+        type: this.#type("blast_presale::RecipientShare"),
+        elements: elements.map((element) => element(tx)),
+      });
+  }
+
+  #setter(
+    options: Initializer,
     functionName: string,
-    options: LaunchTypes & { vault: SharedObjectReference<true> },
-    extra: (tx: Transaction) => TransactionArgument[],
+    args: (tx: Transaction) => TransactionArgument[],
   ) {
     return (tx: Transaction): void => {
-      this.#presaleCall(
+      this.#call(
         tx,
         functionName,
-        [
-          sharedObject(tx, "vault", options.vault, true),
-          this.#version(tx),
-          ...extra(tx),
-        ],
+        [options.initializer, this.#version(tx), ...args(tx)],
         options,
-        "holder_rewards",
       );
     };
   }
 
-  #presale(
+  /** A call on a shared presale, mutable, after its package version. */
+  #presaleCall(
+    options: PresaleInput,
+    functionName: string,
+    args: (tx: Transaction) => TransactionArgument[],
+  ) {
+    return (tx: Transaction): TransactionResult =>
+      this.#call(
+        tx,
+        functionName,
+        [
+          deploymentObject(tx, options.presale, true),
+          this.#version(tx),
+          ...args(tx),
+        ],
+        options,
+      );
+  }
+
+  #policyCall(
+    functionName: string,
+    typeArguments: string[],
+    args: (tx: Transaction) => TransactionArgument[],
+  ) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: this.#target("creation_policy", functionName),
+        typeArguments,
+        arguments: [
+          deploymentObject(tx, this.deployment.creationPolicy, true),
+          this.#version(tx),
+          ...args(tx),
+        ],
+      });
+    };
+  }
+
+  #feePolicyCall(
+    functionName: string,
+    args: (tx: Transaction) => TransactionArgument[],
+  ) {
+    return (tx: Transaction): void => {
+      tx.moveCall({
+        target: this.#target("fee_policy", functionName),
+        arguments: [
+          deploymentObject(tx, this.deployment.feePolicy, true),
+          this.#version(tx),
+          ...args(tx),
+        ],
+      });
+    };
+  }
+
+  /** Calls `blast_presale::<functionName>`, typed `<SaleToken, Quote>` when given. */
+  #call(
     tx: Transaction,
-    options: { presale: SharedObjectReference<true> },
-  ): TransactionObjectArgument {
-    return sharedObject(tx, "presale", options.presale, true);
+    functionName: string,
+    args: TransactionArgument[],
+    types?: PresaleTypes,
+  ): TransactionResult {
+    return tx.moveCall({
+      target: this.#target("blast_presale", functionName),
+      typeArguments: types ? saleTypeArguments(types) : [],
+      arguments: args,
+    });
   }
 
   #version(tx: Transaction): TransactionObjectArgument {
     return deploymentObject(tx, this.deployment.packageVersion, false);
   }
 
-  #feePolicy(tx: Transaction, mutable = false): TransactionObjectArgument {
-    return deploymentObject(tx, this.deployment.feePolicy, mutable);
-  }
-
-  #creationPolicy(tx: Transaction, mutable = false): TransactionObjectArgument {
-    return deploymentObject(tx, this.deployment.creationPolicy, mutable);
+  #target(module: string, functionName: string): string {
+    return `${this.deployment.packageId}::${module}::${functionName}`;
   }
 
   #type(name: string): string {
@@ -2555,109 +875,205 @@ export class PresaleCalls {
   }
 }
 
-/** Presale policy `configureNow` applies at a zero notice. */
+/** A setter's `PresaleInitializer` and the sale's types. */
+type Initializer = PresaleTypes & { initializer: TransactionArgument };
+
+/** Per-sale terms the `PresaleInitializer` setters record, in setter order. */
+export type PresaleSettings = {
+  tokenSupply: bigint;
+  /** Coin Registry supply state after minting: burn-only when true, else fixed. */
+  burnable: boolean;
+  tokenAllocationBps: bigint;
+  liquidityTokenAllocationBps: bigint;
+  recipientAllocations: readonly RecipientShare[];
+  /** Terms each claim locks a participant's tokens under; null pays them out. */
+  participantVesting: VestingTerms | null;
+  raiseTarget: bigint;
+  raiseAllocations: readonly RecipientShare[];
+  commitmentDurationMs: bigint;
+  liquidityWindowDurationMs: bigint;
+  eligibility: EligibilityPolicy;
+  uncapped: UncappedPhase | null;
+  /** Null overflows for the whole window. */
+  hardCap: HardCap | null;
+  /** The vault's LP-fee split. */
+  feeSplit: FeeSplit;
+  /** A Blast partner the `CreationPolicy` accepts; the sale's partner for good. */
+  partner: SharedObjectIdentity | null;
+};
+
+/** A `MigratorCalls` method's options, less the ones the composition fills. */
+type VenueOptions<
+  Call extends (options: never) => unknown,
+  Filled extends string,
+> = Omit<Parameters<Call>[0], Filled | "memeType" | "quoteType">;
+
+/** The venue a sale is created for and the objects its `prepare` takes. */
+export type PresaleVenueCreation =
+  | ({ venue: "cetus" } & VenueOptions<
+      MigratorCalls["prepareCetus"],
+      "treasuryCap"
+    >)
+  | ({ venue: "bluefin" } & VenueOptions<
+      MigratorCalls["prepareBluefin"],
+      "treasuryCap" | "currency"
+    >)
+  | {
+      venue: "aftermathDao";
+      /** The vendor's `AdminCap`, owned by the sender with the `TreasuryCap`. */
+      adminCap: TransactionObjectInput;
+      /** The verified fresh LP coin whose `CreatePoolCapV2` the sale reserves. */
+      lpCoin: AftermathLpCoin;
+    };
+
+/** The venue a funded sale migrates to and the objects its `migrate` takes. */
+export type PresaleVenueMigration =
+  | ({ venue: "cetus" } & VenueOptions<
+      MigratorCalls["migrateCetus"],
+      "migration"
+    >)
+  | ({ venue: "bluefin" } & VenueOptions<
+      MigratorCalls["migrateBluefin"],
+      "migration" | "creationFee"
+    > & {
+        /** Bluefin's pool creation fee in MIST (`deployments` `bluefinPoolCreationFee`). */
+        creationFee: bigint;
+      })
+  | {
+      venue: "aftermathDao";
+      lpType: string;
+      /** The sale token's shared `PoolCreation<Lp, SaleToken>`. */
+      poolCreation: SharedObjectIdentity;
+    };
+
+/** Presale policy `configureNow` applies on a fresh deployment, at zero delays. */
 export type PresalePolicySettings = {
   /** The `FeePolicy` rates new sales snapshot. */
   fees?: ProtocolFees;
-  /** Where Blast's presale fees are paid. */
-  destination?: string;
-  /** Migration witnesses to admit, by venue or witness type. */
-  migrationWitnesses?: readonly (
-    | PresaleMigrator
-    | { migrationWitnessType: string }
-  )[];
+  /** Quote types to allow or disallow. */
+  quotes?: readonly { quoteType: string; allowed: boolean }[];
+  /** Venue witness types to admit (migrators venues, the vendor's `Venue`). */
+  venueTypes?: readonly string[];
+  /** Blast partners new sales may name. */
+  partners?: readonly SharedObjectIdentity[];
 };
 
 /**
- * The notice `armNotices` gives each named value, in milliseconds. A
- * setting restates its applied value beside its new notice. Upgrade custody
- * is not here: `wrap` starts it at a 48-hour notice, which
- * `scheduleUpgradeDelay` changes only after that notice.
+ * The delays `armNotices` gives the policies, in milliseconds. The fee delay
+ * restates the applied rates beside it, since a schedule proposes both.
  */
 export type PresaleNotices = {
   fees?: { fees: ProtocolFees; delayMs: bigint };
-  destination?: { destination: string; delayMs: bigint };
-  /** The notice for each later migration witness admission. */
-  migrationDelayMs?: bigint;
+  venueDelayMs?: bigint;
 };
 
+/**
+ * Deployment-bound presale PTBs: one-PTB creation and migration through the
+ * sale's venue, owner actions through `prove_owner`, sale calls, and admin
+ * calls signed in with an `AdminCap`.
+ */
 export class PresaleTransactions {
   readonly call: PresaleCalls;
+  readonly admin: AdminCalls;
+  readonly migrators: MigratorCalls;
+  readonly vault: VaultCalls;
+  /** Null until the deployment names the vendor package. */
+  readonly aftermathDaoPresale: AftermathDaoPresaleCalls | null;
   readonly #useGasCoin: boolean;
 
   constructor(deployment: PresaleDeployment, options: CoinSourceOptions = {}) {
     this.call = new PresaleCalls(deployment);
+    const { admin, migrators, vault, aftermathDaoPresale } =
+      this.call.deployment;
+    this.admin = new AdminCalls(admin);
+    this.migrators = new MigratorCalls(migrators);
+    this.vault = new VaultCalls(vault);
+    this.aftermathDaoPresale = aftermathDaoPresale
+      ? new AftermathDaoPresaleCalls(aftermathDaoPresale, this.call.deployment)
+      : null;
     this.#useGasCoin = options.useGasCoin ?? true;
   }
 
   /**
-   * `cetus::new`, every setter (with `set_partner` when `partner` is given),
-   * `finalize`, `share` from `startMs`, and transfers the `PresaleCap` to
-   * `capRecipient`.
+   * One PTB: the venue's `prepare`, `new`, every setter (`set_participant_vesting`,
+   * `set_uncapped_phase`, `set_hard_cap` and `set_partner` when given),
+   * `finalize`, `set_protocol_fees` when `protocolFees` names a `FeeAdmin`
+   * cap, `share` from `commitmentStartsAtMs`, and the `PresaleCap` to
+   * `capRecipient`. The sender holds the zero-supply `TreasuryCap` (and, for
+   * the vendor, its `AdminCap`); `prepare` borrows the cap and `new` takes it.
    */
-  createCetusPresale(
-    options: Parameters<PresaleCalls["newCetusPresale"]>[0] & PresaleCreation,
+  createPresale(
+    options: PresaleTypes &
+      PresaleSettings &
+      PresaleVenueCreation & {
+        treasuryCap: TransactionObjectInput;
+        /** The sale token's confirmed unregulated Coin Registry `Currency`. */
+        currency: SharedObjectIdentity;
+        commitmentStartsAtMs: bigint;
+        capRecipient: string;
+        protocolFees?: { adminCapId: string; fees: ProtocolFees };
+      },
   ): Transaction {
+    const capRecipient = normalizeSuiAddress(options.capRecipient);
     const tx = new Transaction();
-    const created = tx.add(this.call.newCetusPresale(options));
-    return this.#shareAndKeepCap(tx, created, options);
-  }
-
-  /**
-   * `bluefin::new`, every setter (with `set_partner` when `partner` is given),
-   * `finalize`, `share` from `startMs`, and transfers the `PresaleCap` to
-   * `capRecipient`.
-   */
-  createBluefinPresale(
-    options: Parameters<PresaleCalls["newBluefinPresale"]>[0] & PresaleCreation,
-  ): Transaction {
-    const tx = new Transaction();
-    const created = tx.add(this.call.newBluefinPresale(options));
-    return this.#shareAndKeepCap(tx, created, options);
-  }
-
-  /** Creates a native sale, shares sale and reservation, and transfers the creator's PresaleCap. */
-  createNativeAftermathPresale(
-    options: NativeAftermathPresaleTerms & PresaleCreation,
-  ): Transaction {
-    const tx = new Transaction();
-    const created = tx.add(this.call.newNativeAftermathPresale(options));
-    const [presale, cap, poolCreation] = moveResults(created, 3);
-    tx.add(this.call.share({ ...options, presale }));
-    tx.add(
-      this.call.shareNativeAftermathPoolCreation({
-        ...options,
-        lpType: options.lpCoin.lpType,
-        poolCreation,
-      }),
-    );
-    tx.transferObjects([cap], normalizeSuiAddress(options.capRecipient));
-    return tx;
-  }
-
-  /**
-   * With the vendor's `AdminCap`: the vendor's `new`, every setter but the
-   * LP-fee split (with `set_partner` when `partner` is given), the vendor's
-   * `finalize`, and `share` from `startMs`. The vendor sends the `PresaleCap`
-   * to its treasury itself.
-   */
-  createAftermathPresale(
-    options: AftermathPresaleTerms & Omit<PresaleCreation, "capRecipient">,
-  ): Transaction {
-    const tx = new Transaction();
-    const presale = tx.add(this.call.newAftermathPresale(options));
-    tx.add(this.call.share({ ...options, presale }));
+    const venueTicket = tx.add(this.#prepare(options));
+    const { call } = this;
+    const initializer = tx.add(call.new({ ...options, venueTicket }));
+    const set = { ...options, initializer };
+    tx.add(call.setSupply(set));
+    tx.add(call.setTokenAllocations(set));
+    if (options.participantVesting) {
+      tx.add(
+        call.setParticipantVesting({
+          ...set,
+          vestingTerms: options.participantVesting,
+        }),
+      );
+    }
+    tx.add(call.setRaise(set));
+    tx.add(call.setWindows(set));
+    tx.add(call.setEligibility(set));
+    if (options.uncapped) {
+      tx.add(call.setUncappedPhase({ ...set, uncapped: options.uncapped }));
+    }
+    if (options.hardCap) {
+      tx.add(
+        call.setHardCap({
+          ...set,
+          startDelayMs: options.hardCap.startsAfterMs,
+          closesWhenFilled: options.hardCap.closesWhenFilled,
+        }),
+      );
+    }
+    tx.add(call.setFeeSplit(set));
+    if (options.partner) {
+      tx.add(call.setPartner({ ...set, partner: options.partner }));
+    }
+    const [presale, presaleCap] = moveResults(tx.add(call.finalize(set)), 2);
+    if (options.protocolFees) {
+      const adminWitness = tx.add(
+        this.#signIn(options.protocolFees.adminCapId, "FeeAdmin"),
+      );
+      tx.add(
+        call.setProtocolFees({
+          ...options,
+          presale,
+          adminWitness,
+          fees: options.protocolFees.fees,
+        }),
+      );
+    }
+    tx.add(call.share({ ...options, presale }));
+    tx.transferObjects([presaleCap], capRecipient);
     return tx;
   }
 
   /**
    * Commits `amount` Quote from the sender's coins through `route` and sends
-   * the returned change (zero outside a hard-capped phase) to `recipient`,
-   * normally the sender.
+   * the returned change (zero outside a hard-capped phase) to `recipient`.
    */
   commit(
-    options: LaunchTypes & {
-      presale: SharedObjectReference<true>;
+    options: PresaleInput & {
       amount: bigint;
       recipient: string;
     } & CoinSourceOptions &
@@ -2669,39 +1085,37 @@ export class PresaleTransactions {
     const amount = requireU64("amount", options.amount);
     const recipient = normalizeSuiAddress(options.recipient);
     const tx = new Transaction();
-    const quote = tx.coin({
+    const quoteIn = tx.coin({
       type: normalizeStructTag(options.quoteType),
       balance: amount,
       useGasCoin: options.useGasCoin ?? this.#useGasCoin,
     });
     const change = tx.add(
       options.route === "allowlisted"
-        ? this.call.commitAllowlisted({ ...options, quote })
+        ? this.call.commitAllowlisted({ ...options, quoteIn })
         : options.route === "open"
-          ? this.call.commitOpen({ ...options, quote })
-          : this.call.commitUncapped({ ...options, quote }),
+          ? this.call.commitOpen({ ...options, quoteIn })
+          : this.call.commitUncapped({ ...options, quoteIn }),
     );
     tx.transferObjects([change], recipient);
     return tx;
   }
 
-  settle(options: Parameters<PresaleCalls["settle"]>[0]): Transaction {
+  settle(options: PresaleInput): Transaction {
     return single(this.call.settle(options));
   }
 
-  cancelUnlaunched(
-    options: Parameters<PresaleCalls["cancelUnlaunched"]>[0],
-  ): Transaction {
+  cancelUnlaunched(options: PresaleInput): Transaction {
     return single(this.call.cancelUnlaunched(options));
   }
 
   /** Relays one claim per participant in a single PTB. */
   claim(
-    options: LaunchTypes & {
-      presale: SharedObjectReference<true>;
-      participants: readonly string[];
-    },
+    options: PresaleInput & { participants: readonly string[] },
   ): Transaction {
+    if (options.participants.length === 0) {
+      throw new RangeError("claim needs a participant");
+    }
     const tx = new Transaction();
     for (const participant of options.participants) {
       tx.add(this.call.claim({ ...options, participant }));
@@ -2710,282 +1124,151 @@ export class PresaleTransactions {
   }
 
   destroyCap(
-    options: LaunchTypes & {
-      presale: SharedObjectReference;
-      presaleCapId: string;
-    },
+    options: PresaleInput & { presaleCap: TransactionObjectInput },
   ): Transaction {
-    return single(
-      this.call.destroyCap({ ...options, presaleCap: options.presaleCapId }),
-    );
-  }
-
-  /** Then pays the sale's partner when `partner` is given; see `payProtocolFeesWithPartner`. */
-  migrateCetus(
-    options: Parameters<PresaleCalls["migrateCetus"]>[0] & PresalePayout,
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.migrateCetus(options));
-    return this.#payProtocolFeesWithPartnerAfter(tx, options);
+    return single(this.call.destroyCap(options));
   }
 
   /**
-   * Pays Bluefin's SUI pool-creation fee as an exact-balance coin,
-   * then the sale's partner when `partner` is given; see `payProtocolFeesWithPartner`.
+   * One PTB, anyone: `settle` first when `settle` is true, then `migrate`, the
+   * venue's `migrate` redeeming its `Migration`, and, when `partner` is the
+   * sale's partner, `pay_protocol_fees_with_partner`.
    */
-  migrateBluefin(
-    options: Omit<
-      Parameters<PresaleCalls["migrateBluefin"]>[0],
-      "creationFee"
-    > & { creationFee: bigint } & PresalePayout &
-      CoinSourceOptions,
-  ): Transaction {
-    requireU64("creationFee", options.creationFee);
-    const tx = new Transaction();
-    const creationFee = tx.coin({
-      type: "0x2::sui::SUI",
-      balance: options.creationFee,
-      useGasCoin: options.useGasCoin ?? this.#useGasCoin,
-    });
-    tx.add(this.call.migrateBluefin({ ...options, creationFee }));
-    return this.#payProtocolFeesWithPartnerAfter(tx, options);
-  }
-
-  migrateNativeAftermath(
-    options: NativeAftermathMigration & PresalePayout,
-  ): Transaction {
-    const tx = single(this.call.migrateNativeAftermath(options));
-    return this.#payProtocolFeesWithPartnerAfter(tx, options);
-  }
-
-  /** Settle a fully funded sale, migrate, then pay its partner when supplied. Underfunding aborts the PTB. */
-  settleAndMigrateNativeAftermath(
-    options: NativeAftermathMigration & PresalePayout,
-  ): Transaction {
-    const tx = single(this.call.settle(options));
-    tx.add(this.call.migrateNativeAftermath(options));
-    return this.#payProtocolFeesWithPartnerAfter(tx, options);
-  }
-
-  collectNativeAftermathFees(
-    options: Parameters<PresaleCalls["collectNativeAftermathFees"]>[0] &
-      PresalePayout,
-  ): Transaction {
-    const tx = single(this.call.collectNativeAftermathFees(options));
-    return this.#payProtocolLpFeesWithPartnerAfter(tx, options);
-  }
-
-  /**
-   * Migrates a funded Aftermath sale, then pays the sale's partner when
-   * `partner` is given; see `payProtocolFeesWithPartner`.
-   */
-  migrateAftermath(options: AftermathMigration & PresalePayout): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.migrateAftermath(options));
-    return this.#payProtocolFeesWithPartnerAfter(tx, options);
-  }
-
-  /**
-   * `settle` and the Aftermath `migrate` in one PTB, then the partner payout
-   * when `partner` is given: the relayer's settle-and-migrate shape. If the
-   * sale settles as cancelled (underfunded), `migrate` aborts and the whole
-   * PTB with it, so settle alone in that case.
-   */
-  settleAndMigrateAftermath(
-    options: AftermathMigration & PresalePayout,
+  migrate(
+    options: PresaleInput &
+      PresaleVenueMigration & {
+        settle?: boolean;
+        partner?: SharedObjectIdentity | null;
+      } & CoinSourceOptions,
   ): Transaction {
     const tx = new Transaction();
-    tx.add(this.call.settle(options));
-    tx.add(this.call.migrateAftermath(options));
-    return this.#payProtocolFeesWithPartnerAfter(tx, options);
+    if (options.settle) tx.add(this.call.settle(options));
+    const migration = tx.add(this.call.migrate(options));
+    const memeTypes = {
+      memeType: options.saleTokenType,
+      quoteType: options.quoteType,
+    };
+    switch (options.venue) {
+      case "cetus":
+        tx.add(
+          this.migrators.migrateCetus({
+            ...memeTypes,
+            migration,
+            cetus: options.cetus,
+          }),
+        );
+        break;
+      case "bluefin": {
+        const creationFee = tx.coin({
+          type: "0x2::sui::SUI",
+          balance: requireU64("creationFee", options.creationFee),
+          useGasCoin: options.useGasCoin ?? this.#useGasCoin,
+        });
+        tx.add(
+          this.migrators.migrateBluefin({
+            ...memeTypes,
+            migration,
+            currency: options.currency,
+            quoteCurrency: options.quoteCurrency,
+            bluefinConfig: options.bluefinConfig,
+            creationFee,
+          }),
+        );
+        break;
+      }
+      case "aftermathDao":
+        tx.add(
+          this.#vendor().migrate({
+            ...options,
+            migration,
+          }),
+        );
+        break;
+    }
+    if (options.partner) {
+      tx.add(
+        this.call.payProtocolFeesWithPartner({
+          ...options,
+          partner: options.partner,
+        }),
+      );
+    }
+    return tx;
   }
 
-  /**
-   * Pays a migrated sale's partner and Blast the shares its migration held.
-   * Use it for a sale another migrator, such as a vendor package's, migrated.
-   */
+  /** `pay_protocol_fees_with_partner` alone, for a migrated partnered sale. */
   payProtocolFeesWithPartner(
-    options: Parameters<PresaleCalls["payProtocolFeesWithPartner"]>[0],
+    options: PresaleInput & { partner: SharedObjectIdentity },
   ): Transaction {
     return single(this.call.payProtocolFeesWithPartner(options));
   }
 
-  /** Then pays the vault's partner when `partner` is given; see `payProtocolLpFeesWithPartner`. */
-  scheduleFeeSplit(
-    options: Parameters<PresaleCalls["scheduleFeeSplit"]>[0],
-  ): Transaction {
-    return single(this.call.scheduleFeeSplit(options));
-  }
-
-  cancelFeeSplit(
-    options: Parameters<PresaleCalls["cancelFeeSplit"]>[0],
-  ): Transaction {
-    return single(this.call.cancelFeeSplit(options));
-  }
-
-  applyAftermathFeeSplit(
-    options: Parameters<PresaleCalls["applyAftermathFeeSplit"]>[0],
-  ): Transaction {
-    return single(this.call.applyAftermathFeeSplit(options));
-  }
-
-  settleAndApplyCetusFeeSplit(
-    options: Parameters<PresaleCalls["settleAndApplyCetusFeeSplit"]>[0],
-  ): Transaction {
-    return single(this.call.settleAndApplyCetusFeeSplit(options));
-  }
-
-  settleAndApplyBluefinFeeSplit(
-    options: Parameters<PresaleCalls["settleAndApplyBluefinFeeSplit"]>[0],
-  ): Transaction {
-    return single(this.call.settleAndApplyBluefinFeeSplit(options));
-  }
-
-  collectCetusFees(
-    options: Parameters<PresaleCalls["collectCetusFees"]>[0] & PresalePayout,
-  ): Transaction {
-    const tx = single(this.call.collectCetusFees(options));
-    return this.#payProtocolLpFeesWithPartnerAfter(tx, options);
-  }
-
-  /** Then pays the vault's partner when `partner` is given; see `payProtocolLpFeesWithPartner`. */
-  collectBluefinFees(
-    options: Parameters<PresaleCalls["collectBluefinFees"]>[0] & PresalePayout,
-  ): Transaction {
-    const tx = single(this.call.collectBluefinFees(options));
-    return this.#payProtocolLpFeesWithPartnerAfter(tx, options);
-  }
-
-  newCetusVault(
-    options: Parameters<PresaleCalls["newCetusVault"]>[0],
-  ): Transaction {
-    return single(this.call.newCetusVault(options));
-  }
-
-  newBluefinVault(
-    options: Parameters<PresaleCalls["newBluefinVault"]>[0],
-  ): Transaction {
-    return single(this.call.newBluefinVault(options));
-  }
-
-  /** Pays a partnered vault's partner and Blast the LP fees its collections held. */
-  payProtocolLpFeesWithPartner(
-    options: Parameters<PresaleCalls["payProtocolLpFeesWithPartner"]>[0],
-  ): Transaction {
-    return single(this.call.payProtocolLpFeesWithPartner(options));
-  }
-
-  claimMigrationResiduals(
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-      presaleCapId: string;
+  /**
+   * `prove_owner` with the `PresaleCap`, then `vault::claim_owner_balances`,
+   * sending both coins to `recipient`. The vault aborts when both owner
+   * balances are zero: read the vault first.
+   */
+  claimOwnerBalances(
+    options: PresaleInput & {
+      presaleCap: TransactionObjectInput;
+      vault: SharedObjectIdentity;
       recipient: string;
     },
   ): Transaction {
+    const recipient = normalizeSuiAddress(options.recipient);
     const tx = new Transaction();
-    const result = tx.add(
-      this.call.claimMigrationResiduals({
-        ...options,
-        presaleCap: options.presaleCapId,
+    const proof = tx.add(this.call.proveOwner(options));
+    const coins = tx.add(
+      this.vault.claimOwnerBalances({ ...this.#vaultInput(options), proof }),
+    );
+    tx.transferObjects(moveResults(coins, 2), recipient);
+    return tx;
+  }
+
+  /** `prove_owner`, then `vault::schedule_fee_split` of a core `fee_split::new`. */
+  scheduleFeeSplit(
+    options: PresaleInput & {
+      presaleCap: TransactionObjectInput;
+      vault: SharedObjectIdentity;
+      feeSplit: FeeSplit;
+    },
+  ): Transaction {
+    const split = this.call.core.feeSplit(options.feeSplit);
+    const tx = new Transaction();
+    const proof = tx.add(this.call.proveOwner(options));
+    const proposed = tx.add(split);
+    tx.add(
+      this.vault.scheduleFeeSplit({
+        ...this.#vaultInput(options),
+        proof,
+        proposed,
       }),
     );
-    tx.transferObjects(
-      moveResults(result, 2),
-      normalizeSuiAddress(options.recipient),
-    );
     return tx;
   }
 
-  /** Signs in as `RewardsAdmin` and schedules a holder-reward round. */
-  scheduleHolderRewardRound(
-    options: AsAdmin<Parameters<PresaleCalls["scheduleHolderRewardRound"]>[0]>,
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
-      this.call.scheduleHolderRewardRound({ ...options, adminWitness }),
-    );
-  }
-
-  /** Anyone publishes the vault's ready round. */
-  publishHolderRewardRound(
-    options: Parameters<PresaleCalls["publishHolderRewardRound"]>[0],
+  /** `prove_owner`, then `vault::cancel_fee_split`. */
+  cancelFeeSplit(
+    options: PresaleInput & {
+      presaleCap: TransactionObjectInput;
+      vault: SharedObjectIdentity;
+    },
   ): Transaction {
     const tx = new Transaction();
-    tx.add(this.call.publishHolderRewardRound(options));
+    const proof = tx.add(this.call.proveOwner(options));
+    tx.add(this.vault.cancelFeeSplit({ ...this.#vaultInput(options), proof }));
     return tx;
   }
 
-  /**
-   * Schedules a round and publishes it in one PTB. Only valid once the
-   * vault's round notice has been lowered to zero; vaults start at two hours,
-   * and at any other notice the publish aborts.
-   */
-  scheduleAndPublishHolderRewardRound(
-    options: AsAdmin<Parameters<PresaleCalls["scheduleHolderRewardRound"]>[0]>,
-  ): Transaction {
-    const tx = this.scheduleHolderRewardRound(options);
-    tx.add(this.call.publishHolderRewardRound(options));
-    return tx;
-  }
-
-  cancelHolderRewardRound(
-    options: AsAdmin<Parameters<PresaleCalls["cancelHolderRewardRound"]>[0]>,
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelHolderRewardRound({ ...options, adminWitness }),
-    );
-  }
-
-  scheduleHolderRewardRoundDelay(
-    options: AsAdmin<
-      Parameters<PresaleCalls["scheduleHolderRewardRoundDelay"]>[0]
-    >,
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
-      this.call.scheduleHolderRewardRoundDelay({ ...options, adminWitness }),
-    );
-  }
-
-  applyHolderRewardRoundDelay(
-    options: Parameters<PresaleCalls["applyHolderRewardRoundDelay"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyHolderRewardRoundDelay(options));
-    return tx;
-  }
-
-  cancelHolderRewardRoundDelay(
-    options: AsAdmin<
-      Parameters<PresaleCalls["cancelHolderRewardRoundDelay"]>[0]
-    >,
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelHolderRewardRoundDelay({ ...options, adminWitness }),
-    );
-  }
-
-  settleHolderRewardGasReserve(
-    options: AsAdmin<
-      Parameters<PresaleCalls["settleHolderRewardGasReserve"]>[0]
-    >,
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "RewardsAdmin", (adminWitness) =>
-      this.call.settleHolderRewardGasReserve({ ...options, adminWitness }),
-    );
-  }
-
-  /** Signs in as `FeeAdmin` and replaces one sale's Blast rates before its window starts. */
-  setPresaleProtocolFees(
-    options: Omit<
-      Parameters<PresaleCalls["setPresaleProtocolFees"]>[0],
-      "adminWitness" | "presale"
-    > & { presale: SharedObjectReference<true>; adminCapId: string },
+  /** `set_protocol_fees` signed in as `FeeAdmin`, before the sale's start. */
+  setProtocolFees(
+    options: PresaleInput & { adminCapId: string; fees: ProtocolFees },
   ): Transaction {
     return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
-      this.call.setPresaleProtocolFees({ ...options, adminWitness }),
+      this.call.setProtocolFees({ ...options, adminWitness }),
     );
   }
 
-  /** Signs in as `ListingAdmin` and lists or delists a Quote type for new presales. */
   setQuoteAllowed(
     options: AsAdmin<Parameters<PresaleCalls["setQuoteAllowed"]>[0]>,
   ): Transaction {
@@ -2994,391 +1277,260 @@ export class PresaleTransactions {
     );
   }
 
-  /** Signs in as `FeeAdmin` and lets new presales name `partner` at once. */
-  addPartner(
-    options: AsAdmin<Parameters<PresaleCalls["addPartner"]>[0]>,
-  ): Transaction {
+  scheduleVenue(options: {
+    adminCapId: string;
+    venueType: string;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "VenueAdmin", (adminWitness) =>
+      this.call.scheduleVenue({ ...options, adminWitness }),
+    );
+  }
+
+  applyVenue(options: { venueType: string }): Transaction {
+    return single(this.call.applyVenue(options));
+  }
+
+  cancelVenue(options: { adminCapId: string; venueType: string }): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelVenue({ ...options, adminWitness }),
+    );
+  }
+
+  removeVenue(options: { adminCapId: string; venueType: string }): Transaction {
+    return this.#asAdmin(options.adminCapId, "VenueAdmin", (adminWitness) =>
+      this.call.removeVenue({ ...options, adminWitness }),
+    );
+  }
+
+  scheduleVenueDelay(options: {
+    adminCapId: string;
+    delayMs: bigint;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "VenueAdmin", (adminWitness) =>
+      this.call.scheduleVenueDelay({ ...options, adminWitness }),
+    );
+  }
+
+  applyVenueDelay(): Transaction {
+    return single(this.call.applyVenueDelay());
+  }
+
+  cancelVenueDelay(options: { adminCapId: string }): Transaction {
+    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
+      this.call.cancelVenueDelay({ adminWitness }),
+    );
+  }
+
+  addPartner(options: {
+    adminCapId: string;
+    partner: SharedObjectIdentity;
+  }): Transaction {
     return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.addPartner({ ...options, adminWitness }),
     );
   }
 
-  /** Signs in as `FeeAdmin` and stops new presales naming `partner` after `PARTNER_DELAY_MS`. */
-  removePartner(
-    options: AsAdmin<Parameters<PresaleCalls["removePartner"]>[0]>,
-  ): Transaction {
+  removePartner(options: {
+    adminCapId: string;
+    partner: SharedObjectIdentity;
+  }): Transaction {
     return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
       this.call.removePartner({ ...options, adminWitness }),
     );
   }
 
-  /** Relays up to `allocations.length` proofs of one round in a single PTB. */
-  claimHolderRewards(
-    options: LaunchTypes & {
-      round: SharedObjectReference<true>;
-      allocations: readonly RewardProof[];
-    },
-  ): Transaction {
-    const tx = new Transaction();
-    for (const allocation of options.allocations) {
-      tx.add(this.call.claimHolderReward({ ...options, allocation }));
-    }
-    return tx;
+  scheduleFees(options: {
+    adminCapId: string;
+    fees: ProtocolFees;
+    delayMs: bigint;
+  }): Transaction {
+    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
+      this.call.scheduleFees({ ...options, adminWitness }),
+    );
   }
 
-  closeHolderRewardRound(
-    options: Parameters<PresaleCalls["closeHolderRewardRound"]>[0],
-  ): Transaction {
-    return single(this.call.closeHolderRewardRound(options));
+  applyFees(): Transaction {
+    return single(this.call.applyFees());
   }
 
-  /** Signs in as `role` and runs one administrator call in the same PTB. */
-  applyMigrationDelay(): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyMigrationDelay());
-    return tx;
-  }
-  applyMigrationWitness(
-    options: Parameters<PresaleCalls["applyMigrationWitness"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyMigrationWitness(options));
-    return tx;
-  }
-  cancelMigrationDelay(
-    options: Omit<
-      Parameters<PresaleCalls["cancelMigrationDelay"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
+  cancelFees(options: { adminCapId: string }): Transaction {
     return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelMigrationDelay({ ...options, adminWitness }),
+      this.call.cancelFees({ adminWitness }),
     );
   }
-  cancelMigrationWitness(
-    options: AsAdmin<Parameters<PresaleCalls["cancelMigrationWitness"]>[0]>,
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelMigrationWitness({ ...options, adminWitness }),
-    );
-  }
-  removeMigrationWitness(
-    options: AsAdmin<Parameters<PresaleCalls["removeMigrationWitness"]>[0]>,
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
-      this.call.removeMigrationWitness({ ...options, adminWitness }),
-    );
-  }
-  scheduleMigrationDelay(
-    options: Omit<
-      Parameters<PresaleCalls["scheduleMigrationDelay"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
-      this.call.scheduleMigrationDelay({ ...options, adminWitness }),
-    );
-  }
-  scheduleMigrationWitness(
-    options: AsAdmin<Parameters<PresaleCalls["scheduleMigrationWitness"]>[0]>,
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "AdapterAdmin", (adminWitness) =>
-      this.call.scheduleMigrationWitness({ ...options, adminWitness }),
-    );
-  }
-  applyProtocolDestination(): Transaction {
+
+  /** `creation_policy::unpause` signed in as `UnpauseAdmin<BLAST_PRESALE_PACKAGE>`. */
+  unpause(options: { adminCapId: string; bits: number }): Transaction {
     const tx = new Transaction();
-    tx.add(this.call.applyProtocolDestination());
+    const unpauseAdmin = tx.add(
+      this.#signInPackage(options.adminCapId, "UnpauseAdmin"),
+    );
+    tx.add(this.call.unpause({ unpauseAdmin, bits: options.bits }));
     return tx;
-  }
-  applyProtocolFees(): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyProtocolFees());
-    return tx;
-  }
-  cancelProtocolDestination(
-    options: Omit<
-      Parameters<PresaleCalls["cancelProtocolDestination"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelProtocolDestination({ ...options, adminWitness }),
-    );
-  }
-  cancelProtocolFees(
-    options: Omit<
-      Parameters<PresaleCalls["cancelProtocolFees"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelProtocolFees({ ...options, adminWitness }),
-    );
-  }
-  scheduleProtocolDestination(
-    options: Omit<
-      Parameters<PresaleCalls["scheduleProtocolDestination"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "TreasuryAdmin", (adminWitness) =>
-      this.call.scheduleProtocolDestination({ ...options, adminWitness }),
-    );
-  }
-  scheduleProtocolFees(
-    options: Omit<
-      Parameters<PresaleCalls["scheduleProtocolFees"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
-      this.call.scheduleProtocolFees({ ...options, adminWitness }),
-    );
-  }
-  applyProtocolLpFees(
-    options: Parameters<PresaleCalls["applyProtocolLpFees"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyProtocolLpFees(options));
-    return tx;
-  }
-  cancelProtocolLpFees(
-    options: Omit<
-      Parameters<PresaleCalls["cancelProtocolLpFees"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelProtocolLpFees({ ...options, adminWitness }),
-    );
-  }
-  scheduleProtocolLpFees(
-    options: Omit<
-      Parameters<PresaleCalls["scheduleProtocolLpFees"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "FeeAdmin", (adminWitness) =>
-      this.call.scheduleProtocolLpFees({ ...options, adminWitness }),
-    );
-  }
-  pause(
-    options: Omit<Parameters<PresaleCalls["pause"]>[0], "adminWitness"> & {
-      adminCapId: string;
-    },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "PauseAdmin", (adminWitness) =>
-      this.call.pause({ ...options, adminWitness }),
-    );
-  }
-  unpause(
-    options: Omit<Parameters<PresaleCalls["unpause"]>[0], "adminWitness"> & {
-      adminCapId: string;
-    },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "UnpauseAdmin", (adminWitness) =>
-      this.call.unpause({ ...options, adminWitness }),
-    );
-  }
-  applyUpgradeDelay(
-    options: Parameters<PresaleCalls["applyUpgradeDelay"]>[0],
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.applyUpgradeDelay(options));
-    return tx;
-  }
-  cancelUpgradeAction(
-    options: Omit<
-      Parameters<PresaleCalls["cancelUpgradeAction"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "CancelAdmin", (adminWitness) =>
-      this.call.cancelUpgradeAction({ ...options, adminWitness }),
-    );
-  }
-  makeImmutable(
-    options: Omit<
-      Parameters<PresaleCalls["makeImmutable"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
-      this.call.makeImmutable({ ...options, adminWitness }),
-    );
-  }
-  scheduleMakeImmutable(
-    options: Omit<
-      Parameters<PresaleCalls["scheduleMakeImmutable"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
-      this.call.scheduleMakeImmutable({ ...options, adminWitness }),
-    );
-  }
-  scheduleUpgrade(
-    options: Omit<
-      Parameters<PresaleCalls["scheduleUpgrade"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
-      this.call.scheduleUpgrade({ ...options, adminWitness }),
-    );
-  }
-  scheduleUpgradeDelay(
-    options: Omit<
-      Parameters<PresaleCalls["scheduleUpgradeDelay"]>[0],
-      "adminWitness"
-    > & { adminCapId: string },
-  ): Transaction {
-    return this.#asAdmin(options.adminCapId, "UpgradeAdmin", (adminWitness) =>
-      this.call.scheduleUpgradeDelay({ ...options, adminWitness }),
-    );
   }
 
   /**
-   * Applies presale policy at once on a fresh deployment whose notices are
-   * still zero: each is a schedule and its apply in this PTB, keeping a zero
-   * notice. Name only settings that change; an unchanged schedule aborts.
-   * Then call `armNotices`. The cap needs each setting's role.
+   * Applies presale policy at once on a fresh deployment whose delays are
+   * still zero, in one PTB: the fees (schedule and apply), each Quote, each
+   * venue (schedule and apply) and each partner. Name only what changes; an
+   * unchanged value aborts. Then call `armNotices`.
    */
   configureNow(
     options: { adminCapId: string } & PresalePolicySettings,
   ): Transaction {
-    const delayMs = 0n;
-    const { fees, destination, migrationWitnesses } = options;
-    return this.#atZeroNotice(options.adminCapId, {
-      ...(fees ? { fees: { fees, delayMs } } : {}),
-      ...(destination === undefined
-        ? {}
-        : { destination: { destination, delayMs } }),
-      ...(migrationWitnesses ? { migrationWitnesses } : {}),
-    });
-  }
-
-  /**
-   * Raises each named notice from zero in one PTB: a schedule and its apply.
-   * A setting restates its applied value, since its schedule proposes a value
-   * and next notice together. Run after `configureNow`; once armed, every
-   * later change waits its notice.
-   */
-  armNotices(options: { adminCapId: string } & PresaleNotices): Transaction {
-    return this.#atZeroNotice(options.adminCapId, options);
-  }
-
-  #atZeroNotice(
-    adminCapId: string,
-    notices: PresaleNotices & Pick<PresalePolicySettings, "migrationWitnesses">,
-  ): Transaction {
     const tx = new Transaction();
-    const witnesses = new Map<PresaleAdminRole, TransactionObjectArgument>();
-    const as = (role: PresaleAdminRole) => {
-      let adminWitness = witnesses.get(role);
-      if (!adminWitness) {
-        adminWitness = tx.add(this.call.signIn({ adminCap: adminCapId, role }));
-        witnesses.set(role, adminWitness);
-      }
-      return adminWitness;
-    };
+    const as = this.#witnesses(tx, options.adminCapId);
     const { call } = this;
-    if (notices.fees) {
+    if (options.fees) {
       tx.add(
-        call.scheduleProtocolFees({
-          ...notices.fees,
+        call.scheduleFees({
+          fees: options.fees,
+          delayMs: 0n,
           adminWitness: as("FeeAdmin"),
         }),
       );
-      tx.add(call.applyProtocolFees());
+      tx.add(call.applyFees());
     }
-    if (notices.destination) {
+    for (const quote of options.quotes ?? []) {
       tx.add(
-        call.scheduleProtocolDestination({
-          ...notices.destination,
-          adminWitness: as("TreasuryAdmin"),
-        }),
+        call.setQuoteAllowed({ ...quote, adminWitness: as("ListingAdmin") }),
       );
-      tx.add(call.applyProtocolDestination());
     }
-    for (const migrator of notices.migrationWitnesses ?? []) {
-      tx.add(
-        call.scheduleMigrationWitness({
-          ...migrator,
-          adminWitness: as("AdapterAdmin"),
-        }),
-      );
-      tx.add(call.applyMigrationWitness(migrator));
+    for (const venueType of options.venueTypes ?? []) {
+      tx.add(call.scheduleVenue({ venueType, adminWitness: as("VenueAdmin") }));
+      tx.add(call.applyVenue({ venueType }));
     }
-    if (notices.migrationDelayMs !== undefined) {
-      tx.add(
-        call.scheduleMigrationDelay({
-          delayMs: notices.migrationDelayMs,
-          adminWitness: as("AdapterAdmin"),
-        }),
-      );
-      tx.add(call.applyMigrationDelay());
+    for (const partner of options.partners ?? []) {
+      tx.add(call.addPartner({ partner, adminWitness: as("FeeAdmin") }));
     }
     return tx;
   }
 
+  /**
+   * Raises each named delay from zero in one PTB: a schedule and its apply.
+   * Run after `configureNow`; once armed, every later change waits its delay.
+   */
+  armNotices(options: { adminCapId: string } & PresaleNotices): Transaction {
+    const tx = new Transaction();
+    const as = this.#witnesses(tx, options.adminCapId);
+    const { call } = this;
+    if (options.fees) {
+      tx.add(
+        call.scheduleFees({ ...options.fees, adminWitness: as("FeeAdmin") }),
+      );
+      tx.add(call.applyFees());
+    }
+    if (options.venueDelayMs !== undefined) {
+      tx.add(
+        call.scheduleVenueDelay({
+          delayMs: options.venueDelayMs,
+          adminWitness: as("VenueAdmin"),
+        }),
+      );
+      tx.add(call.applyVenueDelay());
+    }
+    return tx;
+  }
+
+  #prepare(
+    options: PresaleTypes &
+      PresaleVenueCreation & {
+        treasuryCap: TransactionObjectInput;
+        currency: SharedObjectIdentity;
+      },
+  ): (tx: Transaction) => TransactionResult {
+    const memeTypes = {
+      memeType: options.saleTokenType,
+      quoteType: options.quoteType,
+    };
+    switch (options.venue) {
+      case "cetus":
+        return this.migrators.prepareCetus({
+          ...memeTypes,
+          cetus: options.cetus,
+          treasuryCap: options.treasuryCap,
+          tickSpacing: options.tickSpacing,
+        });
+      case "bluefin":
+        return this.migrators.prepareBluefin({
+          ...memeTypes,
+          treasuryCap: options.treasuryCap,
+          currency: options.currency,
+          tickSpacing: options.tickSpacing,
+          feeRate: options.feeRate,
+        });
+      case "aftermathDao": {
+        const lpCoin = assertAftermathLpCoin(options.lpCoin);
+        return this.#vendor().prepare({
+          ...options,
+          lpType: lpCoin.lpType,
+          createPoolCap: lpCoin.createPoolCapId,
+        });
+      }
+    }
+  }
+
+  #vendor(): AftermathDaoPresaleCalls {
+    if (!this.aftermathDaoPresale) {
+      throw new TypeError("deployment.aftermathDaoPresale is required");
+    }
+    return this.aftermathDaoPresale;
+  }
+
+  #vaultInput(options: PresaleTypes & { vault: SharedObjectIdentity }) {
+    return {
+      memeType: options.saleTokenType,
+      quoteType: options.quoteType,
+      vault: options.vault,
+    };
+  }
+
+  #signIn(adminCapId: string, role: CoreRole) {
+    return this.admin.signIn({
+      adminCap: adminCapId,
+      role: coreRoleType(this.call.deployment.core, role),
+    });
+  }
+
+  #signInPackage(adminCapId: string, role: PackageRole) {
+    return this.admin.signIn({
+      adminCap: adminCapId,
+      role: packageRoleType(this.call.deployment.admin, this.call.otw, role),
+    });
+  }
+
+  /** One `AdminWitness` per core role this PTB needs, signed in on first use. */
+  #witnesses(tx: Transaction, adminCapId: string) {
+    const witnesses = new Map<CoreRole, TransactionObjectArgument>();
+    return (role: CoreRole): TransactionObjectArgument => {
+      let witness = witnesses.get(role);
+      if (!witness) {
+        witness = tx.add(this.#signIn(adminCapId, role));
+        witnesses.set(role, witness);
+      }
+      return witness;
+    };
+  }
+
   #asAdmin(
     adminCapId: string,
-    role: PresaleAdminRole,
+    role: CoreRole,
     call: (
       adminWitness: TransactionObjectArgument,
     ) => (tx: Transaction) => void,
   ): Transaction {
     const tx = new Transaction();
-    const adminWitness = tx.add(
-      this.call.signIn({ adminCap: adminCapId, role }),
-    );
+    const adminWitness = tx.add(this.#signIn(adminCapId, role));
     tx.add(call(adminWitness));
-    return tx;
-  }
-
-  #shareAndKeepCap(
-    tx: Transaction,
-    created: TransactionResult,
-    options: LaunchTypes & PresaleCreation,
-  ): Transaction {
-    const [presale, presaleCap] = moveResults(created, 2);
-    tx.add(this.call.share({ ...options, presale }));
-    tx.transferObjects([presaleCap], normalizeSuiAddress(options.capRecipient));
-    return tx;
-  }
-
-  #payProtocolFeesWithPartnerAfter(
-    tx: Transaction,
-    options: LaunchTypes & {
-      presale: SharedObjectReference<true>;
-    } & PresalePayout,
-  ): Transaction {
-    const { partner } = options;
-    if (partner)
-      tx.add(this.call.payProtocolFeesWithPartner({ ...options, partner }));
-    return tx;
-  }
-
-  #payProtocolLpFeesWithPartnerAfter(
-    tx: Transaction,
-    options: LaunchTypes & {
-      vault: SharedObjectReference<true>;
-    } & PresalePayout,
-  ): Transaction {
-    const { partner } = options;
-    if (partner)
-      tx.add(this.call.payProtocolLpFeesWithPartner({ ...options, partner }));
     return tx;
   }
 }
 
 /** A builder's options with the `AdminCap` ID that signs in in place of its witness. */
-type AsAdmin<Options extends { adminWitness: TransactionObjectInput }> =
-  Options extends unknown
-    ? Omit<Options, "adminWitness"> & { adminCapId: string }
-    : never;
+type AsAdmin<Options extends { adminWitness: TransactionObjectInput }> = Omit<
+  Options,
+  "adminWitness"
+> & { adminCapId: string };
 
 function single(call: (tx: Transaction) => void): Transaction {
   const tx = new Transaction();
@@ -3386,69 +1538,43 @@ function single(call: (tx: Transaction) => void): Transaction {
   return tx;
 }
 
-/** A normalized object ID for an `Option<ID>` argument, or null for `none`. */
-function optionalObjectId(objectId: string | null | undefined): string | null {
-  return objectId ? normalizeSuiObjectId(objectId) : null;
+function saleTypeArguments(types: PresaleTypes): string[] {
+  return [
+    normalizeStructTag(types.saleTokenType),
+    normalizeStructTag(types.quoteType),
+  ];
 }
 
-function sharedObject<const Mutable extends boolean>(
-  tx: Transaction,
-  name: string,
-  reference: SharedObjectReference<Mutable>,
-  mutable: Mutable,
-): TransactionObjectArgument {
-  return tx.sharedObjectRef(
-    normalizeSharedObjectReference(name, reference, mutable),
-  );
-}
-
-/** `[Meme, Quote, CoinA, CoinB]`, the pool's coins in Cetus order. */
-function cetusTypeArguments(types: LaunchTypes): string[] {
-  const { memeType, quoteType } = types;
-  return cetusMemeSide(memeType, quoteType) === "a"
-    ? [memeType, quoteType, memeType, quoteType]
-    : [memeType, quoteType, quoteType, memeType];
-}
-
-function digests(proof: readonly string[]): number[][] {
-  if (proof.length > MAX_PRESALE_PROOF_DEPTH) {
-    throw new RangeError(`proof exceeds ${MAX_PRESALE_PROOF_DEPTH} siblings`);
+/**
+ * The normalized struct type of a venue witness. The contract rejects a
+ * primitive or vector, which any caller can construct, and neither parses as
+ * a struct here, and a framework (`0x1`, `0x2`) type.
+ */
+function venueType(type: string): string {
+  const tag = parseStructTag(type);
+  if (!isValidSuiAddress(tag.address)) {
+    throw new TypeError(`a venue must be a struct type: ${type}`);
   }
-  return proof.map((sibling) => Array.from(rewardDigest(sibling)));
-}
-
-function requireU32(name: string, value: number): number {
-  if (!Number.isInteger(value) || value < 0 || value > 0xffff_ffff) {
-    throw new RangeError(`${name} must be a u32`);
+  const address = BigInt(normalizeSuiAddress(tag.address));
+  if (address === 1n || address === 2n) {
+    throw new TypeError(`a venue must not be a framework type: ${type}`);
   }
-  return value;
+  return normalizeStructTag(tag);
 }
 
-/** Flags may be ORed together; each package has its own migration bit. */
-export const PRESALE_PAUSE_BITS = { Create: 1, Commit: 2, Migrate: 8 } as const;
-
-/** Mirrors `fee_policy::protocol_fees`, whose `EInvalidFees` (0) rejects any rate above its cap. */
-function cappedProtocolFees(fees: ProtocolFees): ProtocolFees {
-  return {
-    raiseBps: requireBasisPointsAtMost(
-      "raiseBps",
-      fees.raiseBps,
-      MAX_PROTOCOL_RAISE_BPS,
-    ),
-    tokenBps: requireBasisPointsAtMost(
-      "tokenBps",
-      fees.tokenBps,
-      MAX_PROTOCOL_TOKEN_BPS,
-    ),
-    lpFeeMemeBps: requireBasisPointsAtMost(
-      "lpFeeMemeBps",
-      fees.lpFeeMemeBps,
-      MAX_PROTOCOL_LP_FEE_BPS,
-    ),
-    lpFeeQuoteBps: requireBasisPointsAtMost(
+/**
+ * The four `bps::new` rates of `ProtocolFees`, in Move order, each within
+ * `fee_policy::protocol_fees`' maximums (`EInvalidFees` otherwise).
+ */
+function rateCalls(core: CoreCalls, fees: ProtocolFees) {
+  return [
+    requireBasisPointsAtMost("raiseBps", fees.raiseBps, MAX_PROTOCOL_RAISE_BPS),
+    requireBasisPointsAtMost("tokenBps", fees.tokenBps, MAX_PROTOCOL_TOKEN_BPS),
+    requireBasisPointsAtMost("lpFeeMemeBps", fees.lpFeeMemeBps, MAX_LP_FEE_BPS),
+    requireBasisPointsAtMost(
       "lpFeeQuoteBps",
       fees.lpFeeQuoteBps,
-      MAX_PROTOCOL_LP_FEE_BPS,
+      MAX_LP_FEE_BPS,
     ),
-  };
+  ].map((rate) => core.bps(rate));
 }

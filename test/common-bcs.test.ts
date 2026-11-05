@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import {
   isDelayedActionGuarded,
   isDelayedGuarded,
@@ -12,6 +11,7 @@ import {
   suiObjectIdBcs,
   suiUidBcs,
 } from "@interest-protocol/blast-core/bcs";
+import { bcs } from "@mysten/sui/bcs";
 
 test("round-trips canonical Sui BCS primitives", () => {
   assert.match(
@@ -34,6 +34,21 @@ test("round-trips canonical Sui BCS primitives", () => {
   assert.equal(
     moveTypeNameBcs.parse(moveTypeNameBcs.serialize("0x2::sui::SUI").toBytes()),
     "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+  );
+});
+
+test("moveTypeNameBcs writes Move's type_name form and round-trips it", () => {
+  const sui =
+    "0000000000000000000000000000000000000000000000000000000000000002";
+  const move = `${sui}::coin::Coin<${sui}::sui::SUI>`;
+  const moveBytes = bcs.string().serialize(move).toBytes();
+  assert.deepEqual(
+    moveTypeNameBcs.serialize("0x2::coin::Coin<0x2::sui::SUI>").toBytes(),
+    moveBytes,
+  );
+  assert.deepEqual(
+    moveTypeNameBcs.serialize(moveTypeNameBcs.parse(moveBytes)).toBytes(),
+    moveBytes,
   );
 });
 
@@ -84,7 +99,7 @@ test("mirrors blast_admin::delayed's notice ceiling and guards", () => {
   };
   assert.equal(isDelayedSetGuarded(set), true);
   assert.equal(
-    isDelayedSetGuarded({ ...set, admissions: [{ member: 1, notice }] }),
+    isDelayedSetGuarded({ ...set, admissions: [{ member: 1, delay: notice }] }),
     false,
   );
   assert.equal(

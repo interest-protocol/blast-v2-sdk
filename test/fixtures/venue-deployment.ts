@@ -6,7 +6,9 @@ import { NON_PRODUCTION_MANIFEST } from "./non-production-deployment.ts";
 
 /**
  * Literal venue identities for deployment-manifest tests. Nothing here is
- * computed by the SDK; every value is copied from contracts 442116a:
+ * computed by the SDK. The Cetus and Bluefin values are copied from contracts
+ * 442116a; the Aftermath values from contracts a1a8f6c
+ * `sui/vendors/aftermath_dao_presale` (interface manifests and README):
  *
  * - `sui/launchpad/ptb_tests/fork/fetch.py` (package lines 59-64: each venue
  *   package's original ID, pinned revision ID, and version; `SUI_TYPE`);
@@ -40,6 +42,27 @@ export const VENUE_LINEAGE = {
       originalPackageId:
         "0x3492c874c1e3b3e2984e8c41b589e642d4d0a5d6459e5a9cfc2d52fd7c89c267",
     },
+    /** The vendor venue: a fixture ID (sha256("blast-sdk-nonprod-29")). */
+    aftermathDaoPresale: {
+      packageId:
+        "0xd4a033a3000b2682d4815ecfa7ae1cbd15ac1dc1131ad1f142ae703deaab14a2",
+      originalPackageId:
+        "0xd4a033a3000b2682d4815ecfa7ae1cbd15ac1dc1131ad1f142ae703deaab14a2",
+    },
+    /** Aftermath AMM, as the vendor's `interfaces/aftermath_amm/Move.toml` pins it. */
+    aftermathAmm: {
+      packageId:
+        "0xf948935b111990c2b604900c9b2eeb8f24dcf9868a45d1ea1653a5f282c10e29",
+      originalPackageId:
+        "0xefe170ec0be4d762196bedecd7a065816576198a6527c99282a2551aaa7da38c",
+    },
+    /** Aftermath DAO-fee pools, as `interfaces/aftermath_dao_fee/Move.toml` pins them. */
+    aftermathDaoFee: {
+      packageId:
+        "0x5ad6890968efcf3d20899e0cec735214f1067b96e77e77d86408989998468bb2",
+      originalPackageId:
+        "0x6f60a091637054e23915b8745c0c0d47b1d49618ee3435b5f68eccf6a44fb53d",
+    },
   },
   sharedObjects: {
     cetus: {
@@ -66,6 +89,19 @@ export const VENUE_LINEAGE = {
         initialSharedVersion: "406496849",
       },
     },
+    /** The objects the vendor's README records, with their mainnet initial shared versions. */
+    aftermath: {
+      poolRegistry: {
+        objectId:
+          "0xfcc774493db2c45c79f688f88d28023a3e7d98e4ee9f48bbf5c7990f651577ae",
+        initialSharedVersion: "6808332",
+      },
+      daoFeeVersion: {
+        objectId:
+          "0xb4bfb0f917f12ad2a772bea9b4f22431f6f5f9653162c3ae6fae5b99b21392b7",
+        initialSharedVersion: "293243902",
+      },
+    },
   },
   /** Each object's type as the snapshot recorded it, by its manifest path. */
   types: {
@@ -77,6 +113,10 @@ export const VENUE_LINEAGE = {
       "0x12d73de9a6bc3cb658ec9dc0fe7de2662be1cea5c76c092fcc3606048cdbac27::lp_burn::BurnManager",
     "bluefin.config":
       "0x3492c874c1e3b3e2984e8c41b589e642d4d0a5d6459e5a9cfc2d52fd7c89c267::config::GlobalConfig",
+    "aftermath.poolRegistry":
+      "0xefe170ec0be4d762196bedecd7a065816576198a6527c99282a2551aaa7da38c::pool_registry::PoolRegistry",
+    "aftermath.daoFeeVersion":
+      "0x6f60a091637054e23915b8745c0c0d47b1d49618ee3435b5f68eccf6a44fb53d::version::Version",
   },
 } as const;
 
@@ -102,7 +142,7 @@ export const BLUEFIN_FEE_SNAPSHOT = {
     "0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
 } as const;
 
-export type VenueName = "cetus" | "bluefin";
+export type VenueName = "cetus" | "bluefin" | "aftermathDao";
 
 /** The non-production manifest with the given venues' complete sets and routes. */
 export function manifestWithVenues(
@@ -111,6 +151,7 @@ export function manifestWithVenues(
   const { packages, sharedObjects } = VENUE_LINEAGE;
   const cetus = venues.includes("cetus");
   const bluefin = venues.includes("bluefin");
+  const aftermath = venues.includes("aftermathDao");
   return {
     ...NON_PRODUCTION_MANIFEST,
     packages: {
@@ -120,44 +161,73 @@ export function manifestWithVenues(
         cetusLpBurn: packages.cetusLpBurn,
       }),
       ...(bluefin && { bluefinSpot: packages.bluefinSpot }),
+      ...(aftermath && {
+        aftermathDaoPresale: packages.aftermathDaoPresale,
+        aftermathAmm: packages.aftermathAmm,
+        aftermathDaoFee: packages.aftermathDaoFee,
+      }),
     },
     sharedObjects: {
       ...NON_PRODUCTION_MANIFEST.sharedObjects,
       ...(cetus && { cetus: sharedObjects.cetus }),
       ...(bluefin && { bluefin: sharedObjects.bluefin }),
+      ...(aftermath && { aftermath: sharedObjects.aftermath }),
     },
     routes: [
       ...(cetus
         ? [{ venue: "cetus", tiers: [{ tickSpacing: 200, feeRate: "10000" }] }]
         : []),
       ...NON_PRODUCTION_MANIFEST.routes,
+      ...(aftermath ? [{ venue: "aftermathDao", tiers: [] }] : []),
     ],
   };
 }
 
-/** What a node reports for a manifest: its chain and every shared object at its expected type. */
+/**
+ * What a node reports for a manifest: its chain, every shared object at its
+ * expected type, and each pausable package's `paused` mask (`paused`, all
+ * zero by default).
+ */
 export function runtimeFor(
   input: BlastDeploymentInput,
+  paused: Readonly<Record<string, number>> = {},
 ): DeploymentRuntimeObservation {
   const original = (name: string) =>
     input.packages[name]?.originalPackageId ?? "0x0";
+  const admin = original("admin");
+  const otw = (group: string, module: string, name: string) =>
+    `${original(group)}::${module}::${name}`;
+  const administered = (group: string, module: string, name: string) => ({
+    [`${group}.packageVersion`]: `${admin}::package_version::PackageVersion<${otw(group, module, name)}>`,
+    [`${group}.packageAdmin`]: `${admin}::package_admin::PackageAdmin<${otw(group, module, name)}>`,
+  });
   const types: Record<string, string> = {
-    "launchpad.packageVersion": `${original("launchpad")}::blast_fun::PackageVersion`,
+    "admin.acl": `${admin}::blast_acl::ACL`,
+    "core.treasury": `${original("core")}::blast_treasury::Treasury`,
+    "vault.registry": `${original("vault")}::blast_vault_package::VaultRegistry`,
+    ...administered("vault", "blast_vault_package", "BLAST_VAULT_PACKAGE"),
+    ...administered("launchpad", "blast_fun", "BLAST_FUN"),
     "launchpad.launchConfig": `${original("launchpad")}::launch_config::LaunchConfig`,
     "launchpad.runtimeConfig": `${original("launchpad")}::runtime_config::RuntimeConfig`,
-    "admin.acl": `${original("admin")}::blast_acl::ACL`,
-    "migrators.packageVersion": `${original("migrators")}::blast_fun_migrators::PackageVersion`,
-    "migrators.lpFeePolicy": `${original("migrators")}::lp_fee_policy::LpFeePolicy`,
-    "migrators.venueConfig": `${original("migrators")}::venue_config::VenueConfig`,
-    "presale.packageVersion": `${original("presale")}::blast_presale_package::PackageVersion`,
-    "presale.venueConfig": `${original("presale")}::venue_config::VenueConfig`,
+    "launchpad.launchRegistry": `${original("launchpad")}::launch::LaunchRegistry`,
+    ...administered(
+      "presale",
+      "blast_presale_package",
+      "BLAST_PRESALE_PACKAGE",
+    ),
     "presale.creationPolicy": `${original("presale")}::creation_policy::CreationPolicy`,
     "presale.feePolicy": `${original("presale")}::fee_policy::FeePolicy`,
+    "presale.presaleRegistry": `${original("presale")}::blast_presale::PresaleRegistry`,
+    ...administered("migrators", "blast_migrators", "BLAST_MIGRATORS"),
+    "migrators.venueConfig": `${original("migrators")}::venue_config::VenueConfig`,
     "cetus.config": `${original("cetusClmm")}::config::GlobalConfig`,
     "cetus.pools": `${original("cetusClmm")}::factory::Pools`,
     "cetus.burnManager": `${original("cetusLpBurn")}::lp_burn::BurnManager`,
     "bluefin.config": `${original("bluefinSpot")}::config::GlobalConfig`,
+    "aftermath.poolRegistry": `${original("aftermathAmm")}::pool_registry::PoolRegistry`,
+    "aftermath.daoFeeVersion": `${original("aftermathDaoFee")}::version::Version`,
   };
+  const pausable = ["vault", "launchpad", "presale", "migrators"];
   return {
     chainIdentifier: input.chainIdentifier,
     sharedObjects: Object.fromEntries(
@@ -170,6 +240,9 @@ export function runtimeFor(
               objectId: identity.objectId,
               type: types[path] ?? "0x2::object::UID",
               initialSharedVersion: String(identity.initialSharedVersion),
+              ...(name === "packageVersion" && pausable.includes(group)
+                ? { paused: paused[group] ?? 0 }
+                : {}),
             },
           ];
         }),

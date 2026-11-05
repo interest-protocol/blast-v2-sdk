@@ -20,11 +20,13 @@ const fingerprint = deploymentFingerprint(deployment);
 const venues = {
   cetus: { available: true },
   bluefin: { available: true },
+  aftermathDao: { available: true },
 } as const;
 const enabled: ProtocolAccess = {
   signing: "enabled",
   deployment,
   fingerprint,
+  paused: { vault: 0, launchpad: 0, presale: 0, migrators: 0 },
   venues,
 };
 const values: QuickPresetValues = {
@@ -39,18 +41,17 @@ const values: QuickPresetValues = {
     recipients: [],
   },
   lpFeeSplit: {
-    creatorBps: 10_000n,
-    autoLpBps: 0n,
-    rewardsBps: 0n,
-    burnBps: 0n,
-    recipients: [],
+    routes: [
+      { destination: { kind: "Owner" }, bps: 8_000n },
+      { destination: { kind: "HolderRewards" }, bps: 2_000n },
+    ],
   },
 };
 const preset = (overrides: Partial<QuickPreset> = {}) =>
   defineQuickPreset({
     id: "quick-local",
     deploymentFingerprint: fingerprint,
-    sdk: { minimum: "0.1.0", below: "0.2.0" },
+    sdk: { minimum: "0.2.0", below: "0.3.0" },
     values,
     ...overrides,
   });
@@ -76,7 +77,7 @@ test("binds a Quick preset to one deployment fingerprint and SDK range", () => {
   );
   assert.deepEqual(
     resolveQuickPreset(
-      preset({ sdk: { minimum: "0.2.0", below: "0.3.0" } }),
+      preset({ sdk: { minimum: "0.3.0", below: "0.4.0" } }),
       enabled,
     ),
     { status: "unavailable", reason: "sdk-incompatible" },

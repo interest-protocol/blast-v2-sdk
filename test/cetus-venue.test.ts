@@ -73,7 +73,7 @@ const deployment = defineBlastDeployment(manifest);
 const launch = {
   memeType: BLAST_CETUS.memeType,
   quoteType: BLAST_CETUS.quoteType,
-  migrationWitnessType: `${BLAST_CETUS.migratorsPackageId}::cetus::Witness`,
+  venue: `${BLAST_CETUS.migratorsPackageId}::cetus::Venue`,
   poolTickSpacing: 200,
   poolFeeRate: 10_000n,
 };
@@ -303,13 +303,13 @@ test("refuses a route outside the deployment's Cetus lineage and tiers", () => {
     deployment: defineBlastDeployment({ ...manifest, packages, sharedObjects }),
   });
   rejects("foreign-lineage", {
-    launch: { ...launch, migrationWitnessType: `${foreign}::cetus::Witness` },
+    launch: { ...launch, venue: `${foreign}::cetus::Venue` },
   });
   rejects("foreign-lineage", { pool: { ...pool, originalPackageId: foreign } });
   rejects("route-substitution", {
     launch: {
       ...launch,
-      migrationWitnessType: `${BLAST_CETUS.migratorsPackageId}::bluefin::Witness`,
+      venue: `${BLAST_CETUS.migratorsPackageId}::bluefin::Venue`,
     },
   });
   rejects("route-substitution", { vault: { ...vault, poolId: foreign } });

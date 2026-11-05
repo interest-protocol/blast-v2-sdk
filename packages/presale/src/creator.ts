@@ -1,33 +1,52 @@
-import { moveResults } from "@interest-protocol/blast-core/ptb";
 import type { SharedObjectIdentity } from "@interest-protocol/blast-core/sui";
-import { bcs } from "@mysten/sui/bcs";
+import {
+  MigratorCalls,
+  venueOf,
+} from "@interest-protocol/blast-migrators-sdk/transactions";
+import type {
+  VaultPositions,
+  VaultState,
+} from "@interest-protocol/blast-vault-sdk/state";
+import { getVault } from "@interest-protocol/blast-vault-sdk/state";
 import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
-import { PresaleClient } from "./client.ts";
 import type { PresaleCreatorEvent } from "./creator-events.ts";
 import { decodePresaleCreatorEvents } from "./creator-events.ts";
-import type { PresaleVaultState } from "./state.ts";
+import { presaleCapBcs } from "./state.ts";
 import type { PresaleDeployment } from "./transactions.ts";
-import { PresaleTransactions } from "./transactions.ts";
 
 /** The configured protocol objects needed to prepare a creator action. */
 export type PresaleCreatorDeployment = Readonly<{
   presale: PresaleDeployment;
   venues: Readonly<{
     cetus?: Readonly<{
-      globalConfig: SharedObjectIdentity;
+      config: SharedObjectIdentity;
       burnManager: SharedObjectIdentity;
     }>;
-    bluefin?: Readonly<{ globalConfig: SharedObjectIdentity }>;
+    bluefin?: Readonly<{ config: SharedObjectIdentity }>;
   }>;
 }>;
 
-export type PresaleCreatorActionKind = "collect_fees" | "claim_residuals";
+/**
+ * Permissionless fee collection on a sale's vault, through its migrators
+ * venue (`collect_fees`). The owner's balances are claimed with
+ * `PresaleTransactions.claimOwnerBalances`.
+ */
+export type PresaleCreatorActionKind = "collect_fees";
+
+/** What `collect_fees` takes beyond the venue's own objects. */
+type CollectInput = {
+  memeType: string;
+  quoteType: string;
+  vault: SharedObjectIdentity;
+  pool: SharedObjectIdentity;
+  currency: SharedObjectIdentity;
+};
 
 export type PresaleCreatorTransaction = Readonly<{
   presaleId: string;
-  vault: PresaleVaultState;
+  vaultId: string;
   transaction: Transaction;
   kindBytes: Uint8Array;
 }>;
@@ -48,12 +67,6 @@ export type PresaleCreatorClient = Readonly<{
   ): Promise<PresaleCreatorTransaction | null>;
 }>;
 
-// PresaleCap contains only its UID and sale ID; economics and vault state use the SDK decoders.
-const presaleCap = bcs.struct("PresaleCap", {
-  id: bcs.Address,
-  presaleId: bcs.Address,
-});
-
 /**
  * Protocol-only creator reads and unsigned transaction preparation. Previews
  * are estimates; completed events and contract execution remain authoritative.
@@ -64,16 +77,26 @@ export function createPresaleCreatorClient(
   client: ClientWithCoreApi,
   identity: PresaleCreatorDeployment,
 ): PresaleCreatorClient {
-  const sdk = new PresaleClient(client, identity.presale);
-  const calls = new PresaleTransactions(identity.presale);
+  const { presale } = identity;
+  const migrators = new MigratorCalls(presale.migrators);
+  const packageWitness = normalizeStructTag(
+    `${presale.originalPackageId}::blast_presale_package::PackageWitness`,
+  );
 
-  async function shared(objectId: string, signal?: AbortSignal) {
+  /** A shared object's identity, or null when it is missing, not shared, or not of `type`. */
+  async function shared(objectId: string, signal?: AbortSignal, type?: string) {
     const { objects } = await client.core.getObjects({
       objectIds: [objectId],
       ...(signal ? { signal } : {}),
     });
     const object = objects[0];
-    if (!object || object instanceof Error || object.owner.$kind !== "Shared")
+    if (
+      !object ||
+      object instanceof Error ||
+      object.owner.$kind !== "Shared" ||
+      (type !== undefined &&
+        normalizeStructTag(object.type) !== normalizeStructTag(type))
+    )
       return null;
     return {
       objectId: object.objectId,
@@ -81,109 +104,44 @@ export function createPresaleCreatorClient(
     };
   }
 
-  async function claimResiduals(
-    vault: PresaleVaultState,
-    owner: string,
-    signal?: AbortSignal,
-  ): Promise<PresaleCreatorTransaction | null> {
-    if (
-      vault.migrationMemeResidual === 0n &&
-      vault.migrationQuoteResidual === 0n
-    )
-      return null;
-    const { objects } = await client.core.getObjects({
-      objectIds: [vault.presaleCapId],
-      ...(signal ? { signal } : {}),
-    });
-    const cap = objects[0];
-    if (
-      !cap ||
-      cap instanceof Error ||
-      cap.owner.$kind !== "AddressOwner" ||
-      normalizeSuiAddress(cap.owner.AddressOwner) !== owner ||
-      normalizeStructTag(cap.type) !==
-        normalizeStructTag(
-          `${identity.presale.originalPackageId}::blast_presale::PresaleCap`,
-        )
-    )
-      return null;
-    const transaction = new Transaction();
-    const coins = transaction.add(
-      calls.call.claimMigrationResiduals({
-        memeType: vault.memeType,
-        quoteType: vault.quoteType,
-        vault,
-        presaleCap: transaction.objectRef({
-          objectId: cap.objectId,
-          version: cap.version,
-          digest: cap.digest,
-        }),
-      }),
-    );
-    transaction.transferObjects(moveResults(coins, 2), owner);
-    return {
-      presaleId: vault.presaleId,
-      vault,
-      transaction,
-      kindBytes: await transaction.build({ onlyTransactionKind: true }),
-    };
+  /** The venue's `collect_fees` builder, or null for a venue this deployment cannot reach. */
+  function collectFees(vault: VaultPositions) {
+    const venue = venueOf(presale.migrators, vault.venue);
+    const { cetus, bluefin } = identity.venues;
+    if (venue === "cetus" && cetus) {
+      return (input: CollectInput) =>
+        migrators.collectCetusFees({ ...input, cetus });
+    }
+    if (venue === "bluefin" && bluefin) {
+      return (input: CollectInput) =>
+        migrators.collectBluefinFees({
+          ...input,
+          bluefinConfig: bluefin.config,
+        });
+    }
+    return null;
   }
 
-  async function collectFees(
-    vault: PresaleVaultState,
-    migrationWitness: string,
+  /** The vault's pool and its Meme's Coin Registry `Currency`, both shared. */
+  async function vaultObjects(
+    vault: VaultState & VaultPositions,
     signal?: AbortSignal,
-  ): Promise<PresaleCreatorTransaction | null> {
-    const common = {
-      memeType: vault.memeType,
-      quoteType: vault.quoteType,
-      vault,
-    };
-    const pool = await shared(vault.poolId, signal);
-    const partner = vault.partnerId
-      ? await shared(vault.partnerId, signal)
-      : null;
-    if (!pool || (vault.partnerId && !partner)) return null;
-    const collection = {
-      ...common,
-      pool: { ...pool, mutable: true as const },
-      ...(partner ? { partner: { ...partner, mutable: false as const } } : {}),
-    };
-    const witness = normalizeStructTag(migrationWitness);
-    let transaction: Transaction;
-    if (
-      witness ===
-        normalizeStructTag(
-          `${identity.presale.originalPackageId}::cetus::Witness`,
-        ) &&
-      identity.venues.cetus
-    ) {
-      transaction = calls.collectCetusFees({
-        ...collection,
-        cetusConfig: { ...identity.venues.cetus.globalConfig, mutable: false },
-        burnManager: { ...identity.venues.cetus.burnManager, mutable: false },
-      });
-    } else if (
-      witness ===
-        normalizeStructTag(
-          `${identity.presale.originalPackageId}::bluefin::Witness`,
-        ) &&
-      identity.venues.bluefin
-    ) {
-      transaction = calls.collectBluefinFees({
-        ...collection,
-        bluefinConfig: {
-          ...identity.venues.bluefin.globalConfig,
-          mutable: false,
-        },
-      });
-    } else return null;
-    return {
-      presaleId: vault.presaleId,
-      vault,
-      transaction,
-      kindBytes: await transaction.build({ onlyTransactionKind: true }),
-    };
+  ) {
+    const { coinMetadata } = await client.core.getCoinMetadata({
+      coinType: vault.memeType,
+      ...(signal ? { signal } : {}),
+    });
+    const [pool, currency] = await Promise.all([
+      shared(vault.poolId, signal),
+      coinMetadata?.id
+        ? shared(
+            coinMetadata.id,
+            signal,
+            `0x2::coin_registry::Currency<${vault.memeType}>`,
+          )
+        : null,
+    ]);
+    return pool && currency ? { pool, currency } : null;
   }
 
   return {
@@ -201,12 +159,12 @@ export function createPresaleCreatorClient(
           ? result.Transaction
           : result.FailedTransaction;
       if (!execution?.effects?.status.success || !execution.events) return null;
-      // The contract emits nothing when both collected balances are zero.
+      // The vault emits nothing when both collected balances are zero.
       if (execution.events.length === 0)
         return execution.effects.eventsDigest === null ? [] : null;
       const events = decodePresaleCreatorEvents(
         execution.events,
-        identity.presale.originalPackageId,
+        presale.vault.originalPackageId,
       );
       return events.length > 0 ? events : null;
     },
@@ -217,7 +175,7 @@ export function createPresaleCreatorClient(
         const page: SuiClientTypes.ListOwnedObjectsResponse<{ content: true }> =
           await client.core.listOwnedObjects({
             owner: sender,
-            type: `${identity.presale.originalPackageId}::blast_presale::PresaleCap`,
+            type: `${presale.originalPackageId}::blast_presale::PresaleCap`,
             include: { content: true },
             limit: 50,
             cursor,
@@ -225,7 +183,7 @@ export function createPresaleCreatorClient(
           });
         for (const object of page.objects) {
           ids.push(
-            normalizeSuiAddress(presaleCap.parse(object.content).presaleId),
+            normalizeSuiAddress(presaleCapBcs.parse(object.content).presale_id),
           );
         }
         cursor = page.hasNextPage ? page.cursor : null;
@@ -233,28 +191,32 @@ export function createPresaleCreatorClient(
       return ids;
     },
     async transaction(vaultId, sender, kind, signal) {
-      const vault = await sdk.getVault(vaultId);
-      const sale = await sdk.getPresale(vault.presaleId);
-      if (
-        sale.lifecycle !== "Migrated" ||
-        sale.presaleCapId !== vault.presaleCapId ||
-        normalizeStructTag(sale.memeType) !==
-          normalizeStructTag(vault.memeType) ||
-        normalizeStructTag(sale.quoteType) !==
-          normalizeStructTag(vault.quoteType)
-      )
+      if (kind !== "collect_fees") return null;
+      const vault = await getVault(client, vaultId, presale.vault);
+      if (normalizeStructTag(vault.terms.packageWitness) !== packageWitness)
         return null;
-      const owner = normalizeSuiAddress(sender);
-      if (kind === "claim_residuals")
-        return claimResiduals(vault, owner, signal);
-      if (
-        !vault.feeRecipients.some(
-          (share) =>
-            normalizeSuiAddress(share.recipient) === owner && share.bps > 0n,
-        )
-      )
-        return null;
-      return collectFees(vault, sale.migrationWitness, signal);
+      const collect = collectFees(vault);
+      const objects = collect && (await vaultObjects(vault, signal));
+      if (!collect || !objects) return null;
+      const transaction = new Transaction();
+      transaction.setSender(sender);
+      transaction.add(
+        collect({
+          memeType: vault.memeType,
+          quoteType: vault.quoteType,
+          vault: {
+            objectId: vault.objectId,
+            initialSharedVersion: vault.initialSharedVersion,
+          },
+          ...objects,
+        }),
+      );
+      return {
+        presaleId: vault.terms.origin,
+        vaultId: vault.objectId,
+        transaction,
+        kindBytes: await transaction.build({ onlyTransactionKind: true }),
+      };
     },
   };
 }

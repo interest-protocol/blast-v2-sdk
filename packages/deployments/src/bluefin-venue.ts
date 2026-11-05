@@ -15,7 +15,6 @@ import {
   exactPrice,
   priceImpactBps,
 } from "@interest-protocol/blast-launchpad-sdk/market-data";
-import type { LpVaultState } from "@interest-protocol/blast-migrators-sdk/state";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
@@ -410,9 +409,9 @@ export type BluefinVenueRoute = Readonly<{
  * Resolves a migrated launch's recorded Bluefin route and fails closed unless
  * every link holds: the deployment records the Bluefin lineage and admits the
  * launch's tier; the launch migrated through this deployment's `bluefin`
- * adapter; the pool is a Bluefin `Pool<Meme, Quote>` of the launch's coins at
+ * venue; the pool is a Bluefin `Pool<Meme, Quote>` of the launch's coins at
  * that tier; and it is the pool the launch's vault recorded. Read `vault` with
- * the deployment's migrators package (`getLpVault`) and `pool` with
+ * the deployment's vault package (`getVault`) and `pool` with
  * `getBluefinPool`.
  */
 export function resolveBluefinVenueRoute(options: {
@@ -420,11 +419,17 @@ export function resolveBluefinVenueRoute(options: {
   launch: {
     memeType: string;
     quoteType: string;
-    migrationWitnessType: string;
+    /** The sale's `venue` `TypeName` (`Launch.venue`, `Presale.venue`). */
+    venue: string;
     poolTickSpacing: number;
     poolFeeRate: bigint;
   };
-  vault: Pick<LpVaultState, "objectId" | "poolId" | "memeType" | "quoteType">;
+  vault: {
+    objectId: string;
+    poolId: string;
+    memeType: string;
+    quoteType: string;
+  };
   pool: BluefinPoolState;
 }): BluefinVenueRoute {
   const { deployment, launch, vault, pool } = options;
@@ -437,14 +442,14 @@ export function resolveBluefinVenueRoute(options: {
       "the deployment records no migrators or Bluefin lineage",
     );
   }
-  const witness = parseStructTag(launch.migrationWitnessType);
+  const witness = parseStructTag(launch.venue);
   if (witness.address !== migrators.originalPackageId) {
     throw new BluefinVenueError(
       "foreign-lineage",
-      "the launch migrated through another migrators package",
+      "the sale migrated through another migrators package",
     );
   }
-  if (witness.module !== "bluefin" || witness.name !== "Witness") {
+  if (witness.module !== "bluefin" || witness.name !== "Venue") {
     throw new BluefinVenueError(
       "route-substitution",
       `the launch recorded ${witness.module}::${witness.name}, not Bluefin`,

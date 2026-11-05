@@ -61,10 +61,6 @@ try {
     ["install", "--ignore-scripts", "--no-audit", "--no-fund", ...tarballs],
     { cwd: directory, stdio: "pipe" },
   );
-  writeFileSync(
-    join(directory, "exports.json"),
-    readFileSync(new URL("test/fixtures/legacy-exports.json", root)),
-  );
   const smoke = new URL(
     "../test/fixtures/package-consumer.mjs",
     import.meta.url,
@@ -78,10 +74,6 @@ try {
     join(directory, "consumer.ts"),
     readFileSync(new URL("test/fixtures/package-consumer.ts", root)),
   );
-  writeFileSync(
-    join(directory, "legacy-types.ts"),
-    readFileSync(new URL("test/fixtures/legacy-types.ts", root)),
-  );
   execFileSync(
     new URL("node_modules/.bin/tsc", root).pathname,
     [
@@ -93,7 +85,6 @@ try {
       "--module",
       "nodenext",
       "consumer.ts",
-      "legacy-types.ts",
     ],
     { cwd: directory, stdio: "inherit" },
   );
