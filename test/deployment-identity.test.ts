@@ -681,7 +681,7 @@ test("the fresh ABI requires a coordinated SDK release and matching runtime", ()
 test("pins the frozen ABI to the contracts baseline and every artifact key", () => {
   assert.equal(
     FROZEN_ABI.contractsCommit,
-    "68db57b32f196a78cd952a718b462b758f882ded",
+    "b50d0c3bee50b637a673d1ccb64b5413af4ba518",
   );
   assert.deepEqual(Object.keys(FROZEN_ABI.artifacts), [...ARTIFACT_KEYS]);
   for (const [key, digest] of Object.entries(FROZEN_ABI.artifacts)) {

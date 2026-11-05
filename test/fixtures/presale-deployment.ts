@@ -42,6 +42,7 @@ export const PRESALE_DEPLOYMENT: PresaleDeployment = {
     venueConfig: shared("0xd5"),
     vault,
   },
+  vestingPackageId: "0xf4",
   aftermathDaoPresale: {
     packageId: "0x7a",
     originalPackageId: "0x7a",

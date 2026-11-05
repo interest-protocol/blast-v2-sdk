@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
  * refreeze at contracts main with `check:abi:write` for an approved change,
  * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
  */
-const BASELINE_COMMIT = "68db57b32f196a78cd952a718b462b758f882ded";
+const BASELINE_COMMIT = "b50d0c3bee50b637a673d1ccb64b5413af4ba518";
 const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
@@ -31,6 +31,8 @@ const LAUNCH_STACK_FREEZE =
   "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#215: the fresh one-way launch stack, first freeze";
 const DEEP_REVIEW_FIXES =
   "contracts #217: every product's unpause also requires the core Treasury guarded; MigrationAllocationPaid names its vesting schedules; venue auto-LP compounding moves to compound_auto_lp";
+const SEALED_TREASURY_CAPS =
+  "contracts ADR 0138 (PR #219): a generated coin's TreasuryCap is sealed under its product in blast_core::sealed_treasury_cap::SealedTreasuryCap; launch_ticket::new and the new blast_presale::sale_token::new return the sealed cap, launch::new and blast_presale::new open it, launch_config::venue_admission and creation_policy::venue_admission issue the VenueAdmission cetus::prepare takes with &mut SealedTreasuryCap, bluefin::prepare takes &SealedTreasuryCap, and presale_coin_template is the presale's generated sale-token package";
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
   {
@@ -52,7 +54,7 @@ const artifactDeclarations = [
   },
   {
     path: "production-core-v1.json",
-    approvedAbiAmendments: [LAUNCH_STACK_FREEZE],
+    approvedAbiAmendments: [LAUNCH_STACK_FREEZE, SEALED_TREASURY_CAPS],
     packages: [["core", "core", "blast_core"]],
   },
   {
@@ -66,6 +68,7 @@ const artifactDeclarations = [
       LAUNCH_STACK_FREEZE,
       "contracts #200: one product-agnostic blast_migrators venue package for launches and presales",
       DEEP_REVIEW_FIXES,
+      SEALED_TREASURY_CAPS,
     ],
     packages: [["migrators", "migrators", "blast_migrators"]],
   },
@@ -75,6 +78,7 @@ const artifactDeclarations = [
       LAUNCH_STACK_FREEZE,
       "contracts #204: launch::migrate returns a Migration for the venue's migrate; generic administration, core roles and the core Treasury ledger",
       DEEP_REVIEW_FIXES,
+      SEALED_TREASURY_CAPS,
     ],
     packages: [
       ["launchpad", "launchpad", "blast_fun"],
@@ -92,8 +96,12 @@ const artifactDeclarations = [
       LAUNCH_STACK_FREEZE,
       "contracts #202: blast_presale::migrate returns a Migration for the venue's migrate; the presale's own venues, vault and rewards are removed",
       DEEP_REVIEW_FIXES,
+      SEALED_TREASURY_CAPS,
     ],
-    packages: [["presale", "presale", "blast_presale"]],
+    packages: [
+      ["presale", "presale", "blast_presale"],
+      ["presaleCoinTemplate", "presale_coin_template", "presale_coin_template"],
+    ],
   },
   {
     path: "production-aftermath-dao-presale-v1.json",
@@ -515,6 +523,11 @@ const functionClassifiers = {
         "blast_treasury::pending_destination",
         "blast_treasury::is_destination_ready",
         "blast_treasury::is_guarded",
+        "sealed_treasury_cap::package_witness",
+        "sealed_treasury_cap::treasury_cap_id",
+        "sealed_treasury_cap::total_supply",
+        "sealed_treasury_cap::admission_package_witness",
+        "sealed_treasury_cap::admission_venue",
       ],
     },
     {
@@ -527,6 +540,8 @@ const functionClassifiers = {
       migration: "move-composition",
       owner_proof: "move-composition",
       protocol_fees: "move-composition",
+      // Sealing, admitting and opening take a package or venue witness.
+      sealed_treasury_cap: "move-composition",
     },
   ),
   blast_vault: classifierOf({
@@ -582,6 +597,7 @@ const functionClassifiers = {
         "migrate",
         "collect_fees",
         "settle_and_apply_fee_split",
+        "compound_auto_lp",
         "buyback_and_burn",
         "compound_auto_lp",
       ].map((name) => `${venue}::${name}`),
@@ -591,6 +607,7 @@ const functionClassifiers = {
   launch_ticket_template: () => undefined,
   coin_template: () => undefined,
   blast_presale: classifyPresaleFunction,
+  presale_coin_template: () => undefined,
   blast_aftermath_dao_presale: classifierOf({
     builder: [
       "blast_aftermath_dao_presale::prepare",
@@ -684,7 +701,11 @@ const launchpadBuilders = {
 function classifyLaunchpadFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
   if (launchpadBuilders[moduleName]?.includes(functionName)) return "builder";
-  if (key === "allocation::recipient_share" || key === "allocation::plan") {
+  if (
+    key === "allocation::recipient_share" ||
+    key === "allocation::plan" ||
+    key === "launch_config::venue_admission"
+  ) {
     return "compositional";
   }
   if (key === "launch_ticket::new") return "template-builder";
@@ -745,8 +766,13 @@ const presaleBuilders = {
 };
 
 function classifyPresaleFunction(moduleName, functionName) {
+  const key = `${moduleName}::${functionName}`;
   // The initializer's venue is read inside the creation PTB.
-  if (moduleName === "blast_presale" && functionName === "venue") return "read";
+  if (key === "blast_presale::venue") return "read";
+  // The admission is built in the creation PTB for cetus::prepare.
+  if (key === "creation_policy::venue_admission") return "compositional";
+  // Called by the generated sale-token package's initializer.
+  if (key === "sale_token::new") return "template-builder";
   if (presaleBuilders[moduleName]?.includes(functionName)) return "builder";
   return undefined;
 }

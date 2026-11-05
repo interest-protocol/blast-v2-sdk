@@ -15,6 +15,8 @@ import {
   CoreCalls,
   normalizeCoreDeployment,
 } from "@interest-protocol/blast-core/deployment";
+import type { ObjectVersionReference } from "@interest-protocol/blast-core/effects";
+import { finalizeCurrencyRegistration } from "@interest-protocol/blast-core/effects";
 import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
 import {
   requireBasisPointsAtMost,
@@ -36,6 +38,7 @@ import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk
 import {
   MigratorCalls,
   normalizeMigratorsDeployment,
+  venueWitnessType,
 } from "@interest-protocol/blast-migrators-sdk/transactions";
 import type { PartnersDeployment } from "@interest-protocol/blast-partners-sdk/transactions";
 import type { VaultDeployment } from "@interest-protocol/blast-vault-sdk/transactions";
@@ -53,10 +56,12 @@ import { Transaction } from "@mysten/sui/transactions";
 import {
   fromHex,
   isValidSuiAddress,
+  MOVE_STDLIB_ADDRESS,
   normalizeStructTag,
   normalizeSuiAddress,
   normalizeSuiObjectId,
   parseStructTag,
+  SUI_FRAMEWORK_ADDRESS,
 } from "@mysten/sui/utils";
 import type { AftermathDaoPresaleDeployment } from "./aftermath-dao.ts";
 import {
@@ -78,14 +83,17 @@ import type {
   RecipientShare,
   UncappedPhase,
 } from "./state.ts";
+import type { PresaleCoinTemplateOptions } from "./template.ts";
+import { buildPresaleCoinPackageBytecode } from "./template.ts";
 
 /**
  * The `blast_presale` package and every package its calls and compositions
  * read: its shared `PackageVersion<BLAST_PRESALE_PACKAGE>`,
  * `PackageAdmin<BLAST_PRESALE_PACKAGE>`, `CreationPolicy`, `FeePolicy` and
  * `PresaleRegistry`; core (the treasury), admin (the ACL), partners, the
- * vault, the migrators venues, and the Aftermath DAO-pool vendor when
- * published. Calls target `packageId`; types name `originalPackageId`.
+ * vault, the migrators venues, the vesting package a sale-token publication
+ * links, and the Aftermath DAO-pool vendor when published. Calls target
+ * `packageId`; types name `originalPackageId`.
  */
 export type PresaleDeployment = {
   packageId: string;
@@ -100,6 +108,8 @@ export type PresaleDeployment = {
   partners: PartnersDeployment;
   vault: VaultDeployment;
   migrators: MigratorsDeployment;
+  /** `blast_fun_vesting`, which core links; `publishPresaleCoin` lists it. */
+  vestingPackageId: string;
   aftermathDaoPresale?: AftermathDaoPresaleDeployment;
 };
 
@@ -144,6 +154,7 @@ export function normalizePresaleDeployment(
     },
     vault: normalizeVaultDeployment(deployment.vault),
     migrators: normalizeMigratorsDeployment(deployment.migrators),
+    vestingPackageId: normalizeSuiObjectId(deployment.vestingPackageId),
     ...(deployment.aftermathDaoPresale === undefined
       ? {}
       : {
@@ -245,17 +256,38 @@ export class PresaleCalls {
       this.#call(tx, "recipient_share", [recipient(tx), bps(tx)]);
   }
 
-  // Creation, in one PTB: a venue's `prepare`, `new`, the setters, `finalize`
-  // and `share`.
+  // Creation, in one PTB: the presale's venue admission (Cetus), a venue's
+  // `prepare`, `new`, the setters, `finalize` and `share`.
 
   /**
-   * `blast_presale::new(treasury_cap, package_version, venue_ticket,
-   * creation_policy, fee_policy)`: redeems the venue's `VenueTicket` and
-   * returns the `PresaleInitializer` the same PTB configures and finalizes.
+   * `creation_policy::venue_admission<Venue>(creation_policy)`: the presale's
+   * `VenueAdmission` of the migrators venue `venueType` (`venueWitnessType`),
+   * with which that venue's `prepare` borrows the sale token's sealed
+   * `TreasuryCap`. Aborts with `EVenueNotAllowed` unless the venue is admitted
+   * now. Ephemeral: consumed by `prepare` in the same PTB.
+   */
+  venueAdmission(options: { venueType: string }) {
+    const venueType = normalizeStructTag(options.venueType);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: this.#target("creation_policy", "venue_admission"),
+        typeArguments: [venueType],
+        arguments: [
+          deploymentObject(tx, this.deployment.creationPolicy, false),
+        ],
+      });
+  }
+
+  /**
+   * `blast_presale::new(sealed_treasury_cap, package_version, venue_ticket,
+   * creation_policy, fee_policy)`: opens the sale token's seal
+   * (`sale_token::new` sealed it at publication), redeems the venue's
+   * `VenueTicket` and returns the `PresaleInitializer` the same PTB
+   * configures and finalizes.
    */
   new(
     options: PresaleTypes & {
-      treasuryCap: TransactionObjectInput;
+      sealedTreasuryCap: TransactionObjectInput;
       venueTicket: TransactionArgument;
     },
   ) {
@@ -264,7 +296,7 @@ export class PresaleCalls {
         tx,
         "new",
         [
-          tx.object(options.treasuryCap),
+          tx.object(options.sealedTreasuryCap),
           this.#version(tx),
           options.venueTicket,
           deploymentObject(tx, this.deployment.creationPolicy, false),
@@ -914,15 +946,15 @@ type VenueOptions<
 export type PresaleVenueCreation =
   | ({ venue: "cetus" } & VenueOptions<
       MigratorCalls["prepareCetus"],
-      "treasuryCap"
+      "sealedTreasuryCap" | "admission"
     >)
   | ({ venue: "bluefin" } & VenueOptions<
       MigratorCalls["prepareBluefin"],
-      "treasuryCap" | "currency"
+      "sealedTreasuryCap" | "currency"
     >)
   | {
       venue: "aftermathDao";
-      /** The vendor's `AdminCap`, owned by the sender with the `TreasuryCap`. */
+      /** The vendor's `AdminCap`, owned by the sender with the sealed `TreasuryCap`. */
       adminCap: TransactionObjectInput;
       /** The verified fresh LP coin whose `CreatePoolCapV2` the sale reserves. */
       lpCoin: AftermathLpCoin;
@@ -997,18 +1029,71 @@ export class PresaleTransactions {
   }
 
   /**
-   * One PTB: the venue's `prepare`, `new`, every setter (`set_participant_vesting`,
+   * Publishes the generated sale-token package and makes it immutable. Its
+   * initializer transfers the `SealedTreasuryCap<SaleToken>` to the sender
+   * (`readPresaleCoinPublication`) and delivers or deletes the `MetadataCap`;
+   * the `Currency` goes to the Coin Registry address
+   * (`finalizeCurrencyRegistration`). The publisher then runs `createPresale`.
+   */
+  publishPresaleCoin(options: PresaleCoinTemplateOptions): Transaction {
+    const { deployment } = this.call;
+    const tx = new Transaction();
+    const upgradeCap = tx.add(async (innerTx) => {
+      const module = await buildPresaleCoinPackageBytecode(options, deployment);
+      return innerTx.publish({
+        modules: [Array.from(module)],
+        dependencies: [
+          MOVE_STDLIB_ADDRESS,
+          SUI_FRAMEWORK_ADDRESS,
+          deployment.admin.packageId,
+          deployment.partners.packageId,
+          deployment.vestingPackageId,
+          deployment.core.packageId,
+          deployment.packageId,
+        ],
+      });
+    });
+    tx.moveCall({
+      target: `${SUI_FRAMEWORK_ADDRESS}::package::make_immutable`,
+      arguments: [upgradeCap],
+    });
+    return tx;
+  }
+
+  /**
+   * Shares a published sale token's pending `Currency` from the Coin Registry
+   * address, so `finalize` can fix its supply. Anyone may run it.
+   */
+  finalizeCurrencyRegistration(options: {
+    saleTokenType: string;
+    currency: ObjectVersionReference;
+    coinRegistry: SharedObjectIdentity;
+  }): Transaction {
+    const tx = new Transaction();
+    tx.add(
+      finalizeCurrencyRegistration({
+        ...options,
+        coinType: options.saleTokenType,
+      }),
+    );
+    return tx;
+  }
+
+  /**
+   * One PTB: for Cetus the presale's `venue_admission`, then the venue's
+   * `prepare`, `new`, every setter (`set_participant_vesting`,
    * `set_uncapped_phase`, `set_hard_cap` and `set_partner` when given),
    * `finalize`, `set_protocol_fees` when `protocolFees` names a `FeeAdmin`
    * cap, `share` from `commitmentStartsAtMs`, and the `PresaleCap` to
-   * `capRecipient`. The sender holds the zero-supply `TreasuryCap` (and, for
-   * the vendor, its `AdminCap`); `prepare` borrows the cap and `new` takes it.
+   * `capRecipient`. The sender holds the sealed zero-supply `TreasuryCap`
+   * (`readPresaleCoinPublication`; for the vendor, also its `AdminCap`);
+   * `prepare` borrows the cap through the seal and `new` opens it.
    */
   createPresale(
     options: PresaleTypes &
       PresaleSettings &
       PresaleVenueCreation & {
-        treasuryCap: TransactionObjectInput;
+        sealedTreasuryCap: TransactionObjectInput;
         /** The sale token's confirmed unregulated Coin Registry `Currency`. */
         currency: SharedObjectIdentity;
         commitmentStartsAtMs: bigint;
@@ -1018,7 +1103,7 @@ export class PresaleTransactions {
   ): Transaction {
     const capRecipient = normalizeSuiAddress(options.capRecipient);
     const tx = new Transaction();
-    const venueTicket = tx.add(this.#prepare(options));
+    const venueTicket = tx.add(this.#prepare(tx, options));
     const { call } = this;
     const initializer = tx.add(call.new({ ...options, venueTicket }));
     const set = { ...options, initializer };
@@ -1435,9 +1520,10 @@ export class PresaleTransactions {
   }
 
   #prepare(
+    tx: Transaction,
     options: PresaleTypes &
       PresaleVenueCreation & {
-        treasuryCap: TransactionObjectInput;
+        sealedTreasuryCap: TransactionObjectInput;
         currency: SharedObjectIdentity;
       },
   ): (tx: Transaction) => TransactionResult {
@@ -1450,13 +1536,18 @@ export class PresaleTransactions {
         return this.migrators.prepareCetus({
           ...memeTypes,
           cetus: options.cetus,
-          treasuryCap: options.treasuryCap,
+          sealedTreasuryCap: options.sealedTreasuryCap,
+          admission: tx.add(
+            this.call.venueAdmission({
+              venueType: venueWitnessType(this.migrators.deployment, "cetus"),
+            }),
+          ),
           tickSpacing: options.tickSpacing,
         });
       case "bluefin":
         return this.migrators.prepareBluefin({
           ...memeTypes,
-          treasuryCap: options.treasuryCap,
+          sealedTreasuryCap: options.sealedTreasuryCap,
           currency: options.currency,
           tickSpacing: options.tickSpacing,
           feeRate: options.feeRate,

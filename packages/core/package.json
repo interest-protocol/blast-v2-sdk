@@ -46,6 +46,10 @@
       "types": "./dist/deployment.d.ts",
       "default": "./dist/deployment.js"
     },
+    "./effects": {
+      "types": "./dist/effects.d.ts",
+      "default": "./dist/effects.js"
+    },
     "./events": {
       "types": "./dist/events.d.ts",
       "default": "./dist/events.js"

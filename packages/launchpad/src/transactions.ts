@@ -12,6 +12,8 @@ import {
   CoreCalls,
   normalizeCoreDeployment,
 } from "@interest-protocol/blast-core/deployment";
+import type { ObjectVersionReference } from "@interest-protocol/blast-core/effects";
+import { finalizeCurrencyRegistration } from "@interest-protocol/blast-core/effects";
 import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
 import {
   requireBasisPointsAtMost,
@@ -36,6 +38,7 @@ import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk
 import {
   MigratorCalls,
   normalizeMigratorsDeployment,
+  venueWitnessType,
 } from "@interest-protocol/blast-migrators-sdk/transactions";
 import type { PartnersDeployment } from "@interest-protocol/blast-partners-sdk/transactions";
 import type { VaultDeployment } from "@interest-protocol/blast-vault-sdk/transactions";
@@ -60,7 +63,6 @@ import {
 } from "@mysten/sui/utils";
 import type { CreatorAllocationPlan, RecipientShare } from "./allocation.ts";
 import { normalizeAllocationPlan } from "./allocation.ts";
-import type { ObjectVersionReference } from "./effects.ts";
 import type { MemeTemplateOptions } from "./template.ts";
 import { buildMemePackageBytecode } from "./template.ts";
 
@@ -275,14 +277,31 @@ export class LaunchpadCalls {
   // Creation, in PTB order: `newLaunch`, the setters, `finalize`, `share`.
 
   /**
-   * `launch::new`: starts the launch from the publisher's ticket and
-   * `TreasuryCap` and the venue's `VenueTicket` (`MigratorCalls.prepare*`),
-   * returning the `LaunchInitializer` hot potato.
+   * `launch_config::venue_admission<Venue>(config)`: the launchpad's
+   * `VenueAdmission` of the migrators venue `venueType`
+   * (`venueWitnessType`), with which that venue's `prepare` borrows the
+   * coin's sealed `TreasuryCap`. Aborts with `EVenueNotAllowed` unless the
+   * venue is admitted now. Ephemeral: consumed by `prepare` in the same PTB.
+   */
+  venueAdmission(options: VenueTypeInput) {
+    const venueType = normalizeStructTag(options.venueType);
+    return (tx: Transaction): TransactionResult =>
+      tx.moveCall({
+        target: this.#target("launch_config", "venue_admission"),
+        typeArguments: [venueType],
+        arguments: [this.#launchConfig(tx)],
+      });
+  }
+
+  /**
+   * `launch::new`: starts the launch from the publisher's ticket and sealed
+   * `TreasuryCap`, which only this call opens, and the venue's `VenueTicket`
+   * (`MigratorCalls.prepare*`), returning the `LaunchInitializer` hot potato.
    */
   newLaunch(
     options: LaunchTypes & {
       ticket: TransactionObjectInput;
-      treasuryCap: TransactionObjectInput;
+      sealedTreasuryCap: TransactionObjectInput;
       venueTicket: TransactionArgument;
     },
   ) {
@@ -293,7 +312,7 @@ export class LaunchpadCalls {
         typeArguments: [types.memeType, types.quoteType],
         arguments: [
           tx.object(options.ticket),
-          tx.object(options.treasuryCap),
+          tx.object(options.sealedTreasuryCap),
           this.#packageVersion(tx),
           this.#launchConfig(tx),
           options.venueTicket,
@@ -566,21 +585,10 @@ export class LaunchpadCalls {
     currency: ObjectVersionReference;
     coinRegistry: SharedObjectIdentity;
   }) {
-    const memeType = normalizeStructTag(options.memeType);
-    const currency = {
-      objectId: normalizeSuiObjectId(options.currency.objectId),
-      version: options.currency.version,
-      digest: options.currency.digest,
-    };
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: `${SUI_FRAMEWORK_ADDRESS}::coin_registry::finalize_registration`,
-        typeArguments: [memeType],
-        arguments: [
-          sharedObject(tx, "coinRegistry", options.coinRegistry, true),
-          tx.receivingRef(currency),
-        ],
-      });
+    return finalizeCurrencyRegistration({
+      ...options,
+      coinType: options.memeType,
+    });
   }
 
   // Migration and ownership.
@@ -1278,7 +1286,7 @@ type ImmediateAdmissions = {
 /** The owned objects a Meme publication sends the publisher (`readMemePublication`). */
 export type LaunchTicketInput = {
   ticket: TransactionObjectInput;
-  treasuryCap: TransactionObjectInput;
+  sealedTreasuryCap: TransactionObjectInput;
 };
 
 /** A launch's vault and the curve-fee cap that proves ownership of it. */
@@ -1306,17 +1314,15 @@ export class LaunchpadTransactions {
 
   /**
    * Publishes the generated Meme package and makes it immutable. Its
-   * initializer transfers the `LaunchTicket<Meme>` and the `TreasuryCap<Meme>`
-   * to the sender (`readMemePublication`), who then runs `createLaunch`.
+   * initializer transfers the `LaunchTicket<Meme>` and the
+   * `SealedTreasuryCap<Meme>` to the sender (`readMemePublication`), who then
+   * runs `createLaunch`.
    */
   publishMeme(options: MemeTemplateOptions): Transaction {
     const { deployment } = this.call;
     const tx = new Transaction();
     const upgradeCap = tx.add(async (innerTx) => {
-      const module = await buildMemePackageBytecode(
-        options,
-        deployment.originalPackageId,
-      );
+      const module = await buildMemePackageBytecode(options, deployment);
       return innerTx.publish({
         modules: [Array.from(module)],
         dependencies: [
@@ -1338,13 +1344,15 @@ export class LaunchpadTransactions {
   }
 
   /**
-   * One PTB from a published Meme to a shared launch: the venue's `prepare`
-   * (the `TreasuryCap` by reference) returns the `VenueTicket`, `launch::new`
-   * takes the ticket and the cap by value, the settings follow, the exact SUI
-   * `creationFee` (`LaunchConfigState.creationFee`) pays `finalize`, the
-   * optional purchase or opening-round bid runs on the owned launch and its
-   * coins go to `preShareBuy.recipient`, and `share` opens it. `currency` is
-   * the shared `Currency<Meme>` (`readCurrencyRegistration`).
+   * One PTB from a published Meme to a shared launch: for Cetus the
+   * launchpad's `venue_admission`, then the venue's `prepare` (the sealed
+   * `TreasuryCap` by reference) returns the `VenueTicket`, `launch::new`
+   * takes the ticket and the sealed cap by value and opens the seal, the
+   * settings follow, the exact SUI `creationFee`
+   * (`LaunchConfigState.creationFee`) pays `finalize`, the optional purchase
+   * or opening-round bid runs on the owned launch and its coins go to
+   * `preShareBuy.recipient`, and `share` opens it. `currency` is the shared
+   * `Currency<Meme>` (`readCurrencyRegistration`).
    */
   createLaunch(
     options: LaunchTypes &
@@ -1362,25 +1370,30 @@ export class LaunchpadTransactions {
     const creationFee = requireU64("creationFee", options.creationFee);
     if (preShareBuy) requirePositiveU64("quoteAmount", preShareBuy.quoteAmount);
     const tx = new Transaction();
-    const treasuryCap = tx.object(options.treasuryCap);
+    const sealedTreasuryCap = tx.object(options.sealedTreasuryCap);
     const venueTicket = tx.add(
       options.venue === "cetus"
         ? this.migrators.prepareCetus({
             ...options,
             cetus: options.cetus,
-            treasuryCap,
+            sealedTreasuryCap,
+            admission: tx.add(
+              call.venueAdmission({
+                venueType: venueWitnessType(this.migrators.deployment, "cetus"),
+              }),
+            ),
             tickSpacing: options.tier.tickSpacing,
           })
         : this.migrators.prepareBluefin({
             ...options,
-            treasuryCap,
+            sealedTreasuryCap,
             currency: options.currency,
             tickSpacing: options.tier.tickSpacing,
             feeRate: options.tier.feeRate,
           }),
     );
     const initializer = tx.add(
-      call.newLaunch({ ...options, treasuryCap, venueTicket }),
+      call.newLaunch({ ...options, sealedTreasuryCap, venueTicket }),
     );
     const settings = { ...options, initializer };
     tx.add(call.setVirtualQuote(settings));

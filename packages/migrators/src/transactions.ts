@@ -128,6 +128,20 @@ type BluefinVaultInput = PairTypes & {
   pool: SharedObjectIdentity;
 };
 
+/** A Cetus vault's auto-LP compounding inputs: the vault, Cetus's config and the pool. */
+type CetusCompoundInput = PairTypes & {
+  vault: SharedObjectIdentity;
+  cetus: { config: SharedObjectIdentity };
+  pool: SharedObjectIdentity;
+};
+
+/** A Bluefin vault's auto-LP compounding inputs: the vault, Bluefin's config and the pool. */
+type BluefinCompoundInput = PairTypes & {
+  vault: SharedObjectIdentity;
+  bluefinConfig: SharedObjectIdentity;
+  pool: SharedObjectIdentity;
+};
+
 /** A buyback's admin witness and swap bounds; `quoteIn` is atomic Quote. */
 type BuybackInput = {
   adminWitness: TransactionObjectInput;
@@ -159,14 +173,18 @@ export class MigratorCalls {
 
   /**
    * `cetus::prepare<Meme, Quote>(migrators_version, venue_config,
-   * cetus_config, pools, &mut treasury_cap, tick_spacing)`: reserves the
-   * Meme's Cetus pool and returns its `VenueTicket`.
+   * cetus_config, pools, &mut sealed_treasury_cap, admission, tick_spacing)`:
+   * borrows the coin's sealed `TreasuryCap` with the product's `VenueAdmission`
+   * of this venue (`launch_config::venue_admission` or
+   * `creation_policy::venue_admission`, built earlier in the same PTB),
+   * reserves the Meme's Cetus pool and returns its `VenueTicket`.
    */
   prepareCetus(options: {
     memeType: string;
     quoteType: string;
     cetus: { config: SharedObjectIdentity; pools: SharedObjectIdentity };
-    treasuryCap: TransactionObjectInput;
+    sealedTreasuryCap: TransactionObjectInput;
+    admission: TransactionArgument;
     tickSpacing: number;
   }): (tx: Transaction) => TransactionResult {
     const types = pair(options);
@@ -187,7 +205,8 @@ export class MigratorCalls {
           deploymentObject(tx, this.deployment.venueConfig, true),
           deploymentObject(tx, cetus.config, false),
           deploymentObject(tx, cetus.pools, true),
-          tx.object(options.treasuryCap),
+          tx.object(options.sealedTreasuryCap),
+          options.admission,
           tx.pure.u32(tickSpacing),
         ],
       });
@@ -195,8 +214,10 @@ export class MigratorCalls {
 
   /**
    * `bluefin::prepare<Meme, Quote>(migrators_version, venue_config,
-   * &treasury_cap, &currency, tick_spacing, fee_rate)`: records the Meme's
-   * Bluefin tier and returns its `VenueTicket`. Rejects a tier outside
+   * &sealed_treasury_cap, &currency, tick_spacing, fee_rate)`: records the
+   * Meme's Bluefin tier and returns its `VenueTicket`. The sealed cap only
+   * proves control of the coin; Bluefin reserves nothing, so it is never
+   * borrowed. Rejects a tier outside
    * Bluefin's own bounds (`EInvalidTier`: tick spacing 1..=400, fee rate
    * 1..=20,000); the contract also aborts with `ESymbolTooLong` when the
    * Meme symbol exceeds 32 bytes.
@@ -204,7 +225,7 @@ export class MigratorCalls {
   prepareBluefin(options: {
     memeType: string;
     quoteType: string;
-    treasuryCap: TransactionObjectInput;
+    sealedTreasuryCap: TransactionObjectInput;
     currency: SharedObjectIdentity;
     tickSpacing: number;
     feeRate: bigint;
@@ -233,7 +254,7 @@ export class MigratorCalls {
         arguments: [
           this.#migratorsVersion(tx),
           deploymentObject(tx, this.deployment.venueConfig, true),
-          tx.object(options.treasuryCap),
+          tx.object(options.sealedTreasuryCap),
           deploymentObject(tx, currency, false),
           tx.pure.u32(tickSpacing),
           tx.pure.u64(feeRate),
@@ -352,8 +373,9 @@ export class MigratorCalls {
   }
 
   /**
-   * `cetus::settle_and_apply_fee_split`: `collectCetusFees` under the
-   * current split, then applies the ready scheduled split. Anyone may call it.
+   * `cetus::settle_and_apply_fee_split(..., pool, clock)`: `collectCetusFees`
+   * under the current split, then applies the ready scheduled split. Anyone
+   * may call it.
    */
   settleAndApplyCetusFeeSplit(
     options: CetusVaultInput,
@@ -634,8 +656,8 @@ export class MigratorCalls {
 }
 
 /**
- * One-call PTBs for a migrated vault's venue routes: fee collection and
- * settlement (anyone) and buybacks (an `AdminCap` holding
+ * One-call PTBs for a migrated vault's venue routes: fee collection,
+ * settlement and auto-LP compounding (anyone) and buybacks (an `AdminCap` holding
  * `blast_domain::BuybackAdmin`). Preparation and migration are composed
  * with the product's own calls by the launchpad and presale packages.
  */

@@ -1,5 +1,10 @@
+<<<<<<<< HEAD:test/fixtures/launchpad-68db57b.move
 // Fixture generator for test/fixtures/launchpad-68db57b.ts. It is not compiled by the SDK.
 // To regenerate: extract contracts commit 68db57b3 with `git archive 68db57b3 sui`, copy this
+========
+// Fixture generator for test/fixtures/launchpad-7efd934.ts. It is not compiled by the SDK.
+// To regenerate: extract contracts commit 7efd9342 with `git archive 7efd9342 sui`, copy this
+>>>>>>>> a54a02d (feat(sdk)!: port to sealed treasury caps (contracts #219, ADR 0138) at 7efd9342):test/fixtures/launchpad-7efd934.move
 // file to sui/launchpad/tests/ in that copy only, and run `sui move test sdk_fixture_tests` from
 // sui/launchpad (sui 1.77.2). Never add it to the contracts repository.
 #[test_only]
@@ -94,7 +99,7 @@ fun print_fixtures() {
     debug::print(&bcs::to_bytes(&runtime));
 
     scenario.next_tx(LAUNCHER);
-    let (ticket, treasury_cap) = launch_ticket::new(
+    let (ticket, sealed_treasury_cap) = launch_ticket::new(
         test_utils::create_one_time_witness<SDK_FIXTURE_TESTS>(),
         9,
         b"SDK".to_string(),
@@ -114,7 +119,7 @@ fun print_fixtures() {
     let mut currency = scenario.take_from_address<Currency<SDK_FIXTURE_TESTS>>(COIN_REGISTRY);
     let mut initializer = launch::new<_, TEST_QUOTE>(
         ticket,
-        treasury_cap,
+        sealed_treasury_cap,
         &pv,
         &config,
         migration::issue_ticket<_, TEST_QUOTE, _>(migration::test_venue()),

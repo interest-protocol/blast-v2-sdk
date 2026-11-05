@@ -28,7 +28,7 @@ const expectedEvents = {
     launchTicketTemplate: 0,
     coinTemplate: 0,
   },
-  "production-presale-v1.json": { presale: 11 },
+  "production-presale-v1.json": { presale: 11, presaleCoinTemplate: 0 },
   "production-aftermath-dao-presale-v1.json": { aftermathDaoPresale: 2 },
   "production-blast-sui-v1.json": { blastSui: 13 },
   "production-boosts-v1.json": {

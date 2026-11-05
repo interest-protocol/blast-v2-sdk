@@ -71,7 +71,7 @@ const lpFeeSplit = {
 const settings = {
   ...types,
   ticket: "0x7c",
-  treasuryCap: "0x7d",
+  sealedTreasuryCap: "0x7d",
   currency: shared("0xd", "22", true),
   virtualQuote: 1_000n,
   graduationTarget: 3_000n,
@@ -101,6 +101,7 @@ test("creates a launch in one PTB: venue ticket, new, settings, finalize, bid, s
 
   const launchpadCalls = assertBuildersMatchAbi(tx, abi, deployment.packageId);
   assert.deepEqual(launchpadCalls, [
+    "launch_config::venue_admission",
     "launch::new",
     "launch::set_virtual_quote",
     "launch::set_graduation_target",
@@ -123,12 +124,28 @@ test("creates a launch in one PTB: venue ticket, new, settings, finalize, bid, s
   assert.ok(coreCalls.includes("payout::recipient"));
   assert.ok(coreCalls.includes("payout::vesting_terms"));
   assert.ok(coreCalls.includes("fee_split::new"));
-  // The venue reserves the pool with the TreasuryCap first; `new` takes it by
-  // value with the venue's ticket.
+  // The launchpad admits the venue, which reserves the pool through the
+  // sealed TreasuryCap first; `new` takes the sealed cap by value with the
+  // venue's ticket and opens it.
+  const admission = commandIndex(tx, "launch_config::venue_admission");
   const prepare = commandIndex(tx, "cetus::prepare");
-  assert.ok(prepare >= 0 && prepare < commandIndex(tx, "launch::new"));
+  assert.ok(admission >= 0 && admission < prepare);
+  assert.ok(prepare < commandIndex(tx, "launch::new"));
   assert.deepEqual(venueCalls(tx), ["cetus::prepare"]);
-  assert.ok(argumentsOf(tx, "cetus::prepare").includes("object:0x7d"));
+  const admissionCall = tx.getData().commands[admission];
+  assert.deepEqual(
+    admissionCall?.$kind === "MoveCall"
+      ? admissionCall.MoveCall.typeArguments
+      : [],
+    [normalizeStructTag("0xb0::cetus::Venue")],
+  );
+  assert.deepEqual(argumentsOf(tx, "launch_config::venue_admission"), [
+    "shared:0x3",
+  ]);
+  assert.deepEqual(argumentsOf(tx, "cetus::prepare").slice(4, 6), [
+    "object:0x7d",
+    `Result:${admission}`,
+  ]);
   assert.deepEqual(argumentsOf(tx, "launch::new"), [
     "object:0x7c",
     "object:0x7d",
@@ -743,7 +760,9 @@ test("every launchpad builder matches the frozen ABI, signed in as its role", ()
   );
   // With creation, trading, claims, migration and ownership above, every
   // `launch_config` and `runtime_config` function and every launch
-  // governance function has a builder.
+  // governance function has a builder; the venue admission is built inside
+  // `createLaunch` (checked above) for `cetus::prepare`.
+  covered.add("launch_config::venue_admission");
   for (const module of ["launch_config", "runtime_config"]) {
     for (const { name } of abi[module]?.functions ?? []) {
       assert.ok(covered.has(`${module}::${name}`), `${module}::${name}`);

@@ -1,10 +1,11 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "68db57b32f196a78cd952a718b462b758f882ded",
+    "contractsCommit": "b50d0c3bee50b637a673d1ccb64b5413af4ba518",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
-      "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#215: the fresh one-way launch stack, first freeze"
+      "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#215: the fresh one-way launch stack, first freeze",
+      "contracts ADR 0138 (PR #219): a generated coin's TreasuryCap is sealed under its product in blast_core::sealed_treasury_cap::SealedTreasuryCap; launch_ticket::new and the new blast_presale::sale_token::new return the sealed cap, launch::new and blast_presale::new open it, launch_config::venue_admission and creation_policy::venue_admission issue the VenueAdmission cetus::prepare takes with &mut SealedTreasuryCap, bluefin::prepare takes &SealedTreasuryCap, and presale_coin_template is the presale's generated sale-token package"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -4382,6 +4383,571 @@
                           "phantom": true
                         }
                       ]
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "sealed_treasury_cap": {
+          "functions": [
+            {
+              "name": "admission_package_witness",
+              "sdk": "read",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "sealed_treasury_cap"
+                        },
+                        "name": "VenueAdmission",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "std",
+                      "name": "type_name"
+                    },
+                    "name": "TypeName",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "admission_venue",
+              "sdk": "read",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "sealed_treasury_cap"
+                        },
+                        "name": "VenueAdmission",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "std",
+                      "name": "type_name"
+                    },
+                    "name": "TypeName",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "into_treasury_cap",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Coin",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "PackageWitness",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
+                }
+              ],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_core",
+                      "name": "sealed_treasury_cap"
+                    },
+                    "name": "SealedTreasuryCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Coin"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "NamedTypeParameter": "PackageWitness"
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "TreasuryCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Coin"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "new",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Coin",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "PackageWitness",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
+                }
+              ],
+              "parameters": [
+                {
+                  "NamedTypeParameter": "PackageWitness"
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "TreasuryCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Coin"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_core",
+                      "name": "sealed_treasury_cap"
+                    },
+                    "name": "SealedTreasuryCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Coin"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "package_witness",
+              "sdk": "read",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Coin",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "sealed_treasury_cap"
+                        },
+                        "name": "SealedTreasuryCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Coin"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "std",
+                      "name": "type_name"
+                    },
+                    "name": "TypeName",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "total_supply",
+              "sdk": "read",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Coin",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "sealed_treasury_cap"
+                        },
+                        "name": "SealedTreasuryCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Coin"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
+              "name": "treasury_cap_id",
+              "sdk": "read",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Coin",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "sealed_treasury_cap"
+                        },
+                        "name": "SealedTreasuryCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Coin"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "object"
+                    },
+                    "name": "ID",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "treasury_cap_mut",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Coin",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Venue",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "sealed_treasury_cap"
+                        },
+                        "name": "SealedTreasuryCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Coin"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_core",
+                      "name": "sealed_treasury_cap"
+                    },
+                    "name": "VenueAdmission",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "NamedTypeParameter": "Venue"
+                }
+              ],
+              "returns": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin"
+                        },
+                        "name": "TreasuryCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Coin"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "venue_admission",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Venue",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
+                },
+                {
+                  "name": "PackageWitness",
+                  "phantom": false,
+                  "constraints": [
+                    "Drop"
+                  ]
+                }
+              ],
+              "parameters": [
+                {
+                  "NamedTypeParameter": "PackageWitness"
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_core",
+                      "name": "sealed_treasury_cap"
+                    },
+                    "name": "VenueAdmission",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            }
+          ],
+          "structs": [
+            {
+              "name": "SealedTreasuryCap",
+              "abilities": [
+                "Key",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Coin",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "package_witness",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "treasury_cap",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "coin"
+                      },
+                      "name": "TreasuryCap",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Coin"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "VenueAdmission",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "package_witness",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "venue",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
+                      "type_arguments": []
                     }
                   }
                 }

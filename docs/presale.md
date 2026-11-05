@@ -48,7 +48,8 @@ quote or Bluefin's creation fee comes from the sender's coins.
 
 | Step | Builder | Notes |
 | --- | --- | --- |
-| Create and share | `createPresale` | One PTB: the venue's `prepare` (`venue: "cetus" \| "bluefin" \| "aftermathDao"`), `new`, `set_supply`, `set_token_allocations`, `set_participant_vesting`, `set_raise`, `set_windows`, `set_eligibility`, `set_uncapped_phase`, `set_hard_cap`, `set_fee_split`, `set_partner` (the optional ones when given), `finalize`, `set_protocol_fees` when `protocolFees` names a `FeeAdmin` cap, `share` from `commitmentStartsAtMs`, and the `PresaleCap` to `capRecipient`. Rates go through core `bps::new`, recipients through core `payout::recipient` (vesting under `payout::vesting_terms`) and `recipient_share`, the LP-fee split through core `fee_split::new`. |
+| Publish the sale token | `publishPresaleCoin`, `readPresaleCoinPublication`, `finalizeCurrencyRegistration` | The patched `presale_coin_template` package, immutable; its initializer seals the `TreasuryCap` under the presale (`sale_token::new`) and sends the publisher the `SealedTreasuryCap`; the `Currency` is shared from the Coin Registry in a later transaction. |
+| Create and share | `createPresale` | One PTB: on Cetus the presale's `venue_admission`, the venue's `prepare` (`venue: "cetus" \| "bluefin" \| "aftermathDao"`), `new`, `set_supply`, `set_token_allocations`, `set_participant_vesting`, `set_raise`, `set_windows`, `set_eligibility`, `set_uncapped_phase`, `set_hard_cap`, `set_fee_split`, `set_partner` (the optional ones when given), `finalize`, `set_protocol_fees` when `protocolFees` names a `FeeAdmin` cap, `share` from `commitmentStartsAtMs`, and the `PresaleCap` to `capRecipient`. Rates go through core `bps::new`, recipients through core `payout::recipient` (vesting under `payout::vesting_terms`) and `recipient_share`, the LP-fee split through core `fee_split::new`. |
 | Commit | `commit` with `route: "open" \| "allowlisted" \| "uncapped"` | Sources `amount` Quote with `tx.coin` and sends the returned change, zero except under a hard cap, to `recipient`. |
 | Settle | `settle`, `cancelUnlaunched` | Anyone. `settle` works from the window's end, or once the raise is full under a hard cap with `closesWhenFilled` (`canClosePresaleEarly`). |
 | Migrate | `migrate` | Anyone: optional `settle`, `blast_presale::migrate`, the venue's `migrate` redeeming the `Migration`, and `pay_protocol_fees_with_partner` when `partner` is given. |
@@ -57,10 +58,13 @@ quote or Bluefin's creation fee comes from the sender's coins.
 | Owner | `claimOwnerBalances`, `scheduleFeeSplit`, `cancelFeeSplit` | `prove_owner` with the `PresaleCap`, then the vault call in the same PTB. `claim_owner_balances` aborts when both owner balances are zero. |
 | Cap | `destroyCap` | After cancellation only. |
 
-`createPresale` takes the sale token's zero-supply `TreasuryCap`, which Cetus's
-`prepare` borrows mutably, Bluefin's immutably, and `new` takes by value, and
-its Coin Registry `Currency`, which `finalize` requires `Unregulated`
-(`ESaleTokenNotUnregulated`). The windows count from `commitmentStartsAtMs`, or
+`createPresale` takes the sale token's `SealedTreasuryCap` (contracts ADR
+0138): Cetus's `prepare` borrows the cap through the seal with the presale's
+`VenueAdmission`, Bluefin's takes the seal as proof of control, and `new`
+opens it, checking the supply is still zero. Only a `presale_coin_template`
+coin has such a seal; a coin whose creator ever held the raw cap cannot start
+a sale. It also takes the sale token's Coin Registry `Currency`, which
+`finalize` requires `Unregulated` (`ESaleTokenNotUnregulated`). The windows count from `commitmentStartsAtMs`, or
 from execution once that has passed; until the start Blast's `FeeAdmin` may
 lower the sale's rates.
 
@@ -76,7 +80,7 @@ publishes that coin; `verifyAftermathLpCoin` reads its capability back and
 returns the `AftermathLpCoin` `createPresale` requires, because the contract
 cannot bind `Lp` to the capability and a wrong `Lp` aborts only at migration,
 leaving the sale refundable at its LP deadline. The same sender holds the
-`AdminCap`, the `CreatePoolCapV2` and the sale's `TreasuryCap`.
+`AdminCap`, the `CreatePoolCapV2` and the sale token's `SealedTreasuryCap`.
 
 `prepare<Lp, SaleToken, Quote, PackageWitness>` fixes the fourth type argument
 to the presale's `blast_presale_package::PackageWitness` and shares a

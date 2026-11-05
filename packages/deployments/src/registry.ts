@@ -238,6 +238,7 @@ export function presaleDeployment(
     core: coreDeployment(deployment),
     admin: adminDeployment(deployment),
     partners: partnersDeployment(deployment),
+    vestingPackageId: deployment.packages.vesting.packageId,
     vault: vaultDeployment(deployment),
     migrators: migratorsDeployment(deployment),
     ...(aftermathDaoPresale && aftermath

@@ -84,7 +84,7 @@ function builders(construct: CoinSourceOptions) {
         ...sui,
         memeType: "0xa::meme::MEME",
         ticket: "0x7c",
-        treasuryCap: "0x7d",
+        sealedTreasuryCap: "0x7d",
         venue: "bluefin",
         tier: { tickSpacing: 200, feeRate: 10_000n },
         currency: shared("0xd", true),
