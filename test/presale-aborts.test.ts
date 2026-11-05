@@ -70,9 +70,9 @@ function numericRegistry(source: string): string[] {
   );
 }
 
-test("PRESALE_ABORTS matches sui/presale/sources/errors.move", { skip }, () => {
+test("PRESALE_ABORTS matches sui/presale/sources/lib/errors.move", { skip }, () => {
   const source = readFileSync(
-    join(contracts, "sui/presale/sources/errors.move"),
+    join(contracts, "sui/presale/sources/lib/errors.move"),
     "utf8",
   );
   assert.deepEqual(numericRegistry(source), [...PRESALE_ABORTS]);

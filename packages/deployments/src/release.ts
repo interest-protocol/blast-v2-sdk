@@ -10,20 +10,20 @@ export const FROZEN_ABI: Readonly<{
   contractsCommit: string;
   artifacts: Readonly<Record<ArtifactKey, string>>;
 }> = Object.freeze({
-  contractsCommit: "4fe8d739f04bafd0775691795eb9f3727e984089",
+  contractsCommit: "88951fe9dbe2b621d45bb80124a325468c6e8298",
   artifacts: Object.freeze({
-    admin: "b4345a8ad862ec4612a61d5567e315f192dc9dfb1062b03fc1db7410b7cf58b0",
+    admin: "06d0f918ccad763d841feed6028573abb2801a250539748ccbd44ab4c08ae621",
     partners:
-      "583c9ac3848a511f35cc1e6e4abc85f70eb89cba469dccc6960b4111440c5009",
-    core: "a1c6564d28de943def47b48df75731d82cdbd052943c51130dbb6f4d17b2f800",
-    vault: "cc992f46c3c5346a1a35e305c05d98e6655db052f54700297e4546b8e3e65593",
+      "821aa9101e42aea7cd0f97e5cc4cdb19023c61d97830c2860838fcf47668f4c6",
+    core: "e1cdc867e4a93ade022ea3537dd95f3255b3f4da869411c65bbfcb91e20b9127",
+    vault: "0cf20e53a58840c7a7ed692870e3f2e5450c92f90351720b03036c958f77a4ad",
     migrators:
-      "1ec5b01788a799b3b6606ec9542f230c8de536c5698ca609ad89086dfe7abe86",
+      "a26bdcf52bbad5632dbf1a226cf05b0a8ff25238b7696111be8881bcb85f349d",
     launchpad:
-      "5bd5545cdcc41f0013609093e94ea39abc6dc7f6ebc85e22ce0e11e61f903191",
-    presale: "3e7f00f3cacd7b79209c6e716067b2d0faa658beb85d2c023984ea5fae94cf45",
+      "1c76f5a5a096f1991bed2dd696b26f038a79c596d598fc2fccd7288189f8da2b",
+    presale: "14398fe3bf3b82ef8ad583360961d82d2342bb7249d2b3241a4c45f5869af4db",
     aftermathDaoPresale:
-      "8ebfb800f9f3a4dfdbf87ed071bfb12d5e860f3fd8c7428c505ada7648eec18c",
+      "b9adb79eb997447dc28369ded0094ad53fb4fe46200f4e8c58c0b2b3b3e17fcf",
     blastSui:
       "943236915134897494c1a1eb7f18d2a0ea8a012e6e657321abc5fc274ee3587f",
     boosts: "917665645d05883fffdfd581367c2b45522aa8de52f57aa9730c101bb329cd8b",

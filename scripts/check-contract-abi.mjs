@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
  * refreeze at contracts main with `check:abi:write` for an approved change,
  * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
  */
-const BASELINE_COMMIT = "4fe8d739f04bafd0775691795eb9f3727e984089";
+const BASELINE_COMMIT = "88951fe9dbe2b621d45bb80124a325468c6e8298";
 const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
@@ -28,7 +28,7 @@ const BLAST_SUI_BOOSTS_BASELINE = {
   workingTreeDifferedAtFreeze: false,
 };
 const LAUNCH_STACK_FREEZE =
-  "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#212: the fresh one-way launch stack, first freeze";
+  "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#214: the fresh one-way launch stack, first freeze";
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
   {
@@ -164,24 +164,7 @@ function frozenSources(commit) {
     input: archive.stdout,
   });
   if (extract.status !== 0) throw new Error(String(extract.stderr));
-  separateTreasuryAddress(directory);
   return directory;
-}
-
-/**
- * `blast_core` leaves its publish-time `blast_treasury` named address at
- * `0x0`, the package's own address, so `sui move summary` would name the
- * package (and every type it defines) `blast_treasury`. A distinct
- * placeholder in the extracted copy keeps each summary under its package name.
- */
-function separateTreasuryAddress(directory) {
-  const manifest = join(directory, "sui", "core", "Move.toml");
-  if (!existsSync(manifest)) return;
-  const source = readFileSync(manifest, "utf8");
-  writeFileSync(
-    manifest,
-    source.replace(/^blast_treasury = "0x0"$/m, 'blast_treasury = "0x7ea5"'),
-  );
 }
 
 function checkArtifact(declaration) {

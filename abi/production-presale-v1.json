@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "4fe8d739f04bafd0775691795eb9f3727e984089",
+    "contractsCommit": "88951fe9dbe2b621d45bb80124a325468c6e8298",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
-      "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#212: the fresh one-way launch stack, first freeze",
+      "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#214: the fresh one-way launch stack, first freeze",
       "contracts #202: blast_presale::migrate returns a Migration for the venue's migrate; the presale's own venues, vault and rewards are removed"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
