@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SharedObjectIdentity } from "@interest-protocol/blast-core/sui";
 import { buildAllowlist } from "@interest-protocol/blast-presale-sdk/allowlist";
-import { openEligibility } from "@interest-protocol/blast-presale-sdk/math";
+import {
+  allowlistedEligibility,
+  openEligibility,
+  uncappedForEligible,
+} from "@interest-protocol/blast-presale-sdk/math";
 import type { PresaleSettings } from "@interest-protocol/blast-presale-sdk/transactions";
 import {
   PRESALE_PAUSE_BITS,
@@ -15,6 +19,7 @@ import {
   normalizeSuiAddress,
   SUI_CLOCK_OBJECT_ID,
 } from "@mysten/sui/utils";
+import { abiCoverage, assertBuildersMatchAbi, readAbi } from "./abi.ts";
 import { verifiedLpCoin } from "./aftermath-lp.ts";
 import { PRESALE_DEPLOYMENT } from "./fixtures/presale-deployment.ts";
 
@@ -24,6 +29,16 @@ const shared = (objectId: string): SharedObjectIdentity => ({
 });
 const deployment = PRESALE_DEPLOYMENT;
 const ptb = new PresaleTransactions(deployment);
+const coverage = abiCoverage(
+  readAbi("production-presale-v1.json", "presale"),
+  deployment.packageId,
+);
+const vendorCoverage = abiCoverage(
+  readAbi("production-aftermath-dao-presale-v1.json", "aftermathDaoPresale"),
+  deployment.aftermathDaoPresale?.packageId ?? "",
+);
+const migratorsAbi = readAbi("production-migrators-v1.json", "migrators");
+const vaultAbi = readAbi("production-vault-v1.json", "vault");
 const saleToken = normalizeStructTag("0xa::sale::SALE");
 const quote = normalizeStructTag("0x2::sui::SUI");
 const lp = normalizeStructTag("0xb::lp::LP");
@@ -62,6 +77,10 @@ function describe(data: Data, argument: Argument): string {
 
 /** Every Move call `tx` makes, as `<package>::<module>::<function>` and argument descriptors. */
 function calls(tx: Transaction): Call[] {
+  coverage.check(tx);
+  vendorCoverage.check(tx);
+  assertBuildersMatchAbi(tx, migratorsAbi, deployment.migrators.packageId);
+  assertBuildersMatchAbi(tx, vaultAbi, deployment.vault.packageId);
   const data = tx.getData();
   return data.commands.flatMap((command) => {
     if (command.$kind !== "MoveCall") return [];
@@ -84,18 +103,6 @@ function only(tx: Transaction, target: string): Call {
 
 function targets(tx: Transaction): string[] {
   return calls(tx).map((call) => call.target);
-}
-
-/** A composition whose venue or vault step is another work package's stub. */
-function pending(build: () => unknown): string | false {
-  try {
-    build();
-    return false;
-  } catch (error) {
-    if (error instanceof Error && /^WP\d/.test(error.message))
-      return error.message;
-    throw error;
-  }
 }
 
 const settings: PresaleSettings = {
@@ -279,7 +286,7 @@ test("createPresale refuses an unverified LP coin and a missing vendor", async (
   );
 });
 
-test("createPresale through a migrators venue starts with its prepare", (t) => {
+test("createPresale through a migrators venue starts with its prepare", () => {
   for (const venue of [
     {
       venue: "cetus" as const,
@@ -298,14 +305,43 @@ test("createPresale through a migrators venue starts with its prepare", (t) => {
         commitmentStartsAtMs: 0n,
         capRecipient: "0xc0ffee",
       });
-    const stub = pending(build);
-    if (stub) {
-      t.skip(stub);
-      continue;
-    }
     const tx = build();
     assert.equal(targets(tx)[0], `0xd1::${venue.venue}::prepare`);
+    assert.ok(calls(tx).some((call) => call.target.startsWith("0xd1::")));
     assert.deepEqual(only(tx, "0x5f::blast_presale::new").args[2], "result:0");
+  }
+});
+
+test("createPresale builds allowlisted eligibility, an eligible-only uncapped phase and vesting", () => {
+  const allowlist = buildAllowlist([
+    { wallet: "0xa11ce", walletCap: 500n },
+    { wallet: "0xb0b", walletCap: 700n },
+  ]);
+  const tx = ptb.createPresale({
+    ...types,
+    ...settings,
+    eligibility: allowlistedEligibility(allowlist.root, allowlist.leafCount),
+    uncapped: uncappedForEligible(1_000n),
+    participantVesting: {
+      cliffDelayMs: 0n,
+      periodDurationMs: 1_000n,
+      periods: 4n,
+    },
+    venue: "bluefin",
+    tickSpacing: 60,
+    feeRate: 3_000n,
+    treasuryCap: "0x7c",
+    currency: shared("0xcc"),
+    commitmentStartsAtMs: 0n,
+    capRecipient: "0xc0ffee",
+  });
+  const built = targets(tx);
+  for (const name of [
+    "allowlisted_eligibility",
+    "uncapped_for_eligible",
+    "set_participant_vesting",
+  ]) {
+    assert.ok(built.includes(`0x5f::blast_presale::${name}`), name);
   }
 });
 
@@ -356,7 +392,7 @@ test("migrate through the vendor: settle, migrate, venue migrate, partner payout
   ]);
 });
 
-test("migrate through a migrators venue redeems the presale's Migration", (t) => {
+test("migrate through a migrators venue redeems the presale's Migration", () => {
   for (const venue of [
     {
       venue: "cetus" as const,
@@ -375,11 +411,6 @@ test("migrate through a migrators venue redeems the presale's Migration", (t) =>
     },
   ]) {
     const build = () => ptb.migrate({ ...types, presale, ...venue });
-    const stub = pending(build);
-    if (stub) {
-      t.skip(stub);
-      continue;
-    }
     const tx = build();
     assert.deepEqual(targets(tx).slice(0, 2), [
       "0x5f::blast_presale::migrate",
@@ -388,7 +419,7 @@ test("migrate through a migrators venue redeems the presale's Migration", (t) =>
   }
 });
 
-test("owner actions prove ownership with the PresaleCap first", (t) => {
+test("owner actions prove ownership with the PresaleCap first", () => {
   const owner = {
     ...types,
     presale,
@@ -400,11 +431,6 @@ test("owner actions prove ownership with the PresaleCap first", (t) => {
     () => ptb.scheduleFeeSplit({ ...owner, feeSplit: settings.feeSplit }),
     () => ptb.cancelFeeSplit(owner),
   ]) {
-    const stub = pending(build);
-    if (stub) {
-      t.skip(stub);
-      continue;
-    }
     const tx = build();
     assert.equal(targets(tx)[0], "0x5f::blast_presale::prove_owner");
   }
@@ -725,4 +751,9 @@ test("PresaleCalls names the package's OTW and witness", () => {
     ptb.aftermathDaoPresale?.venueType,
     normalizeStructTag("0x7a::blast_aftermath_dao_presale::Venue"),
   );
+});
+
+test("every classified blast_presale builder is built and matches the frozen ABI", () => {
+  coverage.assertEveryBuilder(43);
+  vendorCoverage.assertEveryBuilder(2);
 });

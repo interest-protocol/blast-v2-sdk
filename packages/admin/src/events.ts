@@ -84,7 +84,11 @@ export type DecodedAclEvent = {
   };
 }[AclEventKind];
 
-/** Decodes one `<adminPackageId>::blast_admin_events::<Kind>` ACL event. */
+/**
+ * Decodes one `<adminPackageId>::blast_admin_events::<Kind>` ACL event. Its
+ * `role` names are `type_name::with_defining_ids` in Move; for the immutable
+ * v1 `blast_admin` and `blast_core` they equal the original-ID names.
+ */
 export function decodeAclEvent(
   event: SuiClientTypes.EventEntry,
   adminPackageId: string,
@@ -187,7 +191,13 @@ export type DecodedPackageAdministrationEvent = {
   };
 }[PackageAdministrationEventKind];
 
-/** Decodes one `<adminPackageId>::blast_admin_events::<Kind><OTW>` of any package. */
+/**
+ * Decodes one `<adminPackageId>::blast_admin_events::<Kind><OTW>` of any package.
+ * Move records `package_witness` with `type_name::with_defining_ids`; each
+ * product defines its `PackageWitness` in its first version, so the defining
+ * ID is the original ID the SDK compares against. The event type names the
+ * immutable v1 `blast_admin`.
+ */
 export function decodePackageAdministrationEvent(
   event: SuiClientTypes.EventEntry,
   adminPackageId: string,

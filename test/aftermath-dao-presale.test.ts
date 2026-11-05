@@ -10,6 +10,7 @@ import {
 } from "@interest-protocol/blast-presale-sdk/aftermath-dao";
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
+import { abiCoverage, readAbi } from "./abi.ts";
 
 const shared = (objectId: string) => ({ objectId, initialSharedVersion: "3" });
 const vendor = new AftermathDaoPresaleCalls(
@@ -28,8 +29,13 @@ const lp = normalizeStructTag("0xb::lp::LP");
 const sale = normalizeStructTag("0xa::sale::SALE");
 const quote = normalizeStructTag("0x2::sui::SUI");
 
+const coverage = abiCoverage(
+  readAbi("production-aftermath-dao-presale-v1.json", "aftermathDaoPresale"),
+  "0x7a",
+);
+
 function onlyCall(tx: Transaction) {
-  const [command, ...rest] = tx.getData().commands;
+  const [command, ...rest] = coverage.check(tx).getData().commands;
   assert.equal(rest.length, 0);
   assert.ok(command?.$kind === "MoveCall");
   return command.MoveCall;
@@ -74,7 +80,7 @@ test("migrate consumes the hand-off and the shared PoolCreation", () => {
       poolCreation: shared("0xb00"),
     }),
   );
-  const data = tx.getData();
+  const data = coverage.check(tx).getData();
   const command = data.commands[1];
   assert.ok(command?.$kind === "MoveCall");
   const call = command.MoveCall;
@@ -151,4 +157,8 @@ test("mirrors the vendor's display constants", () => {
     "0x37cf46b499f740e653644bd2f7a8ed97f248e8b3c69d5d12c97d7845a54c0cd8",
   );
   assert.equal(AFTERMATH_DAO_BURN_ADDRESS, normalizeSuiAddress("0x0"));
+});
+
+test("every classified vendor builder is built and matches the frozen ABI", () => {
+  coverage.assertEveryBuilder(2);
 });

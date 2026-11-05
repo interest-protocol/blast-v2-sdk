@@ -58,7 +58,7 @@ export function encodeCreatorClaimMessage(claim: CreatorClaim): Uint8Array {
   return message;
 }
 
-/** Encodes an expiry and Ed25519 signature for `claim_creator_cap`. */
+/** Encodes an expiry and Ed25519 signature for `launch::claim_creator_caps`. */
 export function encodeCreatorClaimAttestation(
   expiryMs: bigint,
   signature: Uint8Array,

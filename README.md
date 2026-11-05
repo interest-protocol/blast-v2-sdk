@@ -4,7 +4,7 @@ TypeScript SDKs for the Blast contracts on Sui mainnet. Contract source and
 generated Move references live in
 [interest-protocol/blast-v2-contracts](https://github.com/interest-protocol/blast-v2-contracts);
 this SDK is frozen to contracts
-[`88951fe`](https://github.com/interest-protocol/blast-v2-contracts/tree/88951fe9dbe2b621d45bb80124a325468c6e8298/sui),
+[`a1a8f6c`](https://github.com/interest-protocol/blast-v2-contracts/tree/a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f/sui),
 the one-way launch stack of ADR 0137 (see [docs/abi.md](docs/abi.md)).
 
 Contract state and completed events are authoritative. The SDK builds
@@ -155,7 +155,8 @@ against every package `blast_fun` links (admin, partners, vesting, core, the
 launchpad), then makes the package immutable. Its initializer mints the whole
 supply into a `LaunchTicket` and sends the publisher the `TreasuryCap` beside
 it; `readMemePublication` reads both from the effects and
-`finalizeCurrencyRegistration` shares the `Currency`.
+`finalizeCurrencyRegistration` shares the `Currency` (it takes the shared Coin Registry
+`0xc` with its initial shared version, so it builds offline).
 
 `createLaunch` then runs in one PTB: the venue's `prepare` (Cetus or Bluefin,
 which records the pool tier and returns a sealed `VenueTicket`), `launch::new`,
@@ -219,9 +220,6 @@ call passes both the migrators and the vault `PackageVersion`.
   links the new vault version. The SDK cannot read the compiled version
   constant, so it can only surface the abort.
 
-`addCetusPoolWithLiquidity` and `addBluefinPoolWithLiquidity` create a venue
-pool and seed it for any coin pair outside the launch stack.
-
 ## Administration and partners
 
 `AdminCalls` builds the shared ACL (admins, roles, the delayed root transfer)
@@ -256,8 +254,7 @@ initial supply to one recipient, and settles the `TreasuryCap` by supply mode
 
 Cetus seeds a new pool's tick skip list from the clock, so creating a pool can
 write more storage when it executes than when it was simulated. Cetus
-`migrate` and `addCetusPoolWithLiquidity` carry the `grossGasBudget()` build
-plugin: without an explicit budget it budgets the simulated computation plus
+`migrate` carries the `grossGasBudget()` build plugin: without an explicit budget it budgets the simulated computation plus
 all storage, ignoring the rebate, plus a fifth and 10,000 gas units. A plugin
 does not survive JSON serialization; add it again after `Transaction.from`.
 

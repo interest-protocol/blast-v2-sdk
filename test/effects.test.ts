@@ -7,7 +7,7 @@ import {
 } from "@interest-protocol/blast-launchpad-sdk/effects";
 import { LaunchpadTransactions } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { Inputs, Transaction } from "@mysten/sui/transactions";
+import { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 import { LAUNCHPAD_DEPLOYMENT } from "./fixtures/launchpad-deployment.ts";
 
@@ -17,6 +17,7 @@ const memeType = `${memePackage}::dog::DOG`;
 const quoteType = normalizeStructTag("0x2::sui::SUI");
 const publisher = normalizeSuiObjectId("0xb1a57");
 const registry = normalizeSuiObjectId("0xc");
+const coinRegistry = { objectId: registry, initialSharedVersion: "1" };
 // A valid base58 object digest; `build` rejects the placeholder digests above.
 const CURRENCY_DIGEST = "11111111111111111111111111111111";
 
@@ -221,6 +222,7 @@ test("finalizes the currency registration and reads the shared Currency", () => 
   const tx: Transaction = sdk.finalizeCurrencyRegistration({
     memeType,
     currency: readMemePublication(publication, "0x122").pendingCurrency,
+    coinRegistry,
   });
   const command = tx.getData().commands[0];
   assert.ok(command?.$kind === "MoveCall");
@@ -232,10 +234,11 @@ test("finalizes the currency registration and reads the shared Currency", () => 
   const [registryArgument, currencyArgument] = command.MoveCall.arguments;
   const inputs = tx.getData().inputs;
   assert.ok(registryArgument?.$kind === "Input");
-  assert.equal(
-    inputs[registryArgument.Input]?.UnresolvedObject?.objectId,
-    registry,
-  );
+  assert.deepEqual(inputs[registryArgument.Input]?.Object?.SharedObject, {
+    objectId: registry,
+    initialSharedVersion: "1",
+    mutable: true,
+  });
   assert.ok(currencyArgument?.$kind === "Input");
   assert.deepEqual(inputs[currencyArgument.Input]?.Object?.Receiving, {
     objectId: normalizeSuiObjectId("0xd2"),
@@ -263,20 +266,8 @@ test("finalizes the currency registration and reads the shared Currency", () => 
   });
 });
 
-/** Builds `tx` offline: the Coin Registry input is pinned instead of fetched. */
-async function kindBytes(tx: Transaction): Promise<Uint8Array> {
-  tx.addBuildPlugin(async (data, _options, next) => {
-    for (const [index, input] of data.inputs.entries()) {
-      if (input.UnresolvedObject?.objectId === registry) {
-        data.inputs[index] = Inputs.SharedObjectRef({
-          objectId: registry,
-          initialSharedVersion: "1",
-          mutable: true,
-        });
-      }
-    }
-    await next();
-  });
+/** Builds `tx` offline: every input is fully specified. */
+function kindBytes(tx: Transaction): Promise<Uint8Array> {
   return tx.build({ onlyTransactionKind: true });
 }
 
@@ -285,6 +276,7 @@ test("the composable registration builds the same bytes as the transaction", asy
   const options = {
     memeType,
     currency: { objectId: "0xd2", version: "7", digest: CURRENCY_DIGEST },
+    coinRegistry,
   };
   const composed = new Transaction();
   composed.add(sdk.call.finalizeCurrencyRegistration(options));
@@ -302,12 +294,14 @@ test("registrations in one PTB share the Coin Registry input", () => {
     call.finalizeCurrencyRegistration({
       memeType,
       currency: { objectId: "0xd2", version: "7", digest: CURRENCY_DIGEST },
+      coinRegistry,
     }),
   );
   tx.add(
     call.finalizeCurrencyRegistration({
       memeType: `${normalizeSuiObjectId("0xabd")}::cat::CAT`,
       currency: { objectId: "0xd3", version: "8", digest: CURRENCY_DIGEST },
+      coinRegistry,
     }),
   );
 
@@ -315,8 +309,8 @@ test("registrations in one PTB share the Coin Registry input", () => {
   assert.equal(commands.length, 2);
   assert.deepEqual(
     inputs.map((input) =>
-      input.UnresolvedObject
-        ? input.UnresolvedObject.objectId
+      input.Object?.SharedObject
+        ? input.Object.SharedObject.objectId
         : input.Object?.Receiving?.objectId,
     ),
     [registry, normalizeSuiObjectId("0xd2"), normalizeSuiObjectId("0xd3")],

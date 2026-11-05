@@ -3,6 +3,7 @@ import {
   AdminCalls,
   normalizeAdminDeployment,
   packageRoleType,
+  requirePauseBits,
 } from "@interest-protocol/blast-admin-sdk/transactions";
 import { MAX_LP_FEE_BPS } from "@interest-protocol/blast-core/bps";
 import type { CoinSourceOptions } from "@interest-protocol/blast-core/coins";
@@ -13,7 +14,6 @@ import {
 } from "@interest-protocol/blast-core/deployment";
 import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
 import {
-  requireBasisPoints,
   requireBasisPointsAtMost,
   requirePositiveU64,
   requireU64,
@@ -30,7 +30,6 @@ import type {
 } from "@interest-protocol/blast-core/sui";
 import {
   normalizeSharedObjectIdentity,
-  normalizeSharedObjectReference,
   normalizeSuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
 import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
@@ -62,7 +61,6 @@ import {
 import type { CreatorAllocationPlan, RecipientShare } from "./allocation.ts";
 import { normalizeAllocationPlan } from "./allocation.ts";
 import type { ObjectVersionReference } from "./effects.ts";
-import { COIN_REGISTRY_ID } from "./effects.ts";
 import type { MemeTemplateOptions } from "./template.ts";
 import { buildMemePackageBytecode } from "./template.ts";
 
@@ -103,6 +101,8 @@ export const MIN_OPENING_ROUND_MS = 60_000n;
 export const MAX_OPENING_ROUND_MS = 300_000n;
 /** `constants::max_protocol_allocation_bps`: Blast's largest allocation of each asset. */
 export const MAX_PROTOCOL_ALLOCATION_BPS = 1_000n;
+/** `constants::max_trade_fee_bps`: the largest Quote or Meme trade fee. */
+export const MAX_TRADE_FEE_BPS = 1_000n;
 /** `constants::max_protocol_fee_share_bps`: Blast's largest share of each trade fee. */
 export const MAX_PROTOCOL_FEE_SHARE_BPS = 7_000n;
 /** `constants::max_creation_fee_mist`: the largest creation fee, in MIST (10 SUI). */
@@ -130,7 +130,7 @@ export type LaunchSettings = {
   /** Opening-round length after share; zero or omitted, trading starts at share. */
   openingRoundMs?: bigint;
   /** A Blast partner `LaunchConfig` accepts; it is the launch's partner for good. */
-  partner?: SharedObjectReference<false>;
+  partner?: SharedObjectIdentity;
 };
 
 /**
@@ -183,7 +183,7 @@ export type MigrationVenue =
 export type MemeMetadataUpdate = LaunchTypes & {
   launch: SharedObjectReference;
   creatorMetadataCap: TransactionObjectInput;
-  currency: SharedObjectReference<true>;
+  currency: SharedObjectIdentity;
 };
 
 export type LaunchInitializerInput = LaunchTypes & {
@@ -191,11 +191,11 @@ export type LaunchInitializerInput = LaunchTypes & {
 };
 
 /** A shared launch, borrowed mutably. */
-type LaunchInput = LaunchTypes & { launch: SharedObjectReference<true> };
+type LaunchInput = LaunchTypes & { launch: SharedObjectIdentity };
 
 /** The shared launch, or the owned `Launch` `finalize` returned in this PTB. */
 type OwnedOrSharedLaunch = LaunchTypes & {
-  launch: SharedObjectReference<true> | TransactionArgument;
+  launch: SharedObjectIdentity | TransactionArgument;
 };
 
 /** An administrator action's `AdminWitness` (`signIn`'s result). */
@@ -346,7 +346,7 @@ export class LaunchpadCalls {
   /** Names the launch's partner; `LaunchConfig` must accept it now. */
   setPartner(
     options: LaunchInitializerInput & {
-      partner: SharedObjectReference<false>;
+      partner: SharedObjectIdentity;
     },
   ) {
     return this.#initializerCall("set_partner", options, (tx) => [
@@ -363,7 +363,7 @@ export class LaunchpadCalls {
    */
   finalize(
     options: LaunchInitializerInput & {
-      currency: SharedObjectReference<true>;
+      currency: SharedObjectIdentity;
       creationFee: TransactionObjectInput;
     },
   ) {
@@ -541,7 +541,7 @@ export class LaunchpadCalls {
    * `partner`, pays the partner its share and the core `Treasury` the rest.
    */
   claimProtocolFeesWithPartner(
-    options: LaunchInput & { partner: SharedObjectReference<false> },
+    options: LaunchInput & { partner: SharedObjectIdentity },
   ) {
     return this.#launchCall(
       "claim_protocol_fees_with_partner",
@@ -557,11 +557,14 @@ export class LaunchpadCalls {
    * Shares a published Meme's `Currency<Meme>` through
    * `coin_registry::finalize_registration`; anyone may call it. Each call adds
    * its own `Receiving` input and reuses the PTB's one Coin Registry input, so
-   * several Memes register in one PTB.
+   * several Memes register in one PTB. `coinRegistry` is the shared
+   * `0x2::coin_registry::CoinRegistry` (`0xc`) with its initial shared
+   * version, so the PTB builds offline.
    */
   finalizeCurrencyRegistration(options: {
     memeType: string;
     currency: ObjectVersionReference;
+    coinRegistry: SharedObjectIdentity;
   }) {
     const memeType = normalizeStructTag(options.memeType);
     const currency = {
@@ -573,7 +576,10 @@ export class LaunchpadCalls {
       tx.moveCall({
         target: `${SUI_FRAMEWORK_ADDRESS}::coin_registry::finalize_registration`,
         typeArguments: [memeType],
-        arguments: [tx.object(COIN_REGISTRY_ID), tx.receivingRef(currency)],
+        arguments: [
+          sharedObject(tx, "coinRegistry", options.coinRegistry, true),
+          tx.receivingRef(currency),
+        ],
       });
   }
 
@@ -584,7 +590,7 @@ export class LaunchpadCalls {
    * fee, disposes of the unsold Meme, and returns the `Migration<Meme, Quote>`
    * the launch's venue must redeem in the same PTB (`MigratorCalls.migrate*`).
    */
-  migrate(options: LaunchInput & { currency: SharedObjectReference<true> }) {
+  migrate(options: LaunchInput & { currency: SharedObjectIdentity }) {
     return this.#launchCall("migrate", options, (tx) => [
       this.#launchConfig(tx),
       sharedObject(tx, "currency", options.currency, true),
@@ -713,7 +719,7 @@ export class LaunchpadCalls {
     );
   }
 
-  /** `FeeAdmin`. */
+  /** `FeeAdmin`; each fee at most `MAX_TRADE_FEE_BPS` (1,000). */
   scheduleTradeFees(
     options: AdminWitnessInput & {
       quoteFeeBps: bigint;
@@ -721,8 +727,16 @@ export class LaunchpadCalls {
       delayMs: bigint;
     },
   ) {
-    const quoteFeeBps = requireBasisPoints("quoteFeeBps", options.quoteFeeBps);
-    const memeFeeBps = requireBasisPoints("memeFeeBps", options.memeFeeBps);
+    const quoteFeeBps = requireBasisPointsAtMost(
+      "quoteFeeBps",
+      options.quoteFeeBps,
+      MAX_TRADE_FEE_BPS,
+    );
+    const memeFeeBps = requireBasisPointsAtMost(
+      "memeFeeBps",
+      options.memeFeeBps,
+      MAX_TRADE_FEE_BPS,
+    );
     const delayMs = requireU64("delayMs", options.delayMs);
     return this.#configCall("schedule_trade_fees", options, (tx) => [
       this.core.bps(quoteFeeBps)(tx),
@@ -767,9 +781,7 @@ export class LaunchpadCalls {
   }
 
   /** `FeeAdmin`: new launches may name `partner` at once. */
-  addPartner(
-    options: AdminWitnessInput & { partner: SharedObjectReference<false> },
-  ) {
+  addPartner(options: AdminWitnessInput & { partner: SharedObjectIdentity }) {
     return this.#configCall("add_partner", options, (tx) => [
       sharedObject(tx, "partner", options.partner, false),
     ]);
@@ -780,7 +792,7 @@ export class LaunchpadCalls {
    * launches that name it keep paying it.
    */
   removePartner(
-    options: AdminWitnessInput & { partner: SharedObjectReference<false> },
+    options: AdminWitnessInput & { partner: SharedObjectIdentity },
   ) {
     return this.#configCall("remove_partner", options, (tx) => [
       sharedObject(tx, "partner", options.partner, false),
@@ -842,20 +854,12 @@ export class LaunchpadCalls {
    * (`packageRoleType(admin, otw, "UnpauseAdmin")`).
    */
   unpause(options: { unpauseAdmin: TransactionObjectInput; bits: number }) {
-    const { bits } = options;
-    if (
-      !Number.isInteger(bits) ||
-      bits <= 0 ||
-      (bits &
-        ~(
-          LAUNCHPAD_PAUSE_BITS.Create |
-          LAUNCHPAD_PAUSE_BITS.Trading |
-          LAUNCHPAD_PAUSE_BITS.Migrate
-        )) !==
-        0
-    ) {
-      throw new RangeError("invalid pause bits");
-    }
+    const bits = requirePauseBits(
+      options.bits,
+      LAUNCHPAD_PAUSE_BITS.Create |
+        LAUNCHPAD_PAUSE_BITS.Trading |
+        LAUNCHPAD_PAUSE_BITS.Migrate,
+    );
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
         target: this.#target("launch_config", "unpause"),
@@ -1267,7 +1271,7 @@ type ImmediateAdmissions = {
   quoteTypes?: readonly string[];
   /** Meme precisions to admit beyond the published six and nine. */
   memeDecimals?: readonly number[];
-  partners?: readonly SharedObjectReference<false>[];
+  partners?: readonly SharedObjectIdentity[];
 };
 
 /** The owned objects a Meme publication sends the publisher (`readMemePublication`). */
@@ -1346,7 +1350,7 @@ export class LaunchpadTransactions {
       LaunchTicketInput &
       LaunchVenue &
       LaunchSettings & {
-        currency: SharedObjectReference<true>;
+        currency: SharedObjectIdentity;
         creationFee: bigint;
         preShareBuy?: PreShareBuyInput;
       } & CoinSourceOptions,
@@ -1430,7 +1434,7 @@ export class LaunchpadTransactions {
   migrate(
     options: LaunchInput &
       MigrationVenue & {
-        currency: SharedObjectReference<true>;
+        currency: SharedObjectIdentity;
       } & CoinSourceOptions,
   ): Transaction {
     const tx = new Transaction();
@@ -1621,7 +1625,7 @@ export class LaunchpadTransactions {
    * the launch's `partner` exactly when `LaunchState.partnerId` is set.
    */
   claimProtocolFees(
-    options: LaunchInput & { partner?: SharedObjectReference<false> | null },
+    options: LaunchInput & { partner?: SharedObjectIdentity | null },
   ): Transaction {
     const { partner } = options;
     return single(
@@ -1640,6 +1644,7 @@ export class LaunchpadTransactions {
   finalizeCurrencyRegistration(options: {
     memeType: string;
     currency: ObjectVersionReference;
+    coinRegistry: SharedObjectIdentity;
   }): Transaction {
     return single(this.call.finalizeCurrencyRegistration(options));
   }
@@ -1693,7 +1698,7 @@ export class LaunchpadTransactions {
   }
 
   addPartner(
-    options: AdminCap & { partner: SharedObjectReference<false> },
+    options: AdminCap & { partner: SharedObjectIdentity },
   ): Transaction {
     return this.#asAdmin(options, "FeeAdmin", (adminWitness) =>
       this.call.addPartner({ ...options, adminWitness }),
@@ -1701,7 +1706,7 @@ export class LaunchpadTransactions {
   }
 
   removePartner(
-    options: AdminCap & { partner: SharedObjectReference<false> },
+    options: AdminCap & { partner: SharedObjectIdentity },
   ): Transaction {
     return this.#asAdmin(options, "FeeAdmin", (adminWitness) =>
       this.call.removePartner({ ...options, adminWitness }),
@@ -2234,22 +2239,24 @@ function requireOpeningRoundMs(value: bigint): void {
 
 function launchArgument(
   tx: Transaction,
-  launch: SharedObjectReference<true> | TransactionArgument,
+  launch: SharedObjectIdentity | TransactionArgument,
 ): TransactionArgument {
   return "objectId" in launch
     ? sharedObject(tx, "launch", launch, true)
     : launch;
 }
 
-function sharedObject<const Mutable extends boolean>(
+/** A shared object at the mutability its Move parameter takes. */
+function sharedObject(
   tx: Transaction,
   name: string,
-  reference: SharedObjectReference<Mutable>,
-  mutable: Mutable,
+  identity: SharedObjectIdentity,
+  mutable: boolean,
 ): TransactionObjectArgument {
-  return tx.sharedObjectRef(
-    normalizeSharedObjectReference(name, reference, mutable),
-  );
+  return tx.sharedObjectRef({
+    ...normalizeSharedObjectIdentity(name, identity),
+    mutable,
+  });
 }
 
 export function normalizeLaunchTypes(types: LaunchTypes): LaunchTypes {

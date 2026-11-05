@@ -3,6 +3,7 @@ import {
   AdminCalls,
   normalizeAdminDeployment,
   packageRoleType,
+  requirePauseBits,
 } from "@interest-protocol/blast-admin-sdk/transactions";
 import { MAX_LP_FEE_BPS } from "@interest-protocol/blast-core/bps";
 import type { CoreDeployment } from "@interest-protocol/blast-core/deployment";
@@ -101,15 +102,12 @@ export class VaultCalls {
   readonly deployment: VaultDeployment;
   /** `blast_vault_package::BLAST_VAULT_PACKAGE`, the package's OTW. */
   readonly otw: string;
-  /** `blast_vault_package::PackageWitness`, the package witness (display only). */
-  readonly packageWitnessType: string;
   readonly #core: CoreCalls;
 
   constructor(deployment: VaultDeployment) {
     this.deployment = normalizeVaultDeployment(deployment);
     const module = `${this.deployment.originalPackageId}::blast_vault_package`;
     this.otw = normalizeStructTag(`${module}::BLAST_VAULT_PACKAGE`);
-    this.packageWitnessType = normalizeStructTag(`${module}::PackageWitness`);
     this.#core = new CoreCalls(this.deployment.core);
   }
 
@@ -487,9 +485,7 @@ export class VaultCalls {
     unpauseAdmin: TransactionObjectInput;
     bits: number;
   }): (tx: Transaction) => void {
-    const bits = options.bits;
-    if (!Number.isInteger(bits) || bits <= 0 || bits > 0xff)
-      throw new RangeError("pause bits must be a nonzero u8 mask");
+    const bits = requirePauseBits(options.bits, VAULT_PAUSE_BITS.Admin);
     return (tx) => {
       tx.moveCall({
         target: this.#target("blast_vault_package", "unpause"),

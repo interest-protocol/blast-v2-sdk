@@ -130,6 +130,11 @@ test("apportions Blast's snapshotted token and raise shares like blast_presale::
     () => apportionRaise([share("0x5a1e", 9_667n)], 333n, RAISE),
     "EInvalidRaiseAllocation",
   );
+  // Above 10,000 the LP's `bps::new` aborts first.
+  aborts(
+    () => apportionRaise([share("0x5a1e", 9_668n)], 333n, RAISE),
+    "EInvalidBps",
+  );
 });
 
 test("apportions raise allocations with the LP keeping the last share", () => {

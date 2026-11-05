@@ -422,10 +422,13 @@ export class AdminTransactions {
   }
 }
 
-/** Pause bits are a nonzero `u8` mask; the package checks they are its own. */
-function requirePauseBits(bits: number): number {
-  if (!Number.isInteger(bits) || bits <= 0 || bits > 0xff)
-    throw new RangeError("pause bits must be a nonzero u8 mask");
+/**
+ * Pause bits are a nonzero mask within `valid` (a package's
+ * `valid_pause_bits`; any `u8` when the package checks them itself).
+ */
+export function requirePauseBits(bits: number, valid = 0xff): number {
+  if (!Number.isInteger(bits) || bits <= 0 || (bits & ~valid) !== 0)
+    throw new RangeError(`pause bits must be a nonzero mask within ${valid}`);
   return bits;
 }
 

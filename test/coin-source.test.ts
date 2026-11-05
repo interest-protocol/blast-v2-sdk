@@ -15,9 +15,6 @@ import { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag } from "@mysten/sui/utils";
 import { LAUNCHPAD_DEPLOYMENT } from "./fixtures/launchpad-deployment.ts";
 import { PRESALE_DEPLOYMENT } from "./fixtures/presale-deployment.ts";
-import { stubVenueCalls } from "./fixtures/venue-stubs.ts";
-
-stubVenueCalls();
 
 function shared<const Mutable extends boolean>(
   objectId: string,

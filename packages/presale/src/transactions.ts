@@ -6,6 +6,7 @@ import {
   AdminCalls,
   normalizeAdminDeployment,
   packageRoleType,
+  requirePauseBits,
 } from "@interest-protocol/blast-admin-sdk/transactions";
 import { MAX_LP_FEE_BPS } from "@interest-protocol/blast-core/bps";
 import type { CoinSourceOptions } from "@interest-protocol/blast-core/coins";
@@ -724,7 +725,7 @@ export class PresaleCalls {
    * `EUnguardedDelay` unless the venue and fee delays are guarded.
    */
   unpause(options: { unpauseAdmin: TransactionObjectInput; bits: number }) {
-    const bits = requirePauseBits(options.bits);
+    const bits = requirePauseBits(options.bits, PRESALE_PAUSE_MASK);
     return (tx: Transaction): void => {
       tx.moveCall({
         target: this.#target("creation_policy", "unpause"),
@@ -1559,17 +1560,6 @@ function venueType(type: string): string {
     throw new TypeError(`a venue must not be a framework type: ${type}`);
   }
   return normalizeStructTag(tag);
-}
-
-function requirePauseBits(bits: number): number {
-  if (
-    !Number.isInteger(bits) ||
-    bits <= 0 ||
-    (bits & ~PRESALE_PAUSE_MASK) !== 0
-  ) {
-    throw new RangeError("invalid presale pause bits");
-  }
-  return bits;
 }
 
 /**

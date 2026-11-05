@@ -260,14 +260,11 @@ export function apportionRaise(
   liquidityQuote: bigint;
 } {
   const shares = raiseAllocations.map((allocation) => allocation.bps);
-  const allocated = sum(shares) + protocolRaiseBps;
-  check(
-    allocated < BPS,
-    "EInvalidRaiseAllocation",
-    "raise allocations and Blast's share must leave the LP a share",
-  );
+  // Like Move, the LP's share goes through `bps::new`; a sum above 10,000
+  // aborts there, and a sum of exactly 10,000 leaves the LP no atoms below.
+  const liquidityBps = bps(BPS - sum(shares) - protocolRaiseBps);
   const amounts = apportionBps(
-    [...shares, protocolRaiseBps, BPS - allocated],
+    [...shares, protocolRaiseBps, liquidityBps],
     raiseTarget,
     null,
   );

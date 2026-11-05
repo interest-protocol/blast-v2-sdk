@@ -13,10 +13,19 @@ import {
 } from "@interest-protocol/blast-vault-sdk/transactions";
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag } from "@mysten/sui/utils";
-import { moveCallArguments, moveCallTypeArguments } from "./abi.ts";
+import {
+  abiCoverage,
+  moveCallArguments,
+  moveCallTypeArguments,
+  readAbi,
+} from "./abi.ts";
 import { deployment, fixture, id } from "./vault-helpers.ts";
 
 const calls = new VaultCalls(deployment);
+const coverage = abiCoverage(
+  readAbi("production-vault-v1.json", "vault"),
+  deployment.packageId,
+);
 const vault = { objectId: id("0x7a"), initialSharedVersion: 9 };
 const round = { objectId: id("0x7b"), initialSharedVersion: 10 };
 const types = { memeType: fixture.memeType, quoteType: fixture.quoteType };
@@ -28,7 +37,8 @@ const digest = new Uint8Array(32).fill(1);
 const registryId = `0x${BigInt(fixture.registryId).toString(16)}`;
 
 function moveCalls(tx: Transaction) {
-  return tx
+  return coverage
+    .check(tx)
     .getData()
     .commands.flatMap((command) =>
       command.$kind === "MoveCall" ? [command.MoveCall] : [],
@@ -60,17 +70,11 @@ function separately() {
   };
 }
 
-test("identifies the package's OTW and witness by original ID", () => {
+test("identifies the package's OTW by original ID", () => {
   assert.equal(
     calls.otw,
     normalizeStructTag(
       `${fixture.vaultOriginalPackageId}::blast_vault_package::BLAST_VAULT_PACKAGE`,
-    ),
-  );
-  assert.equal(
-    calls.packageWitnessType,
-    normalizeStructTag(
-      `${fixture.vaultOriginalPackageId}::blast_vault_package::PackageWitness`,
     ),
   );
   assert.deepEqual(VAULT_PAUSE_BITS, { Admin: 1 });
@@ -78,8 +82,9 @@ test("identifies the package's OTW and witness by original ID", () => {
 
 test("owner calls take the vault, the proof and the version in Move order", () => {
   const tx = new Transaction();
-  const proof = tx.pure.u8(0);
-  const proposed = tx.pure.u8(1);
+  // Stand-ins for the product's `prove_owner` and core's `fee_split::new`.
+  const proof = tx.moveCall({ target: "0x5e::blast_presale::prove_owner" });
+  const proposed = tx.moveCall({ target: "0xc0::fee_split::new" });
   const [meme, quote] = tx.add(
     calls.claimOwnerBalances({ ...types, vault, proof }),
   );
@@ -87,15 +92,24 @@ test("owner calls take the vault, the proof and the version in Move order", () =
   tx.add(calls.scheduleFeeSplit({ ...types, vault, proof, proposed }));
   tx.add(calls.cancelFeeSplit({ ...types, vault, proof }));
   assert.deepEqual(shape(tx), [
-    ["vault::claim_owner_balances", ["shared-mut:0x7a", "pure", "shared:0xa2"]],
+    ["blast_presale::prove_owner", []],
+    ["fee_split::new", []],
+    [
+      "vault::claim_owner_balances",
+      ["shared-mut:0x7a", "result:0", "shared:0xa2"],
+    ],
     [
       "vault::schedule_fee_split",
-      ["shared-mut:0x7a", "pure", "shared:0xa2", "pure", "clock"],
+      ["shared-mut:0x7a", "result:0", "shared:0xa2", "result:1", "clock"],
     ],
-    ["vault::cancel_fee_split", ["shared-mut:0x7a", "pure", "shared:0xa2"]],
+    ["vault::cancel_fee_split", ["shared-mut:0x7a", "result:0", "shared:0xa2"]],
   ]);
-  assert.deepEqual(moveCallTypeArguments(tx), [pair, pair, pair]);
-  assert.ok(moveCalls(tx).every((call) => call.package === id("0xf4")));
+  assert.deepEqual(moveCallTypeArguments(tx).slice(2), [pair, pair, pair]);
+  assert.ok(
+    moveCalls(tx)
+      .slice(2)
+      .every((call) => call.package === id("0xf4")),
+  );
 });
 
 test("anyone calls mirror the vault and holder_rewards arity", () => {
@@ -505,4 +519,8 @@ test("the abort table follows errors.move's 35 codes", () => {
   assert.equal(vaultAbortName(34), "EReturnedExceedsTaken");
   assert.equal(vaultAbortName(35), null);
   assert.equal(vaultAbortName(-1), null);
+});
+
+test("every classified blast_vault builder is built and matches the frozen ABI", () => {
+  coverage.assertEveryBuilder(25);
 });

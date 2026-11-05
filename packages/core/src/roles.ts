@@ -21,7 +21,11 @@ export const CORE_ROLES = [
 
 export type CoreRole = (typeof CORE_ROLES)[number];
 
-/** `<core original>::blast_domain::<role>`: the `Role` an `AdminCap` signs in to. */
+/**
+ * `<core original>::blast_domain::<role>`: the `Role` an `AdminCap` signs in to.
+ * Move keys ACL roles by `type_name::with_defining_ids`; the defining ID equals
+ * the original ID here only because `blast_core` is immutable at version 1.
+ */
 export function coreRoleType(
   core: Pick<CoreDeployment, "originalPackageId">,
   role: CoreRole,

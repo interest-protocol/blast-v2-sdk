@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   autoLpFixedSide,
+  isSeedablePrice,
   sqrtPriceX64,
 } from "@interest-protocol/blast-core/migration-math";
 
@@ -77,4 +78,14 @@ test("matches the contract auto-LP side-selection vectors", () => {
 test("rejects invalid migration math inputs", () => {
   assert.throws(() => sqrtPriceX64(0n, 1n, true), /positive u64/);
   assert.throws(() => autoLpFixedSide(0n, 1n << 128n, 1n, 1n, 1n), /u128/);
+});
+
+test("sqrtPriceX64 requires only the divisor side, like migration::sqrt_price_x64", () => {
+  // Meme is coin A: Quote / Meme, so a zero Quote prices 0 and a zero Meme aborts.
+  assert.equal(sqrtPriceX64(5n, 0n, true), 0n);
+  assert.throws(() => sqrtPriceX64(0n, 5n, true), RangeError);
+  // Meme is coin B: Meme / Quote.
+  assert.equal(sqrtPriceX64(0n, 5n, false), 0n);
+  assert.throws(() => sqrtPriceX64(5n, 0n, false), RangeError);
+  assert.equal(isSeedablePrice(sqrtPriceX64(0n, 5n, false)), false);
 });

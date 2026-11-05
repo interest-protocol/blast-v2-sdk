@@ -83,10 +83,17 @@ function ratioQ128(
   quoteAmount: bigint,
   memeIsCoinA: boolean,
 ): bigint {
-  requirePositiveU64("memeAmount", memeAmount);
-  requirePositiveU64("quoteAmount", quoteAmount);
-  const numerator = memeIsCoinA ? quoteAmount : memeAmount;
-  const denominator = memeIsCoinA ? memeAmount : quoteAmount;
+  // Move divides by the coin-A side (it aborts at zero) and allows a zero
+  // numerator, whose price is 0 and not seedable.
+  const [numerator, denominator] = memeIsCoinA
+    ? [
+        requireU64("quoteAmount", quoteAmount),
+        requirePositiveU64("memeAmount", memeAmount),
+      ]
+    : [
+        requireU64("memeAmount", memeAmount),
+        requirePositiveU64("quoteAmount", quoteAmount),
+      ];
   return (numerator << 128n) / denominator;
 }
 

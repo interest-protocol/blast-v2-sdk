@@ -16,7 +16,12 @@ import {
   normalizeStructTag,
   normalizeSuiAddress,
 } from "@mysten/sui/utils";
-import { moveCallArguments, moveCallTypeArguments } from "./abi.ts";
+import {
+  abiCoverage,
+  moveCallArguments,
+  moveCallTypeArguments,
+  readAbi,
+} from "./abi.ts";
 import {
   MEME_A,
   MEME_B,
@@ -26,6 +31,10 @@ import {
 } from "./fixtures/migrators-deployment.ts";
 
 const calls = new MigratorCalls(MIGRATORS);
+const coverage = abiCoverage(
+  readAbi("production-migrators-v1.json", "migrators"),
+  MIGRATORS.packageId,
+);
 const meme = normalizeStructTag(MEME_A);
 const memeB = normalizeStructTag(MEME_B);
 const sui = normalizeStructTag(SUI);
@@ -40,13 +49,16 @@ const treasury = "shared:0x1030";
 
 /** Every Move call's `module::function`, in command order. */
 function targets(tx: Transaction): string[] {
-  return tx.getData().commands.flatMap((command) => {
-    if (command.$kind !== "MoveCall") return [];
-    const call = command.MoveCall;
-    return [
-      `${normalizeSuiAddress(call.package)}::${call.module}::${call.function}`,
-    ];
-  });
+  return coverage
+    .check(tx)
+    .getData()
+    .commands.flatMap((command) => {
+      if (command.$kind !== "MoveCall") return [];
+      const call = command.MoveCall;
+      return [
+        `${normalizeSuiAddress(call.package)}::${call.module}::${call.function}`,
+      ];
+    });
 }
 
 /** The pure inputs of the `index`th Move call, decoded in argument order. */
@@ -468,4 +480,8 @@ test("rejects an incomplete deployment", () => {
       }),
     /vault.registry must be a shared object identity/,
   );
+});
+
+test("every classified blast_migrators builder is built and matches the frozen ABI", () => {
+  coverage.assertEveryBuilder(10);
 });

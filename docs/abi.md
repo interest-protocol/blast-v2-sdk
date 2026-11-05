@@ -15,8 +15,8 @@ function and event, and compares the result byte for byte with `abi/`.
 checks out the commit pinned in `.github/workflows/check.yml`.
 
 The launch stack is frozen at contracts
-[`88951fe`](https://github.com/interest-protocol/blast-v2-contracts/tree/88951fe9dbe2b621d45bb80124a325468c6e8298/sui)
-(ADR 0137 with its 2026-11-05 amendment, PRs #178-#214):
+[`a1a8f6c`](https://github.com/interest-protocol/blast-v2-contracts/tree/a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f/sui)
+(ADR 0137 with its 2026-11-05 amendment, PRs #178-#215):
 
 | Artifact | Move packages | Events |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ Every public function carries one `sdk` role in its artifact:
 
 | Role | Meaning |
 | --- | --- |
-| `builder` | An SDK `*Calls` method builds it; `test/abi.ts#assertBuildersMatchAbi` checks type and value arity, and the shared mutability of every `PackageVersion` argument. |
+| `builder` | An SDK `*Calls` method builds it; `test/abi.ts#assertBuildersMatchAbi` checks type and value arity, pure-versus-object kind of every argument, and `&` versus `&mut` of every shared-object input. Each package's transaction tests exercise every classified builder (vault 25, migrators 10, presale 43, vendor 2). |
 | `compositional` | A value built inside a PTB for another call (`bps::new`, `fee_split::*`, `payout::recipient`, `allocation::plan`). |
 | `read` | A reader the SDK mirrors from object BCS or constants. |
 | `move-composition` | Callable only from Move: it takes a package or venue witness, or embeds a value in another object (`delayed*`, `package_version`, `partner_list`, `vault::new`, `migration::*`). |

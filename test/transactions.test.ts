@@ -14,11 +14,6 @@ import {
 } from "@mysten/sui/utils";
 import { assertBuildersMatchAbi, readAbi } from "./abi.ts";
 import { LAUNCHPAD_DEPLOYMENT as deployment } from "./fixtures/launchpad-deployment.ts";
-import { stubVenueCalls } from "./fixtures/venue-stubs.ts";
-
-// The migrators and vault builders are stand-ins here; the compositions'
-// launchpad and core calls are checked against the frozen ABIs.
-stubVenueCalls();
 
 function shared<const Mutable extends boolean>(
   objectId: string,
@@ -30,6 +25,13 @@ function shared<const Mutable extends boolean>(
 
 const abi = readAbi("production-launchpad-v1.json", "launchpad");
 const coreAbi = readAbi("production-core-v1.json", "core");
+const migratorsAbi = readAbi("production-migrators-v1.json", "migrators");
+const vaultAbi = readAbi("production-vault-v1.json", "vault");
+/** The composition's venue and vault calls, checked against their own ABIs. */
+const venueCalls = (tx: Transaction) => [
+  ...assertBuildersMatchAbi(tx, migratorsAbi, deployment.migrators.packageId),
+  ...assertBuildersMatchAbi(tx, vaultAbi, deployment.vault.packageId),
+];
 const types = {
   memeType: "0xa::meme::MEME",
   quoteType: "0x2::sui::SUI",
@@ -125,7 +127,8 @@ test("creates a launch in one PTB: venue ticket, new, settings, finalize, bid, s
   // value with the venue's ticket.
   const prepare = commandIndex(tx, "cetus::prepare");
   assert.ok(prepare >= 0 && prepare < commandIndex(tx, "launch::new"));
-  assert.deepEqual(argumentsOf(tx, "cetus::prepare"), ["object:0x7d"]);
+  assert.deepEqual(venueCalls(tx), ["cetus::prepare"]);
+  assert.ok(argumentsOf(tx, "cetus::prepare").includes("object:0x7d"));
   assert.deepEqual(argumentsOf(tx, "launch::new"), [
     "object:0x7c",
     "object:0x7d",
@@ -206,7 +209,7 @@ test("creates a Bluefin launch with a pre-share buy routed to the recipient", ()
       "launch::share",
     ],
   );
-  assert.ok(commandIndex(tx, "bluefin::prepare") >= 0);
+  assert.deepEqual(venueCalls(tx), ["bluefin::prepare"]);
   const owned = `Result:${commandIndex(tx, "launch::finalize")}`;
   const buy = argumentsOf(tx, "launch::buy");
   assert.deepEqual(
@@ -252,9 +255,11 @@ test("migrates in two calls: launch::migrate, then the venue redeems the Migrati
     "shared:0xd",
     `shared:${SUI_CLOCK_OBJECT_ID}`,
   ]);
-  assert.deepEqual(argumentsOf(viaCetus, "cetus::migrate"), [
+  assert.deepEqual(venueCalls(viaCetus), ["cetus::migrate"]);
+  assert.equal(
+    argumentsOf(viaCetus, "cetus::migrate")[0],
     `Result:${commandIndex(viaCetus, "launch::migrate")}`,
-  ]);
+  );
 
   const viaBluefin = sdk.migrate({
     ...types,
@@ -265,13 +270,14 @@ test("migrates in two calls: launch::migrate, then the venue redeems the Migrati
     bluefinConfig: { objectId: "0xbf", initialSharedVersion: "1" },
     creationFee: 5_000_000n,
   });
+  assert.deepEqual(venueCalls(viaBluefin), ["bluefin::migrate"]);
   const redeem = argumentsOf(viaBluefin, "bluefin::migrate");
   assert.equal(
     redeem[0],
     `Result:${commandIndex(viaBluefin, "launch::migrate")}`,
   );
   // Bluefin's pool creation fee is a `Coin<SUI>` split for the call.
-  assert.match(redeem[1] ?? "", /^Result/);
+  assert.ok(redeem.slice(1).some((argument) => argument.startsWith("Result")));
 });
 
 test("owner actions prove ownership with the curve-fee cap in the same PTB", () => {
@@ -292,23 +298,31 @@ test("owner actions prove ownership with the curve-fee cap in the same PTB", () 
     "shared:0x2",
     "object:0xcf",
   ]);
-  assert.deepEqual(argumentsOf(claim, "vault::claim_owner_balances"), [
+  assert.deepEqual(venueCalls(claim), ["vault::claim_owner_balances"]);
+  assert.equal(
+    argumentsOf(claim, "vault::claim_owner_balances")[1],
     `Result:${commandIndex(claim, "launch::prove_owner")}`,
-  ]);
+  );
   assert.equal(transferObjectCount(claim), 2);
   // `prove_owner` reads the launch immutably.
   assert.equal(sharedInputs(claim)[0]?.mutable, false);
 
   const schedule = sdk.scheduleFeeSplit({ ...owner, feeSplit: lpFeeSplit });
+  assert.deepEqual(venueCalls(schedule), ["vault::schedule_fee_split"]);
   const proposed = argumentsOf(schedule, "vault::schedule_fee_split");
-  assert.deepEqual(proposed, [
-    `Result:${commandIndex(schedule, "launch::prove_owner")}`,
-    `Result:${commandIndex(schedule, "fee_split::new")}`,
-  ]);
+  assert.deepEqual(
+    [proposed[1], proposed[3]],
+    [
+      `Result:${commandIndex(schedule, "launch::prove_owner")}`,
+      `Result:${commandIndex(schedule, "fee_split::new")}`,
+    ],
+  );
   const cancel = sdk.cancelFeeSplit(owner);
-  assert.deepEqual(argumentsOf(cancel, "vault::cancel_fee_split"), [
+  assert.deepEqual(venueCalls(cancel), ["vault::cancel_fee_split"]);
+  assert.equal(
+    argumentsOf(cancel, "vault::cancel_fee_split")[1],
     `Result:${commandIndex(cancel, "launch::prove_owner")}`,
-  ]);
+  );
 });
 
 test("rejects creation settings finalize aborts on", () => {
@@ -935,24 +949,7 @@ test("configures a fresh launchpad at zero delays, then arms each delay", () => 
   ]);
 });
 
-test("rejects incomplete or incorrectly mutable shared references", () => {
-  const sdk = new LaunchpadTransactions(deployment);
-  const invalidLaunch = shared(
-    "0xc",
-    "20",
-    false,
-  ) as unknown as SharedObjectReference<true>;
-  assert.throws(
-    () =>
-      sdk.buy({
-        ...types,
-        launch: invalidLaunch,
-        quoteAmount: 1n,
-        minMemeOut: 0n,
-        recipient: "0xd",
-      }),
-    /launch\.mutable must be true/,
-  );
+test("rejects an incomplete deployment reference", () => {
   assert.throws(
     () =>
       new LaunchpadTransactions({

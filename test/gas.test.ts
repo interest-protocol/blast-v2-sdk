@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { grossGasBudget } from "@interest-protocol/blast-core/gas";
 import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
-import { addCetusPoolWithLiquidity } from "@interest-protocol/blast-migrators-sdk/cetus-pool";
 import { PresaleTransactions } from "@interest-protocol/blast-presale-sdk/transactions";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
@@ -200,34 +199,6 @@ test("a presale Cetus migration budgets gross cost", async () => {
     await senderBudget(presale.migrate({ ...sale, venue: "cetus", cetus })),
     GROSS_BUDGET,
   );
-});
-
-test("standalone Cetus pool creation budgets gross cost", async () => {
-  const tx = new Transaction();
-  const coin = (objectId: string) =>
-    tx.objectRef({
-      objectId,
-      version: "1",
-      digest: "11111111111111111111111111111111",
-    });
-  const result = addCetusPoolWithLiquidity(tx, {
-    ...types,
-    cetusConfig: cetus.config,
-    cetusPools: cetus.pools,
-    cetusPackageId: "0xcafe",
-    tickSpacing: 200,
-    sqrtPriceX64: 1n << 64n,
-    lowerTick: -443_600,
-    upperTick: 443_600,
-    memeCoin: coin("0xa1"),
-    quoteCoin: coin("0xb1"),
-    fixedMeme: true,
-  });
-  tx.transferObjects(
-    [result.position, result.memeResidual, result.quoteResidual],
-    SENDER,
-  );
-  assert.equal(await senderBudget(tx), GROSS_BUDGET);
 });
 
 test("a keeper PTB composing the Cetus venue migrate call budgets gross cost", async () => {
