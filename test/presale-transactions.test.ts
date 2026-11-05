@@ -1,1680 +1,773 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { itemAt } from "@interest-protocol/blast-core/arrays";
-import { moveResults } from "@interest-protocol/blast-core/ptb";
-import type { RewardManifestSummary } from "@interest-protocol/blast-core/rewards/allocations";
-import {
-  buildRewardManifest,
-  MIGRATOR_REWARD_LEAF_DOMAIN,
-  PRESALE_REWARD_LEAF_DOMAIN,
-} from "@interest-protocol/blast-core/rewards/allocations";
-import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
+import type { SharedObjectIdentity } from "@interest-protocol/blast-core/sui";
 import { buildAllowlist } from "@interest-protocol/blast-presale-sdk/allowlist";
-import {
-  openEligibility,
-  uncappedForAnyone,
-  uncappedForEligible,
-} from "@interest-protocol/blast-presale-sdk/math";
+import { openEligibility } from "@interest-protocol/blast-presale-sdk/math";
 import type {
   PresaleDeployment,
-  PresaleTerms,
+  PresaleSettings,
 } from "@interest-protocol/blast-presale-sdk/transactions";
 import {
-  cetusMemeSide,
+  PRESALE_PAUSE_BITS,
   PresaleCalls,
   PresaleTransactions,
 } from "@interest-protocol/blast-presale-sdk/transactions";
-import { bcs } from "@mysten/sui/bcs";
 import { Transaction } from "@mysten/sui/transactions";
 import {
-  fromBase64,
   normalizeStructTag,
   normalizeSuiAddress,
   SUI_CLOCK_OBJECT_ID,
 } from "@mysten/sui/utils";
+import { verifiedLpCoin } from "./aftermath-lp.ts";
 
-function shared<const Mutable extends boolean>(
-  objectId: string,
-  mutable: Mutable,
-): SharedObjectReference<Mutable> {
-  return { objectId, initialSharedVersion: "3", mutable };
-}
-
+const shared = (objectId: string): SharedObjectIdentity => ({
+  objectId,
+  initialSharedVersion: "3",
+});
+const admin = { packageId: "0xad", acl: shared("0xac1") };
+const core = {
+  packageId: "0xc1",
+  originalPackageId: "0xc0",
+  treasury: shared("0x7ea"),
+};
+const vault = {
+  packageId: "0xb1",
+  originalPackageId: "0xb0",
+  registry: shared("0xb2"),
+  packageVersion: shared("0xb3"),
+  packageAdmin: shared("0xb4"),
+  core,
+  admin,
+};
 const deployment: PresaleDeployment = {
   packageId: "0x5f",
   originalPackageId: "0x5e",
-  packageVersion: shared("0x64", false),
-  venueConfig: shared("0x60", false),
-  feePolicy: shared("0x61", false),
-  creationPolicy: shared("0x62", false),
-  admin: {
-    packageId: "0xad",
-    acl: { objectId: "0x63", initialSharedVersion: "3" },
+  packageVersion: shared("0x64"),
+  packageAdmin: shared("0x65"),
+  creationPolicy: shared("0x62"),
+  feePolicy: shared("0x61"),
+  presaleRegistry: shared("0x63"),
+  core,
+  admin,
+  partners: { packageId: "0xa7", admin },
+  vault,
+  migrators: {
+    packageId: "0xd1",
+    originalPackageId: "0xd0",
+    packageVersion: shared("0xd3"),
+    packageAdmin: shared("0xd4"),
+    venueConfig: shared("0xd5"),
+    vault,
+  },
+  aftermathDaoPresale: {
+    packageId: "0x7a",
+    originalPackageId: "0x7a",
+    aftermath: {
+      poolRegistry: shared("0xaf1"),
+      daoFeeVersion: shared("0xaf2"),
+    },
   },
 };
-const tx = new PresaleTransactions(deployment);
-const memeA = normalizeStructTag("0xa::meme::MEME");
-const memeB = normalizeStructTag("0x1::meme::MEME");
-const sui = normalizeStructTag("0x2::sui::SUI");
-const usdc = normalizeStructTag(
-  "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
-);
-const CLOCK = `shared:${SUI_CLOCK_OBJECT_ID}`;
-const presale = shared("0xab", true);
-const types = { memeType: memeA, quoteType: sui };
-const terms: PresaleTerms = {
-  ...types,
-  treasuryCap: "0x7c",
-  memeCurrency: shared("0xcc", true),
+const ptb = new PresaleTransactions(deployment);
+const saleToken = normalizeStructTag("0xa::sale::SALE");
+const quote = normalizeStructTag("0x2::sui::SUI");
+const lp = normalizeStructTag("0xb::lp::LP");
+const types = { saleTokenType: saleToken, quoteType: quote };
+const presale = shared("0xab");
+const partner = shared("0x9a27");
+const CLOCK = "clock";
+const VERSION = "shared:0x64";
+
+type Call = { target: string; typeArguments: string[]; args: string[] };
+
+type Data = ReturnType<Transaction["getData"]>;
+type Argument = Extract<
+  Data["commands"][number],
+  { $kind: "MoveCall" }
+>["MoveCall"]["arguments"][number];
+
+const hex = (id: string) => `0x${BigInt(id).toString(16)}`;
+
+/** One argument as `result:N[:M]`, `pure`, `object:<id>`, `shared[-mut]:<id>` or `clock`. */
+function describe(data: Data, argument: Argument): string {
+  if (argument.$kind === "Result") return `result:${argument.Result}`;
+  if (argument.$kind === "NestedResult")
+    return `result:${argument.NestedResult.join(":")}`;
+  if (argument.$kind === "GasCoin") return "gas";
+  assert.ok(argument.$kind === "Input");
+  const input = data.inputs[argument.Input];
+  if (input?.$kind === "Pure") return "pure";
+  if (input?.$kind === "UnresolvedObject")
+    return `object:${hex(input.UnresolvedObject.objectId)}`;
+  assert.ok(input?.$kind === "Object" && input.Object.$kind === "SharedObject");
+  const { objectId, mutable } = input.Object.SharedObject;
+  if (objectId === normalizeSuiAddress(SUI_CLOCK_OBJECT_ID)) return CLOCK;
+  return `${mutable ? "shared-mut" : "shared"}:${hex(objectId)}`;
+}
+
+/** Every Move call `tx` makes, as `<package>::<module>::<function>` and argument descriptors. */
+function calls(tx: Transaction): Call[] {
+  const data = tx.getData();
+  return data.commands.flatMap((command) => {
+    if (command.$kind !== "MoveCall") return [];
+    const call = command.MoveCall;
+    return [
+      {
+        target: `${hex(call.package)}::${call.module}::${call.function}`,
+        typeArguments: call.typeArguments,
+        args: call.arguments.map((argument) => describe(data, argument)),
+      },
+    ];
+  });
+}
+
+function only(tx: Transaction, target: string): Call {
+  const found = calls(tx).filter((call) => call.target === target);
+  assert.equal(found.length, 1, target);
+  return found[0] as Call;
+}
+
+function targets(tx: Transaction): string[] {
+  return calls(tx).map((call) => call.target);
+}
+
+/** A composition whose venue or vault step is another work package's stub. */
+function pending(build: () => unknown): string | false {
+  try {
+    build();
+    return false;
+  } catch (error) {
+    if (error instanceof Error && /^WP\d/.test(error.message))
+      return error.message;
+    throw error;
+  }
+}
+
+const settings: PresaleSettings = {
   tokenSupply: 20_001n,
+  burnable: false,
   tokenAllocationBps: 5_000n,
-  participantVesting: null,
   liquidityTokenAllocationBps: 1_000n,
   recipientAllocations: [
-    { recipient: "0xa110c", bps: 2_500n },
-    { recipient: "0xb110c", bps: 1_500n },
+    {
+      recipient: {
+        destination: "0xa110c",
+        vestingTerms: {
+          cliffDelayMs: 100n,
+          periodDurationMs: 50n,
+          periods: 4n,
+        },
+      },
+      bps: 2_500n,
+    },
+    { recipient: { destination: "0xb110c", vestingTerms: null }, bps: 1_000n },
   ],
-  burnable: false,
+  participantVesting: null,
   raiseTarget: 1_000n,
-  raiseAllocations: [{ recipient: "0x5a1e", bps: 2_000n }],
-  durationMs: 100n,
-  liquidityWindowMs: 50n,
-  eligibility: openEligibility(500n, 4n, 250n),
-  uncapped: uncappedForAnyone(50n, 4n, 250n),
+  raiseAllocations: [
+    { recipient: { destination: "0x5a1e", vestingTerms: null }, bps: 2_000n },
+  ],
+  commitmentDurationMs: 100n,
+  liquidityWindowDurationMs: 604_800_000n,
+  eligibility: openEligibility(5_000n, 2n, 500n),
+  uncapped: {
+    startsAfterMs: 50n,
+    access: { kind: "anyone", maxParticipants: 4n, minCommitment: 250n },
+  },
   hardCap: { startsAfterMs: 50n, closesWhenFilled: true },
-  feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
-  holderRewardsBps: 3_000n,
+  feeSplit: {
+    routes: [
+      { destination: { kind: "Owner" }, bps: 7_000n },
+      { destination: { kind: "HolderRewards" }, bps: 3_000n },
+    ],
+  },
+  partner,
 };
-/** The `&AdminWitness<Role>` that the PTB's first command, `blast_acl::sign_in`, returns. */
-const ADMIN = ["Result:0"];
-/** One `RecipientShare`: its rate, then the constructor. */
-const recipientShare = ["bps::new", "blast_presale::recipient_share"];
-const cetus = {
-  cetusConfig: shared("0x70", false),
-  cetusPools: shared("0x71", true),
-};
-const partner = shared("0x9a27", false);
 
-test("orders Cetus coins by defining type name, both ways", () => {
-  assert.equal(cetusMemeSide(memeA, sui), "a");
-  assert.equal(cetusMemeSide(memeB, sui), "b");
-  // The venue fork asserts (USDC, SUI) is in Cetus order.
-  assert.equal(cetusMemeSide(usdc, sui), "a");
-  assert.equal(cetusMemeSide(sui, usdc), "b");
-
-  const migrate = (memeType: string) =>
-    moveCall(
-      tx.migrateCetus({
-        memeType,
-        quoteType: sui,
-        presale,
-        ...cetus,
-        burnManager: shared("0x72", true),
-      }),
-      "cetus::migrate",
-    );
-  assert.deepEqual(migrate(memeA).typeArguments, [memeA, sui, memeA, sui]);
-  assert.deepEqual(migrate(memeB).typeArguments, [memeB, sui, sui, memeB]);
-  const collect = moveCall(
-    tx.collectCetusFees({
-      memeType: memeB,
-      quoteType: sui,
-      vault: shared("0xba", true),
-      cetusConfig: cetus.cetusConfig,
-      burnManager: shared("0x72", false),
-      pool: shared("0x90", true),
-    }),
-    "cetus::collect_fees",
-  );
-  assert.deepEqual(collect.typeArguments, [memeB, sui, sui, memeB]);
-});
-
-test("starts, configures, finalizes, shares, and keeps the cap of a Cetus presale in one PTB", () => {
-  const ptb = tx.createCetusPresale({
-    ...terms,
-    ...cetus,
-    tickSpacing: 200,
-    startMs: 1_000n,
-    capRecipient: "0xc0",
+test("createPresale with the vendor: prepare, new, setters, finalize, rates, share, cap", async () => {
+  const lpCoin = await verifiedLpCoin(lp, "0xcf");
+  const tx = ptb.createPresale({
+    ...types,
+    ...settings,
+    venue: "aftermathDao",
+    adminCap: "0xadc",
+    lpCoin,
+    treasuryCap: "0x7c",
+    currency: shared("0xcc"),
+    commitmentStartsAtMs: 1_000n,
+    capRecipient: "0xc0ffee",
+    protocolFees: {
+      adminCapId: "0xa11",
+      fees: {
+        raiseBps: 300n,
+        tokenBps: 500n,
+        lpFeeMemeBps: 1_000n,
+        lpFeeQuoteBps: 1_000n,
+      },
+    },
   });
-  assert.deepEqual(moveFunctions(ptb), [
-    "cetus::new",
-    "blast_presale::set_supply",
-    "bps::new", // token_allocation_bps
-    "bps::new", // liquidity_token_allocation_bps
-    ...recipientShare,
-    ...recipientShare, // recipient_allocations
-    "blast_presale::set_token_allocations",
-    ...recipientShare, // raise_allocations
-    "blast_presale::set_raise",
-    "blast_presale::set_windows",
-    "blast_presale::open_eligibility",
-    "blast_presale::set_eligibility",
-    "blast_presale::uncapped_for_anyone",
-    "blast_presale::set_uncapped_phase",
-    "blast_presale::set_hard_cap",
-    ...recipientShare, // fee_split shares
-    "bps::new", // fee_split holder_rewards_bps
-    "blast_presale::fee_split",
-    "blast_presale::set_fee_split",
-    "blast_presale::finalize",
-    "blast_presale::share",
+  const presaleCalls = targets(tx).filter(
+    (target) =>
+      target.startsWith("0x5f::blast_presale::") || target.startsWith("0x7a"),
+  );
+  assert.deepEqual(presaleCalls, [
+    "0x7a::blast_aftermath_dao_presale::prepare",
+    "0x5f::blast_presale::new",
+    "0x5f::blast_presale::set_supply",
+    "0x5f::blast_presale::recipient_share",
+    "0x5f::blast_presale::recipient_share",
+    "0x5f::blast_presale::set_token_allocations",
+    "0x5f::blast_presale::recipient_share",
+    "0x5f::blast_presale::set_raise",
+    "0x5f::blast_presale::set_windows",
+    "0x5f::blast_presale::open_eligibility",
+    "0x5f::blast_presale::set_eligibility",
+    "0x5f::blast_presale::uncapped_for_anyone",
+    "0x5f::blast_presale::set_uncapped_phase",
+    "0x5f::blast_presale::set_hard_cap",
+    "0x5f::blast_presale::set_fee_split",
+    "0x5f::blast_presale::set_partner",
+    "0x5f::blast_presale::finalize",
+    "0x5f::blast_presale::set_protocol_fees",
+    "0x5f::blast_presale::share",
   ]);
-  const created = moveCall(ptb, "cetus::new");
-  assert.deepEqual(created.typeArguments, [memeA, sui]);
-  assert.deepEqual(argumentKinds(ptb, created), [
+
+  const prepare = only(tx, "0x7a::blast_aftermath_dao_presale::prepare");
+  assert.deepEqual(prepare.typeArguments, [
+    lp,
+    saleToken,
+    quote,
+    normalizeStructTag("0x5e::blast_presale_package::PackageWitness"),
+  ]);
+  assert.deepEqual(prepare.args, ["object:0xadc", "object:0xcf"]);
+  const created = only(tx, "0x5f::blast_presale::new");
+  assert.deepEqual(created.typeArguments, [saleToken, quote]);
+  assert.deepEqual(created.args, [
     "object:0x7c",
-    "shared:0x64",
+    VERSION,
+    "result:0",
     "shared:0x62",
     "shared:0x61",
-    "shared-mut:0x60",
-    "shared:0x70",
-    "shared-mut:0x71",
-    "pure",
   ]);
-  assert.equal(created.arguments.length, abiArity("cetus", "new"));
-  const initializer = `Result:${commandIndex(ptb, "cetus::new")}`;
-  for (const setter of [
-    "set_supply",
-    "set_token_allocations",
-    "set_raise",
-    "set_windows",
-    "set_eligibility",
-    "set_uncapped_phase",
-    "set_hard_cap",
-    "set_fee_split",
-  ]) {
-    const call = moveCall(ptb, `blast_presale::${setter}`);
-    assert.deepEqual(call.typeArguments, [memeA, sui]);
-    assert.equal(argumentKinds(ptb, call)[0], initializer);
-    assert.equal(call.arguments.length, abiArity("blast_presale", setter));
-  }
-  const allocations = moveCall(ptb, "blast_presale::set_token_allocations");
-  assert.deepEqual(argumentKinds(ptb, allocations), [
-    initializer,
-    "shared:0x64",
-    `Result:${commandIndex(ptb, "bps::new")}`,
-    `Result:${commandIndex(ptb, "bps::new") + 1}`,
-    `Result:${commandIndexOf(ptb, "MakeMoveVec", 0)}`,
-  ]);
-  const hardCap = moveCall(ptb, "blast_presale::set_hard_cap");
-  assert.equal(pureU64(ptb, hardCap.arguments[2]), 50n);
-  const feeSplit = moveCall(ptb, "blast_presale::fee_split");
-  assert.deepEqual(argumentKinds(ptb, feeSplit), [
-    `Result:${commandIndexOf(ptb, "MakeMoveVec", 2)}`,
-    `Result:${commandIndex(ptb, "blast_presale::fee_split") - 1}`,
-  ]);
-  const finalize = moveCall(ptb, "blast_presale::finalize");
-  assert.deepEqual(argumentKinds(ptb, finalize), [
-    initializer,
-    "shared:0x64",
-    "shared-mut:0xcc",
-  ]);
-  assert.equal(
-    finalize.arguments.length,
-    abiArity("blast_presale", "finalize"),
-  );
-  const share = moveCall(ptb, "blast_presale::share");
-  assert.deepEqual(argumentKinds(ptb, share), [
-    `NestedResult:${commandIndex(ptb, "blast_presale::finalize")}:0`,
-    "shared:0x64",
-    "pure",
-    CLOCK,
-  ]);
-  assert.equal(pureU64(ptb, share.arguments[2]), 1_000n);
-  assert.equal(ptb.getData().commands.at(-1)?.$kind, "TransferObjects");
-  const vectors = ptb
-    .getData()
-    .commands.flatMap((command) =>
-      command.$kind === "MakeMoveVec" ? [command.MakeMoveVec.type] : [],
-    );
-  assert.deepEqual(
-    vectors,
-    Array(3).fill(normalizeStructTag("0x5e::blast_presale::RecipientShare")),
-  );
-});
-
-test("names a partner on the initializer before finalize, and pays it in the migration PTB", () => {
-  const ptb = tx.createCetusPresale({
-    ...terms,
-    ...cetus,
-    tickSpacing: 200,
-    startMs: 1_000n,
-    capRecipient: "0xc0",
-    partner,
-  });
-  assert.deepEqual(moveFunctions(ptb).slice(-4), [
-    "blast_presale::set_fee_split",
-    "blast_presale::set_partner",
-    "blast_presale::finalize",
-    "blast_presale::share",
-  ]);
-  const setPartner = moveCall(ptb, "blast_presale::set_partner");
-  assert.deepEqual(setPartner.typeArguments, [memeA, sui]);
-  assert.deepEqual(argumentKinds(ptb, setPartner), [
-    `Result:${commandIndex(ptb, "cetus::new")}`,
-    "shared:0x64",
+  assert.deepEqual(only(tx, "0x5f::blast_presale::set_partner").args, [
+    "result:1",
+    VERSION,
     "shared:0x62",
     "shared:0x9a27",
     CLOCK,
   ]);
-  assert.equal(
-    setPartner.arguments.length,
-    abiArity("blast_presale", "set_partner"),
-  );
-
-  const burnManager = shared("0x72", true);
-  const migrate = tx.migrateCetus({
-    ...types,
-    presale,
-    ...cetus,
-    burnManager,
-    partner,
-  });
-  assert.deepEqual(moveFunctions(migrate), [
-    "cetus::migrate",
-    "blast_presale::pay_protocol_fees_with_partner",
-  ]);
-  const migrateBluefin = tx.migrateBluefin({
-    ...types,
-    presale,
-    memeCurrency: shared("0xcc", false),
-    quoteCurrency: shared("0xcd", false),
-    bluefinConfig: shared("0x80", true),
-    creationFee: 1_000n,
-    partner,
-  });
-  assert.deepEqual(moveFunctions(migrateBluefin), [
-    "bluefin::migrate",
-    "blast_presale::pay_protocol_fees_with_partner",
-  ]);
-  // After migration, each collection on the partnered vault pays what it held.
-  const partneredVault = shared("0xba", true);
-  const collectCetus = tx.collectCetusFees({
-    ...types,
-    vault: partneredVault,
-    cetusConfig: cetus.cetusConfig,
-    burnManager: shared("0x72", false),
-    pool: shared("0x90", true),
-    partner,
-  });
-  assert.deepEqual(moveFunctions(collectCetus), [
-    "cetus::collect_fees",
-    "presale_vault::pay_protocol_lp_fees_with_partner",
-  ]);
-  const collectBluefin = tx.collectBluefinFees({
-    ...types,
-    vault: partneredVault,
-    bluefinConfig: shared("0x80", false),
-    pool: shared("0x90", true),
-    partner,
-  });
-  assert.deepEqual(moveFunctions(collectBluefin), [
-    "bluefin::collect_fees",
-    "presale_vault::pay_protocol_lp_fees_with_partner",
-  ]);
-  // Without a partner, neither creation nor migration names one.
-  for (const unpartnered of [
-    tx.createCetusPresale({
-      ...terms,
-      ...cetus,
-      tickSpacing: 200,
-      startMs: 1_000n,
-      capRecipient: "0xc0",
-    }),
-    tx.migrateCetus({
-      ...types,
-      presale,
-      ...cetus,
-      burnManager,
-      partner: null,
-    }),
-  ]) {
-    assert.ok(
-      !moveFunctions(unpartnered).some((name) => name.includes("partner")),
-    );
-  }
-});
-
-test("creates a Bluefin presale without optional settings", () => {
-  const ptb = tx.createBluefinPresale({
-    ...terms,
-    uncapped: null,
-    hardCap: null,
-    eligibility: {
-      kind: "allowlisted",
-      root: "11".repeat(32),
-      leafCount: 2n,
-    },
-    tickSpacing: 60,
-    feeRate: 3_000n,
-    startMs: 1_000n,
-    capRecipient: "0xc0",
-  });
-  const functions = moveFunctions(ptb);
-  assert.ok(functions.includes("blast_presale::allowlisted_eligibility"));
-  for (const optional of [
-    "set_participant_vesting",
-    "set_uncapped_phase",
-    "set_hard_cap",
-    "set_partner",
-  ]) {
-    assert.ok(!functions.includes(`blast_presale::${optional}`));
-  }
-  const created = moveCall(ptb, "bluefin::new");
-  assert.equal(created.arguments.length, abiArity("bluefin", "new"));
-  // The currency goes in mutably: the same PTB's `finalize` takes it so.
-  assert.deepEqual(argumentKinds(ptb, created), [
-    "object:0x7c",
-    "shared:0x64",
+  const finalize = only(tx, "0x5f::blast_presale::finalize");
+  assert.deepEqual(finalize.args, [
+    "result:1",
+    VERSION,
+    "shared-mut:0x63",
     "shared-mut:0xcc",
-    "shared:0x62",
-    "shared:0x61",
-    "shared-mut:0x60",
-    "pure",
-    "pure",
   ]);
-});
-
-test("commits through each route and returns the change to the wallet", () => {
-  const allowlist = buildAllowlist([
-    { wallet: "0xa11ce", walletCap: 500n },
-    { wallet: "0xb0b", walletCap: 700n },
-  ]);
-  for (const route of ["open", "uncapped", "allowlisted"] as const) {
-    const ptb = tx.commit({
-      ...types,
-      presale,
-      amount: 250n,
-      recipient: "0xa11ce",
-      route,
-      allowlist: itemAt(allowlist.proofs, 0),
-    });
-    const call = moveCall(ptb, `blast_presale::commit_${route}`);
-    assert.deepEqual(call.typeArguments, [memeA, sui]);
-    const kinds = argumentKinds(ptb, call);
-    assert.equal(kinds[0], "shared-mut:0xab");
-    assert.equal(kinds.at(-1), CLOCK);
-    assert.equal(kinds.length, abiArity("blast_presale", `commit_${route}`));
-    const transfer = ptb.getData().commands.at(-1);
-    assert.equal(transfer?.$kind, "TransferObjects");
-  }
-  assert.throws(() =>
-    tx.commit({
-      ...types,
-      presale,
-      amount: -1n,
-      recipient: "0xa",
-      route: "open",
-    }),
-  );
-});
-
-test("builds every lifecycle call with the ABI's argument count", () => {
-  const vault = shared("0xba", true);
-  const round = shared("0xd0", true);
-  const manifest = buildRewardManifest({
-    vaultId: "0xba",
-    number: 0n,
-    startCheckpoint: 1n,
-    endCheckpoint: 2n,
-    allocations: [{ beneficiary: "0xb0b", memeAmount: 0n, quoteAmount: 5n }],
-    leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
-  });
-  const cases: Array<[Transaction, string, string[]]> = [
-    [
-      tx.settle({ ...types, presale }),
-      "blast_presale::settle",
-      ["shared-mut:0xab", "shared:0x64", CLOCK],
-    ],
-    [
-      tx.cancelUnlaunched({ ...types, presale }),
-      "blast_presale::cancel_unlaunched",
-      ["shared-mut:0xab", "shared:0x64", CLOCK],
-    ],
-    [
-      tx.claim({ ...types, presale, participants: ["0xa11ce"] }),
-      "blast_presale::claim",
-      ["shared-mut:0xab", "shared:0x64", "pure", CLOCK],
-    ],
-    [
-      tx.destroyCap({ ...types, presale, presaleCapId: "0xca" }),
-      "blast_presale::destroy_cap",
-      ["shared:0xab", "object:0xca"],
-    ],
-    [
-      tx.migrateCetus({
-        ...types,
-        presale,
-        ...cetus,
-        burnManager: shared("0x72", true),
-      }),
-      "cetus::migrate",
-      [
-        "shared-mut:0xab",
-        "shared:0x64",
-        "shared:0x61",
-        "shared:0x60",
-        "shared:0x70",
-        "shared-mut:0x71",
-        "shared-mut:0x72",
-        CLOCK,
-      ],
-    ],
-    [
-      tx.migrateBluefin({
-        ...types,
-        presale,
-        memeCurrency: shared("0xcc", false),
-        quoteCurrency: shared("0xcd", false),
-        bluefinConfig: shared("0x80", true),
-        creationFee: 1_000n,
-      }),
-      "bluefin::migrate",
-      [
-        "shared-mut:0xab",
-        "shared:0x64",
-        "shared:0x61",
-        "shared:0x60",
-        "shared:0xcc",
-        "shared:0xcd",
-        "shared-mut:0x80",
-        "Result:0",
-        CLOCK,
-      ],
-    ],
-    [
-      tx.collectCetusFees({
-        ...types,
-        vault,
-        cetusConfig: cetus.cetusConfig,
-        burnManager: shared("0x72", false),
-        pool: shared("0x90", true),
-      }),
-      "cetus::collect_fees",
-      [
-        "shared-mut:0xba",
-        "shared:0x64",
-        "shared:0x61",
-        "shared:0x70",
-        "shared:0x72",
-        "shared-mut:0x90",
-      ],
-    ],
-    [
-      tx.collectBluefinFees({
-        ...types,
-        vault,
-        bluefinConfig: shared("0x80", false),
-        pool: shared("0x90", true),
-      }),
-      "bluefin::collect_fees",
-      [
-        "shared-mut:0xba",
-        "shared:0x64",
-        "shared:0x61",
-        "shared:0x80",
-        "shared-mut:0x90",
-        CLOCK,
-      ],
-    ],
-    [
-      tx.claimMigrationResiduals({
-        ...types,
-        vault,
-        presaleCapId: "0xca",
-        recipient: "0xc0",
-      }),
-      "presale_vault::claim_migration_residuals",
-      ["shared-mut:0xba", "shared:0x64", "object:0xca"],
-    ],
-    [
-      tx.scheduleHolderRewardRound({
-        ...types,
-        vault,
-        adminCapId: "0xadc",
-        manifest,
-        gasReserveAmount: 0n,
-        expectedTreasury: "0xc0",
-        claimWindowMs: 9_000n,
-      }),
-      "holder_rewards::schedule_round",
-      [
-        "shared-mut:0xba",
-        "shared:0x64",
-        ...ADMIN,
-        ...Array(11).fill("pure"),
-        CLOCK,
-      ],
-    ],
-    [
-      tx.publishHolderRewardRound({ ...types, vault }),
-      "holder_rewards::publish_round",
-      ["shared-mut:0xba", "shared:0x64", "shared:0x61", CLOCK],
-    ],
-    [
-      tx.claimHolderRewards({
-        ...types,
-        round,
-        allocations: manifest.allocations,
-      }),
-      "holder_rewards::claim",
-      ["shared-mut:0xd0", "shared:0x64", ...Array(5).fill("pure"), CLOCK],
-    ],
-    [
-      tx.closeHolderRewardRound({ ...types, round, vault }),
-      "holder_rewards::close_round",
-      ["shared-mut:0xd0", "shared:0x64", "shared-mut:0xba", CLOCK],
-    ],
-    [
-      tx.scheduleProtocolFees({
-        delayMs: 172_800_000n,
-        adminCapId: "0xadc",
-        fees: {
-          raiseBps: 333n,
-          tokenBps: 500n,
-          lpFeeMemeBps: 1_000n,
-          lpFeeQuoteBps: 1_000n,
-        },
-      }),
-      "fee_policy::schedule_fees",
-      [
-        "shared-mut:0x61",
-        "shared:0x64",
-        ...ADMIN,
-        "Result:1",
-        "Result:2",
-        "Result:3",
-        "Result:4",
-        "pure",
-        CLOCK,
-      ],
-    ],
-    [
-      tx.setPresaleProtocolFees({
-        ...types,
-        presale,
-        adminCapId: "0xadc",
-        fees: {
-          raiseBps: 1_000n,
-          tokenBps: 250n,
-          lpFeeMemeBps: 100n,
-          lpFeeQuoteBps: 200n,
-        },
-      }),
-      "blast_presale::set_protocol_fees",
-      [
-        "shared-mut:0xab",
-        "shared:0x64",
-        ...ADMIN,
-        "shared:0x61",
-        "Result:1",
-        "Result:2",
-        "Result:3",
-        "Result:4",
-        CLOCK,
-      ],
-    ],
-    [
-      tx.scheduleProtocolLpFees({
-        delayMs: 172_800_000n,
-        ...types,
-        vault,
-        adminCapId: "0xadc",
-        lpFeeMemeBps: 500n,
-        lpFeeQuoteBps: 0n,
-      }),
-      "presale_vault::schedule_protocol_lp_fees",
-      [
-        "shared-mut:0xba",
-        "shared:0x64",
-        ...ADMIN,
-        "Result:1",
-        "Result:2",
-        "pure",
-        CLOCK,
-      ],
-    ],
-    [
-      tx.setQuoteAllowed({
-        adminCapId: "0xadc",
-        quoteType: sui,
-        allowed: true,
-      }),
-      "creation_policy::set_quote_allowed",
-      ["shared-mut:0x62", "shared:0x64", ...ADMIN, "pure"],
-    ],
-    [
-      tx.scheduleMigrationWitness({
-        adminCapId: "0xadc",
-        venue: "bluefin",
-      }),
-      "creation_policy::schedule_migration_witness",
-      ["shared-mut:0x62", "shared:0x64", ...ADMIN, CLOCK],
-    ],
-    [
-      tx.scheduleProtocolDestination({
-        delayMs: 172_800_000n,
-        adminCapId: "0xadc",
-        destination: "0x7ea5",
-      }),
-      "fee_policy::schedule_destination",
-      ["shared-mut:0x61", "shared:0x64", ...ADMIN, "pure", "pure", CLOCK],
-    ],
-    [
-      tx.payProtocolFeesWithPartner({ ...types, presale, partner }),
-      "blast_presale::pay_protocol_fees_with_partner",
-      ["shared-mut:0xab", "shared:0x64", "shared:0x61", "shared:0x9a27"],
-    ],
-    [
-      tx.payProtocolLpFeesWithPartner({ ...types, vault, partner }),
-      "presale_vault::pay_protocol_lp_fees_with_partner",
-      ["shared-mut:0xba", "shared:0x64", "shared:0x61", "shared:0x9a27"],
-    ],
-    [
-      tx.newCetusVault({
-        ...types,
-        position: "0x905",
-        feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
-        holderRewardsBps: 3_000n,
-        pool: shared("0x90", false),
-        burnManager: shared("0x72", true),
-      }),
-      "cetus::new_vault",
-      [
-        "object:0x905",
-        "shared:0x64",
-        "Result:4",
-        "pure",
-        "shared:0x62",
-        "shared:0x61",
-        "shared:0x90",
-        "shared-mut:0x72",
-        CLOCK,
-      ],
-    ],
-    [
-      tx.newBluefinVault({
-        ...types,
-        position: "0x905",
-        feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
-        holderRewardsBps: 3_000n,
-        partnerId: "0x9a27",
-        pool: shared("0x90", false),
-      }),
-      "bluefin::new_vault",
-      [
-        "object:0x905",
-        "shared:0x64",
-        "Result:4",
-        "pure",
-        "shared:0x62",
-        "shared:0x61",
-        "shared:0x90",
-        CLOCK,
-      ],
-    ],
-    [
-      tx.addPartner({ adminCapId: "0xadc", partner }),
-      "creation_policy::add_partner",
-      ["shared-mut:0x62", "shared:0x64", ...ADMIN, "shared:0x9a27"],
-    ],
-    [
-      tx.removePartner({ adminCapId: "0xadc", partner }),
-      "creation_policy::remove_partner",
-      ["shared-mut:0x62", "shared:0x64", ...ADMIN, "shared:0x9a27", CLOCK],
-    ],
-  ];
-  for (const [ptb, name, kinds] of cases) {
-    const call = moveCall(ptb, name);
-    const [module, fn] = name.split("::") as [string, string];
-    assert.deepEqual(argumentKinds(ptb, call), kinds, name);
-    assert.equal(call.arguments.length, abiArity(module, fn), name);
-    assert.equal(call.typeArguments.length, abiTypeArity(module, fn), name);
-  }
-});
-
-test("locks an owner's own position in a vault without a presale", () => {
-  const options = {
-    position: "0x905",
-    feeRecipients: [{ recipient: "0xc0ffee", bps: 10_000n }],
-    holderRewardsBps: 0n,
-    pool: shared("0x90", false),
-  };
-  // Cetus takes the pool's coin order, either way round.
-  for (const [memeType, coins] of [
-    [memeA, [memeA, sui]],
-    [memeB, [sui, memeB]],
-  ] as const) {
-    const ptb = tx.newCetusVault({
-      memeType,
-      quoteType: sui,
-      ...options,
-      burnManager: shared("0x72", true),
-    });
-    const call = moveCall(ptb, "cetus::new_vault");
-    assert.deepEqual(call.typeArguments, [memeType, sui, ...coins]);
-    assert.equal(optionalId(ptb, call.arguments[3]), null);
-  }
-  // Bluefin's pool is `Pool<Meme, Quote>`; the partner is an `Option<ID>`.
-  const ptb = tx.newBluefinVault({
-    ...types,
-    ...options,
-    partnerId: "0x9a27",
-  });
-  const call = moveCall(ptb, "bluefin::new_vault");
-  assert.deepEqual(call.typeArguments, [memeA, sui]);
-  assert.equal(
-    optionalId(ptb, call.arguments[3]),
-    normalizeSuiAddress("0x9a27"),
-  );
-  assert.deepEqual(moveFunctions(ptb), [
-    "bps::new",
-    "blast_presale::recipient_share",
-    "bps::new",
-    "blast_presale::fee_split",
-    "bluefin::new_vault",
-  ]);
-  assert.throws(
-    () =>
-      tx.newBluefinVault({
-        ...types,
-        ...options,
-        feeRecipients: [
-          {
-            recipient: "0xc0ffee",
-            bps: 10_000n,
-            vesting: { cliffMs: 0n, periodMs: 1n, periods: 1n },
-          },
-        ],
-      }),
-    /fee recipients cannot vest/,
-  );
-});
-
-test("replaces a sale's Blast rates in its creation PTB, before share", () => {
-  const ptb = new Transaction();
-  const [sale] = moveResults(
-    ptb.add(
-      tx.call.newBluefinPresale({
-        ...terms,
-        tickSpacing: 60,
-        feeRate: 3_000n,
-      }),
-    ),
-    2,
-  );
-  const adminWitness = ptb.add(
-    tx.call.signIn({ adminCap: "0xadc", role: "FeeAdmin" }),
-  );
-  ptb.add(
-    tx.call.setPresaleProtocolFees({
-      ...types,
-      presale: sale,
-      adminWitness,
-      fees: {
-        raiseBps: 100n,
-        tokenBps: 100n,
-        lpFeeMemeBps: 0n,
-        lpFeeQuoteBps: 0n,
-      },
-    }),
-  );
-  const call = moveCall(ptb, "blast_presale::set_protocol_fees");
-  assert.deepEqual(argumentKinds(ptb, call).slice(0, 3), [
-    `NestedResult:${commandIndex(ptb, "blast_presale::finalize")}:0`,
-    "shared:0x64",
-    `Result:${commandIndex(ptb, "blast_acl::sign_in")}`,
-  ]);
-  assert.equal(
-    call.arguments.length,
-    abiArity("blast_presale", "set_protocol_fees"),
-  );
-});
-
-test("signs each administrator call in to blast_acl with its own presale role", () => {
-  const vault = shared("0xba", true);
-  const noFees = {
-    raiseBps: 0n,
-    tokenBps: 0n,
-    lpFeeMemeBps: 0n,
-    lpFeeQuoteBps: 0n,
-  };
-  const listQuote = tx.setQuoteAllowed({
-    adminCapId: "0xadc",
-    quoteType: sui,
-    allowed: true,
-  });
-  const listVenue = tx.scheduleMigrationWitness({
-    adminCapId: "0xadc",
-    venue: "cetus",
-  });
-  const cases: [Transaction, string][] = [
-    [
-      tx.scheduleProtocolFees({
-        delayMs: 172_800_000n,
-        adminCapId: "0xadc",
-        fees: noFees,
-      }),
-      "FeeAdmin",
-    ],
-    [listQuote, "ListingAdmin"],
-    [listVenue, "AdapterAdmin"],
-    [
-      tx.scheduleProtocolDestination({
-        delayMs: 172_800_000n,
-        adminCapId: "0xadc",
-        destination: "0x7ea5",
-      }),
-      "TreasuryAdmin",
-    ],
-    [
-      tx.setPresaleProtocolFees({
-        ...types,
-        presale,
-        adminCapId: "0xadc",
-        fees: noFees,
-      }),
-      "FeeAdmin",
-    ],
-    [
-      tx.scheduleProtocolLpFees({
-        delayMs: 172_800_000n,
-        ...types,
-        vault,
-        adminCapId: "0xadc",
-        lpFeeMemeBps: 0n,
-        lpFeeQuoteBps: 0n,
-      }),
-      "FeeAdmin",
-    ],
-    [tx.addPartner({ adminCapId: "0xadc", partner }), "FeeAdmin"],
-    [tx.removePartner({ adminCapId: "0xadc", partner }), "FeeAdmin"],
-  ];
-  for (const [ptb, role] of cases) {
-    const signIn = moveCall(ptb, "blast_acl::sign_in");
-    assert.equal(commandIndex(ptb, "blast_acl::sign_in"), 0, role);
-    assert.deepEqual(signIn.typeArguments, [
-      normalizeStructTag(`0x5e::blast_presale_domain::${role}`),
-    ]);
-    assert.deepEqual(argumentKinds(ptb, signIn), [
-      "shared:0x63",
-      "object:0xadc",
-    ]);
-    assert.equal(BigInt(signIn.package), 0xadn, "sign_in targets blast_admin");
-  }
-  assert.deepEqual(
-    moveCall(listQuote, "creation_policy::set_quote_allowed").typeArguments,
-    [sui],
-  );
-  assert.deepEqual(
-    moveCall(listVenue, "creation_policy::schedule_migration_witness")
-      .typeArguments,
-    [normalizeStructTag("0x5e::cetus::Witness")],
-  );
-  for (const lpFeeMemeBps of [-1n, 10_001n]) {
-    assert.throws(() =>
-      tx.scheduleProtocolLpFees({
-        delayMs: 172_800_000n,
-        ...types,
-        vault,
-        adminCapId: "0xadc",
-        lpFeeMemeBps,
-        lpFeeQuoteBps: 0n,
-      }),
-    );
-  }
-  for (const raiseBps of [-1n, 10_001n]) {
-    assert.throws(() =>
-      tx.scheduleProtocolFees({
-        delayMs: 172_800_000n,
-        adminCapId: "0xadc",
-        fees: { ...noFees, raiseBps },
-      }),
-    );
-  }
-});
-
-test("configures a fresh deployment at zero notice, then arms each notice", () => {
-  const fees = {
-    raiseBps: 300n,
-    tokenBps: 0n,
-    lpFeeMemeBps: 1_000n,
-    lpFeeQuoteBps: 1_000n,
-  };
-  // Each `Bps` argument is its own `bps::new` call before the schedule.
-  const flow = (ptb: Transaction) =>
-    moveFunctions(ptb).filter((name) => name !== "bps::new");
-  const configured = tx.configureNow({
-    adminCapId: "0xadc",
-    fees,
-    destination: "0x7ea5",
-    migrationWitnesses: [{ venue: "cetus" }, { venue: "bluefin" }],
-  });
-  assert.deepEqual(flow(configured), [
-    "blast_acl::sign_in",
-    "fee_policy::schedule_fees",
-    "fee_policy::apply_fees",
-    "blast_acl::sign_in",
-    "fee_policy::schedule_destination",
-    "fee_policy::apply_destination",
-    "blast_acl::sign_in",
-    "creation_policy::schedule_migration_witness",
-    "creation_policy::apply_migration_witness",
-    "creation_policy::schedule_migration_witness",
-    "creation_policy::apply_migration_witness",
-  ]);
-  const schedule = moveCall(configured, "fee_policy::schedule_fees");
-  assert.equal(pureU64(configured, schedule.arguments[7]), 0n);
-  const armed = tx.armNotices({
-    adminCapId: "0xadc",
-    fees: { fees, delayMs: 172_800_000n },
-    destination: { destination: "0x7ea5", delayMs: 172_800_000n },
-    migrationDelayMs: 172_800_000n,
-  });
-  assert.deepEqual(flow(armed), [
-    "blast_acl::sign_in",
-    "fee_policy::schedule_fees",
-    "fee_policy::apply_fees",
-    "blast_acl::sign_in",
-    "fee_policy::schedule_destination",
-    "fee_policy::apply_destination",
-    "blast_acl::sign_in",
-    "creation_policy::schedule_migration_delay",
-    "creation_policy::apply_migration_delay",
-  ]);
-  assert.equal(
-    pureU64(armed, moveCall(armed, "fee_policy::schedule_fees").arguments[7]),
-    172_800_000n,
-  );
-  for (const ptb of [configured, armed])
-    for (const command of ptb.getData().commands)
-      if (
-        command.$kind === "MoveCall" &&
-        command.MoveCall.module !== "blast_acl"
-      )
-        assert.equal(
-          command.MoveCall.arguments.length,
-          abiArity(command.MoveCall.module, command.MoveCall.function),
-          command.MoveCall.function,
-        );
-  assert.deepEqual(moveFunctions(tx.configureNow({ adminCapId: "0xadc" })), []);
-});
-
-test("allows an external migrator's witness and rejects types anyone can construct", () => {
-  const witness = "0xabc::blast_aftermath_dao_presale::Witness";
-  const allowExternal = tx.scheduleMigrationWitness({
-    adminCapId: "0xadc",
-    witnessType: witness,
-  });
-
-  const call = moveCall(
-    allowExternal,
-    "creation_policy::schedule_migration_witness",
-  );
-  assert.deepEqual(call.typeArguments, [normalizeStructTag(witness)]);
-  assert.deepEqual(argumentKinds(allowExternal, call), [
-    "shared-mut:0x62",
-    "shared:0x64",
-    ...ADMIN,
-    CLOCK,
-  ]);
-  for (const witnessType of [
-    "u64",
-    "vector<u8>",
-    "vector<0x2::sui::SUI>",
-    "0x1::type_name::TypeName",
-    "0x1::option::Option<0xabc::blast_aftermath_dao_presale::Witness>",
-    "0x2::object::ID",
-  ]) {
-    assert.throws(
-      () =>
-        tx.scheduleMigrationWitness({
-          adminCapId: "0xadc",
-          witnessType,
-        }),
-      witnessType,
-    );
-  }
-});
-
-test("vested token and raise shares build their terms; fee shares cannot vest", () => {
-  const vesting = { cliffMs: 100n, periodMs: 50n, periods: 4n };
-  const ptb = tx.createCetusPresale({
-    ...terms,
-    ...cetus,
-    recipientAllocations: [
-      { recipient: "0xa110c", bps: 2_500n, vesting },
-      { recipient: "0xb110c", bps: 1_500n },
-    ],
-    raiseAllocations: [{ recipient: "0x5a1e", bps: 2_000n, vesting }],
-    tickSpacing: 200,
-    startMs: 1_000n,
-    capRecipient: "0xc0",
-  });
-  const vestedShare = [
-    "bps::new",
-    "blast_presale::vesting_terms",
-    "blast_presale::vested_recipient_share",
-  ];
-  assert.deepEqual(moveFunctions(ptb).slice(0, 14), [
-    "cetus::new",
-    "blast_presale::set_supply",
-    "bps::new",
-    "bps::new",
-    ...vestedShare,
-    ...recipientShare,
-    "blast_presale::set_token_allocations",
-    ...vestedShare,
-    "blast_presale::set_raise",
-  ]);
-  const terms0 = moveCall(ptb, "blast_presale::vesting_terms");
-  assert.deepEqual(argumentKinds(ptb, terms0), ["pure", "pure", "pure"]);
-  const vested = moveCall(ptb, "blast_presale::vested_recipient_share");
-  assert.deepEqual(argumentKinds(ptb, vested), [
-    "pure",
-    `Result:${commandIndex(ptb, "blast_presale::vesting_terms") - 1}`,
-    `Result:${commandIndex(ptb, "blast_presale::vesting_terms")}`,
-  ]);
-  for (const [module, fn] of [
-    ["blast_presale", "vesting_terms"],
-    ["blast_presale", "vested_recipient_share"],
-  ] as const) {
-    assert.equal(
-      moveCall(ptb, `${module}::${fn}`).arguments.length,
-      abiArity(module, fn),
-    );
-  }
-
-  assert.throws(
-    () =>
-      tx.createCetusPresale({
-        ...terms,
-        ...cetus,
-        recipientAllocations: [
-          {
-            recipient: "0xa110c",
-            bps: 2_500n,
-            vesting: { ...vesting, periods: 0n },
-          },
-          { recipient: "0xb110c", bps: 1_500n },
-        ],
-        tickSpacing: 200,
-        startMs: 1_000n,
-        capRecipient: "0xc0",
-      }),
-    /EInvalidVestingTerms/,
-  );
-  assert.throws(
-    () =>
-      tx.createCetusPresale({
-        ...terms,
-        ...cetus,
-        feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n, vesting }],
-        tickSpacing: 200,
-        startMs: 1_000n,
-        capRecipient: "0xc0",
-      }),
-    /fee recipients cannot vest/,
-  );
-});
-
-test("participant vesting builds vesting_terms for set_participant_vesting after the token allocations", () => {
-  const vesting = { cliffMs: 100n, periodMs: 50n, periods: 4n };
-  const ptb = tx.createCetusPresale({
-    ...terms,
-    ...cetus,
-    participantVesting: vesting,
-    tickSpacing: 200,
-    startMs: 1_000n,
-    capRecipient: "0xc0",
-  });
-  const functions = moveFunctions(ptb);
-  const allocations = functions.indexOf("blast_presale::set_token_allocations");
-  assert.deepEqual(functions.slice(allocations + 1, allocations + 3), [
-    "blast_presale::vesting_terms",
-    "blast_presale::set_participant_vesting",
-  ]);
-  const terms0 = moveCall(ptb, "blast_presale::vesting_terms");
-  assert.deepEqual(
-    terms0.arguments.map((argument) => pureU64(ptb, argument)),
-    [100n, 50n, 4n],
-  );
-  const setVesting = moveCall(ptb, "blast_presale::set_participant_vesting");
-  assert.deepEqual(argumentKinds(ptb, setVesting), [
-    `Result:${commandIndex(ptb, "cetus::new")}`,
-    "shared:0x64",
-    `Result:${commandIndex(ptb, "blast_presale::vesting_terms")}`,
-  ]);
-  assert.equal(
-    setVesting.arguments.length,
-    abiArity("blast_presale", "set_participant_vesting"),
-  );
-
-  assert.throws(
-    () =>
-      tx.createCetusPresale({
-        ...terms,
-        ...cetus,
-        participantVesting: { ...vesting, periodMs: 0n },
-        tickSpacing: 200,
-        startMs: 1_000n,
-        capRecipient: "0xc0",
-      }),
-    /EInvalidVestingTerms/,
-  );
-});
-
-test("rejects a manifest from the migrators' leaf domain or another vault", () => {
-  const options = {
-    vaultId: "0xba",
-    number: 0n,
-    startCheckpoint: 1n,
-    endCheckpoint: 2n,
-    allocations: [{ beneficiary: "0xb0b", memeAmount: 1n, quoteAmount: 0n }],
-  };
-  const call = new PresaleCalls(deployment);
-  const publish = (
-    manifest: ReturnType<typeof buildRewardManifest>,
-    vault = "0xba",
-  ) =>
-    call.scheduleHolderRewardRound({
-      ...types,
-      vault: shared(vault, true),
-      adminWitness: "0xadc",
-      manifest,
-      gasReserveAmount: 0n,
-      expectedTreasury: "0xc0",
-      claimWindowMs: 1n,
-    });
-  assert.throws(
-    () =>
-      publish(
-        buildRewardManifest({
-          ...options,
-          leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
-        }),
-      ),
-    /root mismatch/,
-  );
-  const presaleManifest = buildRewardManifest({
-    ...options,
-    leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
-  });
-  assert.throws(() => publish(presaleManifest, "0xbb"), /another vault/);
-  // Rounds pay only Quote (`presale_vault::EMemeRewardsUnsupported`).
-  assert.throws(() => publish(presaleManifest), /pay only Quote/);
-});
-
-test("builds reserve publication, immutable beneficiary claims, settlement and safe close against the new ABI", () => {
-  const vault = shared("0xba", true);
-  const round = shared("0xd1", true);
-  const manifest = buildRewardManifest({
-    vaultId: vault.objectId,
-    number: 2n,
-    startCheckpoint: 21n,
-    endCheckpoint: 30n,
-    allocations: [{ beneficiary: "0xb0b", memeAmount: 0n, quoteAmount: 970n }],
-    leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
-  });
-  const publication = tx.scheduleHolderRewardRound({
-    ...types,
-    vault,
-    adminCapId: "0xadc",
-    manifest,
-    gasReserveAmount: 30n,
-    expectedTreasury: "0xc0",
-    claimWindowMs: 604_800_000n,
-  });
-  const publishCall = moveCall(publication, "holder_rewards::schedule_round");
-  assert.deepEqual(argumentKinds(publication, publishCall), [
-    "shared-mut:0xba",
-    "shared:0x64",
-    ...ADMIN,
-    ...Array.from({ length: 11 }, () => "pure"),
-    CLOCK,
-  ]);
-  assert.deepEqual(
-    [3, 4, 5, 9, 10, 11, 12].map((i) =>
-      pureU64(publication, publishCall.arguments[i]),
-    ),
-    [2n, 21n, 30n, 0n, 970n, 30n, 604_800_000n],
-  );
-  const treasuryArgument = publishCall.arguments[13];
-  assert.ok(treasuryArgument?.$kind === "Input");
-  const treasuryInput = publication.getData().inputs[treasuryArgument.Input];
-  assert.ok(treasuryInput?.$kind === "Pure");
-  assert.equal(
-    bcs.Address.parse(fromBase64(treasuryInput.Pure.bytes)),
-    normalizeSuiAddress("0xc0"),
-  );
-  const options = {
-    ...types,
-    vault,
-    adminCapId: "0xadc",
-    manifest,
-    gasReserveAmount: 30n,
-    expectedTreasury: "0xc0",
-    claimWindowMs: 604_800_000n,
-  };
-  assert.throws(() =>
-    tx.scheduleHolderRewardRound({ ...options, expectedTreasury: "invalid" }),
-  );
-  Reflect.deleteProperty(options, "expectedTreasury");
-  assert.throws(
-    () => tx.scheduleHolderRewardRound(options),
-    "treasury has no implicit fallback",
-  );
-  const { allocations: proofs, ...header } = manifest;
-  const summary: RewardManifestSummary = {
-    ...header,
-    leafCount: proofs.length,
-    leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
-  };
-  const publishSummary = (input: typeof summary) =>
-    tx.scheduleHolderRewardRound({
-      ...types,
-      vault,
-      adminCapId: "0xadc",
-      manifest: input,
-      gasReserveAmount: 30n,
-      expectedTreasury: "0xc0",
-      claimWindowMs: 604_800_000n,
-    });
-  assert.deepEqual(publishSummary(summary).getData(), publication.getData());
-  for (const invalid of [
-    { ...summary, leafCount: 0 },
-    { ...summary, leafCount: 65_537 },
-    { ...summary, root: "00" },
-    { ...summary, manifestDigest: "00" },
-    { ...summary, quoteAmount: "0970" },
-    { ...summary, memeAmount: "0", quoteAmount: "0" },
-    { ...summary, startCheckpoint: summary.endCheckpoint },
-  ])
-    assert.throws(() => publishSummary(invalid));
-  assert.throws(
-    () =>
-      tx.scheduleHolderRewardRound({
-        ...types,
-        vault,
-        adminCapId: "0xadc",
-        manifest: { ...summary, leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN },
-        gasReserveAmount: 30n,
-        expectedTreasury: "0xc0",
-        claimWindowMs: 1n,
-      }),
-    /leaf domain mismatch/,
-  );
-  const claim = tx.claimHolderRewards({
-    ...types,
-    round,
-    allocations: manifest.allocations,
-  });
-  const settle = tx.settleHolderRewardGasReserve({
-    ...types,
-    vault,
-    round,
-    adminCapId: "0xadc",
-    reimbursementAmount: 24n,
-  });
-  const close = tx.closeHolderRewardRound({ ...types, vault, round });
-  const cases: [Transaction, string, string[]][] = [
-    [
-      publication,
-      "holder_rewards::schedule_round",
-      argumentKinds(publication, publishCall),
-    ],
-    [
-      claim,
-      "holder_rewards::claim",
-      [
-        "shared-mut:0xd1",
-        "shared:0x64",
-        ...Array.from({ length: 5 }, () => "pure"),
-        CLOCK,
-      ],
-    ],
-    [
-      settle,
-      "holder_rewards::settle_gas_reserve",
-      ["shared-mut:0xd1", "shared:0x64", ...ADMIN, "shared-mut:0xba", "pure"],
-    ],
-    [
-      close,
-      "holder_rewards::close_round",
-      ["shared-mut:0xd1", "shared:0x64", "shared-mut:0xba", CLOCK],
-    ],
-  ];
-  for (const [ptb, name, kinds] of cases) {
-    const call = moveCall(ptb, name);
-    const [module, fn] = name.split("::") as [string, string];
-    assert.deepEqual(argumentKinds(ptb, call), kinds, name);
-    assert.equal(call.arguments.length, abiArity(module, fn), name);
-    assert.equal(call.typeArguments.length, abiTypeArity(module, fn), name);
-  }
-  for (const ptb of [publication, settle]) {
-    assert.deepEqual(moveCall(ptb, "blast_acl::sign_in").typeArguments, [
-      normalizeStructTag("0x5e::blast_presale_domain::RewardsAdmin"),
-    ]);
-  }
-  assert.equal(
-    pureU64(
-      settle,
-      moveCall(settle, "holder_rewards::settle_gas_reserve").arguments[4],
-    ),
-    24n,
-  );
-  for (const gasReserveAmount of [-1n, 1n << 64n]) {
-    assert.throws(
-      () =>
-        tx.scheduleHolderRewardRound({
-          ...types,
-          vault,
-          adminCapId: "0xadc",
-          manifest,
-          gasReserveAmount,
-          expectedTreasury: "0xc0",
-          claimWindowMs: 1n,
-        }),
-      /gasReserveAmount/,
-    );
-  }
-  assert.throws(
-    () =>
-      tx.scheduleHolderRewardRound({
-        ...types,
-        vault: shared("0xbb", true),
-        adminCapId: "0xadc",
-        manifest,
-        gasReserveAmount: 30n,
-        expectedTreasury: "0xc0",
-        claimWindowMs: 1n,
-      }),
-    /another vault/,
-  );
-  assert.throws(
-    () =>
-      tx.scheduleHolderRewardRound({
-        ...types,
-        vault,
-        adminCapId: "0xadc",
-        manifest: buildRewardManifest({
-          vaultId: vault.objectId,
-          number: 2n,
-          startCheckpoint: 21n,
-          endCheckpoint: 30n,
-          allocations: [
-            { beneficiary: "0xb0b", memeAmount: 0n, quoteAmount: 970n },
-          ],
-          leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
-        }),
-        gasReserveAmount: 30n,
-        expectedTreasury: "0xc0",
-        claimWindowMs: 1n,
-      }),
-    /root mismatch/,
-  );
-});
-
-// === ABI and PTB inspection ===
-
-type AbiFunction = {
-  name: string;
-  typeParameters: unknown[];
-  parameters: unknown[];
-};
-const abi = JSON.parse(
-  readFileSync(new URL("../abi/pr150-consumers.json", import.meta.url), "utf8"),
-) as {
-  packages: {
-    presale: { modules: Record<string, { functions: AbiFunction[] }> };
-  };
-};
-
-function abiFunction(module: string, name: string): AbiFunction {
-  const found = abi.packages.presale.modules[module]?.functions.find(
-    (candidate) => candidate.name === name,
-  );
-  assert.ok(found, `${module}::${name} is in the frozen ABI`);
-  return found;
-}
-
-/** Move parameters a PTB supplies: all but the trailing `&mut TxContext`. */
-function abiArity(module: string, name: string): number {
-  return abiFunction(module, name).parameters.filter(
-    (parameter) => !JSON.stringify(parameter).includes('"TxContext"'),
-  ).length;
-}
-
-function abiTypeArity(module: string, name: string): number {
-  return abiFunction(module, name).typeParameters.length;
-}
-
-function moveFunctions(ptb: Transaction): string[] {
-  return ptb
-    .getData()
-    .commands.flatMap((command) =>
-      command.$kind === "MoveCall"
-        ? [`${command.MoveCall.module}::${command.MoveCall.function}`]
-        : [],
-    );
-}
-
-function commandIndex(ptb: Transaction, name: string): number {
-  return ptb
+  const finalizeIndex = tx
     .getData()
     .commands.findIndex(
       (command) =>
         command.$kind === "MoveCall" &&
-        `${command.MoveCall.module}::${command.MoveCall.function}` === name,
+        command.MoveCall.function === "finalize",
     );
-}
-
-function commandIndexOf(ptb: Transaction, kind: string, nth: number): number {
-  const indexes = ptb
-    .getData()
-    .commands.flatMap((command, index) =>
-      command.$kind === kind ? [index] : [],
-    );
-  return itemAt(indexes, nth);
-}
-
-function moveCall(ptb: Transaction, name: string) {
-  const command = ptb.getData().commands[commandIndex(ptb, name)];
-  assert.ok(command?.$kind === "MoveCall", `missing ${name}`);
-  const call = command.MoveCall;
-  if (call.module !== "blast_acl") {
-    const parameter = abiFunction(call.module, call.function).parameters[1];
-    if (JSON.stringify(parameter)?.includes('"PackageVersion"')) {
-      const argument = call.arguments[1];
-      assert.ok(argument?.$kind === "Input", `${name} borrows the version`);
-      const input = ptb.getData().inputs[argument.Input];
-      assert.ok(
-        input?.$kind === "Object" && input.Object.$kind === "SharedObject",
-      );
-      assert.deepEqual(input.Object.SharedObject, {
-        objectId: normalizeSuiAddress("0x64"),
-        initialSharedVersion: "3",
-        mutable: false,
-      });
-    }
-  }
-  return call;
-}
-
-function argumentKinds(
-  ptb: Transaction,
-  call: ReturnType<typeof moveCall>,
-): string[] {
-  return call.arguments.map((argument) => {
-    if (argument.$kind === "Result") return `Result:${argument.Result}`;
-    if (argument.$kind === "NestedResult") {
-      return `NestedResult:${argument.NestedResult.join(":")}`;
-    }
-    if (argument.$kind !== "Input") return argument.$kind;
-    return describeInput(ptb.getData().inputs[argument.Input]);
-  });
-}
-
-/** Decodes the pure `Option<ID>` input `argument` names. */
-function optionalId(
-  ptb: Transaction,
-  argument: ReturnType<typeof moveCall>["arguments"][number] | undefined,
-): string | null {
-  assert.ok(argument?.$kind === "Input");
-  const input = ptb.getData().inputs[argument.Input];
-  assert.ok(input?.$kind === "Pure");
-  return bcs.option(bcs.Address).parse(fromBase64(input.Pure.bytes)) ?? null;
-}
-
-/** Decodes the pure `u64` input `argument` names. */
-function pureU64(
-  ptb: Transaction,
-  argument: ReturnType<typeof moveCall>["arguments"][number] | undefined,
-): bigint {
-  assert.ok(argument?.$kind === "Input");
-  const input = ptb.getData().inputs[argument.Input];
-  assert.ok(input?.$kind === "Pure");
-  return BigInt(bcs.u64().parse(fromBase64(input.Pure.bytes)));
-}
-
-function describeInput(
-  input: ReturnType<Transaction["getData"]>["inputs"][number] | undefined,
-): string {
-  if (input?.$kind === "Pure") return "pure";
-  if (input?.$kind === "UnresolvedObject") {
-    return `object:0x${BigInt(input.UnresolvedObject.objectId).toString(16)}`;
-  }
-  if (input?.$kind !== "Object" || input.Object.$kind !== "SharedObject") {
-    return String(input?.$kind);
-  }
-  const reference = input.Object.SharedObject;
-  if (reference.objectId === SUI_CLOCK_OBJECT_ID) return CLOCK;
-  const prefix = reference.mutable ? "shared-mut" : "shared";
-  return `${prefix}:0x${BigInt(reference.objectId).toString(16)}`;
-}
-
-test("locks an owner's own position in a vault through either venue", () => {
-  const vaultTerms = {
-    ...types,
-    position: "0x9051",
-    feeRecipients: [{ recipient: "0xc0ffee", bps: 7_000n }],
-    holderRewardsBps: 3_000n,
-    partnerId: "0x9a27",
-    pool: shared("0x90", false),
-  };
-  const cetusVault = tx.newCetusVault({
-    ...vaultTerms,
-    burnManager: shared("0x72", true),
-  });
-  const cetusCall = moveCall(cetusVault, "cetus::new_vault");
-  assert.deepEqual(cetusCall.typeArguments, [memeA, sui, memeA, sui]);
-  assert.equal(cetusCall.arguments.length, abiArity("cetus", "new_vault"));
-  assert.deepEqual(argumentKinds(cetusVault, cetusCall), [
-    "object:0x9051",
-    "shared:0x64",
-    `Result:${commandIndex(cetusVault, "blast_presale::fee_split")}`,
+  const rates = only(tx, "0x5f::blast_presale::set_protocol_fees");
+  assert.equal(rates.args[0], `result:${finalizeIndex}:0`);
+  assert.equal(rates.args[1], VERSION);
+  assert.equal(rates.args[3], "shared:0x61");
+  assert.equal(rates.args.length, 9);
+  assert.equal(rates.args[8], CLOCK);
+  assert.deepEqual(only(tx, "0x5f::blast_presale::share").args, [
+    `result:${finalizeIndex}:0`,
+    VERSION,
     "pure",
-    "shared:0x62",
-    "shared:0x61",
-    "shared:0x90",
-    "shared-mut:0x72",
     CLOCK,
   ]);
-
-  const bluefinVault = tx.newBluefinVault({ ...vaultTerms, partnerId: null });
-  const bluefinCall = moveCall(bluefinVault, "bluefin::new_vault");
-  assert.deepEqual(bluefinCall.typeArguments, [memeA, sui]);
-  assert.equal(bluefinCall.arguments.length, abiArity("bluefin", "new_vault"));
-  assert.deepEqual(argumentKinds(bluefinVault, bluefinCall).slice(-4), [
-    "shared:0x62",
-    "shared:0x61",
-    "shared:0x90",
-    CLOCK,
+  // The FeeAdmin witness is a core role, signed in through the admin ACL.
+  const signIn = only(tx, "0xad::blast_acl::sign_in");
+  assert.deepEqual(signIn.typeArguments, [
+    normalizeStructTag("0xc0::blast_domain::FeeAdmin"),
   ]);
-});
-
-test("eligible-only uncapped phase preserves its start delay", () => {
-  const ptb = tx.createBluefinPresale({
-    ...terms,
-    uncapped: uncappedForEligible(42n),
-    tickSpacing: 10,
-    feeRate: 1000n,
-    startMs: 0n,
-    capRecipient: "0xc0",
-  });
-  const phase = moveCall(ptb, "blast_presale::uncapped_for_eligible");
-  assert.equal(pureU64(ptb, phase.arguments[0]), 42n);
-  const setter = moveCall(ptb, "blast_presale::set_uncapped_phase");
-  assert.equal(
-    argumentKinds(ptb, setter)[2],
-    `Result:${commandIndex(ptb, "blast_presale::uncapped_for_eligible")}`,
+  // Core builds every rate, recipient, vesting term and the fee split.
+  assert.ok(targets(tx).includes("0xc1::payout::vesting_terms"));
+  assert.ok(targets(tx).includes("0xc1::fee_split::new"));
+  const commands = tx.getData().commands;
+  const transfer = commands.at(-1);
+  assert.equal(transfer?.$kind, "TransferObjects");
+  assert.deepEqual(
+    transfer?.$kind === "TransferObjects" && transfer.TransferObjects.objects,
+    [{ $kind: "NestedResult", NestedResult: [finalizeIndex, 1] }],
   );
 });
 
-test("PR150 vault split builders match the compiler's argument and generic arity", () => {
-  const snapshot = JSON.parse(
-    readFileSync(
-      new URL("../abi/pr150-consumers.json", import.meta.url),
-      "utf8",
-    ),
-  ) as {
-    packages: {
-      presale: {
-        modules: Record<
-          string,
-          {
-            functions: {
-              name: string;
-              parameters: unknown[];
-              typeParameters: unknown[];
-            }[];
-          }
-        >;
-      };
-    };
+test("createPresale refuses an unverified LP coin and a missing vendor", async () => {
+  const lpCoin = await verifiedLpCoin(lp, "0xcf");
+  const base = {
+    ...types,
+    ...settings,
+    venue: "aftermathDao" as const,
+    adminCap: "0xadc",
+    treasuryCap: "0x7c",
+    currency: shared("0xcc"),
+    commitmentStartsAtMs: 0n,
+    capRecipient: "0xc0ffee",
   };
-  const options = {
-    memeType: memeA,
-    quoteType: sui,
-    vault: shared("0xba", true),
-  };
-  const transactions = [
-    tx.scheduleFeeSplit({
-      ...options,
-      presaleCap: "0xca",
-      feeRecipients: [],
-      holderRewardsBps: 10_000n,
-      delayMs: 0n,
-    }),
-    tx.cancelFeeSplit({ ...options, presaleCap: "0xca" }),
-    tx.applyAftermathFeeSplit(options),
-    tx.settleAndApplyCetusFeeSplit({
-      ...options,
-      cetusConfig: shared("0xd1", false),
-      burnManager: shared("0xd2", false),
-      pool: shared("0xd3", true),
-    }),
-    tx.settleAndApplyBluefinFeeSplit({
-      ...options,
-      bluefinConfig: shared("0xe1", false),
-      pool: shared("0xe2", true),
-    }),
-  ];
-  for (const transaction of transactions)
-    for (const command of transaction.getData().commands) {
-      if (command.$kind !== "MoveCall") continue;
-      const call = command.MoveCall;
-      const f = snapshot.packages.presale.modules[call.module]?.functions.find(
-        (f) => f.name === call.function,
-      );
-      assert.ok(f, `${call.module}::${call.function} exists`);
-      assert.equal(call.typeArguments.length, f.typeParameters.length);
-      assert.equal(
-        call.arguments.length,
-        f.parameters.filter((p) => !JSON.stringify(p).includes('"TxContext"'))
-          .length,
-      );
+  assert.throws(
+    () =>
+      ptb.createPresale({ ...base, lpCoin: { ...lpCoin } as typeof lpCoin }),
+    /verifyAftermathLpCoin/,
+  );
+  const { aftermathDaoPresale: _, ...withoutVendor } = deployment;
+  assert.throws(
+    () =>
+      new PresaleTransactions(withoutVendor).createPresale({ ...base, lpCoin }),
+    /aftermathDaoPresale is required/,
+  );
+});
+
+test("createPresale through a migrators venue starts with its prepare", (t) => {
+  for (const venue of [
+    {
+      venue: "cetus" as const,
+      cetus: { config: shared("0xce1"), pools: shared("0xce2") },
+      tickSpacing: 60,
+    },
+    { venue: "bluefin" as const, tickSpacing: 60, feeRate: 3_000n },
+  ]) {
+    const build = () =>
+      ptb.createPresale({
+        ...types,
+        ...settings,
+        ...venue,
+        treasuryCap: "0x7c",
+        currency: shared("0xcc"),
+        commitmentStartsAtMs: 0n,
+        capRecipient: "0xc0ffee",
+      });
+    const stub = pending(build);
+    if (stub) {
+      t.skip(stub);
+      continue;
     }
+    const tx = build();
+    assert.equal(targets(tx)[0], `0xd1::${venue.venue}::prepare`);
+    assert.deepEqual(only(tx, "0x5f::blast_presale::new").args[2], "result:0");
+  }
+});
+
+test("migrate through the vendor: settle, migrate, venue migrate, partner payout", () => {
+  const tx = ptb.migrate({
+    ...types,
+    presale,
+    venue: "aftermathDao",
+    lpType: lp,
+    poolCreation: shared("0xb00"),
+    settle: true,
+    partner,
+  });
+  assert.deepEqual(targets(tx), [
+    "0x5f::blast_presale::settle",
+    "0x5f::blast_presale::migrate",
+    "0x7a::blast_aftermath_dao_presale::migrate",
+    "0x5f::blast_presale::pay_protocol_fees_with_partner",
+  ]);
+  assert.deepEqual(only(tx, "0x5f::blast_presale::migrate").args, [
+    "shared-mut:0xab",
+    VERSION,
+    "shared:0x7ea",
+    CLOCK,
+  ]);
+  const venue = only(tx, "0x7a::blast_aftermath_dao_presale::migrate");
+  assert.deepEqual(venue.typeArguments, [lp, saleToken, quote]);
+  assert.deepEqual(venue.args, [
+    "result:1",
+    "shared-mut:0xb00",
+    "shared-mut:0xaf1",
+    "shared:0xaf2",
+  ]);
+  assert.deepEqual(
+    only(tx, "0x5f::blast_presale::pay_protocol_fees_with_partner").args,
+    ["shared-mut:0xab", VERSION, "shared:0x7ea", "shared:0x9a27"],
+  );
+  const unpartnered = ptb.migrate({
+    ...types,
+    presale,
+    venue: "aftermathDao",
+    lpType: lp,
+    poolCreation: shared("0xb00"),
+  });
+  assert.deepEqual(targets(unpartnered), [
+    "0x5f::blast_presale::migrate",
+    "0x7a::blast_aftermath_dao_presale::migrate",
+  ]);
+});
+
+test("migrate through a migrators venue redeems the presale's Migration", (t) => {
+  for (const venue of [
+    {
+      venue: "cetus" as const,
+      cetus: {
+        config: shared("0xce1"),
+        pools: shared("0xce2"),
+        burnManager: shared("0xce3"),
+      },
+    },
+    {
+      venue: "bluefin" as const,
+      currency: shared("0xcc"),
+      quoteCurrency: shared("0xcd"),
+      bluefinConfig: shared("0xbf"),
+      creationFee: 1_000_000n,
+    },
+  ]) {
+    const build = () => ptb.migrate({ ...types, presale, ...venue });
+    const stub = pending(build);
+    if (stub) {
+      t.skip(stub);
+      continue;
+    }
+    const tx = build();
+    assert.deepEqual(targets(tx).slice(0, 2), [
+      "0x5f::blast_presale::migrate",
+      `0xd1::${venue.venue}::migrate`,
+    ]);
+  }
+});
+
+test("owner actions prove ownership with the PresaleCap first", (t) => {
+  const owner = {
+    ...types,
+    presale,
+    presaleCap: "0xcab",
+    vault: shared("0xba"),
+  };
+  for (const build of [
+    () => ptb.claimOwnerBalances({ ...owner, recipient: "0xc0ffee" }),
+    () => ptb.scheduleFeeSplit({ ...owner, feeSplit: settings.feeSplit }),
+    () => ptb.cancelFeeSplit(owner),
+  ]) {
+    const stub = pending(build);
+    if (stub) {
+      t.skip(stub);
+      continue;
+    }
+    const tx = build();
+    assert.equal(targets(tx)[0], "0x5f::blast_presale::prove_owner");
+  }
+  const proof = new Transaction();
+  proof.add(ptb.call.proveOwner(owner));
+  assert.deepEqual(only(proof, "0x5f::blast_presale::prove_owner").args, [
+    "shared:0xab",
+    VERSION,
+    "object:0xcab",
+  ]);
+});
+
+test("commits through each route and returns the change", () => {
+  const allowlist = buildAllowlist([
+    { wallet: "0xa11ce", walletCap: 500n },
+    { wallet: "0xb0b", walletCap: 700n },
+  ]);
+  const proof = allowlist.proofs[1];
+  assert.ok(proof);
+  for (const [route, target, arity] of [
+    ["open", "commit_open", 4],
+    ["uncapped", "commit_uncapped", 4],
+    ["allowlisted", "commit_allowlisted", 7],
+  ] as const) {
+    const tx = ptb.commit({
+      ...types,
+      presale,
+      amount: 250n,
+      recipient: "0xb0b",
+      ...(route === "allowlisted" ? { route, allowlist: proof } : { route }),
+    });
+    const call = only(tx, `0x5f::blast_presale::${target}`);
+    assert.equal(call.args.length, arity);
+    assert.deepEqual(call.args.slice(0, 2), ["shared-mut:0xab", VERSION]);
+    assert.equal(call.args.at(-1), CLOCK);
+    assert.equal(tx.getData().commands.at(-1)?.$kind, "TransferObjects");
+  }
+  assert.throws(
+    () =>
+      ptb.call.commitAllowlisted({
+        ...types,
+        presale,
+        quoteIn: { $kind: "GasCoin", GasCoin: true },
+        allowlist: { ...proof, proof: ["00"] },
+      }),
+    /32 bytes/,
+  );
+});
+
+test("sale calls take the presale mutably after its version", () => {
+  const claim = ptb.claim({
+    ...types,
+    presale,
+    participants: ["0xa11ce", "0xb0b"],
+  });
+  assert.deepEqual(
+    calls(claim).map((call) => call.args),
+    [
+      ["shared-mut:0xab", VERSION, "pure", CLOCK],
+      ["shared-mut:0xab", VERSION, "pure", CLOCK],
+    ],
+  );
+  assert.throws(() => ptb.claim({ ...types, presale, participants: [] }));
+  assert.deepEqual(
+    only(ptb.settle({ ...types, presale }), "0x5f::blast_presale::settle").args,
+    ["shared-mut:0xab", VERSION, CLOCK],
+  );
+  assert.deepEqual(
+    only(
+      ptb.cancelUnlaunched({ ...types, presale }),
+      "0x5f::blast_presale::cancel_unlaunched",
+    ).args,
+    ["shared-mut:0xab", VERSION, CLOCK],
+  );
+  assert.deepEqual(
+    only(
+      ptb.destroyCap({ ...types, presale, presaleCap: "0xcab" }),
+      "0x5f::blast_presale::destroy_cap",
+    ).args,
+    ["shared:0xab", "object:0xcab"],
+  );
+});
+
+test("setProtocolFees signs in as FeeAdmin and checks each rate's ceiling", () => {
+  const fees = {
+    raiseBps: 1_000n,
+    tokenBps: 1_000n,
+    lpFeeMemeBps: 3_000n,
+    lpFeeQuoteBps: 3_000n,
+  };
+  const tx = ptb.setProtocolFees({
+    ...types,
+    presale,
+    adminCapId: "0xa11",
+    fees,
+  });
+  const call = only(tx, "0x5f::blast_presale::set_protocol_fees");
+  assert.deepEqual(call.args, [
+    "shared-mut:0xab",
+    VERSION,
+    "result:0",
+    "shared:0x61",
+    "result:1",
+    "result:2",
+    "result:3",
+    "result:4",
+    CLOCK,
+  ]);
+  for (const key of Object.keys(fees) as (keyof typeof fees)[]) {
+    assert.throws(() =>
+      ptb.setProtocolFees({
+        ...types,
+        presale,
+        adminCapId: "0xa11",
+        fees: { ...fees, [key]: fees[key] + 1n },
+      }),
+    );
+  }
+});
+
+test("creation and fee policy calls name their roles and arity", () => {
+  const venue = normalizeStructTag("0xd0::cetus::Venue");
+  const role = (tx: Transaction) =>
+    only(tx, "0xad::blast_acl::sign_in").typeArguments[0];
+  const cases: [Transaction, string, string, string[]][] = [
+    [
+      ptb.setQuoteAllowed({
+        adminCapId: "0xa11",
+        quoteType: quote,
+        allowed: true,
+      }),
+      "set_quote_allowed",
+      "ListingAdmin",
+      ["shared-mut:0x62", VERSION, "result:0", "pure"],
+    ],
+    [
+      ptb.scheduleVenue({ adminCapId: "0xa11", venueType: venue }),
+      "schedule_venue",
+      "VenueAdmin",
+      ["shared-mut:0x62", VERSION, "result:0", CLOCK],
+    ],
+    [
+      ptb.cancelVenue({ adminCapId: "0xa11", venueType: venue }),
+      "cancel_venue",
+      "CancelAdmin",
+      ["shared-mut:0x62", VERSION, "result:0"],
+    ],
+    [
+      ptb.removeVenue({ adminCapId: "0xa11", venueType: venue }),
+      "remove_venue",
+      "VenueAdmin",
+      ["shared-mut:0x62", VERSION, "result:0"],
+    ],
+    [
+      ptb.scheduleVenueDelay({ adminCapId: "0xa11", delayMs: 172_800_000n }),
+      "schedule_venue_delay",
+      "VenueAdmin",
+      ["shared-mut:0x62", VERSION, "result:0", "pure", CLOCK],
+    ],
+    [
+      ptb.cancelVenueDelay({ adminCapId: "0xa11" }),
+      "cancel_venue_delay",
+      "CancelAdmin",
+      ["shared-mut:0x62", VERSION, "result:0"],
+    ],
+    [
+      ptb.addPartner({ adminCapId: "0xa11", partner }),
+      "add_partner",
+      "FeeAdmin",
+      ["shared-mut:0x62", VERSION, "result:0", "shared:0x9a27"],
+    ],
+    [
+      ptb.removePartner({ adminCapId: "0xa11", partner }),
+      "remove_partner",
+      "FeeAdmin",
+      ["shared-mut:0x62", VERSION, "result:0", "shared:0x9a27", CLOCK],
+    ],
+  ];
+  for (const [tx, name, roleName, args] of cases) {
+    const call = only(tx, `0x5f::creation_policy::${name}`);
+    assert.deepEqual(call.args, args, name);
+    assert.equal(
+      role(tx),
+      normalizeStructTag(`0xc0::blast_domain::${roleName}`),
+    );
+  }
+  assert.deepEqual(
+    only(
+      ptb.applyVenue({ venueType: venue }),
+      "0x5f::creation_policy::apply_venue",
+    ),
+    {
+      target: "0x5f::creation_policy::apply_venue",
+      typeArguments: [venue],
+      args: ["shared-mut:0x62", VERSION, CLOCK],
+    },
+  );
+  assert.deepEqual(
+    only(ptb.applyVenueDelay(), "0x5f::creation_policy::apply_venue_delay")
+      .args,
+    ["shared-mut:0x62", VERSION, CLOCK],
+  );
+  for (const bad of [
+    "u64",
+    "vector<u8>",
+    "0x2::object::ID",
+    "0x1::option::Option<u64>",
+  ]) {
+    assert.throws(() =>
+      ptb.scheduleVenue({ adminCapId: "0xa11", venueType: bad }),
+    );
+  }
+
+  const fees = {
+    raiseBps: 200n,
+    tokenBps: 100n,
+    lpFeeMemeBps: 1_500n,
+    lpFeeQuoteBps: 1_500n,
+  };
+  const schedule = ptb.scheduleFees({ adminCapId: "0xa11", fees, delayMs: 0n });
+  assert.equal(
+    only(schedule, "0x5f::fee_policy::schedule_fees").args.length,
+    9,
+  );
+  assert.equal(
+    role(schedule),
+    normalizeStructTag("0xc0::blast_domain::FeeAdmin"),
+  );
+  assert.deepEqual(only(ptb.applyFees(), "0x5f::fee_policy::apply_fees").args, [
+    "shared-mut:0x61",
+    VERSION,
+    CLOCK,
+  ]);
+  assert.deepEqual(
+    only(
+      ptb.cancelFees({ adminCapId: "0xa11" }),
+      "0x5f::fee_policy::cancel_fees",
+    ).args,
+    ["shared-mut:0x61", VERSION, "result:0"],
+  );
+});
+
+test("unpause signs in as UnpauseAdmin<BLAST_PRESALE_PACKAGE>", () => {
+  const tx = ptb.unpause({ adminCapId: "0xa11", bits: 7 });
+  assert.deepEqual(only(tx, "0xad::blast_acl::sign_in").typeArguments, [
+    normalizeStructTag(
+      "0xad::package_admin::UnpauseAdmin<0x5e::blast_presale_package::BLAST_PRESALE_PACKAGE>",
+    ),
+  ]);
+  assert.deepEqual(only(tx, "0x5f::creation_policy::unpause").args, [
+    "shared:0x62",
+    "shared-mut:0x64",
+    "result:0",
+    "shared:0x65",
+    "shared:0x61",
+    "pure",
+  ]);
+  assert.deepEqual(PRESALE_PAUSE_BITS, { Create: 1, Commit: 2, Migrate: 4 });
+  for (const bits of [0, 8, 1.5]) {
+    assert.throws(() => ptb.unpause({ adminCapId: "0xa11", bits }));
+  }
+});
+
+test("configureNow and armNotices sign in once per role", () => {
+  const vendorVenue = normalizeStructTag(
+    "0x7a::blast_aftermath_dao_presale::Venue",
+  );
+  const configure = ptb.configureNow({
+    adminCapId: "0xa11",
+    fees: {
+      raiseBps: 200n,
+      tokenBps: 100n,
+      lpFeeMemeBps: 1_500n,
+      lpFeeQuoteBps: 1_500n,
+    },
+    quotes: [{ quoteType: quote, allowed: true }],
+    venues: [normalizeStructTag("0xd0::cetus::Venue"), vendorVenue],
+    partners: [partner],
+  });
+  assert.deepEqual(
+    targets(configure).filter((target) => !target.startsWith("0xc1::")),
+    [
+      "0xad::blast_acl::sign_in",
+      "0x5f::fee_policy::schedule_fees",
+      "0x5f::fee_policy::apply_fees",
+      "0xad::blast_acl::sign_in",
+      "0x5f::creation_policy::set_quote_allowed",
+      "0xad::blast_acl::sign_in",
+      "0x5f::creation_policy::schedule_venue",
+      "0x5f::creation_policy::apply_venue",
+      "0x5f::creation_policy::schedule_venue",
+      "0x5f::creation_policy::apply_venue",
+      "0x5f::creation_policy::add_partner",
+    ],
+  );
+  const arm = ptb.armNotices({
+    adminCapId: "0xa11",
+    venueDelayMs: 172_800_000n,
+  });
+  assert.deepEqual(targets(arm), [
+    "0xad::blast_acl::sign_in",
+    "0x5f::creation_policy::schedule_venue_delay",
+    "0x5f::creation_policy::apply_venue_delay",
+  ]);
+});
+
+test("PresaleCalls names the package's OTW and witness", () => {
+  const presaleCalls = new PresaleCalls(deployment);
+  assert.equal(
+    presaleCalls.otw,
+    normalizeStructTag("0x5e::blast_presale_package::BLAST_PRESALE_PACKAGE"),
+  );
+  assert.equal(
+    presaleCalls.packageWitnessType,
+    normalizeStructTag("0x5e::blast_presale_package::PackageWitness"),
+  );
+  assert.equal(
+    ptb.aftermathDaoPresale?.venueType,
+    normalizeStructTag("0x7a::blast_aftermath_dao_presale::Venue"),
+  );
 });

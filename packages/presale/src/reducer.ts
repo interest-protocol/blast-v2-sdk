@@ -1,33 +1,42 @@
 import { itemAt } from "@interest-protocol/blast-core/arrays";
-import type { Proposal } from "@interest-protocol/blast-core/bcs";
+import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
+import type {
+  Recipient,
+  VestingTerms,
+} from "@interest-protocol/blast-core/payout";
+import type {
+  DecodedProtocolFeesPaid,
+  ProtocolFeesPaid,
+} from "@interest-protocol/blast-core/protocol-fees";
+import { normalizeSuiObjectId } from "@mysten/sui/utils";
 import type {
   DecodedPresaleDelayedEvent,
   DecodedPresaleEvent,
+  DecodedPresalePolicyEvent,
   PresaleEventKind,
 } from "./events.ts";
 import { presaleEventId, presaleEventModules } from "./events.ts";
 import { apportionRaise, apportionSupply } from "./math.ts";
 import type {
-  BpsShare,
   EligibilityPolicy,
   HardCap,
   PresaleLifecycle,
   ProtocolFees,
-  presaleFeeSplitBcs,
   RecipientPayout,
+  RecipientShare,
   UncappedPhase,
-  VestingTerms,
 } from "./state.ts";
 
 /**
- * One presale rebuilt from its events. Custody fields match `PresaleState`
- * once every event of the presale is applied.
+ * One presale rebuilt from its events and the core `ProtocolFeesPaid` events
+ * of its ledger. Custody fields match `PresaleState` once every event of the
+ * presale is applied.
  */
 export type PresaleProjection = {
   presaleId: string;
   presaleCapId: string;
   treasuryCapId: string;
-  memeType: string;
+  saleTokenType: string;
   quoteType: string;
   lifecycle: PresaleLifecycle;
   tokenSupply: bigint;
@@ -35,19 +44,20 @@ export type PresaleProjection = {
   /** Terms each claim locks a participant's tokens under; null when paid out. */
   participantVesting: VestingTerms | null;
   liquidityTokenAllocationBps: bigint;
-  recipientAllocations: BpsShare[];
+  recipientAllocations: RecipientShare[];
   burnable: boolean;
   raiseTarget: bigint;
-  raiseAllocations: BpsShare[];
+  raiseAllocations: RecipientShare[];
   durationMs: bigint;
   liquidityWindowMs: bigint;
   eligibility: EligibilityPolicy;
   uncapped: UncappedPhase | null;
   hardCap: HardCap | null;
-  migrationWitness: string;
-  feeRecipients: BpsShare[];
-  holderRewardsBps: bigint;
-  /** When commitments open, which may be after the share; zero until `PresaleOpened`. */
+  /** The venue witness type the sale migrates to. */
+  venue: string;
+  /** The LP-fee split the sale's vault starts with. */
+  feeSplit: FeeSplit;
+  /** When commitments open; zero until `PresaleOpened`. */
   startMs: bigint;
   /** Scheduled by `PresaleOpened`; an early close's `PresaleFunded` moves it to the close. */
   endMs: bigint;
@@ -69,156 +79,49 @@ export type PresaleProjection = {
   recipientPayouts: RecipientPayout[];
   recipientTokens: bigint;
   raisePayouts: RecipientPayout[];
-  /**
-   * The `blast_fun_linear_vesting::Vesting` schedule migration created for
-   * each vesting token recipient, by recipient address.
-   */
+  /** The `Vesting` schedule migration created for each vesting token recipient. */
   recipientVestingIds: Readonly<Record<string, string>>;
   /** The schedule migration created for each vesting raise recipient. */
   raiseVestingIds: Readonly<Record<string, string>>;
   /** The schedule each participant's claim created under participant vesting. */
   participantVestingIds: Readonly<Record<string, string>>;
-  /**
-   * Blast's rates: snapshotted at creation, then replaced by each
-   * `ProtocolFeesChanged` before the start.
-   */
+  /** Blast's rates: snapshotted at creation, then replaced by each `ProtocolFeesChanged`. */
   protocolFees: ProtocolFees;
-  /** Blast's share of the raise, paid on migration. */
+  /** Blast's share of the raise, moved into the fee ledger on migration. */
   protocolQuote: bigint;
-  /** Blast's token share still in custody. */
+  /** Blast's token share still in custody; zero once migrated. */
   protocolTokens: bigint;
   /** The Blast partner named at creation; null until `PresaleOpened` names one. */
   partnerId: string | null;
-  /**
-   * Blast's raise fee a partnered sale's migration holds until
-   * `pay_protocol_fees_with_partner`; null before migration, after the payout, and without a
-   * partner.
-   */
-  unpaidProtocolQuote: bigint | null;
-  /**
-   * What the partner received of Blast's raise fee; null until a partnered
-   * sale's payout.
-   */
-  partnerQuote: bigint | null;
-  /** Where Blast's fees were paid; null until then. */
-  protocolDestination: string | null;
-  /** The vault its migration created; null until then. */
-  vaultId: string | null;
+  /** Blast's tokens and Quote the fee ledger holds for a partnered sale's payout. */
+  feeLedgerMeme: bigint;
+  feeLedgerQuote: bigint;
+  /** The ledger's last payout; null until Blast's fees are paid. */
+  protocolFeesPaid: ProtocolFeesPaid | null;
 };
 
-export type PresaleVaultProjection = {
-  vaultId: string;
-  /** The zero ID for a vault an owner created without a presale (contracts ADR 0109). */
-  presaleId: string;
-  poolId: string;
-  positionId: string;
-  venueType: string;
-  memeType: string;
-  quoteType: string;
-  /** `VaultCreated.position_liquidity`: the position's liquidity in its venue's own units. */
-  liquidity: bigint;
-  feeRecipients: BpsShare[];
-  holderRewardsBps: bigint;
-  feeSplitDelayMs: bigint;
-  pendingFeeSplit: Proposal<typeof presaleFeeSplitBcs.$inferType> | null;
-  /**
-   * Blast's shares of each collected LP-fee asset: snapshotted at migration,
-   * then replaced by each applied `ProtocolLpFees` proposal.
-   */
-  pendingProtocolLpFees: {
-    memeBps: bigint;
-    quoteBps: bigint;
-    readyAtMs: bigint;
-    delayMs: bigint;
-  } | null;
-  protocolLpFeeMemeBps: bigint;
-  protocolLpFeeQuoteBps: bigint;
-  migrationMemeResidual: bigint;
-  migrationQuoteResidual: bigint;
-  /**
-   * Holder-reward Quote not yet reserved by a round. Holder Meme fees go to
-   * the treasury when collected (`HolderMemePaid`).
-   */
-  holderRewardsQuote: bigint;
-  /** Cumulative holder Meme actually paid to governed treasury, outside funded leaves. */
-  holderMemeTreasuryPaid: bigint;
-  nextRound: bigint;
-  lastCheckpoint: bigint | null;
-  /** Cumulative LP fees paid to each fee recipient, aligned with `feeRecipients`. */
-  feeRecipientMemePaid: bigint[];
-  feeRecipientQuotePaid: bigint[];
-  /** Cumulative LP fees paid to Blast. */
-  protocolMemePaid: bigint;
-  protocolQuotePaid: bigint;
-  /** Blast's LP fees a partnered vault holds for its next partner payout. */
-  protocolMemeHeld: bigint;
-  protocolQuoteHeld: bigint;
-  /** Cumulative cut of Blast's LP fees paid to the sale's partner. */
-  partnerMemePaid: bigint;
-  partnerQuotePaid: bigint;
-};
-
-export type PresaleRewardRoundProjection = {
-  roundId: string;
-  vaultId: string;
-  number: bigint;
-  startCheckpoint: bigint;
-  endCheckpoint: bigint;
-  claimDeadlineMs: bigint;
-  root: string;
-  manifestDigest: string;
-  leafCount: bigint;
-  memeRemaining: bigint;
-  quoteRemaining: bigint;
-  paidIndexes: Readonly<Record<string, true>>;
-  /** Set by `RoundClosed`, which deletes the round and returns its balances. */
-  closed: boolean;
-  treasury: string;
-  gasReserveAmount: bigint;
-  gasReserveRemaining: bigint;
-  gasReimbursed: bigint;
-  gasReturned: bigint;
-  gasSettled: boolean;
-};
-
-/**
- * The pool tier a Cetus or Bluefin sale's venue recorded (contracts ADR 0111),
- * emitted just before its `PresaleCreated`. A sale token has one sale.
- */
-export type PresalePoolTierProjection = {
-  /** The venue marker, e.g. `<pkg>::cetus::Venue`. */
-  venueType: string;
-  quoteType: string;
-  tickSpacing: number;
-  poolFeeRate: bigint;
-};
-
-/**
- * The package's `FeePolicy` and `CreationPolicy` from `delayed` events; values
- * are null until their `DelayedCreated` event.
- */
+/** The `FeePolicy` and `CreationPolicy` rebuilt from their events. */
 export type PresalePolicyProjection = {
-  destination: string | null;
+  /** Null until the fee policy's `DelayedCreated`. */
   fees: ProtocolFees | null;
-  migrationWitnesses: Readonly<Record<string, true>>;
+  /** Quote types allowed, from `QuoteAllowed`. */
+  quotes: Readonly<Record<string, true>>;
+  /** Admitted venue witness types. */
+  venues: Readonly<Record<string, true>>;
   /**
    * Latest proposals by `presaleDelayedPolicyKey`. Crossing ready_at_ms never
    * applies their values.
    */
   pendingPolicies: Readonly<Record<string, DecodedPresaleDelayedEvent>>;
-  /** Applied notices by `presaleDelayedPolicyKey`, without a set member. */
+  /** Applied delays by `presaleDelayedPolicyKey`, without a set member. */
   policyDelays: Readonly<Record<string, bigint>>;
 };
 
 export type PresaleEventProjection = {
   appliedEventIds: Readonly<Record<string, true>>;
-  /** Presale events by kind; `delayed` events are not counted. */
+  /** Presale events by kind; delayed, policy and core events are not counted. */
   eventCounts: Readonly<Record<PresaleEventKind, number>>;
   presales: Readonly<Record<string, PresaleProjection>>;
-  /** Pool tiers by sale-token (`memeType`); a sale's is `poolTiers[presale.memeType]`. */
-  poolTiers: Readonly<Record<string, PresalePoolTierProjection>>;
-  vaults: Readonly<Record<string, PresaleVaultProjection>>;
-  rounds: Readonly<Record<string, PresaleRewardRoundProjection>>;
   policy: PresalePolicyProjection;
 };
 
@@ -229,54 +132,82 @@ export function createPresaleEventProjection(): PresaleEventProjection {
       Object.keys(presaleEventModules).map((kind) => [kind, 0]),
     ) as Record<PresaleEventKind, number>,
     presales: {},
-    poolTiers: {},
-    vaults: {},
-    rounds: {},
     policy: {
-      destination: null,
       fees: null,
-      migrationWitnesses: {},
+      quotes: {},
+      venues: {},
       pendingPolicies: {},
       policyDelays: {},
     },
   };
 }
 
+export type PresaleProjectionEvent =
+  | DecodedPresaleEvent
+  | DecodedPresaleDelayedEvent
+  | DecodedPresalePolicyEvent
+  | DecodedProtocolFeesPaid;
+
 /**
- * Applies one presale event, or one `delayed` event decoded by
- * `decodePresaleDelayedEvent`, once; replaying an applied event returns
- * `state` unchanged.
+ * Applies one presale event, one delayed event from
+ * `decodePresaleDelayedEvent`, one `QuoteAllowed`, or one core
+ * `ProtocolFeesPaid` whose origin is a projected presale, once; replaying an
+ * applied event returns `state` unchanged.
  */
 export function reducePresaleEvent(
   state: PresaleEventProjection,
-  event: DecodedPresaleEvent | DecodedPresaleDelayedEvent,
+  event: PresaleProjectionEvent,
 ): PresaleEventProjection {
   const eventId = presaleEventId(event);
   if (state.appliedEventIds[eventId]) return state;
-  if (event.source === "delayed")
-    return reduceDelayed(
-      {
-        ...state,
-        appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
-        policy: reduceDelayedPolicy(state.policy, event),
-      },
-      event,
-    );
-  const next: PresaleEventProjection = {
+  const applied = {
     ...state,
-    appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
-    eventCounts: {
-      ...state.eventCounts,
-      [event.kind]: state.eventCounts[event.kind] + 1,
-    },
+    appliedEventIds: { ...state.appliedEventIds, [eventId]: true as const },
   };
-  return applyPresaleEvent(next, event) ?? applyVaultEvent(next, event);
+  switch (event.source) {
+    case "delayed":
+      return { ...applied, policy: reduceDelayed(state.policy, event) };
+    case "presale-policy": {
+      const { [event.quoteType]: _, ...quotes } = state.policy.quotes;
+      return {
+        ...applied,
+        policy: {
+          ...state.policy,
+          quotes: event.payload.allowed
+            ? { ...quotes, [event.quoteType]: true }
+            : quotes,
+        },
+      };
+    }
+    case "core":
+      // A partnered sale's payout, or an unpartnered sale's at migration.
+      return updatePresale(
+        applied,
+        normalizeSuiObjectId(event.payload.origin),
+        () => ({
+          feeLedgerMeme: 0n,
+          feeLedgerQuote: 0n,
+          protocolFeesPaid: event.payload,
+        }),
+      );
+    case "presale":
+      return applyPresaleEvent(
+        {
+          ...applied,
+          eventCounts: {
+            ...state.eventCounts,
+            [event.kind]: state.eventCounts[event.kind] + 1,
+          },
+        },
+        event,
+      );
+  }
 }
 
 function applyPresaleEvent(
   state: PresaleEventProjection,
   event: DecodedPresaleEvent,
-): PresaleEventProjection | null {
+): PresaleEventProjection {
   switch (event.kind) {
     case "PresaleCreated":
       return {
@@ -337,57 +268,44 @@ function applyPresaleEvent(
       return updatePresale(state, event.payload.presale_id, () => ({
         lifecycle: "Cancelled",
       }));
-    // Migration emits ProtocolFeesPaid, every RaiseAllocated and RecipientAllocated, then
-    // PresaleMigrated. A partnered sale's migration holds Blast's fees instead, and its
-    // `pay_protocol_fees_with_partner` emits ProtocolFeesPaid later, out of the held raise fee.
-    case "ProtocolFeesPaid": {
-      const { payload } = event;
-      return updatePresale(state, payload.presale_id, (presale) => ({
-        ...protocolQuotePaid(presale, payload),
-        protocolTokens: presale.protocolTokens - payload.tokens,
-        protocolDestination: payload.destination,
-      }));
-    }
+    // Migration moves the raise out of custody (Blast's share into the ledger, paid at once
+    // without a partner), then emits every RaiseAllocated and RecipientAllocated, then
+    // PresaleMigrated.
     case "RaiseAllocated": {
       const { payload } = event;
       return updatePresale(state, payload.presale_id, (presale) => ({
-        quote: presale.quote - payload.quote,
-        raiseVestingIds:
-          payload.vesting_id === null
-            ? presale.raiseVestingIds
-            : {
-                ...presale.raiseVestingIds,
-                [payload.recipient]: payload.vesting_id,
-              },
+        raiseVestingIds: withVesting(
+          presale.raiseVestingIds,
+          payload.recipient,
+          payload.vesting_id,
+        ),
       }));
     }
     case "RecipientAllocated": {
       const { payload } = event;
       return updatePresale(state, payload.presale_id, (presale) => ({
         recipientTokens: presale.recipientTokens - payload.tokens,
-        recipientVestingIds:
-          payload.vesting_id === null
-            ? presale.recipientVestingIds
-            : {
-                ...presale.recipientVestingIds,
-                [payload.recipient]: payload.vesting_id,
-              },
+        recipientVestingIds: withVesting(
+          presale.recipientVestingIds,
+          payload.recipient,
+          payload.vesting_id,
+        ),
       }));
     }
     case "PresaleMigrated": {
       const { payload } = event;
-      return updatePresale(state, payload.presale_id, (presale) => {
-        const unpaidProtocolQuote = heldProtocolQuote(presale);
-        return {
-          lifecycle: "Migrated",
-          quote:
-            presale.quote -
-            payload.liquidity_quote -
-            (unpaidProtocolQuote ?? 0n),
-          liquidityTokens: presale.liquidityTokens - payload.liquidity_tokens,
-          unpaidProtocolQuote,
-        };
-      });
+      return updatePresale(state, payload.presale_id, (presale) => ({
+        lifecycle: "Migrated",
+        quote: presale.quote - presale.raiseTarget,
+        liquidityTokens: presale.liquidityTokens - payload.liquidity_tokens,
+        protocolTokens: 0n,
+        ...(presale.partnerId === null
+          ? {}
+          : {
+              feeLedgerMeme: presale.protocolTokens,
+              feeLedgerQuote: presale.protocolQuote,
+            }),
+      }));
     }
     case "Claimed": {
       const { payload } = event;
@@ -399,209 +317,14 @@ function applyPresaleEvent(
           participants: payload.remaining_participants,
           saleTokens: presale.saleTokens - payload.tokens,
           quote: presale.quote - payload.quote_refund,
-          participantVestingIds:
-            payload.vesting_id === null
-              ? presale.participantVestingIds
-              : {
-                  ...presale.participantVestingIds,
-                  [payload.participant]: payload.vesting_id,
-                },
+          participantVestingIds: withVesting(
+            presale.participantVestingIds,
+            payload.participant,
+            payload.vesting_id,
+          ),
         };
       });
     }
-    default:
-      return null;
-  }
-}
-
-function applyVaultEvent(
-  state: PresaleEventProjection,
-  event: DecodedPresaleEvent,
-): PresaleEventProjection {
-  switch (event.kind) {
-    case "PoolTierReserved":
-      return {
-        ...state,
-        poolTiers: {
-          ...state.poolTiers,
-          [event.memeType]: {
-            venueType: event.venueType,
-            quoteType: event.quoteType,
-            tickSpacing: event.payload.tick_spacing,
-            poolFeeRate: event.payload.pool_fee_rate,
-          },
-        },
-      };
-    // A vault without a presale carries the zero `presale_id`, which links no presale.
-    case "VaultCreated": {
-      const { payload } = event;
-      const feeRecipients = payload.fee_recipients.map((recipient, i) => ({
-        recipient,
-        bps: itemAt(payload.fee_recipient_bps, i),
-        vesting: null,
-      }));
-      const linked = updatePresale(state, payload.presale_id, () => ({
-        vaultId: payload.vault_id,
-      }));
-      return {
-        ...linked,
-        vaults: {
-          ...state.vaults,
-          [payload.vault_id]: {
-            vaultId: payload.vault_id,
-            presaleId: payload.presale_id,
-            poolId: payload.pool_id,
-            positionId: payload.position_id,
-            venueType: event.venueType,
-            memeType: event.memeType,
-            quoteType: event.quoteType,
-            liquidity: payload.position_liquidity,
-            feeRecipients,
-            holderRewardsBps: payload.holder_rewards_bps,
-            feeSplitDelayMs: 172_800_000n,
-            pendingFeeSplit: null,
-            pendingProtocolLpFees: null,
-            protocolLpFeeMemeBps: payload.protocol_lp_fee_meme_bps,
-            protocolLpFeeQuoteBps: payload.protocol_lp_fee_quote_bps,
-            migrationMemeResidual: payload.migration_meme_residual,
-            migrationQuoteResidual: payload.migration_quote_residual,
-            holderRewardsQuote: 0n,
-            holderMemeTreasuryPaid: 0n,
-            nextRound: 0n,
-            lastCheckpoint: null,
-            feeRecipientMemePaid: feeRecipients.map(() => 0n),
-            feeRecipientQuotePaid: feeRecipients.map(() => 0n),
-            protocolMemePaid: 0n,
-            protocolQuotePaid: 0n,
-            protocolMemeHeld: 0n,
-            protocolQuoteHeld: 0n,
-            partnerMemePaid: 0n,
-            partnerQuotePaid: 0n,
-          },
-        },
-      };
-    }
-    case "FeesCollected": {
-      const { payload } = event;
-      return updateVault(state, payload.vault_id, (vault) => ({
-        holderRewardsQuote:
-          vault.holderRewardsQuote + payload.holder_rewards_quote,
-        feeRecipientMemePaid: vault.feeRecipientMemePaid.map(
-          (paid, i) => paid + (payload.fee_recipient_meme[i] ?? 0n),
-        ),
-        feeRecipientQuotePaid: vault.feeRecipientQuotePaid.map(
-          (paid, i) => paid + (payload.fee_recipient_quote[i] ?? 0n),
-        ),
-        // A partnered vault holds Blast's LP fees: no destination was paid.
-        ...(payload.protocol_destination === null
-          ? {
-              protocolMemeHeld: vault.protocolMemeHeld + payload.protocol_meme,
-              protocolQuoteHeld:
-                vault.protocolQuoteHeld + payload.protocol_quote,
-            }
-          : {
-              protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
-              protocolQuotePaid:
-                vault.protocolQuotePaid + payload.protocol_quote,
-            }),
-      }));
-    }
-    case "ProtocolLpFeesPaid": {
-      const { payload } = event;
-      return updateVault(state, payload.vault_id, (vault) => ({
-        protocolMemeHeld: 0n,
-        protocolQuoteHeld: 0n,
-        protocolMemePaid: vault.protocolMemePaid + payload.protocol_meme,
-        protocolQuotePaid: vault.protocolQuotePaid + payload.protocol_quote,
-        partnerMemePaid: vault.partnerMemePaid + payload.partner_meme,
-        partnerQuotePaid: vault.partnerQuotePaid + payload.partner_quote,
-      }));
-    }
-    case "MigrationResidualsClaimed":
-      return updateVault(state, event.payload.vault_id, () => ({
-        migrationMemeResidual: 0n,
-        migrationQuoteResidual: 0n,
-      }));
-    case "HolderMemePaid": {
-      const { payload } = event;
-      return updateVault(state, payload.vault_id, (vault) => ({
-        holderMemeTreasuryPaid:
-          vault.holderMemeTreasuryPaid + payload.meme_amount,
-      }));
-    }
-    case "RoundPublished": {
-      const { payload } = event;
-      const updated = updateVault(state, payload.vault_id, () => ({
-        holderRewardsQuote: payload.quote_unallocated,
-        nextRound: payload.number + 1n,
-        lastCheckpoint: payload.end_checkpoint,
-      }));
-      return {
-        ...updated,
-        rounds: {
-          ...state.rounds,
-          [payload.round_id]: {
-            roundId: payload.round_id,
-            vaultId: payload.vault_id,
-            number: payload.number,
-            startCheckpoint: payload.start_checkpoint,
-            endCheckpoint: payload.end_checkpoint,
-            claimDeadlineMs: payload.claim_deadline_ms,
-            root: payload.root,
-            manifestDigest: payload.manifest_digest,
-            leafCount: payload.leaf_count,
-            memeRemaining: payload.meme_amount,
-            quoteRemaining: payload.quote_amount,
-            paidIndexes: {},
-            closed: false,
-            treasury: payload.treasury,
-            gasReserveAmount: payload.gas_reserve_amount,
-            gasReserveRemaining: payload.gas_reserve_amount,
-            gasReimbursed: 0n,
-            gasReturned: 0n,
-            gasSettled: false,
-          },
-        },
-      };
-    }
-    case "RewardClaimed": {
-      const { payload } = event;
-      return updateRound(state, payload.round_id, (round) => ({
-        memeRemaining: payload.meme_remaining,
-        quoteRemaining: payload.quote_remaining,
-        paidIndexes: { ...round.paidIndexes, [payload.index.toString()]: true },
-      }));
-    }
-    case "GasReserveSettled": {
-      const { payload } = event;
-      const returned = updateVault(state, payload.vault_id, () => ({
-        holderRewardsQuote: payload.quote_unallocated,
-      }));
-      return updateRound(returned, payload.round_id, () => ({
-        gasReserveRemaining: 0n,
-        gasReimbursed: payload.reimbursement_amount,
-        gasReturned: payload.reserve_returned,
-        gasSettled: true,
-      }));
-    }
-    case "RoundClosed": {
-      const { payload } = event;
-      const returned = updateVault(state, payload.vault_id, (vault) => ({
-        holderRewardsQuote:
-          vault.holderRewardsQuote +
-          payload.quote_returned +
-          payload.gas_reserve_returned,
-      }));
-      return updateRound(returned, payload.round_id, (round) => ({
-        memeRemaining: 0n,
-        quoteRemaining: 0n,
-        gasReserveRemaining: 0n,
-        gasReturned: round.gasReturned + payload.gas_reserve_returned,
-        closed: true,
-      }));
-    }
-    default:
-      return state;
   }
 }
 
@@ -610,25 +333,15 @@ function createdPresale(
   event: Extract<DecodedPresaleEvent, { kind: "PresaleCreated" }>,
 ): PresaleProjection {
   const { payload } = event;
-  const shares = (
-    recipients: string[],
-    bps: bigint[],
-    vesting: readonly (VestingTerms | null)[] = [],
-  ): BpsShare[] =>
-    recipients.map((recipient, i) => ({
-      recipient,
-      bps: itemAt(bps, i),
-      vesting: vesting[i] ?? null,
-    }));
+  const shares = (recipients: Recipient[], bps: bigint[]): RecipientShare[] =>
+    recipients.map((recipient, i) => ({ recipient, bps: itemAt(bps, i) }));
   const recipientAllocations = shares(
     payload.recipients,
     payload.recipient_bps,
-    payload.recipient_vesting,
   );
   const raiseAllocations = shares(
     payload.raise_recipients,
     payload.raise_recipient_bps,
-    payload.raise_recipient_vesting,
   );
   const protocolFees: ProtocolFees = {
     raiseBps: payload.protocol_raise_bps,
@@ -652,7 +365,7 @@ function createdPresale(
     presaleId: payload.presale_id,
     presaleCapId: payload.presale_cap_id,
     treasuryCapId: payload.treasury_cap_id,
-    memeType: event.memeType,
+    saleTokenType: event.saleTokenType,
     quoteType: event.quoteType,
     lifecycle: "Pending",
     tokenSupply: payload.token_supply,
@@ -668,9 +381,8 @@ function createdPresale(
     eligibility: payload.eligibility,
     uncapped: payload.uncapped,
     hardCap: payload.hard_cap,
-    migrationWitness: payload.migration_witness,
-    feeRecipients: shares(payload.fee_recipients, payload.fee_recipient_bps),
-    holderRewardsBps: payload.holder_rewards_bps,
+    venue: payload.venue,
+    feeSplit: payload.fee_split,
     startMs: 0n,
     endMs: 0n,
     liquidityDeadlineMs: 0n,
@@ -696,31 +408,18 @@ function createdPresale(
     protocolQuote: payload.protocol_quote,
     protocolTokens: payload.protocol_tokens,
     partnerId: null,
-    unpaidProtocolQuote: null,
-    partnerQuote: null,
-    protocolDestination: null,
-    vaultId: null,
+    feeLedgerMeme: 0n,
+    feeLedgerQuote: 0n,
+    protocolFeesPaid: null,
   };
 }
 
-/** Blast's raise fee a partnered migration holds back from custody; null without a partner. */
-function heldProtocolQuote(presale: PresaleProjection): bigint | null {
-  if (presale.partnerId === null) return null;
-  return presale.protocolQuote;
-}
-
-/**
- * How `ProtocolFeesPaid` settles Blast's raise fee: out of Quote custody at a
- * sale's migration, or out of the held fee at a partnered sale's payout.
- */
-function protocolQuotePaid(
-  presale: PresaleProjection,
-  payload: { quote: bigint; partner_quote: bigint },
-): Partial<PresaleProjection> {
-  if (presale.partnerId === null) {
-    return { quote: presale.quote - payload.quote };
-  }
-  return { unpaidProtocolQuote: null, partnerQuote: payload.partner_quote };
+function withVesting(
+  ids: Readonly<Record<string, string>>,
+  owner: string,
+  vestingId: string | null,
+): Readonly<Record<string, string>> {
+  return vestingId === null ? ids : { ...ids, [owner]: vestingId };
 }
 
 function updatePresale(
@@ -740,209 +439,71 @@ function updatePresale(
 }
 
 /**
- * Applied policy values, witness memberships and vault splits from `delayed`
- * events. A vault's `DelayedCreated` precedes its `VaultCreated`, which
- * carries the same values, so only later proposals change a vault.
- */
-function reduceDelayed(
-  state: PresaleEventProjection,
-  event: DecodedPresaleDelayedEvent,
-): PresaleEventProjection {
-  const policy = state.policy;
-  const vaultId = event.payload.owner;
-  switch (event.kind) {
-    case "DelayedCreated":
-    case "DelayedApplied":
-      switch (event.name) {
-        case "Destination":
-          return {
-            ...state,
-            policy: { ...policy, destination: event.payload.value },
-          };
-        case "Fees":
-          return { ...state, policy: { ...policy, fees: event.payload.value } };
-        case "FeeSplit":
-          return event.kind === "DelayedApplied"
-            ? applyFeeSplit(state, vaultId, event.payload)
-            : state;
-        case "ProtocolLpFees":
-          return updateVault(state, vaultId, () => ({
-            pendingProtocolLpFees: null,
-            protocolLpFeeMemeBps: event.payload.value.lpFeeMemeBps,
-            protocolLpFeeQuoteBps: event.payload.value.lpFeeQuoteBps,
-          }));
-      }
-      return state;
-    case "DelayedScheduled":
-    case "DelayedCancelled":
-      return reduceVaultProposal(state, event);
-    case "SetApplied":
-      if (event.payload.change.kind !== "Admission") return state;
-      return {
-        ...state,
-        policy: {
-          ...policy,
-          migrationWitnesses: {
-            ...policy.migrationWitnesses,
-            [event.payload.change.member]: true,
-          },
-        },
-      };
-    case "MemberRemoved": {
-      const { [event.payload.member]: _, ...migrationWitnesses } =
-        policy.migrationWitnesses;
-      return { ...state, policy: { ...policy, migrationWitnesses } };
-    }
-  }
-  return state;
-}
-
-/** A vault's pending fee split or Blast LP rates. */
-function reduceVaultProposal(
-  state: PresaleEventProjection,
-  event: Extract<
-    DecodedPresaleDelayedEvent,
-    { kind: "DelayedScheduled" | "DelayedCancelled" }
-  >,
-): PresaleEventProjection {
-  const vaultId = event.payload.owner;
-  const scheduled = event.kind === "DelayedScheduled";
-  if (event.name === "FeeSplit") {
-    const { value, delay_ms, ready_at_ms } = event.payload;
-    return updateVault(state, vaultId, () => ({
-      pendingFeeSplit: scheduled ? { value, delay_ms, ready_at_ms } : null,
-    }));
-  }
-  if (event.name === "ProtocolLpFees")
-    return updateVault(state, vaultId, () => ({
-      pendingProtocolLpFees: scheduled
-        ? {
-            memeBps: event.payload.value.lpFeeMemeBps,
-            quoteBps: event.payload.value.lpFeeQuoteBps,
-            readyAtMs: event.payload.ready_at_ms,
-            delayMs: event.payload.delay_ms,
-          }
-        : null,
-    }));
-  return state;
-}
-
-/** Fee recipients keep their paid totals across a split change. */
-function applyFeeSplit(
-  state: PresaleEventProjection,
-  vaultId: string,
-  applied: {
-    value: typeof presaleFeeSplitBcs.$inferType;
-    delay_ms: bigint;
-  },
-): PresaleEventProjection {
-  return updateVault(state, vaultId, (vault) => {
-    const recipients = applied.value.fee_recipients;
-    const paid = (amounts: bigint[], recipient: string) =>
-      amounts[
-        vault.feeRecipients.findIndex((prior) => prior.recipient === recipient)
-      ] ?? 0n;
-    return {
-      feeRecipients: recipients,
-      holderRewardsBps: applied.value.holder_rewards_bps,
-      feeSplitDelayMs: applied.delay_ms,
-      pendingFeeSplit: null,
-      feeRecipientMemePaid: recipients.map((r) =>
-        paid(vault.feeRecipientMemePaid, r.recipient),
-      ),
-      feeRecipientQuotePaid: recipients.map((r) =>
-        paid(vault.feeRecipientQuotePaid, r.recipient),
-      ),
-    };
-  });
-}
-
-/**
- * The projection key of a delayed value: its registry name, then the owning
- * vault for a vault setting or round publication, then the member for a
- * witness admission.
+ * The projection key of a delayed value: its registry name, then the member
+ * for a venue admission.
  */
 export function presaleDelayedPolicyKey(
   event: Pick<DecodedPresaleDelayedEvent, "name" | "payload">,
 ): string {
-  let key: string = event.name;
   if (
-    event.name === "FeeSplit" ||
-    event.name === "ProtocolLpFees" ||
-    event.name === "RoundPublication"
-  )
-    key += `:${event.payload.owner}`;
-  if (
-    event.name === "MigrationWitnesses" &&
+    event.name === "Venues" &&
     "change" in event.payload &&
     event.payload.change.kind === "Admission"
   )
-    key += `:${event.payload.change.member}`;
-  return key;
+    return `${event.name}:${event.payload.change.member}`;
+  return event.name;
 }
 
-/** Proposals and applied notices; readiness alone changes nothing. */
-function reduceDelayedPolicy(
+/** Applied fees and venues, proposals and applied delays; readiness alone changes nothing. */
+function reduceDelayed(
   state: PresalePolicyProjection,
   event: DecodedPresaleDelayedEvent,
 ): PresalePolicyProjection {
   const key = presaleDelayedPolicyKey(event);
   const pending = { ...state.pendingPolicies };
   const delays = { ...state.policyDelays };
+  let { fees, venues } = state;
   switch (event.kind) {
     case "DelayedScheduled":
-    case "ActionScheduled":
     case "SetScheduled":
       pending[key] = event;
       break;
     case "DelayedCancelled":
-    case "ActionCancelled":
     case "SetCancelled":
       delete pending[key];
       break;
     case "DelayedApplied":
-    case "ActionApplied":
+      delete pending[key];
+      delays[key] = event.payload.delay_ms;
+      if (event.name === "Fees") fees = event.payload.value;
+      break;
     case "SetApplied":
       delete pending[key];
-      // An admission's delay_ms is the notice it waited, not a new set notice.
-      if (event.kind !== "SetApplied" || event.payload.change.kind === "Delay")
+      // An admission's delay_ms is the delay it waited, not a new set delay.
+      if (event.payload.change.kind === "Delay")
         delays[key] = event.payload.delay_ms;
+      else venues = { ...venues, [event.payload.change.member]: true };
       break;
     case "DelayedCreated":
-    case "ActionCreated":
+      delays[key] = event.payload.delay_ms;
+      if (event.name === "Fees") fees = event.payload.value;
+      break;
     case "SetCreated":
       delays[key] = event.payload.delay_ms;
       break;
+    case "MemberRemoved": {
+      const { [event.payload.member]: _, ...rest } = venues;
+      venues = rest;
+      break;
+    }
     default:
       return state;
   }
-  return { ...state, pendingPolicies: pending, policyDelays: delays };
-}
-
-function updateVault(
-  state: PresaleEventProjection,
-  vaultId: string,
-  update: (vault: PresaleVaultProjection) => Partial<PresaleVaultProjection>,
-): PresaleEventProjection {
-  const vault = state.vaults[vaultId];
-  if (!vault) return state;
   return {
     ...state,
-    vaults: { ...state.vaults, [vaultId]: { ...vault, ...update(vault) } },
-  };
-}
-
-function updateRound(
-  state: PresaleEventProjection,
-  roundId: string,
-  update: (
-    round: PresaleRewardRoundProjection,
-  ) => Partial<PresaleRewardRoundProjection>,
-): PresaleEventProjection {
-  const round = state.rounds[roundId];
-  if (!round) return state;
-  return {
-    ...state,
-    rounds: { ...state.rounds, [roundId]: { ...round, ...update(round) } },
+    fees,
+    venues,
+    pendingPolicies: pending,
+    policyDelays: delays,
   };
 }

@@ -1,82 +1,52 @@
+import type { CoreAbortName } from "@interest-protocol/blast-core/aborts";
 import { itemAt } from "@interest-protocol/blast-core/arrays";
+import {
+  apportionBps,
+  MAX_VESTING_DURATION_MS,
+} from "@interest-protocol/blast-core/bps";
+import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
+import { normalizeFeeSplit } from "@interest-protocol/blast-core/fee-split";
 import {
   BASIS_POINTS_DENOMINATOR,
   U64_MAX,
 } from "@interest-protocol/blast-core/integers";
-import { sqrtPriceX64 } from "@interest-protocol/blast-core/migration-math";
+import {
+  isSeedablePrice,
+  sqrtPriceX64,
+} from "@interest-protocol/blast-core/migration-math";
+import type { VestingTerms } from "@interest-protocol/blast-core/payout";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
+import type { PresaleAbortName } from "./aborts.ts";
 import type {
-  BpsShare,
   EligibilityPolicy,
   HardCap,
   PresaleCommitment,
   PresaleState,
   ProtocolFees,
   RecipientPayout,
+  RecipientShare,
   UncappedPhase,
-  VestingTerms,
 } from "./state.ts";
 
 // Every amount here is atomic units (`u64`) of the named asset, every share is
 // BPS of 10,000, and every time is Unix milliseconds. Each function mirrors the
-// cited `blast_presale` Move function, including its rounding and the order of
-// its aborts, and throws `PresaleAbortError` carrying the Move error name.
+// cited Move function, including its rounding and the order of its aborts, and
+// throws `PresaleAbortError` carrying the Move error name: a `blast_presale`
+// name, or a `blast_core` one for the core constructors a creation calls.
 
 const BPS = BASIS_POINTS_DENOMINATOR;
-/** `blast_presale::MAX_PARTICIPANTS`: dynamic commitment records per presale. */
-export const MAX_PRESALE_PARTICIPANTS = 65_536n;
-/** `blast_presale::MAX_RECIPIENTS`: token and raise recipients, each. */
-export const MAX_PRESALE_RECIPIENTS = 64;
-/** `blast_presale::MAX_FEE_RECIPIENTS`. */
-export const MAX_PRESALE_FEE_RECIPIENTS = 16;
-/** `bluefin::MAX_TICK_SPACING`, `MAX_FEE_RATE`, `MAX_MEME_SYMBOL_LENGTH`. */
-export const BLUEFIN_PRESALE_MAX_TICK_SPACING = 400;
-export const BLUEFIN_PRESALE_MAX_FEE_RATE = 20_000n;
-export const BLUEFIN_PRESALE_MAX_SYMBOL_BYTES = 32;
+/** `constants::max_participants`: dynamic commitment records per presale. */
+export const MAX_PARTICIPANTS = 65_536n;
+/** `constants::max_recipients`: token and raise recipients, each. */
+export const MAX_RECIPIENTS = 64;
 /**
- * `blast_presale::MAX_VESTING_DURATION_MS`: the technical bound on a schedule's
- * steps and cliff. Product limits on vesting belong to creation tooling.
+ * `constants::min_liquidity_window_duration_ms`: seven days, the shortest time
+ * after the window before anyone may cancel an unmigrated funded sale.
  */
-export const MAX_PRESALE_VESTING_DURATION_MS = 1n << 63n;
-/**
- * `blast_presale::MIN_LIQUIDITY_WINDOW_MS`: seven days, the shortest time after
- * the window before anyone may cancel an unmigrated funded sale.
- */
-export const PRESALE_MIN_LIQUIDITY_WINDOW_MS = 7n * 24n * 60n * 60n * 1_000n;
-/** `migration_math` sqrt-price bounds shared by Cetus v15 and Bluefin v17. */
-export const PRESALE_MIN_SQRT_PRICE_X64 = 4_295_048_016n;
-export const PRESALE_MAX_SQRT_PRICE_X64 =
-  79_226_673_515_401_279_992_447_579_055n;
+export const MIN_LIQUIDITY_WINDOW_DURATION_MS = 7n * 24n * 60n * 60n * 1_000n;
 
-export type PresaleAbortCode =
-  | "EInvalidBps"
-  | "EInvalidRaiseTarget"
-  | "EInvalidTokenAllocation"
-  | "EInvalidWindow"
-  | "EInvalidEligibilityPolicy"
-  | "EInvalidLifecycle"
-  | "EPresaleNotStarted"
-  | "EPresaleEnded"
-  | "EPresaleNotEnded"
-  | "EZeroCommitment"
-  | "EWalletCapExceeded"
-  | "EParticipantCapacityReached"
-  | "EInvalidEligibilityProof"
-  | "EWrongEligibilityPolicy"
-  | "ETotalCommitmentOverflow"
-  | "EInvalidFeeSplit"
-  | "EBelowMinimumCommitment"
-  | "EUnreachableRaise"
-  | "EUnseedablePrice"
-  | "EInvalidUncappedPhase"
-  | "EUncappedPhaseNotOpen"
-  | "EPresaleFilled"
-  | "EInvalidRaiseAllocation"
-  | "EInvalidTier"
-  | "ESymbolTooLong"
-  | "EInvalidVestingTerms"
-  | "EInvalidHardCap"
-  | "EMissingSetting";
+/** A `blast_presale` error, or a `blast_core` one a creation constructor raises. */
+export type PresaleAbortCode = PresaleAbortName | CoreAbortName;
 
 /** A preview found the abort the contract would raise. */
 export class PresaleAbortError extends RangeError {
@@ -101,18 +71,17 @@ function isU64(value: bigint): boolean {
 }
 
 /**
- * Mirrors `blast_presale::valid_shares`: at most `max` shares, each naming a
- * distinct nonzero recipient and taking positive BPS.
+ * Mirrors `blast_presale::valid_shares`: at most `max` shares, each taking
+ * positive BPS and naming a distinct destination.
  */
-function validShares(shares: readonly BpsShare[], max: number): boolean {
-  const recipients = shares.map((share) =>
-    normalizeSuiAddress(share.recipient),
+function validShares(shares: readonly RecipientShare[], max: number): boolean {
+  const destinations = shares.map((share) =>
+    normalizeSuiAddress(share.recipient.destination),
   );
   return (
     shares.length <= max &&
-    shares.every((share) => share.bps > 0n && share.bps <= BPS) &&
-    recipients.every((recipient) => BigInt(recipient) !== 0n) &&
-    new Set(recipients).size === recipients.length
+    shares.every((share) => share.bps > 0n) &&
+    new Set(destinations).size === destinations.length
   );
 }
 
@@ -122,14 +91,42 @@ function sum(values: readonly bigint[]): bigint {
 
 // === Constructors ===
 
-/** Mirrors `bps::new`, which every rate reaches `blast_presale::new` through. */
-export function validateBps(value: bigint): bigint {
+/** Mirrors `bps::new` (`blast_core`), which every rate reaches the sale through. */
+function bps(value: bigint): bigint {
   check(
     value >= 0n && value <= BPS,
     "EInvalidBps",
     "a basis-points rate must be at most 10,000",
   );
   return value;
+}
+
+/** Mirrors `payout::vesting_terms` (`blast_core`). */
+function vestingTerms(terms: VestingTerms): void {
+  const { cliffDelayMs, periodDurationMs, periods } = terms;
+  check(
+    isU64(cliffDelayMs) &&
+      isU64(periodDurationMs) &&
+      isU64(periods) &&
+      periodDurationMs > 0n &&
+      periods > 0n &&
+      periodDurationMs <= MAX_VESTING_DURATION_MS / periods &&
+      cliffDelayMs <= periodDurationMs * periods,
+    "EInvalidVestingTerms",
+    "vesting needs a positive period and period count, a cliff within its duration, and a duration of at most 2^63 milliseconds",
+  );
+}
+
+/** Mirrors `payout::recipient` then `bps::new`, the constructors of one `recipient_share`. */
+function recipientShare(share: RecipientShare): void {
+  const terms = share.recipient.vestingTerms;
+  if (terms) vestingTerms(terms);
+  check(
+    BigInt(normalizeSuiAddress(share.recipient.destination)) !== 0n,
+    "EInvalidRecipient",
+    "a recipient cannot be the zero address",
+  );
+  bps(share.bps);
 }
 
 /** Mirrors `blast_presale::open_eligibility`. */
@@ -143,7 +140,7 @@ export function openEligibility(
       minCommitment > 0n &&
       minCommitment <= walletCap &&
       maxParticipants > 0n &&
-      maxParticipants <= MAX_PRESALE_PARTICIPANTS,
+      maxParticipants <= MAX_PARTICIPANTS,
     "EInvalidEligibilityPolicy",
     "open policy needs 0 < minimum <= wallet cap and 1..=65,536 participants",
   );
@@ -158,7 +155,7 @@ export function allowlistedEligibility(
   check(
     /^[0-9a-f]{64}$/.test(root) &&
       leafCount > 0n &&
-      leafCount <= MAX_PRESALE_PARTICIPANTS,
+      leafCount <= MAX_PARTICIPANTS,
     "EInvalidEligibilityPolicy",
     "allowlist needs a 32-byte root and 1..=65,536 leaves",
   );
@@ -180,7 +177,7 @@ export function uncappedForAnyone(
     isU64(minCommitment) &&
       minCommitment > 0n &&
       maxParticipants > 0n &&
-      maxParticipants <= MAX_PRESALE_PARTICIPANTS,
+      maxParticipants <= MAX_PARTICIPANTS,
     "EInvalidUncappedPhase",
     "an open-to-anyone phase needs a positive minimum and 1..=65,536 participants",
   );
@@ -190,81 +187,33 @@ export function uncappedForAnyone(
   };
 }
 
-/** Mirrors `blast_presale::vesting_terms`. */
-export function vestingTerms(
-  cliffMs: bigint,
-  periodMs: bigint,
-  periods: bigint,
-): VestingTerms {
-  check(
-    isU64(cliffMs) &&
-      isU64(periodMs) &&
-      isU64(periods) &&
-      periodMs > 0n &&
-      periods > 0n &&
-      periodMs <= MAX_PRESALE_VESTING_DURATION_MS / periods &&
-      cliffMs <= periodMs * periods,
-    "EInvalidVestingTerms",
-    "vesting needs a positive period and period count, a cliff within its duration, and a duration of at most 2^63 milliseconds",
-  );
-  return { cliffMs, periodMs, periods };
-}
-
 // === Apportionment ===
-
-/**
- * Mirrors `blast_presale::apportion`: largest-remainder apportionment of
- * `total` atoms over BPS `shares` that sum to 10,000. Each share first gets
- * `floor(total * bps / 10,000)`; the leftover atoms (fewer than the share
- * count) go one each to the largest fractional remainders, earlier shares
- * first on ties. Every atom is assigned exactly once.
- */
-export function apportion(shares: readonly bigint[], total: bigint): bigint[] {
-  if (sum(shares) !== BPS) {
-    throw new RangeError("apportioned shares must total 10,000 BPS");
-  }
-  const products = shares.map((share) => total * share);
-  const amounts = products.map((product) => product / BPS);
-  const order = products
-    .map((product, index) => ({ index, remainder: product % BPS }))
-    .sort((a, b) =>
-      a.remainder === b.remainder
-        ? a.index - b.index
-        : a.remainder > b.remainder
-          ? -1
-          : 1,
-    );
-  const leftover = Number(total - sum(amounts));
-  const bumped = new Set(order.slice(0, leftover).map(({ index }) => index));
-  return amounts.map((amount, index) =>
-    bumped.has(index) ? amount + 1n : amount,
-  );
-}
 
 export type SupplyApportionment = {
   /** Participant (presale) token allocation. */
   tokenAllocation: bigint;
   /** LP-token allocation seeded at migration. */
   liquidityTokenAllocation: bigint;
-  /** Blast's token share, paid on migration. */
+  /** Blast's token share, moved into the fee ledger on migration. */
   protocolTokenAllocation: bigint;
   recipientPayouts: RecipientPayout[];
 };
 
 /**
  * Mirrors `blast_presale::apportion_supply`: `[presale, LP, Blast,
- * ...recipients]` apportioned over `tokenSupply`. Requires validated
- * allocations (`validateTokenAllocations`). The presale, the LP, and every
- * recipient must get positive atoms; Blast's share may be zero.
+ * ...recipients]` apportioned over `tokenSupply` by core `bps::apportion`
+ * (largest remainder, no rounded-up part). Requires validated allocations
+ * (`validateTokenAllocations`). The presale, the LP, and every recipient must
+ * get positive atoms; Blast's share may be zero.
  */
 export function apportionSupply(
   tokenSupply: bigint,
   tokenAllocationBps: bigint,
   liquidityTokenAllocationBps: bigint,
   protocolTokenBps: bigint,
-  recipientAllocations: readonly BpsShare[],
+  recipientAllocations: readonly RecipientShare[],
 ): SupplyApportionment {
-  const amounts = apportion(
+  const amounts = apportionBps(
     [
       tokenAllocationBps,
       liquidityTokenAllocationBps,
@@ -272,6 +221,7 @@ export function apportionSupply(
       ...recipientAllocations.map((allocation) => allocation.bps),
     ],
     tokenSupply,
+    null,
   );
   const [
     tokenAllocation = 0n,
@@ -301,7 +251,7 @@ export function apportionSupply(
  * must be positive; Blast's may be zero. `liquidityQuote` seeds the pool.
  */
 export function apportionRaise(
-  raiseAllocations: readonly BpsShare[],
+  raiseAllocations: readonly RecipientShare[],
   protocolRaiseBps: bigint,
   raiseTarget: bigint,
 ): {
@@ -316,9 +266,10 @@ export function apportionRaise(
     "EInvalidRaiseAllocation",
     "raise allocations and Blast's share must leave the LP a share",
   );
-  const amounts = apportion(
+  const amounts = apportionBps(
     [...shares, protocolRaiseBps, BPS - allocated],
     raiseTarget,
+    null,
   );
   const raisePayouts = payouts(raiseAllocations, amounts);
   const liquidityQuote = itemAt(amounts, -1);
@@ -334,53 +285,16 @@ export function apportionRaise(
   };
 }
 
-/**
- * Mirrors `blast_presale::apportion_fee` as `presale_vault::fee_shares` uses
- * it: one collected fee amount split into each fee recipient's atoms and the
- * holder-reward share, largest remainder, recipients winning ties over holders.
- */
-export function apportionFee(
-  feeRecipients: readonly BpsShare[],
-  holderRewardsBps: bigint,
-  amount: bigint,
-): { recipients: bigint[]; holderRewards: bigint } {
-  const amounts = apportion(
-    [...feeRecipients.map((recipient) => recipient.bps), holderRewardsBps],
-    amount,
-  );
-  return {
-    recipients: amounts.slice(0, -1),
-    holderRewards: itemAt(amounts, -1),
-  };
-}
-
-/**
- * Mirrors `presale_vault::split_fees` for one asset: Blast takes
- * `bps::apply_up`, `ceil(amount * protocolBps / 10,000)`, first, then
- * `apportionFee` splits the rest between the fee recipients and the
- * holder-reward share.
- */
-export function splitCollectedFee(
-  feeRecipients: readonly BpsShare[],
-  holderRewardsBps: bigint,
-  protocolBps: bigint,
-  amount: bigint,
-): { protocol: bigint; recipients: bigint[]; holderRewards: bigint } {
-  const protocol = (amount * protocolBps + BPS - 1n) / BPS;
-  return {
-    protocol,
-    ...apportionFee(feeRecipients, holderRewardsBps, amount - protocol),
-  };
-}
-
 function payouts(
-  allocations: readonly BpsShare[],
+  allocations: readonly RecipientShare[],
   amounts: readonly bigint[],
 ): RecipientPayout[] {
   return allocations.map((allocation, index) => ({
-    recipient: normalizeSuiAddress(allocation.recipient),
+    recipient: {
+      destination: normalizeSuiAddress(allocation.recipient.destination),
+      vestingTerms: allocation.recipient.vestingTerms,
+    },
     amount: itemAt(amounts, index),
-    vesting: allocation.vesting ?? null,
   }));
 }
 
@@ -388,11 +302,11 @@ function payouts(
 
 /** Mirrors `blast_presale::assert_raise_allocations`. */
 export function validateRaiseAllocations(
-  raiseAllocations: readonly BpsShare[],
+  raiseAllocations: readonly RecipientShare[],
   protocolRaiseBps: bigint,
 ): void {
   check(
-    validShares(raiseAllocations, MAX_PRESALE_RECIPIENTS) &&
+    validShares(raiseAllocations, MAX_RECIPIENTS) &&
       sum(raiseAllocations.map((allocation) => allocation.bps)) +
         protocolRaiseBps <
         BPS,
@@ -407,16 +321,14 @@ export function validateTokenAllocations(
   tokenAllocationBps: bigint,
   liquidityTokenAllocationBps: bigint,
   protocolTokenBps: bigint,
-  recipientAllocations: readonly BpsShare[],
+  recipientAllocations: readonly RecipientShare[],
 ): void {
   check(
     tokenSupply > 0n &&
       isU64(tokenSupply) &&
       tokenAllocationBps > 0n &&
-      tokenAllocationBps <= BPS &&
       liquidityTokenAllocationBps > 0n &&
-      liquidityTokenAllocationBps <= BPS &&
-      validShares(recipientAllocations, MAX_PRESALE_RECIPIENTS) &&
+      validShares(recipientAllocations, MAX_RECIPIENTS) &&
       tokenAllocationBps +
         liquidityTokenAllocationBps +
         protocolTokenBps +
@@ -424,24 +336,6 @@ export function validateTokenAllocations(
         BPS,
     "EInvalidTokenAllocation",
     "presale, LP, and distinct recipient BPS must be positive and total exactly 10,000 with Blast's share",
-  );
-}
-
-/** Mirrors `blast_presale::assert_fee_split`. */
-export function validateFeeSplit(
-  feeRecipients: readonly BpsShare[],
-  holderRewardsBps: bigint,
-): void {
-  check(
-    holderRewardsBps >= 0n &&
-      holderRewardsBps <= BPS &&
-      validShares(feeRecipients, MAX_PRESALE_FEE_RECIPIENTS) &&
-      feeRecipients.every((recipient) => recipient.vesting == null) &&
-      holderRewardsBps +
-        sum(feeRecipients.map((recipient) => recipient.bps)) ===
-        BPS,
-    "EInvalidFeeSplit",
-    "at most 16 distinct unvested fee recipients and the holder share must total 10,000 BPS",
   );
 }
 
@@ -503,85 +397,57 @@ export function validateHardCap(hardCap: HardCap, durationMs: bigint): void {
   );
 }
 
-/**
- * Mirrors `migration_math::is_seedable`: the Q64.64 seed sqrt price sits a
- * factor of two inside the venues' bounds (`MAX / 2` rounds down).
- */
-export function isSeedable(sqrtPrice: bigint): boolean {
-  return (
-    sqrtPrice >= PRESALE_MIN_SQRT_PRICE_X64 * 2n &&
-    sqrtPrice <= PRESALE_MAX_SQRT_PRICE_X64 / 2n
-  );
-}
-
 export type PresaleCreationConfig = {
   tokenSupply: bigint;
   tokenAllocationBps: bigint;
+  liquidityTokenAllocationBps: bigint;
+  recipientAllocations: readonly RecipientShare[];
   /** Terms each claim locks a participant's tokens under; null pays them out. */
   participantVesting: VestingTerms | null;
-  liquidityTokenAllocationBps: bigint;
-  recipientAllocations: readonly BpsShare[];
   raiseTarget: bigint;
-  raiseAllocations: readonly BpsShare[];
+  raiseAllocations: readonly RecipientShare[];
   durationMs: bigint;
   liquidityWindowMs: bigint;
   eligibility: EligibilityPolicy;
   uncapped: UncappedPhase | null;
   /** The sale's hard cap; null overflows for the whole window. */
   hardCap: HardCap | null;
-  feeRecipients: readonly BpsShare[];
-  holderRewardsBps: bigint;
+  /** The LP-fee split the sale's vault starts with. */
+  feeSplit: FeeSplit;
   /** The `FeePolicy` rates now, which `blast_presale::new` snapshots. */
   protocolFees: ProtocolFees;
 };
 
 export type PresaleCreationPreview = SupplyApportionment & {
   raisePayouts: RecipientPayout[];
-  /** Blast's share of the raise, paid on migration. */
+  /** Blast's share of the raise, moved into the fee ledger on migration. */
   protocolQuote: bigint;
   /** Quote that seeds the pool: the raise less Blast's and the recipients' payouts. */
   liquidityQuote: bigint;
-  /** floor(sqrt(quote / LP tokens) * 2^64), Meme as coin A. */
+  /** floor(sqrt(quote / LP tokens) * 2^64), the sale token as coin A. */
   seedSqrtPriceX64: bigint;
 };
 
 /**
  * Mirrors the checks of `blast_presale::finalize` in its abort order, after the
  * constructors `PresaleCalls` runs first in setter order (`bps::new` for the
- * token rates and `recipient_share` or `vesting_terms` and
- * `vested_recipient_share` for each token recipient, `vesting_terms` for
- * participant vesting, the raise recipients, `open_eligibility` /
- * `allowlisted_eligibility`, `uncapped_for_anyone`, then the fee recipients,
- * holder share, and `fee_split`), and returns the exact amounts it
- * apportions. Does not check what only the chain knows: the `CreationPolicy`
- * (`PresaleClient.getCreationPolicy`), distinct coin types, a zero-supply
- * `TreasuryCap`, or a Cetus tier.
+ * token rates, `payout::vesting_terms`, `payout::recipient` and `bps::new`
+ * for each token recipient, `vesting_terms` for participant vesting, the raise
+ * recipients, `open_eligibility` / `allowlisted_eligibility`,
+ * `uncapped_for_anyone`, then `fee_split::new`), and returns the exact amounts
+ * it apportions. Does not check what only the chain knows: the
+ * `CreationPolicy`, the venue, distinct coin types, or a zero-supply
+ * `TreasuryCap`.
  */
 export function previewPresaleCreation(
   config: PresaleCreationConfig,
 ): PresaleCreationPreview {
-  const shareBps = (shares: readonly BpsShare[]) => {
-    for (const share of shares) {
-      validateBps(share.bps);
-      const { vesting } = share;
-      if (vesting) {
-        vestingTerms(vesting.cliffMs, vesting.periodMs, vesting.periods);
-      }
-    }
-  };
-  validateBps(config.tokenAllocationBps);
-  validateBps(config.liquidityTokenAllocationBps);
-  shareBps(config.recipientAllocations);
-  const { participantVesting } = config;
-  if (participantVesting) {
-    vestingTerms(
-      participantVesting.cliffMs,
-      participantVesting.periodMs,
-      participantVesting.periods,
-    );
-  }
-  shareBps(config.raiseAllocations);
-  const { eligibility, uncapped, hardCap } = config;
+  bps(config.tokenAllocationBps);
+  bps(config.liquidityTokenAllocationBps);
+  config.recipientAllocations.forEach(recipientShare);
+  const { participantVesting, eligibility, uncapped, hardCap } = config;
+  if (participantVesting) vestingTerms(participantVesting);
+  config.raiseAllocations.forEach(recipientShare);
   if (eligibility.kind === "open") {
     openEligibility(
       eligibility.walletCap,
@@ -598,9 +464,23 @@ export function previewPresaleCreation(
       uncapped.access.minCommitment,
     );
   }
-  shareBps(config.feeRecipients);
-  validateBps(config.holderRewardsBps);
-  validateFeeSplit(config.feeRecipients, config.holderRewardsBps);
+  for (const { destination, bps: rate } of config.feeSplit.routes) {
+    check(
+      destination.kind !== "Address" ||
+        BigInt(normalizeSuiAddress(destination.address)) !== 0n,
+      "EInvalidRoute",
+      "a fee-split route cannot pay the zero address",
+    );
+    check(bps(rate) > 0n, "EInvalidRoute", "a route needs a positive share");
+  }
+  try {
+    normalizeFeeSplit(config.feeSplit);
+  } catch (error) {
+    throw new PresaleAbortError(
+      "EInvalidFeeSplit",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 
   check(
     config.raiseTarget > 0n && isU64(config.raiseTarget),
@@ -620,7 +500,7 @@ export function previewPresaleCreation(
   );
   check(
     config.durationMs > 0n &&
-      config.liquidityWindowMs >= PRESALE_MIN_LIQUIDITY_WINDOW_MS,
+      config.liquidityWindowMs >= MIN_LIQUIDITY_WINDOW_DURATION_MS,
     "EInvalidWindow",
     "the commitment window must be positive and the liquidity window at least seven days",
   );
@@ -657,37 +537,11 @@ export function previewPresaleCreation(
     true,
   );
   check(
-    isSeedable(seedSqrtPriceX64),
+    isSeedablePrice(seedSqrtPriceX64),
     "EUnseedablePrice",
     "the raise and LP-token allocation give a seed price the venues cannot pool",
   );
   return { ...supply, ...raise, seedSqrtPriceX64 };
-}
-
-/**
- * Mirrors the tier and symbol checks `bluefin::new` runs before
- * `blast_presale::new`: tick spacing 1..=400, fee rate 1..=20,000, and a Meme
- * symbol of at most 32 UTF-8 bytes.
- */
-export function validateBluefinPresaleTier(
-  tickSpacing: number,
-  feeRate: bigint,
-  memeSymbol: string,
-): void {
-  check(
-    tickSpacing > 0 &&
-      tickSpacing <= BLUEFIN_PRESALE_MAX_TICK_SPACING &&
-      feeRate > 0n &&
-      feeRate <= BLUEFIN_PRESALE_MAX_FEE_RATE,
-    "EInvalidTier",
-    "Bluefin tier needs tick spacing 1..=400 and fee rate 1..=20,000",
-  );
-  check(
-    new TextEncoder().encode(memeSymbol).length <=
-      BLUEFIN_PRESALE_MAX_SYMBOL_BYTES,
-    "ESymbolTooLong",
-    "the Meme symbol must be at most 32 bytes for Bluefin migration",
-  );
 }
 
 /**

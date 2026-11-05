@@ -26,14 +26,6 @@
       "types": "./dist/aftermath-lp.d.ts",
       "default": "./dist/aftermath-lp.js"
     },
-    "./aftermath-native": {
-      "types": "./dist/aftermath-native.d.ts",
-      "default": "./dist/aftermath-native.js"
-    },
-    "./aftermath": {
-      "types": "./dist/aftermath.d.ts",
-      "default": "./dist/aftermath.js"
-    },
     "./allowlist": {
       "types": "./dist/allowlist.d.ts",
       "default": "./dist/allowlist.js"
@@ -91,7 +83,9 @@
   "dependencies": {
     "@interest-protocol/blast-admin-sdk": "0.1.0",
     "@interest-protocol/blast-core": "0.1.0",
-    "@interest-protocol/blast-launchpad-sdk": "0.1.2"
+    "@interest-protocol/blast-migrators-sdk": "0.1.2",
+    "@interest-protocol/blast-partners-sdk": "0.1.0",
+    "@interest-protocol/blast-vault-sdk": "0.1.0"
   },
   "peerDependencies": {
     "@mysten/move-bytecode-template": "^0.4.1",
