@@ -117,8 +117,8 @@ export const vaultRegistryBcs = bcs.struct("VaultRegistry", {
 
 /** `vault::VaultKey`'s BCS: `package_witness` as its `TypeName` text, then `origin`. */
 const vaultKeyBcs = bcs.struct("VaultKey", {
-  package_witness: bcs.string(),
-  origin: bcs.Address,
+  package_witness: moveTypeNameBcs,
+  origin: suiObjectIdBcs,
 });
 
 /**
@@ -139,16 +139,11 @@ export function vaultId(
     `${normalizeSuiObjectId(vault.originalPackageId)}::vault::VaultKey`,
     vaultKeyBcs
       .serialize({
-        package_witness: typeNameText(packageWitnessType),
-        origin: normalizeSuiObjectId(originId),
+        package_witness: packageWitnessType,
+        origin: originId,
       })
       .toBytes(),
   );
-}
-
-/** Move `type_name` text: the normalized type with every `0x` address prefix dropped. */
-function typeNameText(type: string): string {
-  return normalizeStructTag(type).replace(/0x([0-9a-f]{64})/g, "$1");
 }
 
 /** `holder_rewards::claim_bit`: whether leaf `index` is paid, 256 leaves per `u256` word. */

@@ -12,7 +12,6 @@ import {
   suiIdBcs,
   suiObjectIdBcs,
   suiUidBcs,
-  tableBcs,
   u64Bcs,
   unitKeyBcs,
   vecSetBcs,
@@ -35,6 +34,7 @@ import type {
   SharedObjectIdentity,
   SharedObjectReference,
 } from "@interest-protocol/blast-core/sui";
+import { partnerListBcs } from "@interest-protocol/blast-partners-sdk/state";
 import { vaultId } from "@interest-protocol/blast-vault-sdk/state";
 import type { VaultDeployment } from "@interest-protocol/blast-vault-sdk/transactions";
 import { bcs } from "@mysten/sui/bcs";
@@ -319,15 +319,6 @@ export const commitmentBcs = bcs.struct("Commitment", {
 export const feePolicyBcs = bcs.struct("FeePolicy", {
   id: suiUidBcs,
   fees: delayedBcs(unitKeyBcs, protocolFeesBcs),
-});
-
-/**
- * `blast_partners::partner_list::PartnerList`: the owner (here the
- * `CreationPolicy`) and the `Table<ID, u64>` of accepted partners.
- */
-const partnerListBcs = bcs.struct("PartnerList", {
-  owner: suiObjectIdBcs,
-  acceptance_ends_at_ms: tableBcs,
 });
 
 /** BCS layout of `creation_policy::CreationPolicy`, the package's one shared creation policy. */

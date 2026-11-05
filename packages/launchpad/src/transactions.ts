@@ -838,10 +838,10 @@ export class LaunchpadCalls {
 
   /**
    * `launch_config::unpause`: clears `bits` once every launchpad delay is
-   * guarded. `adminWitness` is `AdminWitness<UnpauseAdmin<BLAST_FUN>>`
+   * guarded. `unpauseAdmin` is `AdminWitness<UnpauseAdmin<BLAST_FUN>>`
    * (`packageRoleType(admin, otw, "UnpauseAdmin")`).
    */
-  unpause(options: AdminWitnessInput & { bits: number }) {
+  unpause(options: { unpauseAdmin: TransactionObjectInput; bits: number }) {
     const { bits } = options;
     if (
       !Number.isInteger(bits) ||
@@ -862,7 +862,7 @@ export class LaunchpadCalls {
         arguments: [
           this.#launchConfig(tx),
           deploymentObject(tx, this.deployment.packageVersion, true),
-          tx.object(options.adminWitness),
+          tx.object(options.unpauseAdmin),
           deploymentObject(tx, this.deployment.packageAdmin, false),
           this.#runtimeConfig(tx),
           tx.pure.u8(bits),
@@ -1826,13 +1826,13 @@ export class LaunchpadTransactions {
   unpause(options: AdminCap & { bits: number }): Transaction {
     const { call } = this;
     const tx = new Transaction();
-    const adminWitness = tx.add(
+    const unpauseAdmin = tx.add(
       call.admin.signIn({
         adminCap: options.adminCapId,
         role: packageRoleType(call.deployment.admin, call.otw, "UnpauseAdmin"),
       }),
     );
-    tx.add(call.unpause({ ...options, adminWitness }));
+    tx.add(call.unpause({ unpauseAdmin, bits: options.bits }));
     return tx;
   }
 

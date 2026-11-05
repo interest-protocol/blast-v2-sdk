@@ -3,10 +3,7 @@ import test from "node:test";
 import type { SharedObjectIdentity } from "@interest-protocol/blast-core/sui";
 import { buildAllowlist } from "@interest-protocol/blast-presale-sdk/allowlist";
 import { openEligibility } from "@interest-protocol/blast-presale-sdk/math";
-import type {
-  PresaleDeployment,
-  PresaleSettings,
-} from "@interest-protocol/blast-presale-sdk/transactions";
+import type { PresaleSettings } from "@interest-protocol/blast-presale-sdk/transactions";
 import {
   PRESALE_PAUSE_BITS,
   PresaleCalls,
@@ -19,55 +16,13 @@ import {
   SUI_CLOCK_OBJECT_ID,
 } from "@mysten/sui/utils";
 import { verifiedLpCoin } from "./aftermath-lp.ts";
+import { PRESALE_DEPLOYMENT } from "./fixtures/presale-deployment.ts";
 
 const shared = (objectId: string): SharedObjectIdentity => ({
   objectId,
   initialSharedVersion: "3",
 });
-const admin = { packageId: "0xad", acl: shared("0xac1") };
-const core = {
-  packageId: "0xc1",
-  originalPackageId: "0xc0",
-  treasury: shared("0x7ea"),
-};
-const vault = {
-  packageId: "0xb1",
-  originalPackageId: "0xb0",
-  registry: shared("0xb2"),
-  packageVersion: shared("0xb3"),
-  packageAdmin: shared("0xb4"),
-  core,
-  admin,
-};
-const deployment: PresaleDeployment = {
-  packageId: "0x5f",
-  originalPackageId: "0x5e",
-  packageVersion: shared("0x64"),
-  packageAdmin: shared("0x65"),
-  creationPolicy: shared("0x62"),
-  feePolicy: shared("0x61"),
-  presaleRegistry: shared("0x63"),
-  core,
-  admin,
-  partners: { packageId: "0xa7", admin },
-  vault,
-  migrators: {
-    packageId: "0xd1",
-    originalPackageId: "0xd0",
-    packageVersion: shared("0xd3"),
-    packageAdmin: shared("0xd4"),
-    venueConfig: shared("0xd5"),
-    vault,
-  },
-  aftermathDaoPresale: {
-    packageId: "0x7a",
-    originalPackageId: "0x7a",
-    aftermath: {
-      poolRegistry: shared("0xaf1"),
-      daoFeeVersion: shared("0xaf2"),
-    },
-  },
-};
+const deployment = PRESALE_DEPLOYMENT;
 const ptb = new PresaleTransactions(deployment);
 const saleToken = normalizeStructTag("0xa::sale::SALE");
 const quote = normalizeStructTag("0x2::sui::SUI");
@@ -726,7 +681,7 @@ test("configureNow and armNotices sign in once per role", () => {
       lpFeeQuoteBps: 1_500n,
     },
     quotes: [{ quoteType: quote, allowed: true }],
-    venues: [normalizeStructTag("0xd0::cetus::Venue"), vendorVenue],
+    venueTypes: [normalizeStructTag("0xd0::cetus::Venue"), vendorVenue],
     partners: [partner],
   });
   assert.deepEqual(

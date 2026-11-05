@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   autoLpFixedSide,
   sqrtPriceX64,
-} from "@interest-protocol/blast-sdk/migrators";
+} from "@interest-protocol/blast-core/migration-math";
 
 test("matches the contract Q64.64 migration-price vectors", () => {
   const oneX64 = 18_446_744_073_709_551_616n;

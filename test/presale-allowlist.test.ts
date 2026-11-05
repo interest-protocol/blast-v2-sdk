@@ -2,28 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { itemAt } from "@interest-protocol/blast-core/arrays";
 import {
-  buildRewardManifest,
-  MIGRATOR_REWARD_LEAF_DOMAIN,
-  PRESALE_REWARD_LEAF_DOMAIN,
-  verifyRewardProof,
-} from "@interest-protocol/blast-core/rewards/allocations";
-import {
   allowlistLeaf,
   buildAllowlist,
   verifyAllowlistProof,
 } from "@interest-protocol/blast-presale-sdk/allowlist";
-import { fromHex, toHex } from "@mysten/sui/utils";
-import { blake2b } from "@noble/hashes/blake2.js";
+import { toHex } from "@mysten/sui/utils";
 
-// Digests a Move unit test printed from `blast_presale::allowlist_leaf`,
-// `merkle_tree::node`, and `holder_rewards::leaf` at contracts 442116a.
+// Digests a Move unit test printed from `blast_presale::allowlist_leaf` and the
+// Merkle node hash. At 4fe8d73 `allowlist_leaf` hashes the same bytes through
+// `blast_core::merkle::leaf` (blake2b256(0x00 || "blast-presale-v1" || payload)).
 const ALICE_LEAF =
   "0b917a43909cf551596a5dc4bc03d62a638a81b058ddc3de0a4e57367f24519e";
 const BOB_LEAF =
   "8cc656fc8a2d3d5c17e433e4cf25b365e041779ea5c2ab729689eed1b970a70b";
 const ROOT = "04e0fa5e426457543e725f1ad0774f40c8d4daa3f8b3394adcaae81efc91e25b";
-const REWARD_LEAF =
-  "185a1c43d67ccf9a349bb83c92490c4aad70978e6c1244bd081f565297b94921";
 
 test("hashes allowlist leaves and nodes exactly like the Move package", () => {
   assert.equal(toHex(allowlistLeaf(0n, "0xa11ce", 500n)), ALICE_LEAF);
@@ -79,38 +71,4 @@ test("proves every leaf of odd-sized allowlists", () => {
     /distinct/,
   );
   assert.throws(() => buildAllowlist([{ wallet: "0xa", walletCap: 0n }]));
-});
-
-test("builds presale holder-reward manifests in the presale leaf domain", () => {
-  const manifest = buildRewardManifest({
-    vaultId: "0xcafe",
-    number: 3n,
-    startCheckpoint: 1n,
-    endCheckpoint: 2n,
-    allocations: [
-      { beneficiary: "0xa", memeAmount: 1n, quoteAmount: 0n },
-      { beneficiary: "0xb0b", memeAmount: 40n, quoteAmount: 5n },
-    ],
-    leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
-  });
-  const bob = itemAt(manifest.allocations, 1);
-  assert.equal(bob.index, "1");
-  // Index 1 is the right child: root = node(sibling, holder_rewards::leaf).
-  const root = blake2b(
-    Uint8Array.from([
-      1,
-      ...fromHex(itemAt(bob.proof, 0)),
-      ...fromHex(REWARD_LEAF),
-    ]),
-    { dkLen: 32 },
-  );
-  assert.equal(manifest.root, toHex(root));
-  assert.equal(
-    verifyRewardProof(manifest, bob, PRESALE_REWARD_LEAF_DOMAIN),
-    true,
-  );
-  assert.equal(
-    verifyRewardProof(manifest, bob, MIGRATOR_REWARD_LEAF_DOMAIN),
-    false,
-  );
 });

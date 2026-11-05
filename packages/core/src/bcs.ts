@@ -19,11 +19,22 @@ const asciiStringBcs = bcs.struct("AsciiString", {
   bytes: bcs.vector(bcs.u8()),
 });
 
+/**
+ * `std::type_name::TypeName`. Move stores the type with every address as 64
+ * hex digits and no `0x`; the SDK reads and writes normalized struct tags, so
+ * `serialize(parse(bytes))` returns the Move bytes.
+ */
 export const moveTypeNameBcs = bcs
   .struct("TypeName", { name: asciiStringBcs })
   .transform({
     input: (value: string) => ({
-      name: { bytes: Array.from(new TextEncoder().encode(value)) },
+      name: {
+        bytes: Array.from(
+          new TextEncoder().encode(
+            normalizeStructTag(value).replace(/0x([0-9a-f]{64})/g, "$1"),
+          ),
+        ),
+      },
     }),
     output: (value) =>
       normalizeStructTag(

@@ -112,6 +112,7 @@ test("derives every package's call-ready deployment", () => {
     ...packages.launchpad,
     ...sharedObjects.launchpad,
     ...stack,
+    vestingPackageId: packages.vesting.packageId,
   });
   assert.deepEqual(presaleDeployment(deployment), {
     ...packages.presale,

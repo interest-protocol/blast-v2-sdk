@@ -41,6 +41,7 @@ import {
   PACKAGE_ROLES,
   packageRoleType,
 } from "@interest-protocol/blast-admin-sdk/transactions";
+import { coreRoleType } from "@interest-protocol/blast-core/roles";
 import { LaunchpadCalls } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
@@ -51,6 +52,7 @@ import {
   moveCallTypeArguments,
   readAbi,
 } from "./abi.ts";
+import { LAUNCHPAD_DEPLOYMENT } from "./fixtures/launchpad-deployment.ts";
 
 const id = (value: string) => normalizeSuiAddress(value);
 const ADMIN_PACKAGE = id("0xad");
@@ -59,9 +61,8 @@ const deployment = {
   acl: { objectId: "0xac", initialSharedVersion: "3" },
 };
 const abi = readAbi("production-admin-v1.json", "admin");
-// The fresh stack's ACL and events; builders keep the production signatures.
-const fresh = readAbi("pr150-consumers.json", "admin");
-const ROLE = normalizeStructTag("0x122::blast_fun_domain::FeeAdmin");
+const CORE = { originalPackageId: "0xc0" };
+const ROLE = coreRoleType(CORE, "FeeAdmin");
 
 test("builds every blast_acl call against the frozen ABI", () => {
   const calls = new AdminCalls(deployment);
@@ -122,17 +123,13 @@ test("one-call transactions take object IDs", () => {
   ]);
 });
 
-test("a product signs in with its own typed role", () => {
+test("a product signs in with a core blast_domain role", () => {
   const calls = new LaunchpadCalls({
-    packageId: "0x123",
-    originalPackageId: "0x122",
+    ...LAUNCHPAD_DEPLOYMENT,
     admin: deployment,
-    partnersPackageId: "0xae",
-    packageVersion: shared("0x2"),
-    launchConfig: shared("0x3"),
-    runtimeConfig: shared("0x4"),
+    core: { ...LAUNCHPAD_DEPLOYMENT.core, ...CORE },
   });
-  assert.equal(calls.roleType("FeeAdmin"), ROLE);
+  assert.equal(ROLE, normalizeStructTag("0xc0::blast_domain::FeeAdmin"));
   const tx = new Transaction();
   tx.add(calls.signIn({ adminCap: "0xc2", role: "FeeAdmin" }));
   assert.deepEqual(assertBuildersMatchAbi(tx, abi, ADMIN_PACKAGE), [
@@ -234,8 +231,8 @@ test("replays the ACL from its events", () => {
   assert.deepEqual(cancelled.admins, {});
 });
 
-test("the ACL and its events follow the fresh Move field order", () => {
-  const acl = fresh.blast_acl?.structs.find((struct) => struct.name === "ACL");
+test("the ACL and its events follow the frozen Move field order", () => {
+  const acl = abi.blast_acl?.structs.find((struct) => struct.name === "ACL");
   assert.deepEqual(
     Object.keys(
       aclBcs.parse(
@@ -251,16 +248,8 @@ test("the ACL and its events follow the fresh Move field order", () => {
     ),
     acl?.fields.map((field) => field.name),
   );
-  const packageAdministration = new Set([
-    "OperationalVersionAdvanced",
-    "UpgradeAuthorized",
-    "UpgradeCapDestroyed",
-    "UpgradeCommitted",
-    "UpgradeCustodyCreated",
-    "UpgradePolicyRestricted",
-  ]);
-  const decoded = (fresh.blast_admin_events?.structs ?? []).filter(
-    (candidate) => !packageAdministration.has(candidate.name),
+  const decoded = (abi.blast_admin_events?.events ?? []).filter(
+    (candidate) => !(candidate.name in packageAdministrationEventBcs),
   );
   assert.deepEqual(
     decoded.map((candidate) => candidate.name).sort(),

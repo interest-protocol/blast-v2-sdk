@@ -36,16 +36,16 @@ import type { BlastDeployment } from "./types.ts";
 
 type Settings<Configure extends (options: never) => unknown> = Omit<
   Parameters<Configure>[0],
-  "adminCapId"
+  "adminCapId" | "venueTypes"
 >;
 
 /** What the admission runbook configures beyond the manifest's own identities. */
 export type AdmissionOptions = Readonly<{
-  /** The launchpad's zero-notice settings (fees, quotes, decimals, partners, claim signer, allocation). */
+  /** The launchpad's zero-notice settings (fees, quotes, decimals, partners, claim signer, allocation); the runbook names the venues. */
   launchpad: Settings<LaunchpadTransactions["configureNow"]>;
   /** The launchpad's raised notices. */
   launchpadNotices: Settings<LaunchpadTransactions["armNotices"]>;
-  /** The presale's zero-notice settings (fees, quotes, partners). */
+  /** The presale's zero-notice settings (fees, quotes, partners); the runbook names the venues. */
   presale: Settings<PresaleTransactions["configureNow"]>;
   /** The presale's raised notices. */
   presaleNotices: Settings<PresaleTransactions["armNotices"]>;
@@ -62,9 +62,9 @@ export type AdmissionOptions = Readonly<{
  * 1. the vault registry admits, at notice zero, both products' package
  *    witnesses and both migrators venues (`schedule_witness` then
  *    `apply_witness`); the vendor creates no vault and is never listed;
- * 2. each product admits its venues at notice zero (the launchpad the two
- *    migrators venues; the presale those and the vendor's `Venue` when the
- *    manifest records it), then applies its settings (`configureNow`);
+ * 2. each product's `configureNow` admits its venues at notice zero (the
+ *    launchpad the two migrators venues; the presale those and the vendor's
+ *    `Venue` when the manifest records it) and applies its settings;
  * 3. every notice is raised once each zero-notice proposal is applied: the
  *    vault's witness notice, then each product's (`armNotices`);
  * 4. the vault unpauses, then each product, each with its package's
@@ -121,20 +121,6 @@ export function admissionRunbook(
     witnesses.add(vault.applyWitness({ witnessType }));
   }
 
-  const productVenues = new Transaction();
-  const venueAdmin = asCore(productVenues, "VenueAdmin");
-  for (const [calls, types] of [
-    [launchpadCalls, venues],
-    [presaleCalls, presaleVenues],
-  ] as const) {
-    for (const venueType of types) {
-      productVenues.add(
-        calls.scheduleVenue({ venueType, adminWitness: venueAdmin }),
-      );
-      productVenues.add(calls.applyVenue({ venueType }));
-    }
-  }
-
   const launchpadTransactions = new LaunchpadTransactions(launchpad);
   const presaleTransactions = new PresaleTransactions(presale);
 
@@ -171,9 +157,16 @@ export function admissionRunbook(
 
   return [
     witnesses,
-    productVenues,
-    launchpadTransactions.configureNow({ adminCapId, ...options.launchpad }),
-    presaleTransactions.configureNow({ adminCapId, ...options.presale }),
+    launchpadTransactions.configureNow({
+      adminCapId,
+      ...options.launchpad,
+      venueTypes: venues,
+    }),
+    presaleTransactions.configureNow({
+      adminCapId,
+      ...options.presale,
+      venueTypes: presaleVenues,
+    }),
     witnessNotice,
     launchpadTransactions.armNotices({
       adminCapId,

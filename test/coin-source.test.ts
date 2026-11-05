@@ -6,7 +6,6 @@ import { LaunchpadClient } from "@interest-protocol/blast-launchpad-sdk/client";
 import type { LaunchpadDeployment } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import { LaunchpadTransactions } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import { PresaleClient } from "@interest-protocol/blast-presale-sdk/client";
-import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
 import { PresaleTransactions } from "@interest-protocol/blast-presale-sdk/transactions";
 import { BlastSuiClient } from "@interest-protocol/blast-sui-sdk/client";
 import { BlastSuiTransactions } from "@interest-protocol/blast-sui-sdk/transactions";
@@ -15,6 +14,7 @@ import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeStructTag } from "@mysten/sui/utils";
 import { LAUNCHPAD_DEPLOYMENT } from "./fixtures/launchpad-deployment.ts";
+import { PRESALE_DEPLOYMENT } from "./fixtures/presale-deployment.ts";
 import { stubVenueCalls } from "./fixtures/venue-stubs.ts";
 
 stubVenueCalls();
@@ -42,15 +42,7 @@ const blastSui: BlastSuiDeployment = {
   vault: shared("0x11", true),
   admin,
 };
-const presale: PresaleDeployment = {
-  packageId: "0x5f",
-  originalPackageId: "0x5e",
-  packageVersion: shared("0x64", false),
-  venueConfig: shared("0x60", false),
-  feePolicy: shared("0x61", false),
-  creationPolicy: shared("0x62", false),
-  admin,
-};
+const presale = PRESALE_DEPLOYMENT;
 
 const bluefinMigration = {
   memeType: "0xa::meme::MEME",
@@ -129,7 +121,7 @@ function builders(construct: CoinSourceOptions) {
     commit: (o: CoinSourceOptions) =>
       sale.commit({
         ...sui,
-        memeType: "0xa::meme::MEME",
+        saleTokenType: "0xa::meme::MEME",
         presale: shared("0xab", true),
         amount: 1n,
         recipient: "0xe",
@@ -137,10 +129,14 @@ function builders(construct: CoinSourceOptions) {
         ...o,
       }),
     migratePresaleBluefin: (o: CoinSourceOptions) =>
-      sale.migrateBluefin({
+      sale.migrate({
         ...sui,
-        ...bluefinMigration,
-        memeCurrency: shared("0xd", false),
+        saleTokenType: bluefinMigration.memeType,
+        venue: "bluefin",
+        currency: shared("0xd", false),
+        quoteCurrency: bluefinMigration.quoteCurrency,
+        bluefinConfig: bluefinMigration.bluefinConfig,
+        creationFee: bluefinMigration.creationFee,
         presale: shared("0xab", true),
         ...o,
       }),
@@ -241,7 +237,8 @@ test("each client passes its coin source to its builders", () => {
   assert.deepEqual(
     coinSources(
       new PresaleClient(client, presale, off).tx.commit({
-        ...sui,
+        quoteType: SUI,
+        saleTokenType: "0xa::meme::MEME",
         presale: shared("0xab", true),
         amount: 1n,
         recipient: "0xe",
@@ -306,7 +303,7 @@ async function sponsoredBuild(tx: Transaction) {
 test("a sponsored build pays SUI from the sender's coin, never the sponsor's gas", async () => {
   const commit = (useGasCoin: boolean) =>
     new PresaleTransactions(presale, { useGasCoin }).commit({
-      memeType: "0xa::meme::MEME",
+      saleTokenType: "0xa::meme::MEME",
       quoteType: SUI,
       presale: shared("0xab", true),
       amount: 250n,

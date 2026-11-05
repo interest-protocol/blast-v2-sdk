@@ -46,9 +46,18 @@ function calls(tx: Transaction) {
 test("the admission runbook follows the contracts' four paused steps in order", () => {
   const deployment = defineBlastDeployment(NON_PRODUCTION_MANIFEST);
   const steps = admissionRunbook(deployment, ADMIN_CAP, OPTIONS);
-  assert.equal(steps.length, 10);
-  const [witnesses, venues, , , witnessNotice, , , vault, launchpad, presale] =
-    steps.map(calls);
+  assert.equal(steps.length, 9);
+  const [
+    witnesses,
+    launchpadSettings,
+    presaleSettings,
+    witnessNotice,
+    ,
+    ,
+    vault,
+    launchpad,
+    presale,
+  ] = steps.map(calls);
   const venueAdmin = type("core", "blast_domain::VenueAdmin");
   const venueTypes = [
     type("migrators", "bluefin::Venue"),
@@ -76,21 +85,19 @@ test("the admission runbook follows the contracts' four paused steps in order", 
     ]),
   );
 
-  // 2. Each product admits the migrators venues; no vendor is recorded.
-  assert.equal(venues?.[0]?.call, "blast_acl::sign_in");
-  assert.deepEqual(
-    venues?.slice(1).map(({ call }) => call),
-    [
-      ...venueTypes.flatMap(() => [
-        "launch_config::schedule_venue",
-        "launch_config::apply_venue",
+  // 2. Each product's configureNow admits the migrators venues; no vendor is recorded.
+  for (const [settings, module] of [
+    [launchpadSettings, "launch_config"],
+    [presaleSettings, "creation_policy"],
+  ] as const) {
+    assert.deepEqual(settings, [
+      { call: "blast_acl::sign_in", typeArguments: [venueAdmin] },
+      ...venueTypes.flatMap((venue) => [
+        { call: `${module}::schedule_venue`, typeArguments: [venue] },
+        { call: `${module}::apply_venue`, typeArguments: [venue] },
       ]),
-      ...venueTypes.flatMap(() => [
-        "creation_policy::schedule_venue",
-        "creation_policy::apply_venue",
-      ]),
-    ],
-  );
+    ]);
+  }
 
   // 3. The vault's witness notice is raised.
   assert.deepEqual(
@@ -135,7 +142,7 @@ test("the presale also admits the vendor venue when the manifest records it", ()
   const deployment = defineBlastDeployment(
     manifestWithVenues(["aftermathDao"]),
   );
-  const [witnesses, venues] = admissionRunbook(
+  const [witnesses, , venues] = admissionRunbook(
     deployment,
     ADMIN_CAP,
     OPTIONS,

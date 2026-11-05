@@ -901,18 +901,22 @@ export type PresaleSettings = {
   partner: SharedObjectIdentity | null;
 };
 
+/** A `MigratorCalls` method's options, less the ones the composition fills. */
+type VenueOptions<
+  Call extends (options: never) => unknown,
+  Filled extends string,
+> = Omit<Parameters<Call>[0], Filled | "memeType" | "quoteType">;
+
 /** The venue a sale is created for and the objects its `prepare` takes. */
 export type PresaleVenueCreation =
-  | {
-      venue: "cetus";
-      cetus: { config: SharedObjectIdentity; pools: SharedObjectIdentity };
-      tickSpacing: number;
-    }
-  | {
-      venue: "bluefin";
-      tickSpacing: number;
-      feeRate: bigint;
-    }
+  | ({ venue: "cetus" } & VenueOptions<
+      MigratorCalls["prepareCetus"],
+      "treasuryCap"
+    >)
+  | ({ venue: "bluefin" } & VenueOptions<
+      MigratorCalls["prepareBluefin"],
+      "treasuryCap" | "currency"
+    >)
   | {
       venue: "aftermathDao";
       /** The vendor's `AdminCap`, owned by the sender with the `TreasuryCap`. */
@@ -923,22 +927,17 @@ export type PresaleVenueCreation =
 
 /** The venue a funded sale migrates to and the objects its `migrate` takes. */
 export type PresaleVenueMigration =
-  | {
-      venue: "cetus";
-      cetus: {
-        config: SharedObjectIdentity;
-        pools: SharedObjectIdentity;
-        burnManager: SharedObjectIdentity;
-      };
-    }
-  | {
-      venue: "bluefin";
-      currency: SharedObjectIdentity;
-      quoteCurrency: SharedObjectIdentity;
-      bluefinConfig: SharedObjectIdentity;
-      /** Bluefin's pool creation fee in MIST (`deployments` `bluefinPoolCreationFee`). */
-      creationFee: bigint;
-    }
+  | ({ venue: "cetus" } & VenueOptions<
+      MigratorCalls["migrateCetus"],
+      "migration"
+    >)
+  | ({ venue: "bluefin" } & VenueOptions<
+      MigratorCalls["migrateBluefin"],
+      "migration" | "creationFee"
+    > & {
+        /** Bluefin's pool creation fee in MIST (`deployments` `bluefinPoolCreationFee`). */
+        creationFee: bigint;
+      })
   | {
       venue: "aftermathDao";
       lpType: string;
@@ -953,7 +952,7 @@ export type PresalePolicySettings = {
   /** Quote types to allow or disallow. */
   quotes?: readonly { quoteType: string; allowed: boolean }[];
   /** Venue witness types to admit (migrators venues, the vendor's `Venue`). */
-  venues?: readonly string[];
+  venueTypes?: readonly string[];
   /** Blast partners new sales may name. */
   partners?: readonly SharedObjectIdentity[];
 };
@@ -1396,14 +1395,9 @@ export class PresaleTransactions {
         call.setQuoteAllowed({ ...quote, adminWitness: as("ListingAdmin") }),
       );
     }
-    for (const venue of options.venues ?? []) {
-      tx.add(
-        call.scheduleVenue({
-          venueType: venue,
-          adminWitness: as("VenueAdmin"),
-        }),
-      );
-      tx.add(call.applyVenue({ venueType: venue }));
+    for (const venueType of options.venueTypes ?? []) {
+      tx.add(call.scheduleVenue({ venueType, adminWitness: as("VenueAdmin") }));
+      tx.add(call.applyVenue({ venueType }));
     }
     for (const partner of options.partners ?? []) {
       tx.add(call.addPartner({ partner, adminWitness: as("FeeAdmin") }));

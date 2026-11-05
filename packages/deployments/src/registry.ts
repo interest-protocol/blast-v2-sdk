@@ -219,6 +219,7 @@ export function launchpadDeployment(
     partners: partnersDeployment(deployment),
     vault: vaultDeployment(deployment),
     migrators: migratorsDeployment(deployment),
+    vestingPackageId: deployment.packages.vesting.packageId,
   };
 }
 
