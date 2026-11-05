@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-launchpad-sdk",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Blast launchpad SDK",
   "type": "module",
   "repository": {
@@ -85,11 +85,11 @@
     "access": "public"
   },
   "dependencies": {
-    "@interest-protocol/blast-admin-sdk": "0.1.0",
-    "@interest-protocol/blast-core": "0.1.0",
-    "@interest-protocol/blast-migrators-sdk": "0.1.2",
-    "@interest-protocol/blast-partners-sdk": "0.1.0",
-    "@interest-protocol/blast-vault-sdk": "0.1.0"
+    "@interest-protocol/blast-admin-sdk": "0.2.0",
+    "@interest-protocol/blast-core": "0.2.0",
+    "@interest-protocol/blast-migrators-sdk": "0.2.0",
+    "@interest-protocol/blast-partners-sdk": "0.2.0",
+    "@interest-protocol/blast-vault-sdk": "0.2.0"
   },
   "peerDependencies": {
     "@mysten/move-bytecode-template": "^0.4.1",

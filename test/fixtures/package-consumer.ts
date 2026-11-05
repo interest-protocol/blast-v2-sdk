@@ -6,12 +6,12 @@ import type * as Deployments from "@interest-protocol/blast-deployments-sdk";
 import type * as Rewards from "@interest-protocol/blast-holder-rewards-sdk";
 import type * as Launchpad from "@interest-protocol/blast-launchpad-sdk";
 import type * as Template from "@interest-protocol/blast-launchpad-sdk/template";
-import type * as Migrators from "@interest-protocol/blast-migrators-sdk";
 import type * as Partners from "@interest-protocol/blast-partners-sdk";
 import type * as Presale from "@interest-protocol/blast-presale-sdk";
 import type * as BlastSui from "@interest-protocol/blast-sui-sdk";
+import type * as Vault from "@interest-protocol/blast-vault-sdk";
 
-// Assign namespaces both ways so the legacy entry points retain the product
+// Assign namespaces both ways so each blast-sdk subpath keeps its package's
 // functions, class constructors, and inferred parameter and return types.
 const admin: typeof Admin =
   {} as typeof import("@interest-protocol/blast-sdk/admin");
@@ -31,14 +31,14 @@ const launchpad: typeof Launchpad =
   {} as typeof import("@interest-protocol/blast-sdk/launchpad");
 const template: typeof Template =
   {} as typeof import("@interest-protocol/blast-sdk/launchpad/template");
-const migrators: typeof Migrators =
-  {} as typeof import("@interest-protocol/blast-sdk/migrators");
 const partners: typeof Partners =
   {} as typeof import("@interest-protocol/blast-sdk/partners");
 const presale: typeof Presale =
   {} as typeof import("@interest-protocol/blast-sdk/presale");
+const vault: typeof Vault =
+  {} as typeof import("@interest-protocol/blast-sdk/vault");
 
-export const legacy: [
+export const subpaths: [
   typeof import("@interest-protocol/blast-sdk/admin"),
   typeof import("@interest-protocol/blast-sdk/blast-sui"),
   typeof import("@interest-protocol/blast-sdk/boosts"),
@@ -50,6 +50,7 @@ export const legacy: [
   typeof import("@interest-protocol/blast-sdk/launchpad/template"),
   typeof import("@interest-protocol/blast-sdk/partners"),
   typeof import("@interest-protocol/blast-sdk/presale"),
+  typeof import("@interest-protocol/blast-sdk/vault"),
 ] = [
   admin,
   blastSui,
@@ -62,9 +63,19 @@ export const legacy: [
   template,
   partners,
   presale,
+  vault,
 ];
 
-export type { SharedObjectReference } from "@interest-protocol/blast-core";
-export type { CetusMemeSide } from "@interest-protocol/blast-core/cetus";
-export type { PresaleDeployment } from "@interest-protocol/blast-sdk";
-export { migrators };
+export type {
+  FeeSplit,
+  LaunchpadDeployment,
+  PresaleDeployment,
+  SharedObjectReference,
+  VaultDeployment,
+} from "@interest-protocol/blast-sdk";
+export {
+  LaunchpadTransactions,
+  MigratorCalls,
+  PresaleTransactions,
+  VaultCalls,
+} from "@interest-protocol/blast-sdk";

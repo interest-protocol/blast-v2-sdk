@@ -51,7 +51,7 @@ const preset = (overrides: Partial<QuickPreset> = {}) =>
   defineQuickPreset({
     id: "quick-local",
     deploymentFingerprint: fingerprint,
-    sdk: { minimum: "0.1.0", below: "0.2.0" },
+    sdk: { minimum: "0.2.0", below: "0.3.0" },
     values,
     ...overrides,
   });
@@ -77,7 +77,7 @@ test("binds a Quick preset to one deployment fingerprint and SDK range", () => {
   );
   assert.deepEqual(
     resolveQuickPreset(
-      preset({ sdk: { minimum: "0.2.0", below: "0.3.0" } }),
+      preset({ sdk: { minimum: "0.3.0", below: "0.4.0" } }),
       enabled,
     ),
     { status: "unavailable", reason: "sdk-incompatible" },

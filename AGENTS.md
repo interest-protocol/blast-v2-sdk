@@ -54,8 +54,10 @@ preview.
 - Install and run repository checks from the root using the shared npm workspace
   lockfile. Build workspaces before focused tests; tests import built exports.
 - Keep cross-package imports on declared package exports. The root workspace is
-  private; `packages/blast-sdk` owns legacy import compatibility. Package layout
-  and release order are documented in `README.md`.
+  private; `packages/blast-sdk` only re-exports the current packages. Package
+  layout and release order are documented in `README.md`.
+- Replace outright: no compatibility shims, aliases, deprecated APIs, or code
+  kept for an earlier contract stack.
 - Every derivation documents input/output units, rounding direction, and who
   receives the rounding remainder.
 - Mirror contract formulas exactly, including rounding, when previewing a value
