@@ -2,12 +2,6 @@ import type {
   SharedObjectIdentity,
   SuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
-import type { LaunchpadDeployment } from "@interest-protocol/blast-launchpad-sdk/transactions";
-import type {
-  MigratorsDeployment,
-  MigratorVenue,
-} from "@interest-protocol/blast-migrators-sdk/transactions";
-import type { BlastSuiDeployment } from "@interest-protocol/blast-sui-sdk/types";
 
 /** Blast deploys to Sui mainnet only (contracts ADR 0103). */
 export const BLAST_NETWORKS = ["mainnet"] as const;
@@ -20,27 +14,36 @@ export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
  * entry: each is bytecode a launch or a standalone coin publishes as its own
  * package.
  *
- * `admin`, `partners` and `launchpad` are the core every manifest
- * records. A package a manifest does not record is absent, and the accessor
- * that needs it refuses; the presale publishes on its own (contracts ADR
- * 0099), so a launchpad manifest may predate it. A venue's packages are
- * recorded whole or not at all.
+ * The seven launch-stack packages of contracts ADR 0137 and
+ * `blast_fun_vesting` (which types `blast_fun_linear_vesting::Vesting`) are
+ * required. A venue's packages are recorded whole or not at all.
  */
 export type BlastPackages = Readonly<{
-  /** Immutable `blast_admin`, home of the shared ACL. */
+  /** Immutable `blast_admin`, home of the shared ACL and package administration. */
   admin: SuiPackageReference;
   /** Immutable `blast_partners`. */
   partners: SuiPackageReference;
+  /** Immutable `blast_core`, home of the shared `Treasury`. */
+  core: SuiPackageReference;
+  /** `blast_fun_vesting`, which types the vesting objects payouts create. */
+  vesting: SuiPackageReference;
+  vault: SuiPackageReference;
   launchpad: SuiPackageReference;
-  migrators?: SuiPackageReference;
-  presale?: SuiPackageReference;
+  presale: SuiPackageReference;
+  migrators: SuiPackageReference;
   blastSui?: SuiPackageReference;
+  /** The `blast_aftermath_dao_presale` vendor venue. */
+  aftermathDaoPresale?: SuiPackageReference;
   /** Cetus CLMM: the revision Cetus calls target, and the original package that defines its types. */
   cetusClmm?: SuiPackageReference;
   /** Cetus LP Burn, which defines `lp_burn::BurnManager`. */
   cetusLpBurn?: SuiPackageReference;
   /** Bluefin Spot, which defines its `config::GlobalConfig`. */
   bluefinSpot?: SuiPackageReference;
+  /** Aftermath AMM, which defines `pool_registry::PoolRegistry`. */
+  aftermathAmm?: SuiPackageReference;
+  /** Aftermath DAO-fee pools, which define `version::Version`. */
+  aftermathDaoFee?: SuiPackageReference;
 }>;
 
 /**
@@ -49,30 +52,46 @@ export type BlastPackages = Readonly<{
  * belongs to each Move call, not to the on-chain object; transaction builders
  * add the required value.
  *
- * A group is present exactly when its package is, so each group's path
- * (`launchpad.launchConfig`, `cetus.pools`) names both the owner and the
- * object.
+ * Each upgradeable package records its `PackageVersion<OTW>` and
+ * `PackageAdmin<OTW>`. A group is present exactly when its package is, so
+ * each group's path (`launchpad.launchConfig`, `cetus.pools`) names both the
+ * owner and the object.
  */
 export type BlastSharedObjects = Readonly<{
   admin: Readonly<{
     /** The singleton `blast_admin::blast_acl::ACL`. */
     acl: SharedObjectIdentity;
   }>;
+  core: Readonly<{
+    /** `blast_treasury::Treasury`, every protocol fee's destination. */
+    treasury: SharedObjectIdentity;
+  }>;
+  vault: Readonly<{
+    /** `blast_vault_package::VaultRegistry`, the admitted package and venue witnesses. */
+    registry: SharedObjectIdentity;
+    packageVersion: SharedObjectIdentity;
+    packageAdmin: SharedObjectIdentity;
+  }>;
   launchpad: Readonly<{
     packageVersion: SharedObjectIdentity;
+    packageAdmin: SharedObjectIdentity;
     launchConfig: SharedObjectIdentity;
     runtimeConfig: SharedObjectIdentity;
+    /** `launch::LaunchRegistry`, the parent of every derived launch ID. */
+    launchRegistry: SharedObjectIdentity;
   }>;
-  migrators?: Readonly<{
+  presale: Readonly<{
     packageVersion: SharedObjectIdentity;
-    lpFeePolicy: SharedObjectIdentity;
-    venueConfig: SharedObjectIdentity;
-  }>;
-  presale?: Readonly<{
-    packageVersion: SharedObjectIdentity;
-    venueConfig: SharedObjectIdentity;
+    packageAdmin: SharedObjectIdentity;
     creationPolicy: SharedObjectIdentity;
     feePolicy: SharedObjectIdentity;
+    /** `blast_presale::PresaleRegistry`, the parent of every derived presale ID. */
+    presaleRegistry: SharedObjectIdentity;
+  }>;
+  migrators: Readonly<{
+    packageVersion: SharedObjectIdentity;
+    packageAdmin: SharedObjectIdentity;
+    venueConfig: SharedObjectIdentity;
   }>;
   blastSui?: Readonly<{
     packageVersion: SharedObjectIdentity;
@@ -82,7 +101,7 @@ export type BlastSharedObjects = Readonly<{
   cetus?: Readonly<{
     /** `config::GlobalConfig`, read by every Cetus pool call. */
     config: SharedObjectIdentity;
-    /** `factory::Pools`, where Cetus launches reserve and create their pool. */
+    /** `factory::Pools`, where Cetus sales reserve and create their pool. */
     pools: SharedObjectIdentity;
     /** `lp_burn::BurnManager`, which burns and then collects the migration position. */
     burnManager: SharedObjectIdentity;
@@ -92,22 +111,51 @@ export type BlastSharedObjects = Readonly<{
     /** `config::GlobalConfig`, read by Bluefin migration, fees, and buyback. */
     config: SharedObjectIdentity;
   }>;
+  /** Aftermath's singletons the vendor venue's migration takes. */
+  aftermath?: Readonly<{
+    /** Aftermath AMM `pool_registry::PoolRegistry`, taken mutably. */
+    poolRegistry: SharedObjectIdentity;
+    /** Aftermath DAO-fee pools `version::Version`, taken read-only. */
+    daoFeeVersion: SharedObjectIdentity;
+  }>;
 }>;
 
 /** Every shared-object group a manifest may record, in canonical order. */
 export const SHARED_OBJECT_GROUPS = [
   "admin",
+  "core",
+  "vault",
   "launchpad",
-  "migrators",
   "presale",
+  "migrators",
   "blastSui",
   "cetus",
   "bluefin",
+  "aftermath",
 ] as const satisfies readonly (keyof BlastSharedObjects)[];
 
 export type SharedObjectGroup = (typeof SHARED_OBJECT_GROUPS)[number];
 
-export const BLAST_DEPLOYMENT_SCHEMA_VERSION = 1;
+export const BLAST_DEPLOYMENT_SCHEMA_VERSION = 2;
+
+/**
+ * The SDK's frozen ABI artifacts (`abi/production-<name>-v1.json`), each a
+ * key of `DeploymentSource.abi`.
+ */
+export const ARTIFACT_KEYS = [
+  "admin",
+  "partners",
+  "core",
+  "vault",
+  "migrators",
+  "launchpad",
+  "presale",
+  "aftermathDaoPresale",
+  "blastSui",
+  "boosts",
+] as const;
+
+export type ArtifactKey = (typeof ARTIFACT_KEYS)[number];
 
 /** A venue object's expected type: `<package's original ID>::<module>::<name>`. */
 export type VenueObjectType = Readonly<{
@@ -117,13 +165,15 @@ export type VenueObjectType = Readonly<{
 }>;
 
 /**
- * Each enabled venue's identity set: the packages whose lineage it records
- * and, under the venue's own shared-object group, the singletons that
- * creating, migrating, and trading a launch on it need, each typed by one of
- * those packages. A manifest records a venue's whole set or none of it.
+ * Each venue's identity set: the packages whose lineage it records and, under
+ * its shared-object `group`, the singletons that creating, migrating, and
+ * trading a sale on it need, each typed by one of those packages. A manifest
+ * records a venue's whole set or none of it. `aftermathDao` is the presale
+ * vendor venue `blast_aftermath_dao_presale`.
  */
 export const VENUE_IDENTITY_SETS = Object.freeze({
   cetus: Object.freeze({
+    group: "cetus",
     packages: Object.freeze(["cetusClmm", "cetusLpBurn"] as const),
     sharedObjects: Object.freeze({
       config: {
@@ -140,6 +190,7 @@ export const VENUE_IDENTITY_SETS = Object.freeze({
     }),
   }),
   bluefin: Object.freeze({
+    group: "bluefin",
     packages: Object.freeze(["bluefinSpot"] as const),
     sharedObjects: Object.freeze({
       config: {
@@ -149,13 +200,45 @@ export const VENUE_IDENTITY_SETS = Object.freeze({
       },
     }),
   }),
+  aftermathDao: Object.freeze({
+    group: "aftermath",
+    packages: Object.freeze([
+      "aftermathDaoPresale",
+      "aftermathAmm",
+      "aftermathDaoFee",
+    ] as const),
+    sharedObjects: Object.freeze({
+      poolRegistry: {
+        package: "aftermathAmm",
+        module: "pool_registry",
+        name: "PoolRegistry",
+      },
+      daoFeeVersion: {
+        package: "aftermathDaoFee",
+        module: "version",
+        name: "Version",
+      },
+    }),
+  }),
 }) satisfies Record<
-  MigratorVenue,
+  string,
   {
-    packages: readonly string[];
+    group: SharedObjectGroup;
+    packages: readonly (keyof BlastPackages)[];
     sharedObjects: Readonly<Record<string, VenueObjectType>>;
   }
 >;
+
+/**
+ * A venue a deployment may route sales through: the two `blast_migrators`
+ * venues, which serve both products, and the presale-only vendor.
+ */
+export type Venue = keyof typeof VENUE_IDENTITY_SETS;
+
+/** Every venue, in canonical order. */
+export const VENUES = Object.freeze(
+  Object.keys(VENUE_IDENTITY_SETS) as Venue[],
+);
 
 /**
  * A production manifest may enable production signing; a non-production one
@@ -166,16 +249,19 @@ export const VENUE_IDENTITY_SETS = Object.freeze({
  */
 export type DeploymentEnvironment = "production" | "non-production";
 
-/** One pool tier an adapter route accepts, in that venue's native units. */
+/** One pool tier a venue route accepts, in that venue's native units. */
 export type MigrationRouteTier = Readonly<{
   tickSpacing: number;
   /** Venue fee rate as a u64 decimal string. */
   feeRate: string;
 }>;
 
-/** A migration adapter this deployment admits, with its creator-selectable tiers. */
+/**
+ * A venue this deployment admits, with its creator-selectable tiers. The
+ * vendor's `aftermathDao` (presale only) has no tiers.
+ */
 export type MigrationRoute = Readonly<{
-  venue: MigratorVenue;
+  venue: Venue;
   tiers: readonly MigrationRouteTier[];
 }>;
 
@@ -183,8 +269,8 @@ export type MigrationRoute = Readonly<{
 export type DeploymentSource = Readonly<{
   /** 40-hex contracts commit. */
   contractsCommit: string;
-  /** sha256 hex of `abi/production-launchpad-v1.json` and `abi/production-blast-sui-v1.json`. */
-  abi: Readonly<{ launchpad: string; blastSui: string }>;
+  /** sha256 hex of each `abi/production-<name>-v1.json`. */
+  abi: Readonly<Record<ArtifactKey, string>>;
 }>;
 
 /** Base58 digests of the transactions that published or configured the release, by step. */
@@ -247,7 +333,7 @@ export type BlastDeploymentInput = Readonly<{
   }>[];
   source: Readonly<{
     contractsCommit: string;
-    abi: Readonly<{ launchpad: string; blastSui: string }>;
+    abi: Readonly<Record<string, string>>;
   }>;
   release: Readonly<{ transactions: Readonly<Record<string, string>> }>;
   sdk: Readonly<{ version: string; commit: string }>;
@@ -262,7 +348,3 @@ export type BlastDeploymentInput = Readonly<{
 export type BlastDeploymentRegistry = Readonly<
   Partial<Record<BlastNetwork, BlastDeployment>>
 >;
-
-export type LaunchpadDeploymentConstants = LaunchpadDeployment;
-export type BlastSuiDeploymentConstants = BlastSuiDeployment;
-export type MigratorsDeploymentConstants = MigratorsDeployment;

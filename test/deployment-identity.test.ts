@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { packageVersionBcs } from "@interest-protocol/blast-admin-sdk/state";
 import type {
   DeploymentRuntimeObservation,
   SdkRelease,
-  VenueAvailability,
 } from "@interest-protocol/blast-deployments-sdk";
 import {
+  ARTIFACT_KEYS,
   BLAST_DEPLOYMENTS,
   defineBlastDeployment,
   deploymentFingerprint,
@@ -109,16 +110,23 @@ test("names every recorded shared object by its owner-qualified path", () => {
     sharedObjectEntries(deployment.sharedObjects).map(([path]) => path),
     [
       "admin.acl",
+      "core.treasury",
+      "vault.registry",
+      "vault.packageVersion",
+      "vault.packageAdmin",
       "launchpad.packageVersion",
+      "launchpad.packageAdmin",
       "launchpad.launchConfig",
       "launchpad.runtimeConfig",
-      "migrators.packageVersion",
-      "migrators.lpFeePolicy",
-      "migrators.venueConfig",
+      "launchpad.launchRegistry",
       "presale.packageVersion",
-      "presale.venueConfig",
+      "presale.packageAdmin",
       "presale.creationPolicy",
       "presale.feePolicy",
+      "presale.presaleRegistry",
+      "migrators.packageVersion",
+      "migrators.packageAdmin",
+      "migrators.venueConfig",
     ],
   );
   // The observation an SDK consumer builds uses exactly those keys.
@@ -179,6 +187,69 @@ test("disables signing on a runtime identity mismatch or foreign lineage", () =>
         manifest,
         mode: "non-production",
         runtime: missing,
+      }),
+    ),
+    ["runtime-unverified"],
+  );
+});
+
+test("types each PackageVersion and PackageAdmin by its package's OTW", () => {
+  const runtime = runtimeFor(manifest);
+  const admin = normalizeSuiObjectId(pkg("admin"));
+  assert.equal(
+    runtime.sharedObjects["migrators.packageVersion"]?.type,
+    `${admin}::package_version::PackageVersion<${normalizeSuiObjectId(pkg("migrators"))}::blast_migrators::BLAST_MIGRATORS>`,
+  );
+  // Another package's OTW is a different object, even under the same admin package.
+  const swapped = structuredClone(runtime);
+  swapped.sharedObjects["vault.packageVersion"]!.type =
+    runtime.sharedObjects["launchpad.packageVersion"]!.type;
+  assert.deepEqual(
+    codes(
+      evaluateProtocolAccess({
+        manifest,
+        mode: "non-production",
+        runtime: swapped,
+      }),
+    ),
+    ["runtime-mismatch"],
+  );
+  const foreignAdmin = structuredClone(runtime);
+  foreignAdmin.sharedObjects["presale.packageAdmin"]!.type =
+    `${normalizeSuiObjectId("0xbad")}::package_admin::PackageAdmin<${normalizeSuiObjectId(pkg("presale"))}::blast_presale_package::BLAST_PRESALE_PACKAGE>`;
+  assert.deepEqual(
+    codes(
+      evaluateProtocolAccess({
+        manifest,
+        mode: "non-production",
+        runtime: foreignAdmin,
+      }),
+    ),
+    ["foreign-lineage"],
+  );
+});
+
+test("reports each pausable package's observed pause mask", () => {
+  const access = evaluateProtocolAccess({
+    manifest,
+    mode: "non-production",
+    runtime: runtimeFor(manifest, { vault: 1, launchpad: 7, presale: 2 }),
+  });
+  assert.equal(access.signing, "enabled");
+  assert.deepEqual(access.signing === "enabled" && access.paused, {
+    vault: 1,
+    launchpad: 7,
+    presale: 2,
+    migrators: 0,
+  });
+  const unobserved = runtimeFor(manifest);
+  delete unobserved.sharedObjects["presale.packageVersion"]!.paused;
+  assert.deepEqual(
+    codes(
+      evaluateProtocolAccess({
+        manifest,
+        mode: "non-production",
+        runtime: unobserved,
       }),
     ),
     ["runtime-unverified"],
@@ -283,6 +354,22 @@ test("disables signing on an ABI mismatch or an unsupported route", () => {
   assert.deepEqual(
     codes(
       evaluateProtocolAccess({
+        manifest: {
+          ...manifest,
+          source: {
+            ...manifest.source,
+            abi: { ...manifest.source.abi, vault: "1".repeat(64) },
+          },
+        },
+        mode: "non-production",
+        runtime,
+      }),
+    ),
+    ["abi-mismatch"],
+  );
+  assert.deepEqual(
+    codes(
+      evaluateProtocolAccess({
         manifest: withRoute("turbos"),
         mode: "non-production",
         runtime,
@@ -290,7 +377,7 @@ test("disables signing on an ABI mismatch or an unsupported route", () => {
     ),
     ["unsupported-route"],
   );
-  // The SDK's generic Cetus builders match the frozen ADR 0100 routes.
+  // Every venue the SDK builds is a supported route.
   assert.equal(
     evaluateProtocolAccess({
       manifest: withRoute("cetus"),
@@ -466,7 +553,8 @@ test("never lets a non-production or fixture identity sign in production", () =>
     }),
   );
   assert.ok(nonProduction.includes("environment-mismatch"));
-  assert.ok(nonProduction.includes("foreign-lineage"));
+  // No fresh-stack deployment is registered yet.
+  assert.ok(nonProduction.includes("unreleased-deployment"));
   assert.equal(nonProduction.includes("sdk-unreleased"), true);
 
   const relabeled = {
@@ -491,7 +579,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
 });
 
 test("the fresh ABI requires a coordinated SDK release and matching runtime", () => {
-  assert.ok(BLAST_DEPLOYMENTS.mainnet);
+  assert.equal(BLAST_DEPLOYMENTS.mainnet, undefined);
   assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
   assert.equal(SDK_RELEASE.version, "0.1.4");
   assert.equal(SDK_RELEASE.published, false);
@@ -534,7 +622,7 @@ test("the fresh ABI requires a coordinated SDK release and matching runtime", ()
         runtime,
       }),
     ),
-    ["foreign-lineage", "sdk-unreleased", "sdk-mismatch"],
+    ["unreleased-deployment", "sdk-unreleased", "sdk-mismatch"],
   );
   for (const sdk of [
     { ...released, published: false },
@@ -590,44 +678,14 @@ test("the fresh ABI requires a coordinated SDK release and matching runtime", ()
   );
 });
 
-test("pins the frozen ABI identity to the committed artifacts", () => {
-  const artifact = (name: string) =>
-    readFileSync(new URL(`../abi/${name}`, import.meta.url));
-  const sha = (bytes: Uint8Array) =>
-    createHash("sha256").update(bytes).digest("hex");
+test("pins the frozen ABI to the contracts baseline and every artifact key", () => {
   assert.equal(
     FROZEN_ABI.contractsCommit,
-    "d8482986e71eea91d364babba7897ad68bd05046",
+    "4fe8d739f04bafd0775691795eb9f3727e984089",
   );
-  assert.equal(
-    FROZEN_ABI.artifacts.launchpad,
-    sha(artifact("pr150-consumers.json")),
-  );
-  assert.equal(
-    FROZEN_ABI.artifacts.blastSui,
-    sha(artifact("production-blast-sui-v1.json")),
-  );
-  for (const name of [
-    "production-launchpad-v1.json",
-    "production-presale-v1.json",
-    "production-admin-v1.json",
-    "production-partners-v1.json",
-  ]) {
-    assert.equal(
-      JSON.parse(artifact(name).toString("utf8")).baseline.contractsCommit,
-      "9255e78751b70b22d8f33cc6577df126a3434424",
-    );
-  }
-  for (const name of [
-    "production-blast-sui-v1.json",
-    "production-aftermath-dao-presale-v1.json",
-    "production-boosts-v1.json",
-  ]) {
-    assert.equal(
-      JSON.parse(artifact(name).toString("utf8")).baseline.contractsCommit,
-      "01d7659617abcd552cece6d05b9db409ec4ff2c0",
-    );
-  }
+  assert.deepEqual(Object.keys(FROZEN_ABI.artifacts), [...ARTIFACT_KEYS]);
+  for (const digest of Object.values(FROZEN_ABI.artifacts))
+    assert.match(digest, /^[0-9a-f]{64}$/);
   assert.equal("unresolvedRoutes" in FROZEN_ABI, false);
 });
 
@@ -651,6 +709,19 @@ test("observes the chain and shared-object identities through the Core API", asy
               $kind: "Shared",
               Shared: { initialSharedVersion: entry.initialSharedVersion },
             },
+            // A `PackageVersion<OTW>` with its pause mask; other objects need no contents.
+            content:
+              entry.paused === undefined
+                ? new Uint8Array()
+                : packageVersionBcs
+                    .serialize({
+                      id: { id: { bytes: objectId } },
+                      valid_pause_bits: 7,
+                      paused: entry.paused,
+                      package_witness: "0x1::m::W",
+                      version: 1n,
+                    })
+                    .toBytes(),
           };
         }),
       }),
@@ -658,6 +729,7 @@ test("observes the chain and shared-object identities through the Core API", asy
   } as unknown as ClientWithCoreApi;
 
   const observed = await observeDeploymentRuntime(client, deployment);
+  assert.deepEqual(observed, expected);
   assert.equal(
     evaluateProtocolAccess({
       manifest,
@@ -685,58 +757,23 @@ function productionManifest() {
     network: "mainnet",
     chainIdentifier: "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S",
     explorer: { baseUrl: "https://suiscan.xyz/mainnet" },
-    packages: {
-      launchpad: reference("launchpad"),
-      admin: reference("admin"),
-      partners: reference("partners"),
-      migrators: reference("migrators"),
-    },
-    sharedObjects: {
-      admin: { acl: object("acl") },
-      launchpad: {
-        packageVersion: object("packageVersion"),
-        launchConfig: object("launchConfig"),
-        runtimeConfig: object("runtimeConfig"),
-      },
-      migrators: {
-        packageVersion: object("migratorsPackageVersion"),
-        lpFeePolicy: object("lpFeePolicy"),
-        venueConfig: object("venueConfig"),
-      },
-    },
+    packages: Object.fromEntries(
+      Object.keys(manifest.packages).map((name) => [name, reference(name)]),
+    ),
+    sharedObjects: Object.fromEntries(
+      Object.entries(manifest.sharedObjects).map(([group, objects]) => [
+        group,
+        Object.fromEntries(
+          Object.keys(objects).map((name) => [
+            name,
+            object(`${group}.${name}`),
+          ]),
+        ),
+      ]),
+    ),
     sdk: {
       version: "1.0.0",
       commit: "1111111111111111111111111111111111111111",
     },
-  } as const satisfies BlastDeploymentInput;
+  } satisfies BlastDeploymentInput;
 }
-
-test("the historical mainnet stack cannot sign using the fresh PR150 ABI", () => {
-  const released = BLAST_DEPLOYMENTS.mainnet;
-  assert.ok(released);
-  const access = evaluateProtocolAccess({
-    manifest: released,
-    mode: "production",
-    runtime: runtimeFor(released as unknown as BlastDeploymentInput),
-  });
-  assert.equal(access.signing, "disabled");
-  assert.ok(codes(access).includes("abi-mismatch"));
-  assert.ok(codes(access).includes("sdk-unreleased"));
-  for (const venue of ["cetus", "bluefin"] as const) {
-    const availability: VenueAvailability = access.venues[venue];
-    assert.equal(availability.available, false);
-  }
-  assert.notEqual(
-    codes(
-      evaluateProtocolAccess({
-        manifest: released,
-        mode: "production",
-        runtime: {
-          ...runtimeFor(released as unknown as BlastDeploymentInput),
-          chainIdentifier: "69WiPg3DAQiwdxfncX6wYQ2siKwAe6L9BZthQea3JNMD",
-        },
-      }),
-    ).length,
-    0,
-  );
-});

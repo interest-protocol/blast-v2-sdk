@@ -32,6 +32,13 @@ const VENUE_KEYS = {
     "sharedObjects.cetus.burnManager",
   ],
   bluefin: ["packages.bluefinSpot", "sharedObjects.bluefin.config"],
+  aftermathDao: [
+    "packages.aftermathDaoPresale",
+    "packages.aftermathAmm",
+    "packages.aftermathDaoFee",
+    "sharedObjects.aftermath.poolRegistry",
+    "sharedObjects.aftermath.daoFeeVersion",
+  ],
 } as const;
 
 /** The value at a dotted manifest path, or undefined. */
@@ -65,7 +72,8 @@ test("normalizes a complete Cetus set, a complete Bluefin set, or both", () => {
   for (const venues of [
     ["cetus"],
     ["bluefin"],
-    ["cetus", "bluefin"],
+    ["aftermathDao"],
+    ["cetus", "bluefin", "aftermathDao"],
   ] as const) {
     const deployment = defineBlastDeployment(manifestWithVenues(venues));
     for (const venue of venues) {
@@ -78,14 +86,16 @@ test("normalizes a complete Cetus set, a complete Bluefin set, or both", () => {
     }
   }
   // The fixture runtime reports each venue object at its snapshot type.
-  const runtime = runtimeFor(manifestWithVenues(["cetus", "bluefin"]));
+  const runtime = runtimeFor(
+    manifestWithVenues(["cetus", "bluefin", "aftermathDao"]),
+  );
   for (const [name, type] of Object.entries(VENUE_LINEAGE.types)) {
     assert.equal(runtime.sharedObjects[name]?.type, type, name);
   }
 });
 
 test("rejects every partial venue set as an invalid manifest that disables everything", () => {
-  for (const venue of ["cetus", "bluefin"] as const) {
+  for (const venue of ["cetus", "bluefin", "aftermathDao"] as const) {
     const complete = manifestWithVenues([venue]);
     const keys = VENUE_KEYS[venue];
     const partials = [
@@ -111,6 +121,7 @@ test("rejects every partial venue set as an invalid manifest that disables every
       );
       assert.equal(access.venues.cetus.available, false);
       assert.equal(access.venues.bluefin.available, false);
+      assert.equal(access.venues.aftermathDao.available, false);
     }
   }
 });
@@ -128,7 +139,7 @@ const evaluate = (
   });
 const venueCodes = (
   access: ReturnType<typeof evaluate>,
-  venue: "cetus" | "bluefin",
+  venue: "cetus" | "bluefin" | "aftermathDao",
 ) => {
   const availability = access.venues[venue];
   return availability.available ? [] : availability.reasons.map((r) => r.code);
@@ -137,10 +148,27 @@ const venueCodes = (
 test("enables both venues when both complete sets match the runtime", () => {
   const access = evaluate(BOTH);
   assert.equal(access.signing, "enabled");
-  assert.deepEqual(access.venues, {
-    cetus: { available: true },
-    bluefin: { available: true },
+  assert.deepEqual(access.venues.cetus, { available: true });
+  assert.deepEqual(access.venues.bluefin, { available: true });
+  assert.deepEqual(venueCodes(access, "aftermathDao"), ["venue-unrecorded"]);
+});
+
+test("enables the vendor venue when its set is recorded and routed", () => {
+  const access = evaluate(manifestWithVenues(["aftermathDao"]));
+  assert.equal(access.signing, "enabled");
+  assert.deepEqual(venueCodes(access, "aftermathDao"), []);
+  const unrouted = manifestWithVenues(["aftermathDao"]);
+  const noRoute = evaluate({
+    ...unrouted,
+    routes: unrouted.routes.filter((route) => route.venue !== "aftermathDao"),
   });
+  assert.deepEqual(venueCodes(noRoute, "aftermathDao"), ["venue-not-routed"]);
+  const runtime = runtimeFor(unrouted);
+  runtime.sharedObjects["aftermath.poolRegistry"]!.type =
+    `0x${"9".repeat(64)}::pool_registry::PoolRegistry`;
+  const foreign = evaluate(unrouted, runtime);
+  assert.equal(foreign.signing, "enabled");
+  assert.deepEqual(venueCodes(foreign, "aftermathDao"), ["foreign-lineage"]);
 });
 
 test("disables only the venue whose route has no recorded set", () => {
@@ -216,8 +244,8 @@ test("keeps every core reason global and marks both venues unavailable", () => {
   movedCore.sharedObjects["launchpad.launchConfig"]!.initialSharedVersion =
     "99";
   const foreignCore = structuredClone(runtime);
-  foreignCore.sharedObjects["migrators.lpFeePolicy"]!.type =
-    `0x${"9".repeat(64)}::lp_fee_policy::LpFeePolicy`;
+  foreignCore.sharedObjects["migrators.venueConfig"]!.type =
+    `0x${"9".repeat(64)}::venue_config::VenueConfig`;
   const otherCommit = {
     ...BOTH,
     source: { ...BOTH.source, contractsCommit: "9".repeat(40) },
@@ -261,44 +289,27 @@ test("resolves each available venue's objects into the builders' typed inputs", 
   const cetus = resolveVenueObjects(access, "cetus");
   const bluefin = resolveVenueObjects(access, "bluefin");
   const { sharedObjects: venueObjects, packages } = VENUE_LINEAGE;
-  /** Each venue object under the short name its builder input uses. */
-  const ids = {
-    cetusConfig: venueObjects.cetus.config,
-    cetusPools: venueObjects.cetus.pools,
-    cetusBurnManager: venueObjects.cetus.burnManager,
-    bluefinConfig: venueObjects.bluefin.config,
-  };
-  const ref = <const M extends boolean>(
-    identity: { objectId: string; initialSharedVersion: string },
-    mutable: M,
-  ) => ({ ...identity, mutable });
+  const cetusSet = venueObjects.cetus;
   assert.deepEqual(cetus, {
     venue: "cetus",
     packages: {
       cetusClmm: packages.cetusClmm,
       cetusLpBurn: packages.cetusLpBurn,
     },
-    create: {
-      cetusConfig: ref(ids.cetusConfig, false),
-      cetusPools: ref(ids.cetusPools, true),
-    },
-    migrate: {
-      cetusConfig: ref(ids.cetusConfig, false),
-      cetusPools: ref(ids.cetusPools, true),
-      burnManager: ref(ids.cetusBurnManager, true),
-    },
+    prepare: { cetus: { config: cetusSet.config, pools: cetusSet.pools } },
+    migrate: { cetus: cetusSet },
     fees: {
-      cetusConfig: ref(ids.cetusConfig, false),
-      burnManager: ref(ids.cetusBurnManager, false),
+      cetus: { config: cetusSet.config, burnManager: cetusSet.burnManager },
     },
-    buyback: { cetusConfig: ref(ids.cetusConfig, false) },
+    buyback: { cetus: { config: cetusSet.config } },
   });
+  const bluefinObjects = { bluefinConfig: venueObjects.bluefin.config };
   assert.deepEqual(bluefin, {
     venue: "bluefin",
     packages: { bluefinSpot: packages.bluefinSpot },
-    migrate: { bluefinConfig: ref(ids.bluefinConfig, true) },
-    fees: { bluefinConfig: ref(ids.bluefinConfig, false) },
-    buyback: { bluefinConfig: ref(ids.bluefinConfig, false) },
+    migrate: bluefinObjects,
+    fees: bluefinObjects,
+    buyback: bluefinObjects,
   });
 });
 

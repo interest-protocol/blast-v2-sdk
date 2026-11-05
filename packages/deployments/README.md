@@ -8,14 +8,18 @@ npm install @interest-protocol/blast-deployments-sdk
 
 See the repository README and docs for usage, development, and release guidance.
 
-`MAINNET_*_DEPLOYMENT` exports bind the canonical MVR publication.
-`resolveMainnetDeployments(client)` resolves the five reviewed
-`@blastpackages/{admin,partners,launchpad,migrators,presale}/1` packages through
-the Sui client's cached MVR API and returns call-ready `admin`, `partners`,
-`launchpad`, `migrators` and `presale` deployments. The compatible
-`@interest-protocol/blast-sdk/deployments` export exposes the same API.
+A `BlastDeployment` (schema 2) names the fresh launch stack of contracts ADR
+0137: `admin`, `partners`, `core`, `vesting`, `vault`, `launchpad`, `presale`
+and `migrators`, with every package's `PackageVersion` and `PackageAdmin`, the
+core `Treasury`, the `VaultRegistry`, `LaunchRegistry` and `PresaleRegistry`,
+and optional venue sets (Cetus, Bluefin, the Aftermath DAO vendor).
+`coreDeployment`, `vaultDeployment`, `migratorsDeployment`,
+`launchpadDeployment` and `presaleDeployment` derive each package's call-ready
+deployment from it.
 
-The resolver requires a mainnet client, rejects absent or foreign package
-identities, and retains verified shared object IDs and original type identities.
-Version pins prevent a native upgrade from being selected before Blast activates
-and reviews it. MVR resolution does not enable product signing or venue routes.
+`BLAST_DEPLOYMENTS` is empty until the publish script writes the mainnet
+manifest; `getBlastDeployment` throws `DeploymentManifestError("unpublished")`
+until then. `evaluateProtocolAccess` decides whether a manifest may sign and
+reports each package's observed pause mask. `admissionRunbook` builds the
+contracts' paused admission, notice raise and unpause sequence
+(`deployments/README.md`, "Admission while paused").
