@@ -12,18 +12,18 @@ export const FROZEN_ABI: Readonly<{
 }> = Object.freeze({
   contractsCommit: "4fe8d739f04bafd0775691795eb9f3727e984089",
   artifacts: Object.freeze({
-    admin: "3c9a7f8a200a7ba9617ef1d1597e3fcb5a43fe2c0a75ef755117bd39a835d53d",
+    admin: "b4345a8ad862ec4612a61d5567e315f192dc9dfb1062b03fc1db7410b7cf58b0",
     partners:
-      "8980fb166347378ad68c8b4277e1070ac533bcc9f052197551ce9a1036e227a4",
-    core: "0000000000000000000000000000000000000000000000000000000000000000",
-    vault: "0000000000000000000000000000000000000000000000000000000000000000",
+      "583c9ac3848a511f35cc1e6e4abc85f70eb89cba469dccc6960b4111440c5009",
+    core: "a1c6564d28de943def47b48df75731d82cdbd052943c51130dbb6f4d17b2f800",
+    vault: "cc992f46c3c5346a1a35e305c05d98e6655db052f54700297e4546b8e3e65593",
     migrators:
-      "0000000000000000000000000000000000000000000000000000000000000000",
+      "1ec5b01788a799b3b6606ec9542f230c8de536c5698ca609ad89086dfe7abe86",
     launchpad:
-      "7ca399dd441aeaa8f63df5e67e44cb7d93a678a47410e4c86193baede5661887",
-    presale: "2868e20d71c264c4c2bdd0ce02746136670a5c343d2f62b6bfb6d33d62dd8e99",
+      "5bd5545cdcc41f0013609093e94ea39abc6dc7f6ebc85e22ce0e11e61f903191",
+    presale: "3e7f00f3cacd7b79209c6e716067b2d0faa658beb85d2c023984ea5fae94cf45",
     aftermathDaoPresale:
-      "0c3031e874e48cf7fcbc63f4e6d8a75a19815a200e0277bdd9ea82d316daf57f",
+      "8ebfb800f9f3a4dfdbf87ed071bfb12d5e860f3fd8c7428c505ada7648eec18c",
     blastSui:
       "943236915134897494c1a1eb7f18d2a0ea8a012e6e657321abc5fc274ee3587f",
     boosts: "917665645d05883fffdfd581367c2b45522aa8de52f57aa9730c101bb329cd8b",
@@ -48,7 +48,7 @@ export type SdkRelease = Readonly<{
  */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
-  version: "0.1.4",
+  version: "0.2.0",
   published: false,
   commit: null,
 });

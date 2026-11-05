@@ -17,20 +17,60 @@ import { fileURLToPath } from "node:url";
  * refreeze at contracts main with `check:abi:write` for an approved change,
  * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
  */
-const BASELINE_COMMIT = "01d7659617abcd552cece6d05b9db409ec4ff2c0";
+const BASELINE_COMMIT = "4fe8d739f04bafd0775691795eb9f3727e984089";
 const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
 };
-const CANONICAL_BASELINE = {
-  contractsCommit: "9255e78751b70b22d8f33cc6577df126a3434424",
+/** blast_sui and boosts adopt the generic administration separately; their artifacts stay frozen here. */
+const BLAST_SUI_BOOSTS_BASELINE = {
+  contractsCommit: "01d7659617abcd552cece6d05b9db409ec4ff2c0",
   workingTreeDifferedAtFreeze: false,
 };
+const LAUNCH_STACK_FREEZE =
+  "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#212: the fresh one-way launch stack, first freeze";
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
   {
+    path: "production-admin-v1.json",
+    approvedAbiAmendments: [
+      LAUNCH_STACK_FREEZE,
+      "contracts #179, #199 and #211: generic package_version::PackageVersion<OTW> and package_admin::PackageAdmin<OTW> replace upgrade_custody and operational_version",
+    ],
+    packages: [["admin", "admin", "blast_admin"]],
+  },
+  {
+    path: "production-partners-v1.json",
+    approvedAbiAmendments: [
+      LAUNCH_STACK_FREEZE,
+      "contracts #198 and #208: partner_list::PartnerList and the Partner readiness readers",
+    ],
+    packages: [["partners", "partners", "blast_partners"]],
+  },
+  {
+    path: "production-core-v1.json",
+    approvedAbiAmendments: [LAUNCH_STACK_FREEZE],
+    packages: [["core", "core", "blast_core"]],
+  },
+  {
+    path: "production-vault-v1.json",
+    approvedAbiAmendments: [LAUNCH_STACK_FREEZE],
+    packages: [["vault", "vault", "blast_vault"]],
+  },
+  {
+    path: "production-migrators-v1.json",
+    approvedAbiAmendments: [
+      LAUNCH_STACK_FREEZE,
+      "contracts #200: one product-agnostic blast_migrators venue package for launches and presales",
+    ],
+    packages: [["migrators", "migrators", "blast_migrators"]],
+  },
+  {
     path: "production-launchpad-v1.json",
-    baseline: CANONICAL_BASELINE,
+    approvedAbiAmendments: [
+      LAUNCH_STACK_FREEZE,
+      "contracts #204: launch::migrate returns a Migration for the venue's migrate; generic administration, core roles and the core Treasury ledger",
+    ],
     packages: [
       ["launchpad", "launchpad", "blast_fun"],
       [
@@ -39,81 +79,22 @@ const artifactDeclarations = [
         "launch_ticket_template",
       ],
       ["coinTemplate", "coin_template", "coin_template"],
-      ["migrators", "migrators", "blast_fun_migrators"],
-    ],
-    approvedAbiAmendments: [
-      "Asymptotic I-5: distinguish Blast metadata capability event fields from the native Coin Registry capability before publication",
-      "Asymptotic L-1: consume Bootstrap and the fresh matching UpgradeCap to enable launchpad PackageVersion",
-      "Asymptotic L-5: version-first guards on all six initializer setters, finalize and share before first publication",
-      "contracts ADR 0011: compact replay-complete event payloads before release",
-      "contracts ADR 0027: make protocol ownership explicit in Quote migration fee names",
-      "contracts ADR 0067: retire the Full Sail migrator before release",
-      "contracts ADR 0068: compact the LP-fee principal snapshot before release",
-      "contracts ADR 0069: consolidate launch graduation and move migration math into migrators",
-      "contracts ADR 0079: remove redundant launch event totals and history",
-      "contracts ADR 0080: make creator recipients provider-independent",
-      "contracts ADR 0085: name every explorer-visible type after Blast",
-      "contracts ADR 0088: reusable launch accounting, allocation plans, protected public buys, and atomic migration",
-      "contracts ADR 0089: start launches in the migration adapter and move every post-migration fee path into the migrators package",
-      "contracts ADR 0090: a minimal launchpad surface — trimmed getters, recipient allocation plans, merged config setters and events, renumbered errors, one migration call",
-      "contracts ADR 0091: a burn part in the LP-fee split, with admin buyback and burn",
-      "contracts ADR 0100: one generic Cetus route per operation over <Meme, Quote, CoinA, CoinB>, replacing the _meme_a/_meme_b pairs",
-      "contracts ADR 0090 (redundancy audit): framework aborts replace duplicate checks; Migrated drops native_supply_burned, the holder-reward Round drops its checkpoints and manifest digest, CreatorClaimMessage drops copy",
-      "contracts ADR 0092: the creator sets the virtual Quote reserve on the initializer; LaunchConfig admits Quotes in a Table and QuoteSet records allowed",
-      "contracts ADR 0093: an optional opening round replaces purchase protection; buy no longer takes the Clock",
-      "contracts ADRs 0094 and 0097: every administrator action takes blast_admin::blast_acl::AdminWitness of its own typed blast_fun_domain role",
-      "contracts ADR 0098: a SUI creation fee paid at finalize, one ADR 0095 partner per launch paid at Blast's claim, and Blast's migration fee accrued in the launch ledger from an always-set ProtocolAllocation",
-      "contracts ADR 0097 (amended 2026-10-02): each package's PackageVersion lives in its one-time-witness module, blast_fun::PackageVersion and blast_fun_migrators::PackageVersion, seeded from that witness",
-      "contracts ADR 0105: anyone claims Blast's launch fees, paid to the partner and to a RuntimeConfig treasury that runtime_config::set_treasury (TreasuryAdmin) rotates; ProtocolFeesClaimed records the treasury and TreasuryChanged records each rotation",
-      "contracts ADR 0107: the LpVault inherits launch::partner_id and, when partnered, holds Blast's LP fees until anyone calls vault::claim_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesClaimed records each claim",
-      "contracts ADR 0108: meme_template is launch_ticket_template with byte-identical bytecode, and the standalone coin_template, with no public functions, joins the generated-package templates",
-      "contracts ADR 0089 (events review, 2026-10-14): the LpVault drops its fee-split generation; FeesCollected drops generation and FeeSplitChanged drops old_generation and new_generation, since native event order and the old/new split pair already sequence split changes",
-      "blast-v2-move f888097 (contracts ADR 0091 amended in place 2026-10-27): cetus::buyback_and_burn and bluefin::buyback_and_burn take quote_in: u64 before min_meme_out and spend exactly that much of the vault's burn Quote, aborting with vault EBuybackQuoteOutOfRange (code 4, replacing ENoBuybackQuote) on zero or more than is held",
     ],
   },
   {
     path: "production-presale-v1.json",
-    baseline: CANONICAL_BASELINE,
-    // Canonical versioned presale published and activated on mainnet.
     approvedAbiAmendments: [
-      "contracts ADR 0099 (amended 2026-10-05): optional participant vesting; new takes Option<VestingTerms> after the sale's token rate, claim takes the Clock and locks each participant's tokens in a schedule from the claim, and Claimed carries its vesting_id",
-      "contracts ADR 0104: blast_presale::new and migrate are public so a migrator in another package creates and migrates sales with its own allowed witness",
-      "contracts ADR 0106: one Blast partner per presale, named by set_partner before the share and accepted by creation_policy::add_partner and remove_partner; a partnered migration holds Blast's shares for pay_partner, PresaleOpened gains partner_id, and ProtocolFeesPaid gains partner_quote",
-      "contracts ADR 0099 (owner-requested cleanup, 2026-10-05): Presale derives its windows from start_ms, counts participants down as they claim (Claimed reports remaining_participants), and holds the LP-fee split as one FeeSplit that new, cetus::new, and bluefin::new take, built by blast_presale::fee_split; the Vault holds the same FeeSplit",
-      "contracts ADR 0104 (amended 2026-10-05): set_migration_witness_allowed also rejects witness types defined at 0x1 and 0x2",
-      "contracts ADR 0106 (source-style review, 2026-10-05): pay_partner is pay_protocol_fees_with_partner, since it pays Blast too, and FeeSplit names its recipients fee_recipients",
-      "contracts ADR 0107: the Vault inherits the sale's partner and, when partnered, holds Blast's LP fees until anyone calls presale_vault::pay_protocol_lp_fees_with_partner; FeesCollected.protocol_destination becomes optional and ProtocolLpFeesPaid records each payout",
-      "contracts ADR 0101 (amended 2026-10-05): set_protocol_fees also accepts a Pending sale, in its creation transaction before share",
-      "contracts ADR 0109: cetus::new_vault and bluefin::new_vault lock an owner's own position in a Vault with zero presale IDs; PresaleVault and PresaleVaultCreated become Vault and VaultCreated",
-      "contracts ADR 0110: blast_presale::new returns a PresaleInitializer that the set_* setters configure and finalize turns into (Presale, PresaleCap); cetus::new and bluefin::new take only their venue arguments; the hard cap moves from UncappedPhase to a sale-level HardCap with closes_when_filled, settle closes a full sale early, PresaleCreated gains hard_cap, PresaleOpened hard_cap_from_ms, and PresaleFunded end_ms and liquidity_deadline_ms",
-      "contracts ADR 0111: the pool tier belongs to the venue; blast_presale::new, Presale, and PresaleCreated drop tick_spacing and pool_fee_rate, bluefin::new and bluefin::migrate take the VenueConfig, and venue_config::PoolTierReserved<Meme, Quote, Venue> records each Cetus or Bluefin tier",
-      "contracts ADR 0099 (amended 2026-10-08): the shared Blast ACL administers the presale; every administrator call takes blast_admin::blast_acl::AdminWitness of one typed blast_presale_domain role (FeeAdmin, TreasuryAdmin, ListingAdmin, AdapterAdmin, RewardsAdmin, UpgradeAdmin) in place of the AdminRegistry and AdminCap, and blast_presale_admin with its SuperAdminCap, AdminCap, AdminRegistry, AdminCapReplaced, and AdminCapRevoked is deleted",
-      "contracts ADR 0112: presale holding intervals may follow confirmed skipped days while preserving sequential funded rounds, proof domains and independent claim deadlines",
-      "contracts ADR 0113: republished canonical Round reserves optional separate gas custody, zero reserve selects Blast-paid gas, governed one-shot capped settlement and permissionless reserve return; holder Meme collection pays the governed FeePolicy destination; publication atomically rejects a changed expected treasury",
-      "contracts ADR 0117: compatible upgrades and custody-gated PackageVersion on every mutation",
-      "contracts ADR 0099 (amended 2026-10-20): finalize requires confirmed unregulated Currency; native Aftermath is published but disabled on that deployment",
-      "contracts PR 108: native Aftermath new returns a mandatory FinalizeTicket consumed by native finalize; expose native creation, reservation sharing, migration, fee collection and event readers in the SDK",
+      LAUNCH_STACK_FREEZE,
+      "contracts #202: blast_presale::migrate returns a Migration for the venue's migrate; the presale's own venues, vault and rewards are removed",
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },
   {
-    path: "production-admin-v1.json",
-    baseline: CANONICAL_BASELINE,
-    approvedAbiAmendments: [
-      "contracts ADR 0097 (amended 2026-10-02, admin package review): upgrade_custody::publisher borrows the sealed Publisher, operational_version::new takes the package's one-time witness, and advance takes the versioned object's UID",
-    ],
-    packages: [["admin", "admin", "blast_admin"]],
-  },
-  {
-    path: "production-partners-v1.json",
-    baseline: CANONICAL_BASELINE,
-    approvedAbiAmendments: [
-      "contracts ADR 0095 (amended 2026-10-11): pay takes TxContext and transfers the partner's share as a coin",
-    ],
-    packages: [["partners", "partners", "blast_partners"]],
-  },
-  {
     path: "production-aftermath-dao-presale-v1.json",
+    approvedAbiAmendments: [
+      LAUNCH_STACK_FREEZE,
+      "contracts #200: the vendor is a plain venue over blast_core (prepare, migrate)",
+    ],
     packages: [
       [
         "aftermathDaoPresale",
@@ -124,6 +105,7 @@ const artifactDeclarations = [
   },
   {
     path: "production-blast-sui-v1.json",
+    baseline: BLAST_SUI_BOOSTS_BASELINE,
     packages: [["blastSui", "blast_sui", "blast_sui"]],
     approvedAbiAmendments: [
       "contracts ADR 0059: remove sender and unchanged state from event payloads",
@@ -137,6 +119,7 @@ const artifactDeclarations = [
   },
   {
     path: "production-boosts-v1.json",
+    baseline: BLAST_SUI_BOOSTS_BASELINE,
     packages: [
       ["boostsCore", "boosts/core", "blast_boosts_core"],
       ["boostsProducts", "boosts/products", "blast_boosts_products"],
@@ -181,7 +164,24 @@ function frozenSources(commit) {
     input: archive.stdout,
   });
   if (extract.status !== 0) throw new Error(String(extract.stderr));
+  separateTreasuryAddress(directory);
   return directory;
+}
+
+/**
+ * `blast_core` leaves its publish-time `blast_treasury` named address at
+ * `0x0`, the package's own address, so `sui move summary` would name the
+ * package (and every type it defines) `blast_treasury`. A distinct
+ * placeholder in the extracted copy keeps each summary under its package name.
+ */
+function separateTreasuryAddress(directory) {
+  const manifest = join(directory, "sui", "core", "Move.toml");
+  if (!existsSync(manifest)) return;
+  const source = readFileSync(manifest, "utf8");
+  writeFileSync(
+    manifest,
+    source.replace(/^blast_treasury = "0x0"$/m, 'blast_treasury = "0x7ea5"'),
+  );
 }
 
 function checkArtifact(declaration) {
@@ -382,27 +382,384 @@ function normalizeType(type) {
 function classifyFunction(packageName, moduleName, functionName) {
   const classifier = functionClassifiers[packageName];
   if (!classifier) throw new Error(`unknown package ${packageName}`);
-  return classifier(moduleName, functionName);
+  const sdk = classifier(moduleName, functionName);
+  if (sdk === undefined) {
+    throw new Error(
+      `unclassified function ${packageName}::${moduleName}::${functionName}`,
+    );
+  }
+  return sdk;
+}
+
+/** `module::function` → SDK role, for each set. */
+function classifierOf(sets, byModule = {}) {
+  return (moduleName, functionName) => {
+    const key = `${moduleName}::${functionName}`;
+    for (const [sdk, names] of Object.entries(sets)) {
+      if (names.includes(key)) return sdk;
+    }
+    return byModule[moduleName];
+  };
 }
 
 const functionClassifiers = {
-  blast_fun: (moduleName, functionName) =>
-    classifyLaunchpadFunction("blast_fun", moduleName, functionName),
-  launch_ticket_template: (moduleName, functionName) =>
-    rejectTemplateFunction("launch_ticket_template", moduleName, functionName),
-  coin_template: (moduleName, functionName) =>
-    rejectTemplateFunction("coin_template", moduleName, functionName),
-  blast_fun_migrators: classifyMigratorFunction,
-  blast_sui: classifyBlastSuiFunction,
+  blast_admin: classifierOf(
+    {
+      builder: [
+        "blast_acl::sign_in",
+        "blast_acl::grant_admin",
+        "blast_acl::revoke_admin",
+        "blast_acl::grant_role",
+        "blast_acl::revoke_role",
+        "blast_acl::destroy_admin_cap",
+        "blast_acl::begin_super_admin_transfer",
+        "blast_acl::cancel_super_admin_transfer",
+        "blast_acl::accept_super_admin_transfer",
+        "blast_acl::destroy_retired_super_admin_cap",
+        "package_admin::pause",
+        "package_admin::schedule_upgrade",
+        "package_admin::schedule_make_immutable",
+        "package_admin::cancel_upgrade_action",
+        "package_admin::schedule_upgrade_delay",
+        "package_admin::apply_upgrade_delay",
+      ],
+      read: [
+        "blast_acl::admin_count",
+        "blast_acl::admin_roles",
+        "blast_acl::has_role",
+        "blast_acl::is_admin",
+        "blast_acl::max_roles_per_admin",
+        "blast_acl::super_admin_cap_id",
+        "blast_acl::super_admin_transfer",
+        "blast_acl::super_admin_transfer_delay_ms",
+        "package_admin::current_package_id",
+        "package_admin::has_upgrade_cap",
+        "package_admin::initial_upgrade_delay_ms",
+        "package_admin::is_upgrade_delay_guarded",
+        "package_admin::pending_upgrade",
+        "package_admin::publisher_id",
+        "package_admin::upgrade_cap_id",
+        "package_admin::upgrade_cap_version",
+        "package_admin::upgrade_delay_ms",
+        "package_admin::upgrade_digest",
+        "package_admin::upgrade_policy",
+      ],
+      // Only a package's own code holds its PackageWitness or Publisher.
+      "move-composition": [
+        "package_admin::clear_pause_bits",
+        "package_admin::publisher",
+        "package_admin::publisher_mut",
+      ],
+      // Publishing wraps the Publication; upgrades are Sui CLI publish tooling.
+      "intentional-deployment-exclusion": ["package_admin::wrap"],
+      "intentional-upgrade-exclusion": [
+        "package_admin::authorize_upgrade",
+        "package_admin::commit_upgrade_and_advance",
+        "package_admin::make_immutable",
+      ],
+    },
+    {
+      // Consumers embed these values in their own objects.
+      delayed: "move-composition",
+      delayed_action: "move-composition",
+      delayed_map: "move-composition",
+      delayed_set: "move-composition",
+      package_version: "move-composition",
+    },
+  ),
+  blast_partners: classifierOf(
+    {
+      builder: [
+        "blast_partners::register",
+        "blast_partners::schedule_share",
+        "blast_partners::apply_share",
+        "blast_partners::cancel_share",
+        "blast_partners::schedule_cap",
+        "blast_partners::apply_cap",
+        "blast_partners::cancel_cap",
+        "blast_partners::set_recipient",
+        "blast_partners::new_cap",
+        "blast_partners::destroy_cap",
+      ],
+      read: [
+        "blast_partners::cap_id",
+        "blast_partners::delay_ms",
+        "blast_partners::is_cap_ready",
+        "blast_partners::is_share_ready",
+        "blast_partners::max_share_bps",
+        "blast_partners::pending_cap_id",
+        "blast_partners::pending_share_bps",
+        "blast_partners::recipient",
+        "blast_partners::share_bps",
+      ],
+      // Products pay partners from Blast's own fee balance.
+      "move-composition": ["blast_partners::pay"],
+    },
+    {
+      // Products embed a PartnerList in their own config.
+      partner_list: "move-composition",
+    },
+  ),
+  blast_core: classifierOf(
+    {
+      builder: [
+        "blast_treasury::schedule_destination",
+        "blast_treasury::apply_destination",
+        "blast_treasury::cancel_destination",
+      ],
+      // Values built in the PTB for a product or vault call.
+      compositional: [
+        "bps::new",
+        "fee_split::address_destination",
+        "fee_split::owner_destination",
+        "fee_split::auto_lp_destination",
+        "fee_split::holder_rewards_destination",
+        "fee_split::burn_destination",
+        "fee_split::route",
+        "fee_split::new",
+        "payout::vesting_terms",
+        "payout::recipient",
+      ],
+      read: [
+        "blast_treasury::destination",
+        "blast_treasury::delay_ms",
+        "blast_treasury::pending_destination",
+        "blast_treasury::is_destination_ready",
+        "blast_treasury::is_guarded",
+      ],
+    },
+    {
+      // Mirrored off chain as constants and bigint math.
+      constants: "read",
+      bps: "move-composition",
+      fee_split: "move-composition",
+      payout: "move-composition",
+      merkle: "move-composition",
+      migration: "move-composition",
+      owner_proof: "move-composition",
+      protocol_fees: "move-composition",
+    },
+  ),
+  blast_vault: classifierOf({
+    builder: [
+      "blast_vault_package::schedule_witness",
+      "blast_vault_package::apply_witness",
+      "blast_vault_package::cancel_witness",
+      "blast_vault_package::remove_witness",
+      "blast_vault_package::schedule_witness_delay",
+      "blast_vault_package::apply_witness_delay",
+      "blast_vault_package::cancel_witness_delay",
+      "blast_vault_package::unpause",
+      "blast_vault_package::make_immutable",
+      "holder_rewards::schedule_round",
+      "holder_rewards::cancel_round",
+      "holder_rewards::publish_round",
+      "holder_rewards::claim",
+      "holder_rewards::close_round",
+      "holder_rewards::settle_gas_reserve",
+      "holder_rewards::schedule_round_delay",
+      "holder_rewards::apply_round_delay",
+      "holder_rewards::cancel_round_delay",
+      "vault::claim_owner_balances",
+      "vault::schedule_fee_split",
+      "vault::cancel_fee_split",
+      "vault::schedule_protocol_bps",
+      "vault::apply_protocol_bps",
+      "vault::cancel_protocol_bps",
+      "vault::pay_protocol_fees_with_partner",
+    ],
+    read: ["vault::assert_fee_split_ready", "vault::pool_id"],
+    // Each takes the venue's own witness; the migrators venues call them.
+    "move-composition": [
+      "vault::new",
+      "vault::share_with_position",
+      "vault::position_mut",
+      "vault::has_auto_lp_position",
+      "vault::attach_auto_lp_position",
+      "vault::auto_lp_position",
+      "vault::auto_lp_position_mut",
+      "vault::split_fees",
+      "vault::apply_fee_split",
+      "vault::take_auto_lp",
+      "vault::keep_auto_lp",
+      "vault::take_buyback_quote",
+      "vault::burn_buyback",
+    ],
+  }),
+  blast_migrators: classifierOf({
+    builder: ["cetus", "bluefin"].flatMap((venue) =>
+      [
+        "prepare",
+        "migrate",
+        "collect_fees",
+        "settle_and_apply_fee_split",
+        "buyback_and_burn",
+      ].map((name) => `${venue}::${name}`),
+    ),
+  }),
+  blast_fun: classifyLaunchpadFunction,
+  launch_ticket_template: () => undefined,
+  coin_template: () => undefined,
   blast_presale: classifyPresaleFunction,
-  blast_admin: classifyAdminFunction,
-  blast_partners: classifyPartnersFunction,
-  blast_aftermath_dao_presale: classifyAftermathDaoPresaleFunction,
+  blast_aftermath_dao_presale: classifierOf({
+    builder: [
+      "blast_aftermath_dao_presale::prepare",
+      "blast_aftermath_dao_presale::migrate",
+    ],
+  }),
+  blast_sui: classifyBlastSuiFunction,
   blast_boosts_core: () => "move-composition",
-  blast_boosts_products: (moduleName, functionName) =>
-    rejectTemplateFunction("blast_boosts_products", moduleName, functionName),
+  // A generated-package template runs only its initializer.
+  blast_boosts_products: () => undefined,
   blast_boosts_aftermath: classifyBoostsFunction,
 };
+
+/** The launchpad's own entry points the SDK builds, by module. */
+const launchpadBuilders = {
+  launch: [
+    "apply_creator_metadata_cap_delay",
+    "apply_creator_metadata_cap_reassignment",
+    "apply_curve_fee_cap_delay",
+    "apply_curve_fee_cap_reassignment",
+    "buy",
+    "cancel_creator_metadata_cap_reassignment",
+    "cancel_curve_fee_cap_reassignment",
+    "claim_creator_caps",
+    "claim_creator_fees",
+    "claim_protocol_fees",
+    "claim_protocol_fees_with_partner",
+    "deliver_opening_round",
+    "finalize",
+    "join_opening_round",
+    "migrate",
+    "new",
+    "prove_owner",
+    "schedule_creator_metadata_cap_delay",
+    "schedule_creator_metadata_cap_reassignment",
+    "schedule_curve_fee_cap_delay",
+    "schedule_curve_fee_cap_reassignment",
+    "sell",
+    "set_allocation_plan",
+    "set_description",
+    "set_graduation_target",
+    "set_icon_url",
+    "set_lp_fee_split",
+    "set_name",
+    "set_opening_round",
+    "set_partner",
+    "set_virtual_quote",
+    "settle_opening_round",
+    "share",
+  ],
+  launch_config: [
+    "add_partner",
+    "apply_creation_fee",
+    "apply_protocol_allocation",
+    "apply_protocol_lp_fees",
+    "apply_trade_fees",
+    "apply_venue",
+    "apply_venue_delay",
+    "cancel_creation_fee",
+    "cancel_protocol_allocation",
+    "cancel_protocol_lp_fees",
+    "cancel_trade_fees",
+    "cancel_venue",
+    "cancel_venue_delay",
+    "remove_partner",
+    "remove_venue",
+    "schedule_creation_fee",
+    "schedule_protocol_allocation",
+    "schedule_protocol_lp_fees",
+    "schedule_trade_fees",
+    "schedule_venue",
+    "schedule_venue_delay",
+    "set_meme_decimals_allowed",
+    "set_quote_allowed",
+    "unpause",
+  ],
+  runtime_config: [
+    "apply_creator_claim_signer",
+    "apply_creator_claim_signer_delay",
+    "apply_protocol_fee_share",
+    "cancel_creator_claim_signer",
+    "cancel_creator_claim_signer_delay",
+    "cancel_protocol_fee_share",
+    "revoke_creator_claim_signer",
+    "schedule_creator_claim_signer",
+    "schedule_creator_claim_signer_delay",
+    "schedule_protocol_fee_share",
+  ],
+};
+
+function classifyLaunchpadFunction(moduleName, functionName) {
+  const key = `${moduleName}::${functionName}`;
+  if (launchpadBuilders[moduleName]?.includes(functionName)) return "builder";
+  if (key === "allocation::recipient_share" || key === "allocation::plan") {
+    return "compositional";
+  }
+  if (key === "launch_ticket::new") return "template-builder";
+  if (moduleName === "creator_authority") {
+    if (functionName.startsWith("new_")) return "template-internal";
+    if (functionName.startsWith("destroy_")) return "move-composition";
+  }
+  return undefined;
+}
+
+/** The presale's own entry points the SDK builds, by module. */
+const presaleBuilders = {
+  blast_presale: [
+    "allowlisted_eligibility",
+    "cancel_unlaunched",
+    "claim",
+    "commit_allowlisted",
+    "commit_open",
+    "commit_uncapped",
+    "destroy_cap",
+    "finalize",
+    "migrate",
+    "new",
+    "open_eligibility",
+    "pay_protocol_fees_with_partner",
+    "prove_owner",
+    "recipient_share",
+    "set_eligibility",
+    "set_fee_split",
+    "set_hard_cap",
+    "set_participant_vesting",
+    "set_partner",
+    "set_protocol_fees",
+    "set_raise",
+    "set_supply",
+    "set_token_allocations",
+    "set_uncapped_phase",
+    "set_windows",
+    "settle",
+    "share",
+    "uncapped_for_anyone",
+    "uncapped_for_eligible",
+  ],
+  creation_policy: [
+    "add_partner",
+    "apply_venue",
+    "apply_venue_delay",
+    "cancel_venue",
+    "cancel_venue_delay",
+    "remove_partner",
+    "remove_venue",
+    "schedule_venue",
+    "schedule_venue_delay",
+    "set_quote_allowed",
+    "unpause",
+  ],
+  fee_policy: ["apply_fees", "cancel_fees", "schedule_fees"],
+};
+
+function classifyPresaleFunction(moduleName, functionName) {
+  // The initializer's venue is read inside the creation PTB.
+  if (moduleName === "blast_presale" && functionName === "venue") return "read";
+  if (presaleBuilders[moduleName]?.includes(functionName)) return "builder";
+  return undefined;
+}
 
 /** The consumer SDK builds active trades, maintenance and issuer metadata updates. */
 const boostsBuilders = new Set([
@@ -445,249 +802,12 @@ function classifyBoostsFunction(moduleName, functionName) {
   ) {
     return "intentional-upgrade-exclusion";
   }
-  return classifyPackageAdmin(
-    "blast_boosts_aftermath",
-    moduleName,
-    functionName,
-  );
-}
-
-const partnersBuilders = new Set([
-  "new_cap",
-  "register",
-  "schedule_share",
-  "schedule_cap",
-  "set_recipient",
-  "destroy_cap",
-]);
-
-/** `AftermathDaoPresaleCalls` builds every entry point of the vendor package. */
-function classifyAftermathDaoPresaleFunction(moduleName, functionName) {
-  if (
-    moduleName === "blast_aftermath_dao_presale" &&
-    ["new", "finalize", "migrate"].includes(functionName)
-  ) {
-    return "builder";
-  }
-  throw new Error(
-    `unclassified function blast_aftermath_dao_presale::${moduleName}::${functionName}`,
-  );
-}
-
-function classifyPartnersFunction(moduleName, functionName) {
-  if (partnersBuilders.has(functionName)) return "builder";
-  // Products call `pay` with Blast's own fee balance; `delay_ms` is
-  // `PARTNER_DELAY_MS` off chain.
-  if (functionName === "pay" || functionName === "delay_ms") {
-    return "move-composition";
-  }
-  throw new Error(
-    `unclassified function blast_partners::${moduleName}::${functionName}`,
-  );
-}
-
-const aclBuilders = new Set([
-  "sign_in",
-  "grant_admin",
-  "revoke_admin",
-  "grant_role",
-  "revoke_role",
-  "destroy_admin_cap",
-  "begin_super_admin_transfer",
-  "cancel_super_admin_transfer",
-  "accept_super_admin_transfer",
-  "destroy_retired_super_admin_cap",
-]);
-
-function classifyAdminFunction(moduleName, functionName) {
-  if (moduleName === "blast_acl" && aclBuilders.has(functionName)) {
-    return "builder";
-  }
-  // Consumers' own package_admin and one-time-witness modules call these on
-  // values they wrap; no transaction can reach them directly.
-  if (
-    moduleName === "upgrade_custody" ||
-    moduleName === "operational_version"
-  ) {
-    return "move-composition";
-  }
-  throw new Error(
-    `unclassified function blast_admin::${moduleName}::${functionName}`,
-  );
+  return classifyPackageAdmin(moduleName, functionName);
 }
 
 /**
- * Every event the SDK decodes and replays. blast_admin's generic upgrade and
- * operational-version events follow package upgrades, which publish tooling
- * drives, so the SDK leaves them out with the upgrade calls.
- */
-function classifyEvent(packageName, moduleName, event) {
-  if (packageName === "blast_boosts_aftermath") {
-    return ["Minted", "Redeemed", "Rebalanced"].includes(event.name)
-      ? "decoder"
-      : "intentional-operator-exclusion";
-  }
-  if (packageName === "blast_presale" && moduleName === "aftermath") {
-    return "decoder";
-  }
-  if (packageName === "blast_admin" && event.typeParameters.length > 0) {
-    return "intentional-upgrade-exclusion";
-  }
-  return "decoder-reducer";
-}
-
-const presaleBuilders = new Set([
-  "aftermath::new",
-  "aftermath::finalize",
-  "aftermath::share",
-  "aftermath::migrate",
-  "aftermath::collect_fees",
-  "blast_presale::open_eligibility",
-  "blast_presale::allowlisted_eligibility",
-  "blast_presale::uncapped_for_eligible",
-  "blast_presale::uncapped_for_anyone",
-  "blast_presale::recipient_share",
-  "blast_presale::vested_recipient_share",
-  "blast_presale::vesting_terms",
-  "blast_presale::fee_split",
-  "blast_presale::set_supply",
-  "blast_presale::set_token_allocations",
-  "blast_presale::set_participant_vesting",
-  "blast_presale::set_raise",
-  "blast_presale::set_windows",
-  "blast_presale::set_eligibility",
-  "blast_presale::set_uncapped_phase",
-  "blast_presale::set_hard_cap",
-  "blast_presale::set_fee_split",
-  "blast_presale::set_partner",
-  "blast_presale::finalize",
-  "blast_presale::share",
-  "blast_presale::set_protocol_fees",
-  "blast_presale::commit_open",
-  "blast_presale::commit_allowlisted",
-  "blast_presale::commit_uncapped",
-  "blast_presale::settle",
-  "blast_presale::cancel_unlaunched",
-  "blast_presale::claim",
-  "blast_presale::destroy_cap",
-  "blast_presale::pay_protocol_fees_with_partner",
-  "fee_policy::set_fees",
-  "fee_policy::set_destination",
-  "creation_policy::set_quote_allowed",
-  "creation_policy::set_migration_witness_allowed",
-  "creation_policy::add_partner",
-  "creation_policy::remove_partner",
-  "cetus::new",
-  "cetus::migrate",
-  "cetus::collect_fees",
-  "cetus::new_vault",
-  "bluefin::new",
-  "bluefin::migrate",
-  "bluefin::collect_fees",
-  "bluefin::new_vault",
-  "presale_vault::claim_migration_residuals",
-  "presale_vault::set_protocol_lp_fees",
-  "presale_vault::pay_protocol_lp_fees_with_partner",
-  "holder_rewards::publish_round",
-  "holder_rewards::claim",
-  "holder_rewards::close_round",
-  "holder_rewards::settle_gas_reserve",
-]);
-const presaleEventNames = new Set([
-  "PoolCreationReserved",
-  "DaoFeePoolCreated",
-  "PresaleCreated",
-  "PresaleOpened",
-  "ProtocolFeesChanged",
-  "Committed",
-  "PresaleFunded",
-  "PresaleCancelled",
-  "PresaleMigrated",
-  "ProtocolFeesPaid",
-  "RaiseAllocated",
-  "RecipientAllocated",
-  "Claimed",
-  "VaultCreated",
-  "PoolTierReserved",
-  "FeesCollected",
-  "MigrationResidualsClaimed",
-  "ProtocolLpFeesChanged",
-  "ProtocolLpFeesPaid",
-  "FeesChanged",
-  "DestinationChanged",
-  "QuoteSet",
-  "MigrationWitnessSet",
-  "PartnerAdded",
-  "PartnerRemoved",
-  "RoundPublished",
-  "RoundClosed",
-  "RewardClaimed",
-  "GasReserveSettled",
-  "HolderMemePaid",
-]);
-
-function classifyPresaleFunction(moduleName, functionName) {
-  const key = `${moduleName}::${functionName}`;
-  if (presaleBuilders.has(key)) return "builder";
-  // Every rate argument is a `bps::Bps` built in the PTB.
-  if (key === "bps::new") return "compositional";
-  // A migrator's module calls these with its own sealed witness, which no
-  // transaction can construct; the SDK builds that migrator's entry points.
-  // A migrator finalizing an initializer it is handed reads its witness in Move.
-  if (
-    key === "blast_presale::new" ||
-    key === "blast_presale::migrate" ||
-    key === "blast_presale::migration_witness"
-  ) {
-    return "move-composition";
-  }
-  // `allowlist.ts` mirrors the Merkle tree and `math.ts` the BPS arithmetic off chain.
-  if (moduleName === "merkle_tree" || moduleName === "bps") {
-    return "move-composition";
-  }
-  return classifyPackageAdmin("blast_presale", moduleName, functionName);
-}
-
-/** A generated-package template runs only its initializer: any public function is new surface. */
-function rejectTemplateFunction(packageName, moduleName, functionName) {
-  throw new Error(
-    `unexpected public function ${packageName}::${moduleName}::${functionName}`,
-  );
-}
-
-const migratorBuilders = new Set([
-  "bluefin::new",
-  "bluefin::migrate",
-  "bluefin::collect_fees",
-  "bluefin::settle_and_update_fee_split",
-  "bluefin::buyback_and_burn",
-  "cetus::new",
-  "cetus::migrate",
-  "cetus::collect_fees",
-  "cetus::settle_and_update_fee_split",
-  "cetus::buyback_and_burn",
-  "vault::claim_creator_fees",
-  "vault::claim_protocol_fees",
-  "vault::claim_protocol_lp_fees_with_partner",
-  "blast_holder_rewards::publish_round",
-  "blast_holder_rewards::claim",
-  "lp_fee_policy::set_default_shares",
-  "lp_fee_policy::set_coin_shares",
-  "lp_fee_policy::clear_coin_shares",
-  "lp_fee_policy::set_protocol_destination",
-]);
-
-function classifyMigratorFunction(moduleName, functionName) {
-  const key = `${moduleName}::${functionName}`;
-  if (migratorBuilders.has(key)) return "builder";
-  return classifyPackageAdmin("blast_fun_migrators", moduleName, functionName);
-}
-
-/**
- * Every package's `package_admin` holds its Publisher and UpgradeCap.
- * Wrapping them is part of publishing, and authorizing, committing,
- * restricting or sealing an upgrade is CLI publish tooling; neither is SDK
- * surface.
+ * blast_sui's and boosts' own `package_admin` (frozen before the generic
+ * administration): wrapping is publishing, and upgrades are publish tooling.
  */
 const upgradeCustodyFunctions = new Set([
   "authorize_upgrade",
@@ -697,96 +817,13 @@ const upgradeCustodyFunctions = new Set([
   "make_immutable",
 ]);
 
-function classifyPackageAdmin(packageName, moduleName, functionName) {
-  if (moduleName === "package_admin") {
-    if (functionName === "wrap") return "intentional-deployment-exclusion";
-    if (upgradeCustodyFunctions.has(functionName)) {
-      return "intentional-upgrade-exclusion";
-    }
+function classifyPackageAdmin(moduleName, functionName) {
+  if (moduleName !== "package_admin") return undefined;
+  if (functionName === "wrap") return "intentional-deployment-exclusion";
+  if (upgradeCustodyFunctions.has(functionName)) {
+    return "intentional-upgrade-exclusion";
   }
-  throw new Error(
-    `unclassified function ${packageName}::${moduleName}::${functionName}`,
-  );
-}
-
-const launchpadBuilders = new Set([
-  "launch::finalize",
-  "launch::share",
-  "launch::buy",
-  "launch::sell",
-  "launch::set_graduation_target",
-  "launch::set_allocation_plan",
-  "launch::set_lp_fee_split",
-  "launch::set_virtual_quote",
-  "launch::set_opening_round",
-  "launch::set_partner",
-  "launch::join_opening_round",
-  "launch::settle_opening_round",
-  "launch::deliver_opening_round",
-  "launch::claim_creator_caps",
-  "launch::claim_creator_fees",
-  "launch::claim_protocol_fees",
-  "launch::claim_protocol_fees_with_partner",
-  "launch::set_name",
-  "launch::set_description",
-  "launch::set_icon_url",
-  "launch::reassign_curve_fee_cap",
-  "launch::reassign_metadata_cap",
-  "launch_config::set_protocol_allocation",
-  "launch_config::set_meme_decimals_allowed",
-  "launch_config::set_quote_allowed",
-  "launch_config::set_trade_fees",
-  "launch_config::set_creation_fee",
-  "launch_config::add_partner",
-  "launch_config::remove_partner",
-  "launch_config::set_migration_witness_allowed",
-  "runtime_config::set_creator_claim_signer",
-  "runtime_config::set_protocol_fee_share",
-  "runtime_config::set_treasury",
-]);
-const launchpadCompositional = new Set([
-  "allocation::recipient",
-  "allocation::plan",
-  "allocation::route",
-  "allocation::fee_split",
-  "bps::new",
-]);
-const launchpadAdapterComposition = new Set([
-  "launch::new",
-  "launch::treasury_cap_mut",
-  "launch::migrate",
-]);
-
-function classifyLaunchpadFunction(packageName, moduleName, functionName) {
-  const key = `${moduleName}::${functionName}`;
-  if (launchpadBuilders.has(key)) return "builder";
-  if (launchpadCompositional.has(key)) return "compositional";
-  if (launchpadAdapterComposition.has(key)) return "adapter-composition";
-  if (key === "launch_ticket::new") return "template-builder";
-  if (moduleName === "creator_authority" && functionName.startsWith("new_")) {
-    return "template-internal";
-  }
-  if (isLaunchpadMoveComposition(moduleName, functionName)) {
-    return "move-composition";
-  }
-  return classifyPackageAdmin(packageName, moduleName, functionName);
-}
-
-const launchGetters = new Set([
-  "launch::pool_tier",
-  "launch::lp_fee_split",
-  "launch::partner_id",
-  "launch::assert_curve_fee_cap",
-]);
-
-/** Getters and exact math the SDK mirrors off chain. */
-function isLaunchpadMoveComposition(moduleName, functionName) {
-  return (
-    moduleName === "bps" ||
-    moduleName === "allocation" ||
-    launchGetters.has(`${moduleName}::${functionName}`) ||
-    (moduleName === "creator_authority" && functionName.startsWith("destroy_"))
-  );
+  return undefined;
 }
 
 const blastSuiBuilders = new Set([
@@ -801,28 +838,50 @@ const blastSuiBuilders = new Set([
   "vault::sync",
   "vault::set_redeem_fee",
 ]);
-const blastSuiMoveComposition = new Set(["package_admin::has_upgrade_cap"]);
+const blastSuiDeploymentExclusions = new Set([
+  "vault::create",
+  "package_admin::add_capability",
+  "deposit_receipt::create_display",
+  "package_admin::new",
+  "package_admin::share",
+]);
 
 function classifyBlastSuiFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
   if (blastSuiBuilders.has(key)) return "builder";
-  if (isBlastSuiDeploymentExclusion(key)) {
+  if (blastSuiDeploymentExclusions.has(key)) {
     return "intentional-deployment-exclusion";
   }
-  if (blastSuiMoveComposition.has(key)) return "move-composition";
-  return classifyPackageAdmin("blast_sui", moduleName, functionName);
+  if (key === "package_admin::has_upgrade_cap") return "move-composition";
+  return classifyPackageAdmin(moduleName, functionName);
 }
 
-function isBlastSuiDeploymentExclusion(key) {
-  return (
-    key === "vault::create" ||
-    key === "package_admin::add_capability" ||
-    key === "deposit_receipt::create_display" ||
-    key === "package_admin::new" ||
-    key === "package_admin::share"
-  );
+/** Every event the SDK decodes and replays; boosts' operator events are excluded. */
+function classifyEvent(packageName, _moduleName, event) {
+  if (packageName === "blast_boosts_aftermath") {
+    return ["Minted", "Redeemed", "Rebalanced"].includes(event.name)
+      ? "decoder"
+      : "intentional-operator-exclusion";
+  }
+  return "decoder-reducer";
 }
 
+/** The delayed modules own their events; the SDK decodes all 21. */
+const delayedEventModules = new Set([
+  "delayed",
+  "delayed_action",
+  "delayed_map",
+  "delayed_set",
+]);
+const delayedEventName =
+  /^(Delayed|Action|Map|Set)(Created|Scheduled|Cancelled|Applied|Destroyed)$|^MemberRemoved$/;
+const partnersEventNames = new Set([
+  "PartnerUpdated",
+  "PartnerPaid",
+  "PartnerAdded",
+  "PartnerRemoved",
+  "PartnerListDestroyed",
+]);
 const blastSuiEventNames = new Set([
   "PackageCapabilityAdded",
   "VaultCreated",
@@ -840,22 +899,32 @@ const blastSuiEventNames = new Set([
 ]);
 
 function isEventStruct(packageName, moduleName, structName) {
-  if (packageName === "blast_boosts_aftermath") {
-    return moduleName === "events";
+  switch (packageName) {
+    case "blast_admin":
+      return (
+        moduleName === "blast_admin_events" ||
+        (delayedEventModules.has(moduleName) &&
+          delayedEventName.test(structName))
+      );
+    case "blast_partners":
+      return partnersEventNames.has(structName);
+    case "blast_core":
+      return moduleName === "blast_core_events";
+    case "blast_vault":
+      return moduleName === "blast_vault_events";
+    case "blast_presale":
+      // PresaleCreated is defined beside the sale, not in `events`.
+      return (
+        moduleName === "events" ||
+        (moduleName === "blast_presale" && structName === "PresaleCreated")
+      );
+    case "blast_aftermath_dao_presale":
+      return structName === "PoolCreationReserved" || structName === "Migrated";
+    case "blast_sui":
+      return moduleName === "events" && blastSuiEventNames.has(structName);
+    default:
+      return moduleName === "events";
   }
-  if (packageName === "blast_aftermath_dao_presale") {
-    return structName === "PoolCreationReserved" || structName === "Migrated";
-  }
-  if (packageName === "blast_presale") return presaleEventNames.has(structName);
-  if (packageName === "blast_admin") return moduleName === "blast_admin_events";
-  if (packageName === "blast_partners") {
-    return structName === "PartnerUpdated" || structName === "PartnerPaid";
-  }
-  if (packageName === "blast_sui" && moduleName === "events") {
-    return blastSuiEventNames.has(structName);
-  }
-  if (moduleName === "events") return true;
-  return packageName === "blast_fun_migrators" && moduleName === "blast_events";
 }
 
 function runClassificationProbe(argumentIndex) {

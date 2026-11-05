@@ -4,6 +4,7 @@ import {
   chmodSync,
   existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -14,16 +15,27 @@ import test from "node:test";
 
 const contractsDirectory =
   process.env.BLAST_CONTRACTS_DIR ?? "../blast-v2-contracts";
-const contractsManifest = join(contractsDirectory, "sui/launchpad/Move.toml");
+const contractsManifest = join(contractsDirectory, "sui/core/Move.toml");
+/** Artifact file → package key → event count. */
 const expectedEvents = {
-  launchpad: 28,
-  migrators: 14,
-  blastSui: 13,
-  presale: 30,
-  admin: 15,
-  partners: 2,
-  aftermathDaoPresale: 2,
-  boostsAftermath: 21,
+  "production-admin-v1.json": { admin: 36 },
+  "production-partners-v1.json": { partners: 5 },
+  "production-core-v1.json": { core: 1 },
+  "production-vault-v1.json": { vault: 10 },
+  "production-migrators-v1.json": { migrators: 2 },
+  "production-launchpad-v1.json": {
+    launchpad: 18,
+    launchTicketTemplate: 0,
+    coinTemplate: 0,
+  },
+  "production-presale-v1.json": { presale: 11 },
+  "production-aftermath-dao-presale-v1.json": { aftermathDaoPresale: 2 },
+  "production-blast-sui-v1.json": { blastSui: 13 },
+  "production-boosts-v1.json": {
+    boostsCore: 0,
+    boostsProducts: 0,
+    boostsAftermath: 21,
+  },
 };
 
 type Artifact = {
@@ -98,81 +110,22 @@ test("rejects a Sui CLI version that differs from the frozen artifacts", () => {
 });
 
 test("freezes every production package and event", () => {
-  const boosts = readArtifact("production-boosts-v1.json");
-  const launchpad = readArtifact("production-launchpad-v1.json");
-  const blastSui = readArtifact("production-blast-sui-v1.json");
-  const presale = readArtifact("production-presale-v1.json");
-  const admin = readArtifact("production-admin-v1.json");
-  const partners = readArtifact("production-partners-v1.json");
-  const aftermathDaoPresale = readArtifact(
-    "production-aftermath-dao-presale-v1.json",
-  );
-
-  assert.deepEqual(Object.keys(launchpad.packages).sort(), [
-    "coinTemplate",
-    "launchTicketTemplate",
-    "launchpad",
-    "migrators",
-  ]);
-  assert.deepEqual(Object.keys(boosts.packages), [
-    "boostsCore",
-    "boostsProducts",
-    "boostsAftermath",
-  ]);
-  assert.equal(
-    countEvents(boosts, "boostsAftermath"),
-    expectedEvents.boostsAftermath,
-  );
-  const boostsCore = boosts.packages.boostsCore;
-  const boostsProducts = boosts.packages.boostsProducts;
-  const boostsAftermathEvents = boosts.packages.boostsAftermath?.modules.events;
-  assert.ok(boostsCore);
-  assert.ok(boostsProducts);
-  assert.ok(boostsAftermathEvents);
   assert.deepEqual(
-    Object.values(boostsCore.modules).flatMap((module) => module.events),
-    [],
+    readdirSync(new URL("../abi/", import.meta.url)).sort(),
+    Object.keys(expectedEvents).sort(),
   );
-  assert.deepEqual(
-    Object.values(boostsProducts.modules).flatMap((module) => module.events),
-    [],
-  );
-  for (const event of boostsAftermathEvents.events) {
-    assert.ok(
-      ["decoder", "intentional-operator-exclusion"].includes(event.sdk),
-    );
+  for (const [file, packages] of Object.entries(expectedEvents)) {
+    const artifact = readArtifact(file);
+    assert.deepEqual(Object.keys(artifact.packages), Object.keys(packages));
+    for (const [packageName, events] of Object.entries(packages)) {
+      assert.equal(countEvents(artifact, packageName), events, packageName);
+    }
+    assertEveryOperationIsClassified(artifact, file);
   }
-  assert.deepEqual(Object.keys(blastSui.packages), ["blastSui"]);
-  assert.deepEqual(Object.keys(presale.packages), ["presale"]);
-  assert.deepEqual(Object.keys(admin.packages), ["admin"]);
-  assert.deepEqual(Object.keys(partners.packages), ["partners"]);
-  assert.deepEqual(Object.keys(aftermathDaoPresale.packages), [
-    "aftermathDaoPresale",
-  ]);
-  assert.equal(countEvents(launchpad, "launchpad"), expectedEvents.launchpad);
-  assert.equal(countEvents(launchpad, "migrators"), expectedEvents.migrators);
-  assert.equal(countEvents(blastSui, "blastSui"), expectedEvents.blastSui);
-  assert.equal(countEvents(presale, "presale"), expectedEvents.presale);
-  assert.equal(countEvents(admin, "admin"), expectedEvents.admin);
-  assert.equal(countEvents(partners, "partners"), expectedEvents.partners);
-  assert.equal(
-    countEvents(aftermathDaoPresale, "aftermathDaoPresale"),
-    expectedEvents.aftermathDaoPresale,
-  );
-  const eventWrapper = blastSui.packages.blastSui?.modules.blast_events;
+  const eventWrapper = readArtifact("production-blast-sui-v1.json").packages
+    .blastSui?.modules.blast_events;
   assert.ok(eventWrapper);
   assert.ok(eventWrapper.structs.some(({ name }) => name === "Event"));
-
-  for (const artifact of [
-    launchpad,
-    blastSui,
-    presale,
-    admin,
-    partners,
-    aftermathDaoPresale,
-  ]) {
-    assertEveryOperationIsClassified(artifact, artifact === admin);
-  }
 });
 
 test("rejects unknown Boosts adapter functions", () => {
@@ -278,27 +231,51 @@ test("rejects unknown blast_presale function classifications", () => {
   );
 });
 
-function assertEveryOperationIsClassified(
-  artifact: Artifact,
-  isAdmin: boolean,
-) {
-  const modules = Object.values(artifact.packages).flatMap((packageArtifact) =>
-    Object.entries(packageArtifact.modules),
-  );
-  for (const [moduleName, moduleArtifact] of modules) {
-    for (const operation of moduleArtifact.functions) {
-      assert.ok(operation.sdk.length > 0);
-    }
-    for (const event of moduleArtifact.events) {
-      // Native adapter events have their own decoder; admin upgrade events are excluded.
-      assert.equal(
-        event.sdk,
-        moduleName === "aftermath"
-          ? "decoder"
-          : isAdmin && event.typeParameters.length > 0
-            ? "intentional-upgrade-exclusion"
-            : "decoder-reducer",
-      );
+test("rejects unknown launch-stack function classifications", () => {
+  for (const [packageName, moduleName] of [
+    ["blast_core", "blast_treasury"],
+    ["blast_partners", "blast_partners"],
+    ["blast_vault", "vault"],
+    ["blast_migrators", "cetus"],
+    ["blast_fun", "creator_authority"],
+    ["launch_ticket_template", "meme"],
+  ] as const) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/check-contract-abi.mjs",
+        "--classify-function",
+        packageName,
+        moduleName,
+        "future_operation",
+      ],
+      { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+    );
+    assert.notEqual(result.status, 0, `${packageName}::${moduleName}`);
+    assert.match(
+      result.stderr,
+      new RegExp(
+        `unclassified function ${packageName}::${moduleName}::future_operation`,
+      ),
+    );
+  }
+});
+
+function assertEveryOperationIsClassified(artifact: Artifact, file: string) {
+  for (const packageArtifact of Object.values(artifact.packages)) {
+    for (const moduleArtifact of Object.values(packageArtifact.modules)) {
+      for (const operation of moduleArtifact.functions) {
+        assert.ok(operation.sdk.length > 0);
+      }
+      for (const event of moduleArtifact.events) {
+        if (file === "production-boosts-v1.json") {
+          assert.ok(
+            ["decoder", "intentional-operator-exclusion"].includes(event.sdk),
+          );
+        } else {
+          assert.equal(event.sdk, "decoder-reducer");
+        }
+      }
     }
   }
 }

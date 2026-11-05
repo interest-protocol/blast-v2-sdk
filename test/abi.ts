@@ -6,7 +6,7 @@ import { normalizeSuiObjectId, SUI_CLOCK_OBJECT_ID } from "@mysten/sui/utils";
 
 type AbiFunction = {
   name: string;
-  sdk?: string;
+  sdk: string;
   typeParameters: unknown[];
   parameters: unknown[];
   returns: unknown[];
@@ -50,8 +50,7 @@ export function assertBuildersMatchAbi(
     );
     assert.ok(frozen, `${name} is in the frozen ABI`);
     assert.ok(
-      frozen.sdk === undefined ||
-        frozen.sdk === "builder" ||
+      frozen.sdk === "builder" ||
         frozen.sdk === "compositional" ||
         frozen.sdk === "read",
       `${name} is a builder`,
@@ -64,22 +63,33 @@ export function assertBuildersMatchAbi(
       ).length,
       name,
     );
-    if (
-      JSON.stringify(frozen.parameters[1])?.includes('"blast_presale_package"')
-    ) {
-      const argument = call.arguments[1];
+    frozen.parameters.forEach((parameter, index) => {
+      const reference = (parameter as { Reference?: [boolean, unknown] })
+        .Reference;
+      const datatype = (
+        reference?.[1] as
+          | { Datatype?: { module: { name: string }; name: string } }
+          | undefined
+      )?.Datatype;
+      if (
+        datatype?.module.name !== "package_version" ||
+        datatype.name !== "PackageVersion"
+      ) {
+        return;
+      }
+      const argument = call.arguments[index];
       assert.ok(argument?.$kind === "Input", `${name} borrows PackageVersion`);
       const input = tx.getData().inputs[argument.Input];
       assert.ok(
         input?.$kind === "Object" && input.Object.$kind === "SharedObject",
+        `${name} passes PackageVersion as a shared object`,
       );
       assert.equal(
         input.Object.SharedObject.mutable,
-        (frozen.parameters[1] as { Reference?: [boolean, unknown] })
-          ?.Reference?.[0] ?? false,
+        reference?.[0],
         `${name} has the correct PackageVersion mutability`,
       );
-    }
+    });
     return [name];
   });
 }

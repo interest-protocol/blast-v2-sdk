@@ -581,7 +581,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
 test("the fresh ABI requires a coordinated SDK release and matching runtime", () => {
   assert.equal(BLAST_DEPLOYMENTS.mainnet, undefined);
   assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
-  assert.equal(SDK_RELEASE.version, "0.1.4");
+  assert.equal(SDK_RELEASE.version, "0.2.0");
   assert.equal(SDK_RELEASE.published, false);
   assert.equal(SDK_RELEASE.commit, null);
   const packageJson = JSON.parse(
@@ -592,7 +592,7 @@ test("the fresh ABI requires a coordinated SDK release and matching runtime", ()
   );
   assert.equal(SDK_RELEASE.name, packageJson.name);
   assert.equal(SDK_RELEASE.version, packageJson.version);
-  assert.equal(packageJson.version, "0.1.4");
+  assert.equal(packageJson.version, "0.2.0");
 
   const production = productionManifest();
   const runtime = runtimeFor(production);
@@ -684,8 +684,23 @@ test("pins the frozen ABI to the contracts baseline and every artifact key", () 
     "4fe8d739f04bafd0775691795eb9f3727e984089",
   );
   assert.deepEqual(Object.keys(FROZEN_ABI.artifacts), [...ARTIFACT_KEYS]);
-  for (const digest of Object.values(FROZEN_ABI.artifacts))
-    assert.match(digest, /^[0-9a-f]{64}$/);
+  for (const [key, digest] of Object.entries(FROZEN_ABI.artifacts)) {
+    const file = `production-${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}-v1.json`;
+    const artifact = readFileSync(new URL(`../abi/${file}`, import.meta.url));
+    assert.equal(
+      digest,
+      createHash("sha256").update(artifact).digest("hex"),
+      `FROZEN_ABI.artifacts.${key} is the sha256 of abi/${file}`,
+    );
+    // blast-sui and boosts stay frozen at their own earlier baseline.
+    if (key !== "blastSui" && key !== "boosts") {
+      assert.equal(
+        JSON.parse(artifact.toString("utf8")).baseline.contractsCommit,
+        FROZEN_ABI.contractsCommit,
+        file,
+      );
+    }
+  }
   assert.equal("unresolvedRoutes" in FROZEN_ABI, false);
 });
 

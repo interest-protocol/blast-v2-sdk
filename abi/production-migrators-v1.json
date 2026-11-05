@@ -1,0 +1,2488 @@
+{
+  "schemaVersion": 1,
+  "baseline": {
+    "contractsCommit": "4fe8d739f04bafd0775691795eb9f3727e984089",
+    "workingTreeDifferedAtFreeze": false,
+    "approvedAbiAmendments": [
+      "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#212: the fresh one-way launch stack, first freeze",
+      "contracts #200: one product-agnostic blast_migrators venue package for launches and presales"
+    ],
+    "suiCli": "1.77.2-51d177ad7d65"
+  },
+  "packages": {
+    "migrators": {
+      "address": "blast_migrators",
+      "modules": {
+        "blast_migrators": {
+          "functions": [],
+          "structs": [
+            {
+              "name": "BLAST_MIGRATORS",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "PackageWitness",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "bluefin": {
+          "functions": [
+            {
+              "name": "buyback_and_burn",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_vault",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_vault",
+                                  "name": "blast_vault_package"
+                                },
+                                "name": "BLAST_VAULT_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_core",
+                                  "name": "blast_domain"
+                                },
+                                "name": "BuybackAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "bluefin_spot",
+                          "name": "config"
+                        },
+                        "name": "GlobalConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "bluefin_spot",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "collect_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_vault",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_vault",
+                                  "name": "blast_vault_package"
+                                },
+                                "name": "BLAST_VAULT_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "blast_treasury"
+                        },
+                        "name": "Treasury",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "bluefin_spot",
+                          "name": "config"
+                        },
+                        "name": "GlobalConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "bluefin_spot",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "migrate",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_core",
+                      "name": "migration"
+                    },
+                    "name": "Migration",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_migrators",
+                          "name": "venue_config"
+                        },
+                        "name": "VenueConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "bluefin_spot",
+                          "name": "config"
+                        },
+                        "name": "GlobalConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_vault",
+                          "name": "blast_vault_package"
+                        },
+                        "name": "VaultRegistry",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_vault",
+                                  "name": "blast_vault_package"
+                                },
+                                "name": "BLAST_VAULT_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "blast_treasury"
+                        },
+                        "name": "Treasury",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "sui",
+                              "name": "sui"
+                            },
+                            "name": "SUI",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "prepare",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_migrators",
+                          "name": "venue_config"
+                        },
+                        "name": "VenueConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin"
+                        },
+                        "name": "TreasuryCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u32",
+                "u64"
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_core",
+                      "name": "migration"
+                    },
+                    "name": "VenueTicket",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "settle_and_apply_fee_split",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_vault",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_vault",
+                                  "name": "blast_vault_package"
+                                },
+                                "name": "BLAST_VAULT_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "blast_treasury"
+                        },
+                        "name": "Treasury",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "bluefin_spot",
+                          "name": "config"
+                        },
+                        "name": "GlobalConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "bluefin_spot",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            }
+          ],
+          "structs": [
+            {
+              "name": "PoolTier",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "tick_spacing",
+                  "type": "u32"
+                },
+                {
+                  "name": "fee_rate",
+                  "type": "u64"
+                }
+              ]
+            },
+            {
+              "name": "PoolTierKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "Venue",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "cetus": {
+          "functions": [
+            {
+              "name": "buyback_and_burn",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "CoinA",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "CoinB",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_vault",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_vault",
+                                  "name": "blast_vault_package"
+                                },
+                                "name": "BLAST_VAULT_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_core",
+                                  "name": "blast_domain"
+                                },
+                                "name": "BuybackAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "config"
+                        },
+                        "name": "GlobalConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "CoinA"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "CoinB"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "collect_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "CoinA",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "CoinB",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_vault",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_vault",
+                                  "name": "blast_vault_package"
+                                },
+                                "name": "BLAST_VAULT_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "blast_treasury"
+                        },
+                        "name": "Treasury",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "config"
+                        },
+                        "name": "GlobalConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "lp_burn",
+                          "name": "lp_burn"
+                        },
+                        "name": "BurnManager",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "CoinA"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "CoinB"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "migrate",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "CoinA",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "CoinB",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_core",
+                      "name": "migration"
+                    },
+                    "name": "Migration",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_migrators",
+                          "name": "venue_config"
+                        },
+                        "name": "VenueConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "config"
+                        },
+                        "name": "GlobalConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "factory"
+                        },
+                        "name": "Pools",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "lp_burn",
+                          "name": "lp_burn"
+                        },
+                        "name": "BurnManager",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_vault",
+                          "name": "blast_vault_package"
+                        },
+                        "name": "VaultRegistry",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_vault",
+                                  "name": "blast_vault_package"
+                                },
+                                "name": "BLAST_VAULT_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "blast_treasury"
+                        },
+                        "name": "Treasury",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "prepare",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_migrators",
+                          "name": "venue_config"
+                        },
+                        "name": "VenueConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "config"
+                        },
+                        "name": "GlobalConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "factory"
+                        },
+                        "name": "Pools",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin"
+                        },
+                        "name": "TreasuryCap",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u32",
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_core",
+                      "name": "migration"
+                    },
+                    "name": "VenueTicket",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "settle_and_apply_fee_split",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "CoinA",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "CoinB",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_vault",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_vault",
+                                  "name": "blast_vault_package"
+                                },
+                                "name": "BLAST_VAULT_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "blast_treasury"
+                        },
+                        "name": "Treasury",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "coin_registry"
+                        },
+                        "name": "Currency",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "config"
+                        },
+                        "name": "GlobalConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "lp_burn",
+                          "name": "lp_burn"
+                        },
+                        "name": "BurnManager",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "CoinA"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "CoinB"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            }
+          ],
+          "structs": [
+            {
+              "name": "CastKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "CreationCapKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "PoolTierKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "Venue",
+              "abilities": [
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        },
+        "constants": {
+          "functions": [],
+          "structs": [],
+          "enums": [],
+          "events": []
+        },
+        "errors": {
+          "functions": [],
+          "structs": [],
+          "enums": [],
+          "events": []
+        },
+        "events": {
+          "functions": [],
+          "structs": [],
+          "enums": [],
+          "events": [
+            {
+              "name": "BluefinPoolTierRecorded",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "tick_spacing",
+                  "type": "u32"
+                },
+                {
+                  "name": "fee_rate",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "CetusPoolReserved",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": true,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "pool_creation_cap_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "tick_spacing",
+                  "type": "u32"
+                }
+              ],
+              "sdk": "decoder-reducer"
+            }
+          ]
+        },
+        "venue_config": {
+          "functions": [],
+          "structs": [
+            {
+              "name": "VenueConfig",
+              "abilities": [
+                "Key"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "UID",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "enums": [],
+          "events": []
+        }
+      }
+    }
+  }
+}
