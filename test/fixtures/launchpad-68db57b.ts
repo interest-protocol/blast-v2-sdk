@@ -1,7 +1,7 @@
 /**
  * Literal BCS bytes printed by the Move test runner at contracts commit
- * a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f (Sui CLI 1.77.2-51d177ad7d65), from
- * the scratch-only generator `test/fixtures/launchpad-a1a8f6c.move`, run as a
+ * 68db57b32f196a78cd952a718b462b758f882ded (Sui CLI 1.77.2-51d177ad7d65), from
+ * the scratch-only generator `test/fixtures/launchpad-68db57b.move`, run as a
  * `blast_fun` test module in an extracted copy of that commit. The contracts
  * repository was not modified. Do not regenerate these bytes with the SDK
  * layouts under test.
@@ -233,7 +233,9 @@ export const LAUNCHPAD_FIXTURE_HEX = {
   migrationAllocationPaid: [
     "704e7bad29e35096c6e71f74c7dd553eeeebc1a934dd6bbe058aa04d97334024",
     "000000000000000000000000000000000000000000000000000000000000feed",
-    "008062175ed1580033c17edc47000000",
+    "008062175ed1580033c17edc4700000001b3deee5877043bf9f9459d507b4f52",
+    "ba5b7435816330df775190812c7a9ea457015b305d274d4e05f77a456f169325",
+    "37b10060cad28be71e5ad4b20269221c9465",
   ].join(""),
   protocolFeesAccrued: [
     "704e7bad29e35096c6e71f74c7dd553eeeebc1a934dd6bbe058aa04d97334024",

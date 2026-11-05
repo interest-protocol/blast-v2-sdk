@@ -494,6 +494,7 @@ export class VaultCalls {
           tx.object(options.unpauseAdmin),
           deploymentObject(tx, this.deployment.packageAdmin, false),
           this.#packageVersion(tx, true),
+          this.#treasury(tx),
           tx.pure.u8(bits),
         ],
       });

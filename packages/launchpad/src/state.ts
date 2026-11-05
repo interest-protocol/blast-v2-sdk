@@ -1,4 +1,5 @@
 import type {
+  Deadline,
   Delayed,
   DelayedAction,
   PendingDelay,
@@ -473,8 +474,8 @@ export type LaunchConfigState = {
   venueDelayMs: bigint;
   /** A proposed next admission delay. */
   pendingVenueDelay: PendingDelay | null;
-  /** Pending admissions; each keeps the delay it was scheduled under. */
-  pendingVenues: Readonly<Record<string, PendingDelay>>;
+  /** Pending admissions; each keeps the deadline it was scheduled with. */
+  pendingVenues: Readonly<Record<string, Deadline>>;
   protocolAllocation: ProtocolAllocation;
   protocolAllocationPolicy: Delayed<null, ProtocolAllocation>;
   /** Blast's share of each asset in the LP fees of vaults created afterward. */
@@ -502,8 +503,8 @@ export type RuntimeConfigState = {
   claimSignerDelayMs: bigint;
   /** A proposed next signer delay. */
   pendingClaimSignerDelay: PendingDelay | null;
-  /** Pending signer admissions by hex key; each keeps the delay it was scheduled under. */
-  pendingClaimSigners: Readonly<Record<string, PendingDelay>>;
+  /** Pending signer admissions by hex key; each keeps the deadline it was scheduled with. */
+  pendingClaimSigners: Readonly<Record<string, Deadline>>;
   /** Blast's share of each trade fee, rounded up to Blast. */
   protocolFeeShareBps: bigint;
   protocolFeeSharePolicy: Delayed<null, bigint>;

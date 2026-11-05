@@ -10,7 +10,7 @@ import {
   requireCompletePlan,
 } from "@interest-protocol/blast-launchpad-sdk/allocation";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
-import { LAUNCHPAD_FIXTURE_HEX } from "./fixtures/launchpad-a1a8f6c.ts";
+import { LAUNCHPAD_FIXTURE_HEX } from "./fixtures/launchpad-68db57b.ts";
 
 /** A plan recipient paid outright. */
 const share = (destination: string, memeBps: bigint, quoteBps: bigint) => ({

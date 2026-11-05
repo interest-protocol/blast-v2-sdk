@@ -1,4 +1,5 @@
 import type {
+  Deadline,
   Delayed,
   DelayedSet,
   PendingDelay,
@@ -435,8 +436,8 @@ export type PresaleCreationPolicyState = SharedObjectReference<true> & {
   venueDelayMs: bigint;
   /** A proposed next admission delay. */
   pendingVenueDelay: PendingDelay | null;
-  /** Pending admissions; each keeps the delay it was scheduled under. */
-  pendingVenues: Readonly<Record<string, PendingDelay>>;
+  /** Pending admissions; each keeps the deadline it was scheduled with. */
+  pendingVenues: Readonly<Record<string, Deadline>>;
   venuesPolicy: DelayedSet<null, string>;
   partners: { owner: string; acceptanceTableId: string; size: bigint };
 };

@@ -1,4 +1,5 @@
 import type {
+  Deadline,
   DelayedChange,
   PendingDelay,
   Proposal,
@@ -396,7 +397,7 @@ export type VaultRegistryState = SharedObjectIdentity & {
   witnesses: string[];
   delayMs: bigint;
   pendingDelay: PendingDelay | null;
-  pendingWitnesses: Readonly<Record<string, PendingDelay>>;
+  pendingWitnesses: Readonly<Record<string, Deadline>>;
 };
 
 export function decodeVaultRegistryObject(

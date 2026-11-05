@@ -849,8 +849,8 @@ export class LaunchpadCalls {
   }
 
   /**
-   * `launch_config::unpause`: clears `bits` once every launchpad delay is
-   * guarded. `unpauseAdmin` is `AdminWitness<UnpauseAdmin<BLAST_FUN>>`
+   * `launch_config::unpause`: clears `bits` once every launchpad delay and
+   * the core treasury's delay are guarded. `unpauseAdmin` is `AdminWitness<UnpauseAdmin<BLAST_FUN>>`
    * (`packageRoleType(admin, otw, "UnpauseAdmin")`).
    */
   unpause(options: { unpauseAdmin: TransactionObjectInput; bits: number }) {
@@ -869,6 +869,7 @@ export class LaunchpadCalls {
           tx.object(options.unpauseAdmin),
           deploymentObject(tx, this.deployment.packageAdmin, false),
           this.#runtimeConfig(tx),
+          this.#treasury(tx),
           tx.pure.u8(bits),
         ],
       });

@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f",
+    "contractsCommit": "68db57b32f196a78cd952a718b462b758f882ded",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#215: the fresh one-way launch stack, first freeze",
-      "contracts #179, #199 and #211: generic package_version::PackageVersion<OTW> and package_admin::PackageAdmin<OTW> replace upgrade_custody and operational_version"
+      "contracts #179, #199 and #211: generic package_version::PackageVersion<OTW> and package_admin::PackageAdmin<OTW> replace upgrade_custody and operational_version",
+      "contracts #220: delayed::Deadline holds a pending admission's or entry change's fixed deadline; PendingDelay is only a proposed next delay"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -1945,6 +1946,58 @@
               "returns": []
             },
             {
+              "name": "deadline_delay_ms",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "delayed"
+                        },
+                        "name": "Deadline",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
+              "name": "deadline_ready_at_ms",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "delayed"
+                        },
+                        "name": "Deadline",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
               "name": "delay_ms",
               "sdk": "move-composition",
               "entry": false,
@@ -2955,6 +3008,26 @@
             }
           ],
           "structs": [
+            {
+              "name": "Deadline",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "delay_ms",
+                  "type": "u64"
+                },
+                {
+                  "name": "ready_at_ms",
+                  "type": "u64"
+                }
+              ]
+            },
             {
               "name": "Delayed",
               "abilities": [
@@ -5776,7 +5849,7 @@
               "returns": []
             },
             {
-              "name": "entry_proposal_delay",
+              "name": "entry_proposal_deadline",
               "sdk": "move-composition",
               "entry": false,
               "typeParameters": [
@@ -5821,7 +5894,7 @@
                       "address": "blast_admin",
                       "name": "delayed"
                     },
-                    "name": "PendingDelay",
+                    "name": "Deadline",
                     "type_arguments": []
                   }
                 }
@@ -7421,14 +7494,14 @@
                   }
                 },
                 {
-                  "name": "delay",
+                  "name": "deadline",
                   "type": {
                     "Datatype": {
                       "module": {
                         "address": "blast_admin",
                         "name": "delayed"
                       },
-                      "name": "PendingDelay",
+                      "name": "Deadline",
                       "type_arguments": []
                     }
                   }
@@ -7906,7 +7979,7 @@
         "delayed_set": {
           "functions": [
             {
-              "name": "admission_delay",
+              "name": "admission_deadline",
               "sdk": "move-composition",
               "entry": false,
               "typeParameters": [
@@ -7983,7 +8056,7 @@
                               "address": "blast_admin",
                               "name": "delayed"
                             },
-                            "name": "PendingDelay",
+                            "name": "Deadline",
                             "type_arguments": []
                           }
                         },
@@ -9619,7 +9692,7 @@
                                 "address": "blast_admin",
                                 "name": "delayed"
                               },
-                              "name": "PendingDelay",
+                              "name": "Deadline",
                               "type_arguments": []
                             }
                           },

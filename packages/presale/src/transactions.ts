@@ -720,9 +720,10 @@ export class PresaleCalls {
 
   /**
    * `creation_policy::unpause(creation_policy, package_version,
-   * unpause_admin, package_admin, fee_policy, bits)` with an
+   * unpause_admin, package_admin, fee_policy, treasury, bits)` with an
    * `UnpauseAdmin<BLAST_PRESALE_PACKAGE>` witness: aborts with
-   * `EUnguardedDelay` unless the venue and fee delays are guarded.
+   * `EUnguardedDelay` unless the venue, fee and core treasury delays are
+   * guarded.
    */
   unpause(options: { unpauseAdmin: TransactionObjectInput; bits: number }) {
     const bits = requirePauseBits(options.bits, PRESALE_PAUSE_MASK);
@@ -735,6 +736,7 @@ export class PresaleCalls {
           tx.object(options.unpauseAdmin),
           deploymentObject(tx, this.deployment.packageAdmin, false),
           deploymentObject(tx, this.deployment.feePolicy, false),
+          deploymentObject(tx, this.deployment.core.treasury, false),
           tx.pure.u8(bits),
         ],
       });

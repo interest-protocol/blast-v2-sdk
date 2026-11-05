@@ -143,6 +143,8 @@ export const launchpadEventSpecs = {
     destination: "address",
     meme_amount: "u64",
     quote_amount: "u64",
+    meme_vesting_id: "optionId",
+    quote_vesting_id: "optionId",
   },
   Migrated: {
     launch_id: "id",

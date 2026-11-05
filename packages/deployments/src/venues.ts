@@ -49,7 +49,7 @@ export type CetusVenueObjects = Readonly<{
       burnManager: SharedObjectIdentity;
     }>;
   }>;
-  /** `buybackAndBurnCetus`. */
+  /** `buybackAndBurnCetus` and `compoundCetusAutoLp`. */
   buyback: Readonly<{ cetus: Readonly<{ config: SharedObjectIdentity }> }>;
 }>;
 
@@ -57,7 +57,10 @@ export type CetusVenueObjects = Readonly<{
 export type BluefinVenueObjects = Readonly<{
   venue: "bluefin";
   packages: Readonly<{ bluefinSpot: SuiPackageReference }>;
-  /** `migrateBluefin`, `collectBluefinFees`, `settleAndApplyBluefinFeeSplit` and `buybackAndBurnBluefin`. */
+  /**
+   * `migrateBluefin`, `collectBluefinFees`, `settleAndApplyBluefinFeeSplit`,
+   * `buybackAndBurnBluefin` and `compoundBluefinAutoLp`.
+   */
   migrate: Readonly<{ bluefinConfig: SharedObjectIdentity }>;
   fees: Readonly<{ bluefinConfig: SharedObjectIdentity }>;
   buyback: Readonly<{ bluefinConfig: SharedObjectIdentity }>;

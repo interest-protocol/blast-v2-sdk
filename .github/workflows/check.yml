@@ -39,7 +39,7 @@ jobs:
           repository: interest-protocol/blast-v2-contracts
           # Bump with every `npm run check:abi:write`; the full history keeps the
           # blast-sui and boosts artifacts' earlier baseline reachable.
-          ref: a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f
+          ref: 68db57b32f196a78cd952a718b462b758f882ded
           fetch-depth: 0
           token: ${{ secrets.CONTRACTS_READ_TOKEN }}
           path: blast-v2-contracts

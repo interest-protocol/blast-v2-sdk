@@ -686,6 +686,7 @@ test("unpause signs in as UnpauseAdmin<BLAST_PRESALE_PACKAGE>", () => {
     "result:0",
     "shared:0x65",
     "shared:0x61",
+    "shared:0x7ea",
     "pure",
   ]);
   assert.deepEqual(PRESALE_PAUSE_BITS, { Create: 1, Commit: 2, Migrate: 4 });

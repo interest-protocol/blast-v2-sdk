@@ -719,13 +719,15 @@ test("every launchpad builder matches the frozen ABI, signed in as its role", ()
     role(unpause),
     packageRoleType(deployment.admin, otw, "UnpauseAdmin"),
   );
-  // config, version (mut), the witness, package admin, runtime config, bits.
+  // config, version (mut), the witness, package admin, runtime config,
+  // core treasury, bits.
   assert.deepEqual(argumentsOf(unpause, "launch_config::unpause"), [
     "shared:0x3",
     "shared:0x2",
     `Result:${commandIndex(unpause, "blast_acl::sign_in")}`,
     "shared:0x8",
     "shared:0x4",
+    "shared:0x7ea5",
     "pure",
   ]);
   assert.equal(

@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f",
+    "contractsCommit": "68db57b32f196a78cd952a718b462b758f882ded",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#215: the fresh one-way launch stack, first freeze",
-      "contracts #200: one product-agnostic blast_migrators venue package for launches and presales"
+      "contracts #200: one product-agnostic blast_migrators venue package for launches and presales",
+      "contracts #217: every product's unpause also requires the core Treasury guarded; MigrationAllocationPaid names its vesting schedules; venue auto-LP compounding moves to compound_auto_lp"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -490,6 +491,170 @@
                           "name": "tx_context"
                         },
                         "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "compound_auto_lp",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_vault",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_vault",
+                                  "name": "blast_vault_package"
+                                },
+                                "name": "BLAST_VAULT_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "bluefin_spot",
+                          "name": "config"
+                        },
+                        "name": "GlobalConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "bluefin_spot",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
                         "type_arguments": []
                       }
                     }
@@ -1588,6 +1753,180 @@
                           "name": "lp_burn"
                         },
                         "name": "BurnManager",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "pool"
+                        },
+                        "name": "Pool",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "CoinA"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "CoinB"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "compound_auto_lp",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Meme",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Quote",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "CoinA",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "CoinB",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_vault",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Meme"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Quote"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_migrators",
+                                  "name": "blast_migrators"
+                                },
+                                "name": "BLAST_MIGRATORS",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_vault",
+                                  "name": "blast_vault_package"
+                                },
+                                "name": "BLAST_VAULT_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "cetus_clmm",
+                          "name": "config"
+                        },
+                        "name": "GlobalConfig",
                         "type_arguments": []
                       }
                     }
