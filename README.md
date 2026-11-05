@@ -4,8 +4,9 @@ TypeScript SDKs for the Blast contracts on Sui mainnet. Contract source and
 generated Move references live in
 [interest-protocol/blast-v2-contracts](https://github.com/interest-protocol/blast-v2-contracts);
 this SDK is frozen to contracts
-[`68db57b`](https://github.com/interest-protocol/blast-v2-contracts/tree/68db57b32f196a78cd952a718b462b758f882ded/sui),
-the one-way launch stack of ADR 0137 (see [docs/abi.md](docs/abi.md)).
+[`b50d0c3`](https://github.com/interest-protocol/blast-v2-contracts/tree/b50d0c3bee50b637a673d1ccb64b5413af4ba518/sui),
+the one-way launch stack of ADR 0137 with the sealed treasury caps of ADR 0138
+(see [docs/abi.md](docs/abi.md)).
 
 Contract state and completed events are authoritative. The SDK builds
 transactions, decodes objects and events, and mirrors contract formulas with
@@ -33,8 +34,8 @@ root `workspaces` array is the build and publish order, which
 | `packages/vault` | `@interest-protocol/blast-vault-sdk` | `blast_vault` | The one LP vault: owner balances, fee split, Blast's share, holder-reward rounds, the venue and package witness registry |
 | `packages/migrators` | `@interest-protocol/blast-migrators-sdk` | `blast_migrators` | Cetus and Bluefin venues for launches and presales: `prepare`, `migrate`, fee collection, buybacks |
 | `packages/launchpad` | `@interest-protocol/blast-launchpad-sdk` | `blast_fun`, `launch_ticket_template` | Generated Meme packages, launch creation, the curve, opening rounds, migration, economics and events |
-| `packages/presale` | `@interest-protocol/blast-presale-sdk` | `blast_presale`, `blast_aftermath_dao_presale` | Presale creation, commitments, settlement, migration, claims, and the Aftermath DAO-pool vendor venue |
-| `packages/coin` | `@interest-protocol/blast-coin-sdk` | `coin_template` | Standalone Sui coins with no Blast dependency |
+| `packages/presale` | `@interest-protocol/blast-presale-sdk` | `blast_presale`, `presale_coin_template`, `blast_aftermath_dao_presale` | Generated sale-token packages, presale creation, commitments, settlement, migration, claims, and the Aftermath DAO-pool vendor venue |
+| `packages/coin` | `@interest-protocol/blast-coin-sdk` | `coin_template` | Standalone Sui coins with no Blast dependency; they can neither launch nor be sold on Blast |
 | `packages/blast-sui` | `@interest-protocol/blast-sui-sdk` | `blast_sui` | blastSUI reads, previews and transactions |
 | `packages/boosts` | `@interest-protocol/blast-boosts-sdk` | Boosts | Boosts products and transactions |
 | `packages/cctp` | `@interest-protocol/blast-cctp-sdk` | — | EVM USDC deposit parameters and ABIs ([docs/cctp.md](docs/cctp.md)) |
@@ -153,14 +154,20 @@ const publish = client.blastLaunchpad.tx.publishMeme({
 `publishMeme` patches the compiled `launch_ticket_template` and publishes it
 against every package `blast_fun` links (admin, partners, vesting, core, the
 launchpad), then makes the package immutable. Its initializer mints the whole
-supply into a `LaunchTicket` and sends the publisher the `TreasuryCap` beside
-it; `readMemePublication` reads both from the effects and
+supply into a `LaunchTicket` and sends the publisher the coin's `TreasuryCap`
+sealed under the launchpad (`blast_core::sealed_treasury_cap::SealedTreasuryCap`,
+contracts ADR 0138): no raw cap leaves the publication, so nobody mints before
+`launch::new` opens the seal. `readMemePublication` reads the ticket, the
+sealed cap and the pending `Currency` from the effects and
 `finalizeCurrencyRegistration` shares the `Currency` (it takes the shared Coin Registry
 `0xc` with its initial shared version, so it builds offline).
 
-`createLaunch` then runs in one PTB: the venue's `prepare` (Cetus or Bluefin,
-which records the pool tier and returns a sealed `VenueTicket`), `launch::new`,
-the settings (virtual Quote, graduation target, allocation plan, the vault's
+`createLaunch` then runs in one PTB: on Cetus the launchpad's
+`venue_admission` of the venue, the venue's `prepare` (Cetus borrows the
+sealed cap with that admission to reserve the pool; Bluefin takes it only as
+proof of control; each records the pool tier and returns a sealed
+`VenueTicket`), `launch::new` with the ticket and the sealed cap, the
+settings (virtual Quote, graduation target, allocation plan, the vault's
 core `FeeSplit`, opening round, partner), `finalize` with the SUI creation
 fee, an optional pre-share buy or opening-round bid, and `share`.
 
@@ -182,16 +189,29 @@ blast-infra pins by SHA-256; see [docs/launch-economics.md](docs/launch-economic
 
 ## Presales
 
-`PresaleTransactions.createPresale` runs the sale's venue `prepare` (Cetus,
-Bluefin, or the vendor's `blast_aftermath_dao_presale::prepare`), `new`, every
-setter, `finalize`, an optional `set_protocol_fees` signed in as `FeeAdmin`,
-and `share` at the chosen `commitmentStartsAtMs`, then sends the `PresaleCap`
-to its recipient. `migrate` optionally settles, calls
-`blast_presale::migrate` and hands the `Migration` to the venue, and pays a
-partnered sale's held fees when asked. The vendor's `prepare` needs the
-vendor `AdminCap` and the sale's `TreasuryCap` from the same sender, and
-cannot bind the LP coin to its `CreatePoolCapV2`: verify the LP coin with
-`verifyAftermathLpCoin*` before listing. See [docs/presale.md](docs/presale.md).
+A sale token comes only from the generated `presale_coin_template` package:
+`PresaleTransactions.publishPresaleCoin` patches its compiled module (symbol,
+name, description, icon, decimals, the `MetadataCap` recipient or its
+deletion) and publishes it against admin, partners, vesting, core and the
+presale, then makes it immutable. Its initializer creates the currency through
+`blast_presale::sale_token::new`, which seals the `TreasuryCap` under the
+presale from birth and sends the publisher the `SealedTreasuryCap`;
+`readPresaleCoinPublication` reads it and the pending `Currency` from the
+effects and `finalizeCurrencyRegistration` shares the `Currency`. A coin
+created elsewhere, including through `coin_template`, cannot start a sale.
+
+`PresaleTransactions.createPresale` runs, on Cetus, the presale's
+`venue_admission`, then the sale's venue `prepare` (Cetus, Bluefin, or the
+vendor's `blast_aftermath_dao_presale::prepare`) on the sealed cap, `new`,
+which opens the seal, every setter, `finalize`, an optional
+`set_protocol_fees` signed in as `FeeAdmin`, and `share` at the chosen
+`commitmentStartsAtMs`, then sends the `PresaleCap` to its recipient.
+`migrate` optionally settles, calls `blast_presale::migrate` and hands the
+`Migration` to the venue, and pays a partnered sale's held fees when asked.
+The vendor's `prepare` needs the vendor `AdminCap` from the same sender that
+holds the sealed cap, and cannot bind the LP coin to its `CreatePoolCapV2`:
+verify the LP coin with `verifyAftermathLpCoin*` before listing. See
+[docs/presale.md](docs/presale.md).
 
 ## Vault
 
@@ -206,11 +226,13 @@ the witness registry (`VenueAdmin`), and the package's `unpause` and
 ## Migrators
 
 One `blast_migrators` package serves launches and presales. `MigratorCalls`
-builds `cetus::prepare`/`bluefin::prepare` and each venue's `migrate` for the
-product compositions; `MigratorTransactions` builds permissionless fee
-collection (`collectCetusFees`, `collectBluefinFees`), auto-LP compounding
-(`compoundCetusAutoLp`, `compoundBluefinAutoLp`; collection leaves the auto-LP
-share waiting in the vault), the settled fee-split switch
+builds `cetus::prepare`/`bluefin::prepare` (on the coin's sealed
+`TreasuryCap`; Cetus also takes the product's `VenueAdmission`) and each
+venue's `migrate` for the product compositions; `MigratorTransactions` builds
+permissionless fee collection (`collectCetusFees`, `collectBluefinFees`),
+auto-LP compounding (`compoundCetusAutoLp`, `compoundBluefinAutoLp`;
+collection leaves the auto-LP share waiting in the vault, so a venue's refusal
+of the add never blocks collecting), the settled fee-split switch
 (`settleAndApply*FeeSplit`) and buybacks (`BuybackAdmin`). Every venue call
 passes both the migrators and the vault `PackageVersion`.
 
@@ -248,8 +270,9 @@ previews `blast_partners::pay`.
 
 `@interest-protocol/blast-sdk/coin` publishes a plain Sui coin from the
 compiled `coin_template`. The coin has no Blast dependency and can never launch
-on Blast. Its initializer creates the currency in the Coin Registry, mints the
-initial supply to one recipient, and settles the `TreasuryCap` by supply mode
+or be sold on Blast, since its creator holds the raw `TreasuryCap`. Its
+initializer creates the currency in the Coin Registry, mints the initial
+supply to one recipient, and settles the `TreasuryCap` by supply mode
 (`mintable`, `fixed`, `burnOnly`).
 
 ## Gas budgets

@@ -91,10 +91,11 @@ test("merkleLeaf mirrors merkle::leaf", () => {
 });
 
 test("core aborts name blast_core's numeric codes", () => {
-  assert.equal(CORE_ABORTS.length, 14);
+  assert.equal(CORE_ABORTS.length, 15);
   assert.equal(coreAbortName(0), "EInvalidBps");
   assert.equal(coreAbortName(10), "EWrongPackageWitness");
   assert.equal(coreAbortName(13), "ELedgerNotEmpty");
-  assert.equal(coreAbortName(14), null);
+  assert.equal(coreAbortName(14), "EVenueNotAdmitted");
+  assert.equal(coreAbortName(15), null);
   assert.equal(coreAbortName(1.5), null);
 });

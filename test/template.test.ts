@@ -22,6 +22,10 @@ const adminPackageId = normalizeSuiObjectId("0xad");
 const partnersPackageId = normalizeSuiObjectId("0xae");
 const corePackageId = normalizeSuiObjectId("0xc0");
 const vestingPackageId = normalizeSuiObjectId("0xf4");
+const dependencies = {
+  originalPackageId: blastPackageId,
+  core: { originalPackageId: corePackageId },
+};
 const options = {
   decimals: 6,
   symbol: "DOG COIN",
@@ -51,11 +55,14 @@ test("locks the embedded artifact to the nine source constants", async () => {
       accountCommitment: creatorRecipientBytes,
     },
   };
-  const bytecode = await buildMemePackageBytecode(defaults, "0xda74");
+  const bytecode = await buildMemePackageBytecode(defaults, {
+    originalPackageId: "0xda74",
+    core: { originalPackageId: "0xc0de" },
+  });
 
   assert.equal(
     createHash("sha256").update(bytecode).digest("hex"),
-    "14d907c7dbfd9a71eab59aaa64a9bcec0e245a590386ed563e9e916c54cb4e78",
+    "7a51d20899341936f9d93ec012872062dab2168e82b08fa97e2765123b78a426",
   );
   assert.deepEqual(get_constants(bytecode), [
     {
@@ -112,7 +119,7 @@ test("custom launch module names determine the one-time witness", async () => {
       ...options,
       moduleName: "custom_launch",
     },
-    blastPackageId,
+    dependencies,
   );
   const compiled = deserialize(bytecode) as { identifiers: string[] };
   assert.deepEqual(
@@ -127,7 +134,7 @@ test("custom launch module names determine the one-time witness", async () => {
 });
 
 test("patches identifiers, constants, and the Blast dependency", async () => {
-  const bytecode = await buildMemePackageBytecode(options, blastPackageId);
+  const bytecode = await buildMemePackageBytecode(options, dependencies);
   const compiled = deserialize(bytecode) as {
     address_identifiers: string[];
     function_handles: { module: number; name: number }[];
@@ -142,6 +149,16 @@ test("patches identifiers, constants, and the Blast dependency", async () => {
   assert.ok(compiled.identifiers.includes("dog_coin"));
   assert.ok(compiled.identifiers.includes("DOG_COIN"));
   assert.ok(compiled.address_identifiers.includes(blastPackageId.slice(2)));
+  assert.ok(compiled.address_identifiers.includes(corePackageId.slice(2)));
+  // The seal is the core's type, linked at the core's original ID.
+  assert.ok(
+    compiled.module_handles.some(
+      (handle) =>
+        compiled.address_identifiers[handle.address] ===
+          corePackageId.slice(2) &&
+        compiled.identifiers[handle.name] === "sealed_treasury_cap",
+    ),
+  );
 
   const launchTicketModule = compiled.module_handles.findIndex(
     (handle) =>
@@ -216,7 +233,7 @@ test("patches a 32-byte account commitment in the same compiled template", async
       creatorRecipient: { kind: "account", accountCommitment },
       burnable: false,
     },
-    blastPackageId,
+    dependencies,
   );
   const constants = get_constants(bytecode);
 
@@ -244,7 +261,7 @@ test("keeps constant fields independent when values match placeholders", async (
       name: "A Meme launched on Blast",
       description: "https://blast.fun/meme.png",
     },
-    blastPackageId,
+    dependencies,
   );
   const constants = get_constants(bytecode) as { value_bcs: number[] }[];
 
@@ -299,8 +316,20 @@ test("publishes against every transitive dependency, then makes the package immu
     );
     const compiled = deserialize(publishedModule) as {
       address_identifiers: string[];
+      identifiers: string[];
+      module_handles: { address: number; name: number }[];
     };
     assert.ok(compiled.address_identifiers.includes(blastPackageId.slice(2)));
+    assert.ok(compiled.address_identifiers.includes(corePackageId.slice(2)));
+    // The seal is the core's type, linked at the core's original ID.
+    assert.ok(
+      compiled.module_handles.some(
+        (handle) =>
+          compiled.address_identifiers[handle.address] ===
+            corePackageId.slice(2) &&
+          compiled.identifiers[handle.name] === "sealed_treasury_cap",
+      ),
+    );
     assert.ok(
       !compiled.address_identifiers.includes(latestBlastPackageId.slice(2)),
     );
@@ -332,7 +361,7 @@ test("rejects invalid policy, dependency, and identifier inputs", async () => {
           accountCommitment: new Uint8Array(31),
         },
       },
-      blastPackageId,
+      dependencies,
     ),
     /32 bytes/,
   );
@@ -342,35 +371,35 @@ test("rejects invalid policy, dependency, and identifier inputs", async () => {
         ...options,
         creatorRecipient: { kind: "address", address: "0x0" },
       },
-      blastPackageId,
+      dependencies,
     ),
     /nonzero Sui address/,
   );
   await assert.rejects(
-    buildMemePackageBytecode(
-      { ...options, sellBurnBps: 5_001n },
-      blastPackageId,
-    ),
+    buildMemePackageBytecode({ ...options, sellBurnBps: 5_001n }, dependencies),
     /exceeds 5,000/,
   );
   await assert.rejects(
-    buildMemePackageBytecode(options, "0x2"),
+    buildMemePackageBytecode(options, {
+      ...dependencies,
+      originalPackageId: "0x2",
+    }),
     /deployed Blast package/,
   );
   await assert.rejects(
-    buildMemePackageBytecode({ ...options, decimals: 11 }, blastPackageId),
+    buildMemePackageBytecode({ ...options, decimals: 11 }, dependencies),
     /Meme atomic supply must be a u64/,
   );
   await assert.rejects(
-    buildMemePackageBytecode({ ...options, decimals: 1.5 }, blastPackageId),
+    buildMemePackageBytecode({ ...options, decimals: 1.5 }, dependencies),
     /decimals must be a u8/,
   );
   await assert.rejects(
-    buildMemePackageBytecode({ ...options, symbol: "BAD!" }, blastPackageId),
+    buildMemePackageBytecode({ ...options, symbol: "BAD!" }, dependencies),
     /Move witness identifier/,
   );
   await assert.rejects(
-    buildMemePackageBytecode({ ...options, symbol: "STRING" }, blastPackageId),
+    buildMemePackageBytecode({ ...options, symbol: "STRING" }, dependencies),
     /collides with the Meme template/,
   );
 });
@@ -386,7 +415,7 @@ test("merges constants that patching made equal, which the verifier would reject
       burnable: false,
       creatorRecipient: { kind: "address", address: "0xc" },
     },
-    blastPackageId,
+    dependencies,
   );
   const compiled = deserialize(bytecode) as {
     constant_pool: { type_: unknown; data: number[] }[];

@@ -478,8 +478,11 @@ export class VaultCalls {
   }
 
   /**
-   * `blast_vault_package::unpause` with an
-   * `UnpauseAdmin<BLAST_VAULT_PACKAGE>` witness (`packageRoleType`).
+   * `blast_vault_package::unpause(registry, unpause_admin, package_admin,
+   * package_version, treasury, bits)` with an
+   * `UnpauseAdmin<BLAST_VAULT_PACKAGE>` witness (`packageRoleType`): aborts
+   * with `EUnguardedDelay` unless the witness and core treasury delays are
+   * guarded.
    */
   unpause(options: {
     unpauseAdmin: TransactionObjectInput;

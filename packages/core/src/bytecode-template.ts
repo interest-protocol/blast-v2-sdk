@@ -2,6 +2,12 @@ import initBytecodeTemplate, {
   deserialize,
 } from "@mysten/move-bytecode-template";
 import { bcs } from "@mysten/sui/bcs";
+import {
+  isValidSuiObjectId,
+  MOVE_STDLIB_ADDRESS,
+  normalizeSuiObjectId,
+  SUI_FRAMEWORK_ADDRESS,
+} from "@mysten/sui/utils";
 
 // Shared by every generated-package template: one WASM initialization, module
 // table checks, and constant patching by type and default value.
@@ -32,6 +38,12 @@ export type BytecodeTemplateInitOptions = {
   module_or_path?: unknown;
 };
 
+const SYSTEM_ADDRESSES = new Set([
+  normalizeSuiObjectId("0x0"),
+  MOVE_STDLIB_ADDRESS,
+  SUI_FRAMEWORK_ADDRESS,
+]);
+
 let initialization: Promise<void> | undefined;
 
 /**
@@ -52,6 +64,66 @@ export function initializeBytecodeTemplate(
     throw error;
   });
   return initialization;
+}
+
+/** A deployed package's original ID that a generated package links: valid and not a system address. */
+export function requireDependencyPackageId(
+  name: string,
+  packageId: string,
+): string {
+  if (typeof packageId !== "string") {
+    throw new TypeError(`${name} must be a string`);
+  }
+  const normalized = normalizeSuiObjectId(packageId);
+  if (!isValidSuiObjectId(normalized)) {
+    throw new TypeError(`${name} must be a valid Sui package ID`);
+  }
+  if (SYSTEM_ADDRESSES.has(normalized)) {
+    throw new RangeError(`${name} must identify a deployed Blast package`);
+  }
+  return normalized;
+}
+
+/**
+ * Binds every non-system address of the template to the deployed package
+ * whose modules it names: `bindings` maps a module name to that package's
+ * original ID. Each placeholder address must be claimed by exactly one
+ * package through the modules it holds, and each binding must claim one, so
+ * a template that gains or loses a dependency fails here instead of linking
+ * a placeholder.
+ */
+export function patchDependencyAddresses(
+  label: string,
+  compiled: CompiledModule,
+  bindings: Readonly<Record<string, string>>,
+): void {
+  const claimed = new Set<string>();
+  compiled.address_identifiers.forEach((address, index) => {
+    if (SYSTEM_ADDRESSES.has(normalizeSuiObjectId(address))) return;
+    const packageIds = new Set(
+      compiled.module_handles.flatMap((handle) => {
+        const module = compiled.identifiers[handle.name];
+        const packageId =
+          handle.address === index && module !== undefined
+            ? bindings[module]
+            : undefined;
+        if (packageId !== undefined && module !== undefined) {
+          claimed.add(module);
+        }
+        return packageId === undefined ? [] : [packageId];
+      }),
+    );
+    if (packageIds.size !== 1) {
+      throw new TypeError(`${label} has an unbound dependency address`);
+    }
+    const [packageId] = packageIds as Set<string>;
+    compiled.address_identifiers[index] = (packageId as string).slice(2);
+  });
+  for (const module of Object.keys(bindings)) {
+    if (!claimed.has(module)) {
+      throw new TypeError(`${label} does not link ${module}`);
+    }
+  }
 }
 
 /** Deserializes a template module and checks the tables patching reads. */

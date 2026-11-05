@@ -1,13 +1,12 @@
-import type {
-  BytecodeTemplateInitOptions,
-  CompiledModule,
-} from "@interest-protocol/blast-core/bytecode-template";
+import type { BytecodeTemplateInitOptions } from "@interest-protocol/blast-core/bytecode-template";
 import {
   assertIdentifierSlots,
   deriveTemplateIdentifiers,
   deserializeTemplate,
   initializeBytecodeTemplate,
   patchConstantSlots,
+  patchDependencyAddresses,
+  requireDependencyPackageId,
   requireNonEmptyString,
   requireString,
 } from "@interest-protocol/blast-core/bytecode-template";
@@ -21,9 +20,7 @@ import {
   fromBase64,
   fromHex,
   isValidSuiObjectId,
-  MOVE_STDLIB_ADDRESS,
   normalizeSuiObjectId,
-  SUI_FRAMEWORK_ADDRESS,
 } from "@mysten/sui/utils";
 import { MAX_SELL_BURN_BPS } from "./curve.ts";
 
@@ -31,20 +28,15 @@ import { MAX_SELL_BURN_BPS } from "./curve.ts";
 export const MEME_TOTAL_SUPPLY_WHOLE_TOKENS = 1_000_000_000n;
 
 const ZERO_ADDRESS = normalizeSuiObjectId("0x0");
-const SYSTEM_ADDRESSES = new Set([
-  ZERO_ADDRESS,
-  MOVE_STDLIB_ADDRESS,
-  SUI_FRAMEWORK_ADDRESS,
-]);
 
 // Built from contracts/sui/launch_ticket_template/sources/meme.move at contracts
-// commit a1a8f6c9 with Sui CLI 1.77.2-51d177ad7d65 (`sui move build
-// --with-unpublished-dependencies`), `blast_fun` bound to 0xda74 and its
-// dependencies to distinct placeholder addresses. Its initializer transfers the
-// `LaunchTicket<Meme>` and the `TreasuryCap<Meme>` to the publisher. SHA-256:
-// 14d907c7dbfd9a71eab59aaa64a9bcec0e245a590386ed563e9e916c54cb4e78
+// commit 7efd9342 with Sui CLI 1.77.2-51d177ad7d65 (`sui move build
+// --with-unpublished-dependencies`), `blast_fun` bound to 0xda74 and
+// `blast_core` to 0xc0de. Its initializer transfers the `LaunchTicket<Meme>`
+// and the `SealedTreasuryCap<Meme>` to the publisher. SHA-256:
+// 7a51d20899341936f9d93ec012872062dab2168e82b08fa97e2765123b78a426
 const TEMPLATE_BYTECODE_BASE64 =
-  "oRzrCwcAAAUKAQAQAhAcAywqBFYGBVxRB60B4QEIjgOAAQaOBIcBCpUFBQyaBVAADQMIAwwBEwIGAgcCFAIVAAICAAEABwACAQwBAAEDAwcABQQMAQABBwUCAAALAAEAAQ8DBAABEAUEAAIOCAkBAgMWAwYABAoDBQAGEQwBAQwHEgoFAAMHBgsGDQIIAAcIBQADCAEIAQsEAQgAAQoCAQgBAQUBCAMBCAAKCQACCAMIAwgDCAMIAQEDBwgFAgsCAQkACwQBCQABBggFAQsCAQgAAgkABQELBAEIABBDcmVhdG9yUmVjaXBpZW50DExhdW5jaFRpY2tldARNRU1FBlN0cmluZwtUcmVhc3VyeUNhcAlUeENvbnRleHQHYWRkcmVzcwRjb2luEWNyZWF0b3JfYXV0aG9yaXR5C2R1bW15X2ZpZWxkCmZyb21fYnl0ZXMEaW5pdA1sYXVuY2hfdGlja2V0BG1lbWUDbmV3C25ld19hY2NvdW50C25ld19hZGRyZXNzD3B1YmxpY190cmFuc2ZlcgZzZW5kZXIGc3RyaW5nCHRyYW5zZmVyCnR4X2NvbnRleHQEdXRmOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANp0CgIFBE1FTUUKAgsKQmxhc3QgTWVtZQoCGRhBIE1lbWUgbGF1bmNoZWQgb24gQmxhc3QKAhsaaHR0cHM6Ly9ibGFzdC5mdW4vbWVtZS5wbmcKAiEgAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8BAQECAQkBAQADCAAAAAAAAAAAAAIBCQEAAAAAAiYHBQQGBwQRAQwCBQoHBBEFEQIMAgsCDAMLAAcGBwARBAcBEQQHAhEEBwMRBAsDBwcHCAoBOAAMBAoBLhEHOAELBAsBLhEHOAICAAA=";
+  "oRzrCwcAAAUKAQAQAhAcAywqBFYGBVxRB60B9gEIowOgAQbDBIcBCsoFBQzPBVAADAMRBAcECwETAgYCFAIVAAICAAEDDAEAAQIABwADAQwBAAEEBAcABwUCAAAKAAEAAg4DBAACDwUEAAMNCAkBAgQWAwYABQkDBQAGEAwBAQwHEgoFAAMHBgsGDQIIAAcIBQADCAIIAgsBAQgAAQoCAQgCAQUBCAQBCAAKCQACCAQIBAgECAQIAgEDBwgFAgsDAQkACwEBCQABBggFAQsDAQgAAgkABQELAQEIABBDcmVhdG9yUmVjaXBpZW50DExhdW5jaFRpY2tldARNRU1FEVNlYWxlZFRyZWFzdXJ5Q2FwBlN0cmluZwlUeENvbnRleHQHYWRkcmVzcxFjcmVhdG9yX2F1dGhvcml0eQtkdW1teV9maWVsZApmcm9tX2J5dGVzBGluaXQNbGF1bmNoX3RpY2tldARtZW1lA25ldwtuZXdfYWNjb3VudAtuZXdfYWRkcmVzcw9wdWJsaWNfdHJhbnNmZXITc2VhbGVkX3RyZWFzdXJ5X2NhcAZzZW5kZXIGc3RyaW5nCHRyYW5zZmVyCnR4X2NvbnRleHQEdXRmOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2nQKAgUETUVNRQoCCwpCbGFzdCBNZW1lCgIZGEEgTWVtZSBsYXVuY2hlZCBvbiBCbGFzdAoCGxpodHRwczovL2JsYXN0LmZ1bi9tZW1lLnBuZwoCISAAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHwEBAQIBCQEBAAMIAAAAAAAAAAAAAgEIAQAAAAACJgcFBAYHBBEBDAIFCgcEEQURAgwCCwIMAwsABwYHABEEBwERBAcCEQQHAxEECwMHBwcICgE4AAwECgEuEQc4AQsECwEuEQc4AgIAAA==";
 
 const DEFAULT_CREATOR_RECIPIENT_BYTES = fromHex(
   "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
@@ -93,6 +85,16 @@ export type MemeTemplateIdentifiers = {
 export type MemeTemplateInitOptions = BytecodeTemplateInitOptions;
 
 /**
+ * The packages a generated Meme package links by original ID: the launchpad
+ * (`launch_ticket`, `creator_authority`) and `blast_core`
+ * (`sealed_treasury_cap`). A `LaunchpadDeployment` is one.
+ */
+export type MemePackageDependencies = {
+  originalPackageId: string;
+  core: { originalPackageId: string };
+};
+
+/**
  * Initializes the bytecode-template WASM helper, shared with the coin
  * template. A browser can supply its WASM URL when the bundler cannot
  * discover the package asset automatically.
@@ -108,16 +110,27 @@ export function initializeMemeTemplate(
  *
  * Its initializer creates the selected address or Blast account recipient, calls
  * `blast_fun::launch_ticket::new` at the selected decimals, and transfers the
- * ticket and the `TreasuryCap<Meme>` to the publisher, who prepares the venue
- * and starts the launch with both (`LaunchpadTransactions.createLaunch`).
+ * ticket and the `SealedTreasuryCap<Meme>` (sealed under the launchpad by
+ * `blast_core::sealed_treasury_cap`, so no one mints before `launch::new`) to
+ * the publisher, who prepares the venue and starts the launch with both
+ * (`LaunchpadTransactions.createLaunch`).
  */
 export async function buildMemePackageBytecode(
   options: MemeTemplateOptions,
-  blastOriginalPackageId: string,
+  deployment: MemePackageDependencies,
 ): Promise<Uint8Array> {
   const metadata = validateOptions(options);
   const creatorRecipient = validateCreatorRecipient(options.creatorRecipient);
-  const dependency = normalizeBlastPackageId(blastOriginalPackageId);
+  const dependencies = {
+    launchpad: requireDependencyPackageId(
+      "originalPackageId",
+      deployment.originalPackageId,
+    ),
+    core: requireDependencyPackageId(
+      "core.originalPackageId",
+      deployment.core.originalPackageId,
+    ),
+  };
   const identifiers = deriveMemeTemplateIdentifiers(
     metadata.symbol,
     options.moduleName,
@@ -129,7 +142,11 @@ export async function buildMemePackageBytecode(
     fromBase64(TEMPLATE_BYTECODE_BASE64),
   );
   assertIdentifierSlots(LABEL, compiled, ["MEME", "meme"], identifiers);
-  patchBlastDependency(compiled, dependency);
+  patchDependencyAddresses(LABEL, compiled, {
+    launch_ticket: dependencies.launchpad,
+    creator_authority: dependencies.launchpad,
+    sealed_treasury_cap: dependencies.core,
+  });
   patchConstantSlots(LABEL, compiled, [
     {
       name: "symbol",
@@ -194,7 +211,7 @@ export async function buildMemePackageBytecode(
     MEME: identifiers.witnessName,
     meme: identifiers.moduleName,
   });
-  assertTemplateWiring(bytecode, dependency, identifiers);
+  assertTemplateWiring(bytecode, dependencies, identifiers);
   return bytecode;
 }
 
@@ -287,45 +304,9 @@ function validateCreatorRecipient(recipient: MemeCreatorRecipientInput): {
   throw new TypeError("creatorRecipient.kind must be address or account");
 }
 
-function normalizeBlastPackageId(packageId: string): string {
-  if (typeof packageId !== "string") {
-    throw new TypeError("blastPackageId must be a string");
-  }
-  const normalized = normalizeSuiObjectId(packageId);
-  if (!isValidSuiObjectId(normalized)) {
-    throw new TypeError("blastPackageId must be a valid Sui package ID");
-  }
-  if (SYSTEM_ADDRESSES.has(normalized)) {
-    throw new RangeError(
-      "blastPackageId must identify the deployed Blast package",
-    );
-  }
-  return normalized;
-}
-
-function patchBlastDependency(
-  compiled: CompiledModule,
-  blastPackageId: string,
-): void {
-  const candidates = compiled.address_identifiers.flatMap((address, index) =>
-    SYSTEM_ADDRESSES.has(normalizeSuiObjectId(address)) ? [] : [index],
-  );
-
-  // ponytail: this supports one non-system dependency. Add named slots before
-  // the template imports another external package.
-  if (candidates.length !== 1) {
-    throw new TypeError("Meme template must have one Blast dependency slot");
-  }
-  const index = candidates[0];
-  if (index === undefined) {
-    throw new TypeError("Meme template has no Blast dependency slot");
-  }
-  compiled.address_identifiers[index] = blastPackageId.slice(2);
-}
-
 function assertTemplateWiring(
   bytecode: Uint8Array,
-  blastPackageId: string,
+  dependencies: { launchpad: string; core: string },
   identifiers: MemeTemplateIdentifiers,
 ): void {
   const compiled = deserializeTemplate(LABEL, bytecode);
@@ -336,12 +317,17 @@ function assertTemplateWiring(
     throw new TypeError("Meme template identifiers were not patched");
   }
 
-  const blastAddress = blastPackageId.slice(2);
-  const launchTicketModule = compiled.module_handles.findIndex(
-    (handle) =>
-      compiled.address_identifiers[handle.address] === blastAddress &&
-      compiled.identifiers[handle.name] === "launch_ticket",
-  );
+  const moduleAt = (packageId: string, name: string) =>
+    compiled.module_handles.findIndex(
+      (handle) =>
+        compiled.address_identifiers[handle.address] === packageId.slice(2) &&
+        compiled.identifiers[handle.name] === name,
+    );
+  if (moduleAt(dependencies.core, "sealed_treasury_cap") < 0) {
+    throw new TypeError("Meme template is not wired to the core seal");
+  }
+  const blastAddress = dependencies.launchpad.slice(2);
+  const launchTicketModule = moduleAt(dependencies.launchpad, "launch_ticket");
   if (
     launchTicketModule < 0 ||
     !compiled.function_handles.some(

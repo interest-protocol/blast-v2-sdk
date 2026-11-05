@@ -15,8 +15,9 @@ function and event, and compares the result byte for byte with `abi/`.
 checks out the commit pinned in `.github/workflows/check.yml`.
 
 The launch stack is frozen at contracts
-[`68db57b`](https://github.com/interest-protocol/blast-v2-contracts/tree/68db57b32f196a78cd952a718b462b758f882ded/sui)
-(ADR 0137 with its 2026-11-05 amendment, PRs #178-#220):
+[`b50d0c3`](https://github.com/interest-protocol/blast-v2-contracts/tree/b50d0c3bee50b637a673d1ccb64b5413af4ba518/sui)
+(ADR 0137 with its 2026-11-05 amendment, PRs #178-#220, and ADR 0138's sealed
+treasury caps, PR #219):
 
 | Artifact | Move packages | Events |
 | --- | --- | --- |
@@ -26,7 +27,7 @@ The launch stack is frozen at contracts
 | `abi/production-vault-v1.json` | `blast_vault` | 10 |
 | `abi/production-migrators-v1.json` | `blast_migrators` (Cetus and Bluefin, for both products) | 2 |
 | `abi/production-launchpad-v1.json` | `blast_fun`, `launch_ticket_template`, `coin_template` | 18 |
-| `abi/production-presale-v1.json` | `blast_presale` | 11 (`PresaleCreated` + 10 `events`) |
+| `abi/production-presale-v1.json` | `blast_presale`, `presale_coin_template` | 11 (`PresaleCreated` + 10 `events`) |
 | `abi/production-aftermath-dao-presale-v1.json` | `blast_aftermath_dao_presale` | 2 |
 
 `blast_sui` and the three Boosts packages adopt the generic package
@@ -46,11 +47,11 @@ Every public function carries one `sdk` role in its artifact:
 
 | Role | Meaning |
 | --- | --- |
-| `builder` | An SDK `*Calls` method builds it; `test/abi.ts#assertBuildersMatchAbi` checks type and value arity, pure-versus-object kind of every argument, and `&` versus `&mut` of every shared-object input. Each package's transaction tests exercise every classified builder (vault 25, migrators 10, presale 43, vendor 2). |
-| `compositional` | A value built inside a PTB for another call (`bps::new`, `fee_split::*`, `payout::recipient`, `allocation::plan`). |
+| `builder` | An SDK `*Calls` method builds it; `test/abi.ts#assertBuildersMatchAbi` checks type and value arity, pure-versus-object kind of every argument, and `&` versus `&mut` of every shared-object input. Each package's transaction tests exercise every classified builder (vault 25, migrators 12, presale 43, vendor 2). |
+| `compositional` | A value built inside a PTB for another call (`bps::new`, `fee_split::*`, `payout::recipient`, `allocation::plan`, each product's `venue_admission` for `cetus::prepare`). |
 | `read` | A reader the SDK mirrors from object BCS or constants. |
-| `move-composition` | Callable only from Move: it takes a package or venue witness, or embeds a value in another object (`delayed*`, `package_version`, `partner_list`, `vault::new`, `migration::*`). |
-| `template-builder`, `template-internal` | Called by the generated Meme package's initializer. |
+| `move-composition` | Callable only from Move: it takes a package or venue witness, or embeds a value in another object (`delayed*`, `package_version`, `partner_list`, `vault::new`, `migration::*`, `sealed_treasury_cap::*` apart from its readers). |
+| `template-builder`, `template-internal` | Called by a generated package's initializer: `launch_ticket::new` and `creator_authority::new_*` by the Meme package, `sale_token::new` by the sale-token package. |
 | `intentional-deployment-exclusion`, `intentional-upgrade-exclusion` | Publishing (`package_admin::wrap`) and upgrades (`authorize_upgrade`, `commit_upgrade_and_advance`, `make_immutable`) are Sui CLI publish tooling. |
 | `intentional-operator-exclusion` | Boosts operator PTBs. |
 

@@ -42,6 +42,10 @@
       "types": "./dist/creator.d.ts",
       "default": "./dist/creator.js"
     },
+    "./effects": {
+      "types": "./dist/effects.d.ts",
+      "default": "./dist/effects.js"
+    },
     "./events": {
       "types": "./dist/events.d.ts",
       "default": "./dist/events.js"
@@ -61,6 +65,10 @@
     "./state": {
       "types": "./dist/state.d.ts",
       "default": "./dist/state.js"
+    },
+    "./template": {
+      "types": "./dist/template.d.ts",
+      "default": "./dist/template.js"
     },
     "./transactions": {
       "types": "./dist/transactions.d.ts",

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "68db57b32f196a78cd952a718b462b758f882ded",
+    "contractsCommit": "b50d0c3bee50b637a673d1ccb64b5413af4ba518",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#215: the fresh one-way launch stack, first freeze",

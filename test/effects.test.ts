@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readCurrencyRegistration } from "@interest-protocol/blast-core/effects";
 import {
-  readCurrencyRegistration,
   readLaunchCreation,
   readMemePublication,
 } from "@interest-protocol/blast-launchpad-sdk/effects";
@@ -12,6 +12,7 @@ import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 import { LAUNCHPAD_DEPLOYMENT } from "./fixtures/launchpad-deployment.ts";
 
 const launchpad = normalizeSuiObjectId("0x122");
+const core = normalizeSuiObjectId(LAUNCHPAD_DEPLOYMENT.core.originalPackageId);
 const memePackage = normalizeSuiObjectId("0xabc");
 const memeType = `${memePackage}::dog::DOG`;
 const quoteType = normalizeStructTag("0x2::sui::SUI");
@@ -93,12 +94,13 @@ const publication = {
       `${launchpad}::launch_ticket::LaunchTicket<${memeType}>`,
     [normalizeSuiObjectId("0xd2")]: `0x2::coin_registry::Currency<${memeType}>`,
     [normalizeSuiObjectId("0xd3")]: "0x2::package::UpgradeCap",
-    [normalizeSuiObjectId("0xd4")]: `0x2::coin::TreasuryCap<${memeType}>`,
+    [normalizeSuiObjectId("0xd4")]:
+      `${core}::sealed_treasury_cap::SealedTreasuryCap<${memeType}>`,
   },
 };
 
-test("reads the published Meme, ticket, treasury cap and currency with the Core API package marker", () => {
-  assert.deepEqual(readMemePublication(publication, "0x122"), {
+test("reads the published Meme, ticket, sealed treasury cap and currency with the Core API package marker", () => {
+  assert.deepEqual(readMemePublication(publication, deployment), {
     packageId: memePackage,
     memeType: normalizeStructTag(memeType),
     ticket: {
@@ -107,7 +109,7 @@ test("reads the published Meme, ticket, treasury cap and currency with the Core 
       digest: "digest-0xd1",
       owner: publisher,
     },
-    treasuryCap: {
+    sealedTreasuryCap: {
       objectId: normalizeSuiObjectId("0xd4"),
       version: "7",
       digest: "digest-0xd4",
@@ -141,7 +143,7 @@ test("requires exactly one published package even with Core API package markers"
               [extraPackage.objectId]: "package",
             },
           },
-          "0x122",
+          deployment,
         ),
       /publication must create exactly one package/,
     );
@@ -159,7 +161,7 @@ test("rejects malformed object struct tags in publication effects", () => {
             [normalizeSuiObjectId("0xd1")]: "invalid-struct-tag",
           },
         },
-        "0x122",
+        deployment,
       ),
     /Invalid struct tag: invalid-struct-tag/,
   );
@@ -170,12 +172,16 @@ test("rejects publication effects without exactly one ticket from the launchpad"
     () =>
       readMemePublication(
         { ...publication, effects: effects([], false) },
-        "0x122",
+        deployment,
       ),
     /did not succeed/,
   );
   assert.throws(
-    () => readMemePublication(publication, "0x999"),
+    () =>
+      readMemePublication(publication, {
+        ...deployment,
+        originalPackageId: "0x999",
+      }),
     /exactly one LaunchTicket/,
   );
   const foreignTicket = {
@@ -187,19 +193,19 @@ test("rejects publication effects without exactly one ticket from the launchpad"
     },
   };
   assert.throws(
-    () => readMemePublication(foreignTicket, "0x122"),
+    () => readMemePublication(foreignTicket, deployment),
     /not from the published package/,
   );
 });
 
-const deployment = { ...LAUNCHPAD_DEPLOYMENT, originalPackageId: "0x122" };
+const deployment = { ...LAUNCHPAD_DEPLOYMENT, originalPackageId: launchpad };
 
-test("refuses a publication without the TreasuryCap beside the ticket", () => {
+test("refuses a publication without the SealedTreasuryCap beside the ticket", () => {
   const { [normalizeSuiObjectId("0xd4")]: _, ...objectTypes } =
     publication.objectTypes;
   assert.throws(
-    () => readMemePublication({ ...publication, objectTypes }, "0x122"),
-    /exactly one TreasuryCap<Meme> beside the ticket/,
+    () => readMemePublication({ ...publication, objectTypes }, deployment),
+    /exactly one SealedTreasuryCap<Coin> beside the ticket/,
   );
   const elsewhere = {
     ...publication,
@@ -212,8 +218,8 @@ test("refuses a publication without the TreasuryCap beside the ticket", () => {
     ),
   };
   assert.throws(
-    () => readMemePublication(elsewhere, "0x122"),
-    /exactly one TreasuryCap<Meme> beside the ticket/,
+    () => readMemePublication(elsewhere, deployment),
+    /exactly one SealedTreasuryCap<Coin> beside the ticket/,
   );
 });
 
@@ -221,7 +227,7 @@ test("finalizes the currency registration and reads the shared Currency", () => 
   const sdk = new LaunchpadTransactions(deployment);
   const tx: Transaction = sdk.finalizeCurrencyRegistration({
     memeType,
-    currency: readMemePublication(publication, "0x122").pendingCurrency,
+    currency: readMemePublication(publication, deployment).pendingCurrency,
     coinRegistry,
   });
   const command = tx.getData().commands[0];

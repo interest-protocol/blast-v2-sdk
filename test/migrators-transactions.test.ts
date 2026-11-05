@@ -104,32 +104,41 @@ test("venue witnesses are <migrators original>::<venue>::Venue and map back", ()
 
 test("prepareCetus calls cetus::prepare with the Move arity and returns the ticket", () => {
   const tx = new Transaction();
+  // The product's admission of the venue, built earlier in the same PTB.
+  const admission = tx.moveCall({
+    target: "0x99::launch_config::venue_admission",
+    typeArguments: [venueWitnessType(MIGRATORS, "cetus")],
+  });
   const ticket = tx.add(
     calls.prepareCetus({
       memeType: MEME_A,
       quoteType: SUI,
       cetus: { config: O.cetusConfig, pools: O.cetusPools },
-      treasuryCap: "0x7c",
+      sealedTreasuryCap: "0x7c",
+      admission,
       tickSpacing: 200,
     }),
   );
   tx.moveCall({ target: "0x99::launch::new", arguments: [ticket] });
   assert.deepEqual(targets(tx), [
+    "0x0000000000000000000000000000000000000000000000000000000000000099::launch_config::venue_admission",
     target("cetus", "prepare"),
     "0x0000000000000000000000000000000000000000000000000000000000000099::launch::new",
   ]);
-  assert.deepEqual(moveCallTypeArguments(tx)[0], [meme, sui]);
-  // (migrators_version, &mut venue_config, cetus_config, &mut pools, &mut treasury_cap, tick_spacing)
-  assert.deepEqual(moveCallArguments(tx, 0), [
+  assert.deepEqual(moveCallTypeArguments(tx)[1], [meme, sui]);
+  // (migrators_version, &mut venue_config, cetus_config, &mut pools,
+  //  &mut sealed_treasury_cap, admission, tick_spacing)
+  assert.deepEqual(moveCallArguments(tx, 1), [
     migratorsVersion,
     venueConfig(true),
     "shared:0xc0f",
     "shared-mut:0xc00",
     "object:0x7c",
+    "result:0",
     "pure",
   ]);
-  assert.equal(bcs.u32().parse(pureBytes(tx, 0)[0] as Uint8Array), 200);
-  assert.deepEqual(moveCallArguments(tx, 1), ["result:0"]);
+  assert.equal(bcs.u32().parse(pureBytes(tx, 1)[0] as Uint8Array), 200);
+  assert.deepEqual(moveCallArguments(tx, 2), ["result:1"]);
 });
 
 test("prepareBluefin calls bluefin::prepare and mirrors Bluefin's tier bounds", () => {
@@ -138,7 +147,7 @@ test("prepareBluefin calls bluefin::prepare and mirrors Bluefin's tier bounds", 
     calls.prepareBluefin({
       memeType: MEME_A,
       quoteType: SUI,
-      treasuryCap: "0x7c",
+      sealedTreasuryCap: "0x7c",
       currency: O.currency,
       tickSpacing: 60,
       feeRate: 3_000n,
@@ -146,7 +155,7 @@ test("prepareBluefin calls bluefin::prepare and mirrors Bluefin's tier bounds", 
   );
   assert.deepEqual(targets(tx), [target("bluefin", "prepare")]);
   assert.deepEqual(moveCallTypeArguments(tx)[0], [meme, sui]);
-  // (migrators_version, &mut venue_config, &treasury_cap, &currency, tick_spacing, fee_rate)
+  // (migrators_version, &mut venue_config, &sealed_treasury_cap, &currency, tick_spacing, fee_rate)
   assert.deepEqual(moveCallArguments(tx, 0), [
     migratorsVersion,
     venueConfig(true),
@@ -162,7 +171,7 @@ test("prepareBluefin calls bluefin::prepare and mirrors Bluefin's tier bounds", 
   const base = {
     memeType: MEME_A,
     quoteType: SUI,
-    treasuryCap: "0x7c",
+    sealedTreasuryCap: "0x7c",
     currency: O.currency,
   };
   assert.equal(BLUEFIN_MAX_TICK_SPACING, 400);

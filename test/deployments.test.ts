@@ -118,6 +118,7 @@ test("derives every package's call-ready deployment", () => {
     ...packages.presale,
     ...sharedObjects.presale,
     ...stack,
+    vestingPackageId: packages.vesting.packageId,
   });
   assert.deepEqual(blastSuiDeployment(deployment), {
     packageId: id("0x423"),

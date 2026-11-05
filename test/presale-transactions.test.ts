@@ -154,7 +154,7 @@ test("createPresale with the vendor: prepare, new, setters, finalize, rates, sha
     venue: "aftermathDao",
     adminCap: "0xadc",
     lpCoin,
-    treasuryCap: "0x7c",
+    sealedTreasuryCap: "0x7c",
     currency: shared("0xcc"),
     commitmentStartsAtMs: 1_000n,
     capRecipient: "0xc0ffee",
@@ -268,7 +268,7 @@ test("createPresale refuses an unverified LP coin and a missing vendor", async (
     ...settings,
     venue: "aftermathDao" as const,
     adminCap: "0xadc",
-    treasuryCap: "0x7c",
+    sealedTreasuryCap: "0x7c",
     currency: shared("0xcc"),
     commitmentStartsAtMs: 0n,
     capRecipient: "0xc0ffee",
@@ -286,7 +286,7 @@ test("createPresale refuses an unverified LP coin and a missing vendor", async (
   );
 });
 
-test("createPresale through a migrators venue starts with its prepare", () => {
+test("createPresale through a migrators venue starts with its prepare, after the admission on Cetus", () => {
   for (const venue of [
     {
       venue: "cetus" as const,
@@ -300,15 +300,37 @@ test("createPresale through a migrators venue starts with its prepare", () => {
         ...types,
         ...settings,
         ...venue,
-        treasuryCap: "0x7c",
+        sealedTreasuryCap: "0x7c",
         currency: shared("0xcc"),
         commitmentStartsAtMs: 0n,
         capRecipient: "0xc0ffee",
       });
     const tx = build();
-    assert.equal(targets(tx)[0], `0xd1::${venue.venue}::prepare`);
-    assert.ok(calls(tx).some((call) => call.target.startsWith("0xd1::")));
-    assert.deepEqual(only(tx, "0x5f::blast_presale::new").args[2], "result:0");
+    const built = targets(tx);
+    const prepare = `0xd1::${venue.venue}::prepare`;
+    if (venue.venue === "cetus") {
+      // The presale admits the venue first; `prepare` consumes the admission
+      // with the sealed cap.
+      assert.deepEqual(built.slice(0, 2), [
+        "0x5f::creation_policy::venue_admission",
+        prepare,
+      ]);
+      const admission = only(tx, "0x5f::creation_policy::venue_admission");
+      assert.deepEqual(admission.typeArguments, [
+        normalizeStructTag("0xd0::cetus::Venue"),
+      ]);
+      assert.deepEqual(admission.args, ["shared:0x62"]);
+      assert.deepEqual(only(tx, prepare).args.slice(4, 6), [
+        "object:0x7c",
+        "result:0",
+      ]);
+      assert.equal(only(tx, "0x5f::blast_presale::new").args[2], "result:1");
+    } else {
+      assert.equal(built[0], prepare);
+      assert.equal(only(tx, prepare).args[2], "object:0x7c");
+      assert.equal(only(tx, "0x5f::blast_presale::new").args[2], "result:0");
+    }
+    assert.equal(only(tx, "0x5f::blast_presale::new").args[0], "object:0x7c");
   }
 });
 
@@ -330,7 +352,7 @@ test("createPresale builds allowlisted eligibility, an eligible-only uncapped ph
     venue: "bluefin",
     tickSpacing: 60,
     feeRate: 3_000n,
-    treasuryCap: "0x7c",
+    sealedTreasuryCap: "0x7c",
     currency: shared("0xcc"),
     commitmentStartsAtMs: 0n,
     capRecipient: "0xc0ffee",

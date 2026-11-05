@@ -19,6 +19,7 @@ export const CORE_ABORTS = [
   "EInvalidLpFeeBps",
   "EInvalidRecipient",
   "ELedgerNotEmpty",
+  "EVenueNotAdmitted",
 ] as const;
 
 export type CoreAbortName = (typeof CORE_ABORTS)[number];

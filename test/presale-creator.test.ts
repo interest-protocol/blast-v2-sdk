@@ -48,6 +48,7 @@ const identity: PresaleCreatorDeployment = {
       venueConfig: shared("0xd5"),
       vault,
     },
+    vestingPackageId: "0xf4",
   },
   venues: {},
 };
