@@ -1,6 +1,6 @@
 /**
- * BCS printed by presale-4fe8d73.move under sui 1.77.2 from the contracts'
- * own presale and vendor test fixtures at 4fe8d739, independently of the SDK.
+ * BCS printed by presale-a1a8f6c.move under sui 1.77.2 from the contracts'
+ * own presale and vendor test fixtures at a1a8f6c9, independently of the SDK.
  * Every value is lowercase hex; `venue` is the ASCII `TypeName` text of the
  * fixture venue, and `*Object` is a whole `Presale` at that stage. Both test
  * packages are at address 0x0, so the presale's `TEST_VENUE` and

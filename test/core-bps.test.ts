@@ -17,7 +17,7 @@ import {
 } from "@interest-protocol/blast-core/migration-math";
 import { toHex } from "@mysten/sui/utils";
 
-// Literal outputs printed by test/fixtures/core-vectors.move at contracts 4fe8d739.
+// Literal outputs printed by test/fixtures/core-vectors.move at contracts a1a8f6c9.
 
 test("apportionBps mirrors bps::apportion, rounded-up part included", () => {
   const U64_MAX = 18_446_744_073_709_551_615n;

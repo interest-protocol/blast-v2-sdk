@@ -1,6 +1,6 @@
-// Fixture generator for test/fixtures/vault-4fe8d73.ts. It is not compiled by the SDK and is
+// Fixture generator for test/fixtures/vault-a1a8f6c.ts. It is not compiled by the SDK and is
 // never added to the contracts repository. It runs against the real `blast_vault` package at
-// contracts 4fe8d739 and its test-only `vault_fixture`. To regenerate: copy `sui/{admin,core,
+// contracts a1a8f6c9 and its test-only `vault_fixture`. To regenerate: copy `sui/{admin,core,
 // partners,vesting,vault}` from that commit to a scratch directory (sources, manifests and
 // `vault/tests/vault_fixture.move` only), set `blast_vault` in `vault/Move.toml` to
 // 0x0b1a5f00000000000000000000000000000000000000000000000000000000f3, write this file to

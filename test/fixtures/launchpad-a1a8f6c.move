@@ -1,5 +1,5 @@
-// Fixture generator for test/fixtures/launchpad-4fe8d73.ts. It is not compiled by the SDK.
-// To regenerate: extract contracts commit 4fe8d739 with `git archive 4fe8d739 sui`, copy this
+// Fixture generator for test/fixtures/launchpad-a1a8f6c.ts. It is not compiled by the SDK.
+// To regenerate: extract contracts commit a1a8f6c9 with `git archive a1a8f6c9 sui`, copy this
 // file to sui/launchpad/tests/ in that copy only, and run `sui move test sdk_fixture_tests` from
 // sui/launchpad (sui 1.77.2). Never add it to the contracts repository.
 #[test_only]

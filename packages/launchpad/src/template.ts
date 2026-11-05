@@ -38,7 +38,7 @@ const SYSTEM_ADDRESSES = new Set([
 ]);
 
 // Built from contracts/sui/launch_ticket_template/sources/meme.move at contracts
-// commit 4fe8d739 with Sui CLI 1.77.2-51d177ad7d65 (`sui move build
+// commit a1a8f6c9 with Sui CLI 1.77.2-51d177ad7d65 (`sui move build
 // --with-unpublished-dependencies`), `blast_fun` bound to 0xda74 and its
 // dependencies to distinct placeholder addresses. Its initializer transfers the
 // `LaunchTicket<Meme>` and the `TreasuryCap<Meme>` to the publisher. SHA-256:

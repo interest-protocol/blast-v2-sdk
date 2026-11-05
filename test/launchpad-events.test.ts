@@ -30,12 +30,12 @@ import type { BcsType } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 import { orderedEventFields } from "./abi.ts";
-import type { LaunchpadFixture } from "./fixtures/launchpad-4fe8d73.ts";
+import type { LaunchpadFixture } from "./fixtures/launchpad-a1a8f6c.ts";
 import {
   FIXTURE_PACKAGE_ID,
   LAUNCHPAD_FIXTURE_HEX,
   launchpadFixture,
-} from "./fixtures/launchpad-4fe8d73.ts";
+} from "./fixtures/launchpad-a1a8f6c.ts";
 
 const packages: LaunchpadEventPackageIdentity = {
   originalPackageId: "0x122",

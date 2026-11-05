@@ -10,7 +10,7 @@ import {
   requireCompletePlan,
 } from "@interest-protocol/blast-launchpad-sdk/allocation";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
-import { LAUNCHPAD_FIXTURE_HEX } from "./fixtures/launchpad-4fe8d73.ts";
+import { LAUNCHPAD_FIXTURE_HEX } from "./fixtures/launchpad-a1a8f6c.ts";
 
 /** A plan recipient paid outright. */
 const share = (destination: string, memeBps: bigint, quoteBps: bigint) => ({
@@ -259,7 +259,7 @@ test("rejects plans the Move constructors abort on", () => {
 });
 
 test("decodes a finalized plan with a vested recipient from literal contract bytes", () => {
-  // `LaunchCreated.allocation_plan` of the 4fe8d73 fixture.
+  // `LaunchCreated.allocation_plan` of the a1a8f6c fixture.
   const bytes = Buffer.from(
     [
       "581b000000000000",

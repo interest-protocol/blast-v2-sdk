@@ -7,7 +7,7 @@ import { NON_PRODUCTION_MANIFEST } from "./non-production-deployment.ts";
 /**
  * Literal venue identities for deployment-manifest tests. Nothing here is
  * computed by the SDK. The Cetus and Bluefin values are copied from contracts
- * 442116a; the Aftermath values from contracts 4fe8d73
+ * 442116a; the Aftermath values from contracts a1a8f6c
  * `sui/vendors/aftermath_dao_presale` (interface manifests and README):
  *
  * - `sui/launchpad/ptb_tests/fork/fetch.py` (package lines 59-64: each venue

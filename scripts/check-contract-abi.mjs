@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
  * refreeze at contracts main with `check:abi:write` for an approved change,
  * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
  */
-const BASELINE_COMMIT = "88951fe9dbe2b621d45bb80124a325468c6e8298";
+const BASELINE_COMMIT = "a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f";
 const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
@@ -28,7 +28,7 @@ const BLAST_SUI_BOOSTS_BASELINE = {
   workingTreeDifferedAtFreeze: false,
 };
 const LAUNCH_STACK_FREEZE =
-  "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#214: the fresh one-way launch stack, first freeze";
+  "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#215: the fresh one-way launch stack, first freeze";
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
   {

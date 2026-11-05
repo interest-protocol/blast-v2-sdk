@@ -17,7 +17,7 @@ const core = {
   treasury: { objectId: "0x7e", initialSharedVersion: "5" },
 };
 
-// Literal BCS and amounts from test/fixtures/core-vectors.move at contracts 4fe8d739.
+// Literal BCS and amounts from test/fixtures/core-vectors.move at contracts a1a8f6c9.
 const SPLIT: FeeSplit = {
   routes: [
     { destination: { kind: "Address", address: "0xf00d" }, bps: 1000n },

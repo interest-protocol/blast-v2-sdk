@@ -1,6 +1,6 @@
 // Fixture generator for the literal vectors in test/core-bps.test.ts, test/core-fee-split.test.ts
 // and test/core-payout.test.ts. It is not compiled by the SDK. To regenerate: extract contracts
-// commit 4fe8d739 with `git archive 4fe8d739 sui/admin sui/partners sui/vesting sui/core`, copy
+// commit a1a8f6c9 with `git archive a1a8f6c9 sui/admin sui/partners sui/vesting sui/core`, copy
 // this file to sui/core/tests/ in that copy only, and run `sui move test sdk_vectors` from
 // sui/core (sui 1.77.2). Never add it to the contracts repository.
 #[test_only]

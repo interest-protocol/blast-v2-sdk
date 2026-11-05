@@ -17,9 +17,9 @@ import {
 } from "@interest-protocol/blast-vault-sdk/state";
 import type { BcsType } from "@mysten/sui/bcs";
 import { fromHex } from "@mysten/sui/utils";
-import { launchpadFixture } from "./fixtures/launchpad-4fe8d73.ts";
-import { PRESALE_FIXTURE } from "./fixtures/presale-4fe8d73.ts";
-import { VAULT_FIXTURE } from "./fixtures/vault-4fe8d73.ts";
+import { launchpadFixture } from "./fixtures/launchpad-a1a8f6c.ts";
+import { PRESALE_FIXTURE } from "./fixtures/presale-a1a8f6c.ts";
+import { VAULT_FIXTURE } from "./fixtures/vault-a1a8f6c.ts";
 
 type FrozenStruct = { name: string; fields: { name: string }[] };
 type Artifact = {

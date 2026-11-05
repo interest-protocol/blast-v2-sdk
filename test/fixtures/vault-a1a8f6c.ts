@@ -1,6 +1,6 @@
 /**
- * BCS printed by vault-4fe8d73.move under sui 1.77.2 from the real
- * `blast_vault` package at contracts 4fe8d739, compiled with `blast_vault` at
+ * BCS printed by vault-a1a8f6c.move under sui 1.77.2 from the real
+ * `blast_vault` package at contracts a1a8f6c9, compiled with `blast_vault` at
  * `vaultOriginalPackageId`. Hex is `bcs::to_bytes` of each object, or of the
  * last event of each type in the transaction that emitted it, without a
  * prefix. Object IDs are the Move test scenario's, left-padded to 32 bytes.

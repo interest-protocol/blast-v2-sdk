@@ -20,7 +20,7 @@ import {
 } from "@mysten/sui/utils";
 
 // Built from contracts/sui/coin_template/sources/my_coin.move at contracts
-// commit 4fe8d739 with Sui CLI 1.77.2-51d177ad7d65; since 86d29e1 (ADR 0108)
+// commit a1a8f6c9 with Sui CLI 1.77.2-51d177ad7d65; since 86d29e1 (ADR 0108)
 // the source only moved its error constant, which reorders the pool. SHA-256:
 // cdfdd72a9b0026afdbd9876a2d69f375ef02b5d39986b2e0c541413ac4de70cd
 const TEMPLATE_BYTECODE_BASE64 =

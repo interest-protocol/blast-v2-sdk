@@ -22,7 +22,7 @@ const core = {
   treasury: { objectId: "0x7e", initialSharedVersion: "5" },
 };
 
-// Literal BCS from test/fixtures/core-vectors.move at contracts 4fe8d739.
+// Literal BCS from test/fixtures/core-vectors.move at contracts a1a8f6c9.
 const RECIPIENT_VESTING =
   "000000000000000000000000000000000000000000000000000000000000beef010a0000000000000014000000000000000300000000000000";
 const RECIPIENT_OUTRIGHT =

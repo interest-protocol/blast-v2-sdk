@@ -33,7 +33,7 @@ import {
   normalizeStructTag,
   normalizeSuiAddress,
 } from "@mysten/sui/utils";
-import { PRESALE_FIXTURE as fixture } from "./fixtures/presale-4fe8d73.ts";
+import { PRESALE_FIXTURE as fixture } from "./fixtures/presale-a1a8f6c.ts";
 
 // The Move fixture publishes the presale (and core, in its own build) at 0x0.
 const pkg = normalizeSuiAddress("0x0");

@@ -9,7 +9,7 @@ import {
 import type { VaultDeployment } from "@interest-protocol/blast-vault-sdk/transactions";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { fromHex, normalizeSuiAddress } from "@mysten/sui/utils";
-import { VAULT_FIXTURE as fixture } from "./fixtures/vault-4fe8d73.ts";
+import { VAULT_FIXTURE as fixture } from "./fixtures/vault-a1a8f6c.ts";
 
 export { fixture };
 

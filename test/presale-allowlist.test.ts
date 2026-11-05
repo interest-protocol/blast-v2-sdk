@@ -9,7 +9,7 @@ import {
 import { toHex } from "@mysten/sui/utils";
 
 // Digests a Move unit test printed from `blast_presale::allowlist_leaf` and the
-// Merkle node hash. At 4fe8d73 `allowlist_leaf` hashes the same bytes through
+// Merkle node hash. At a1a8f6c `allowlist_leaf` hashes the same bytes through
 // `blast_core::merkle::leaf` (blake2b256(0x00 || "blast-presale-v1" || payload)).
 const ALICE_LEAF =
   "0b917a43909cf551596a5dc4bc03d62a638a81b058ddc3de0a4e57367f24519e";

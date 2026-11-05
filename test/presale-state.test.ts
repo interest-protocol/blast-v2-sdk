@@ -23,7 +23,7 @@ import {
   normalizeSuiObjectId,
 } from "@mysten/sui/utils";
 import { DERIVED_ID_FIXTURE as derived } from "./fixtures/derived-ids.ts";
-import { PRESALE_FIXTURE as fixture } from "./fixtures/presale-4fe8d73.ts";
+import { PRESALE_FIXTURE as fixture } from "./fixtures/presale-a1a8f6c.ts";
 
 // The Move fixture's presale and vendor test packages are published at 0x0.
 const pkg = "0x0";

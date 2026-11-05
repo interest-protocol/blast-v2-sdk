@@ -1,7 +1,7 @@
 /**
  * Literal BCS bytes printed by the Move test runner at contracts commit
- * 4fe8d739f04bafd0775691795eb9f3727e984089 (Sui CLI 1.77.2-51d177ad7d65), from
- * the scratch-only generator `test/fixtures/launchpad-4fe8d73.move`, run as a
+ * a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f (Sui CLI 1.77.2-51d177ad7d65), from
+ * the scratch-only generator `test/fixtures/launchpad-a1a8f6c.move`, run as a
  * `blast_fun` test module in an extracted copy of that commit. The contracts
  * repository was not modified. Do not regenerate these bytes with the SDK
  * layouts under test.

@@ -1,7 +1,7 @@
-// Fixture generator for test/fixtures/presale-4fe8d73.ts. It is not compiled by the SDK. The two
+// Fixture generator for test/fixtures/presale-a1a8f6c.ts. It is not compiled by the SDK. The two
 // test functions below reuse the private fixtures of the contracts' own presale and vendor tests,
-// so they are appended to copies of those files. To regenerate: extract contracts commit 4fe8d739
-// with `git archive 4fe8d739 sui/admin sui/partners sui/vesting sui/core sui/presale
+// so they are appended to copies of those files. To regenerate: extract contracts commit a1a8f6c9
+// with `git archive a1a8f6c9 sui/admin sui/partners sui/vesting sui/core sui/presale
 // sui/vendors/aftermath_dao_presale`, append the PRESALE block to
 // sui/presale/tests/blast_presale_tests.move and the VENDOR block to
 // sui/vendors/aftermath_dao_presale/tests/blast_aftermath_dao_presale_tests.move in that copy

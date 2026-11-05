@@ -1,5 +1,5 @@
 // Fixture generator for test/fixtures/derived-ids.ts. It is not compiled by the SDK.
-// The key declarations are copied verbatim from contracts 4fe8d739 (`launch::LaunchKey`,
+// The key declarations are copied verbatim from contracts a1a8f6c9 (`launch::LaunchKey`,
 // `blast_presale::PresaleKey`, `vault::VaultKey`, and the two products' `PackageWitness`) at
 // fixed, distinct package addresses, so the derived IDs exercise nonzero original IDs. To
 // regenerate: write this file to `sources/derived_ids.move` and the manifest below to
