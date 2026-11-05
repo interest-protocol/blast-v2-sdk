@@ -84,7 +84,7 @@ test("mirrors blast_admin::delayed's notice ceiling and guards", () => {
   };
   assert.equal(isDelayedSetGuarded(set), true);
   assert.equal(
-    isDelayedSetGuarded({ ...set, admissions: [{ member: 1, notice }] }),
+    isDelayedSetGuarded({ ...set, admissions: [{ member: 1, delay: notice }] }),
     false,
   );
   assert.equal(

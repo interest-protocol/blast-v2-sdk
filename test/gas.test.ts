@@ -3,8 +3,6 @@ import test from "node:test";
 import { grossGasBudget } from "@interest-protocol/blast-core/gas";
 import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
 import { addCetusPoolWithLiquidity } from "@interest-protocol/blast-migrators-sdk/cetus-pool";
-import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
-import { MigratorTransactions } from "@interest-protocol/blast-migrators-sdk/transactions";
 import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
 import { PresaleTransactions } from "@interest-protocol/blast-presale-sdk/transactions";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
@@ -243,33 +241,6 @@ test("a keeper PTB composing the Cetus migration call budgets gross cost", async
   const tx = new Transaction();
   tx.add(presale.call.settle({ ...types, presale: shared("0xab", true) }));
   tx.add(presale.call.migrateCetus(presaleMigration));
-  assert.equal(await senderBudget(tx), GROSS_BUDGET);
-});
-
-test("a launch's Cetus migration budgets gross cost", async () => {
-  const deployment: MigratorsDeployment = {
-    packageId: "0x321",
-    originalPackageId: "0x320",
-    launchpad: {
-      packageId: "0x123",
-      originalPackageId: "0x122",
-      partnersPackageId: "0xae",
-      packageVersion: shared("0x2", false),
-      launchConfig: shared("0x3", false),
-      runtimeConfig: shared("0x4", false),
-      admin: { packageId: "0xad", acl: shared("0x5", false) },
-    },
-    migratorsVersion: shared("0x61", false),
-    lpFeePolicy: shared("0x40", false),
-    venueConfig: shared("0x60", false),
-  };
-  const tx = new MigratorTransactions(deployment).migrateCetus({
-    ...types,
-    ...cetus,
-    memeSide: "a",
-    launch: shared("0xc", true),
-    memeCurrency: shared("0xd", true),
-  });
   assert.equal(await senderBudget(tx), GROSS_BUDGET);
 });
 

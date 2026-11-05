@@ -515,7 +515,6 @@ for (const Class of [PresaleCalls, PresaleTransactions]) {
   }
 }
 await import("../test/presale-transactions.test.ts");
-await import("../test/pr150-governance.test.ts");
 await import("../test/presale-aftermath.test.ts");
 await import("../test/aftermath-dao-presale.test.ts");
 

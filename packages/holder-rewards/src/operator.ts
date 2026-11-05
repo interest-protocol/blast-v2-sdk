@@ -7,7 +7,6 @@ import type {
 import {
   allocateHolderRewards,
   buildRewardManifest,
-  MIGRATOR_REWARD_LEAF_DOMAIN,
   PRESALE_REWARD_LEAF_DOMAIN,
   rewardAddress,
 } from "@interest-protocol/blast-core/rewards/allocations";
@@ -30,11 +29,8 @@ import {
   pendingRewardAllocations,
 } from "@interest-protocol/blast-core/rewards/keeper";
 import type { RewardRoundTerms } from "@interest-protocol/blast-core/rewards/state";
-import { getRewardRound } from "@interest-protocol/blast-core/rewards/state";
 import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
-import { getLpVault } from "@interest-protocol/blast-migrators-sdk/state";
 import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
-import { MigratorTransactions } from "@interest-protocol/blast-migrators-sdk/transactions";
 import {
   getPresaleRewardRound,
   getPresaleVault,
@@ -575,36 +571,9 @@ async function loadProduct(
         transactions.claimHolderRewards({ ...pair, round, allocations }),
     };
   }
-  const transactions = new MigratorTransactions(
-    config.deployment as MigratorsDeployment,
+  throw new Error(
+    "WP5: migrators vault rounds move to the vault package (VaultTransactions)",
   );
-  const { originalPackageId } = transactions.call.deployment;
-  const state = await getLpVault(client, config.vaultId, originalPackageId);
-  const pair = { memeType: state.memeType, quoteType: state.quoteType };
-  return {
-    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
-    vault: {
-      ...state,
-      summary: { feeSplit: state.feeSplit },
-    },
-    readRound: (roundId) => getRewardRound(client, roundId, originalPackageId),
-    publish: (manifest, adminCapId) => {
-      if (isScheduled(state.roundPublication, manifest))
-        return transactions.publishHolderRewardRound({ ...pair, vault: state });
-      const round = {
-        ...pair,
-        vault: state,
-        adminCapId,
-        manifest,
-        ...roundTerms(config),
-      };
-      return state.roundPublication.delay_ms === 0n
-        ? transactions.scheduleAndPublishHolderRewardRound(round)
-        : transactions.scheduleHolderRewardRound(round);
-    },
-    claim: (round, allocations) =>
-      transactions.claimHolderRewards({ ...pair, round, allocations }),
-  };
 }
 
 /** The configured terms a round schedule needs; every product requires all three. */

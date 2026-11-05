@@ -9,17 +9,11 @@ import {
   defineBlastDeployment,
   evaluateProtocolAccess,
   getBluefinPoolCreationFee,
-  migratorsDeployment,
   resolveVenueObjects,
   VenueUnavailableError,
 } from "@interest-protocol/blast-deployments-sdk";
-import {
-  MigratorCalls,
-  MigratorTransactions,
-} from "@interest-protocol/blast-migrators-sdk/transactions";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
-import { Transaction } from "@mysten/sui/transactions";
 import { fromHex, toHex } from "@mysten/sui/utils";
 import {
   BLUEFIN_FEE_SNAPSHOT,
@@ -262,24 +256,6 @@ test("keeps every core reason global and marks both venues unavailable", () => {
   assert.ok(venueCodes(production, "bluefin").includes("environment-mismatch"));
 });
 
-/** Each shared input of `tx` as `objectId -> mutable`. */
-function sharedInputs(tx: Transaction): Record<string, boolean> {
-  return Object.fromEntries(
-    tx
-      .getData()
-      .inputs.flatMap((input) =>
-        input.$kind === "Object" && input.Object.$kind === "SharedObject"
-          ? [
-              [
-                input.Object.SharedObject.objectId,
-                input.Object.SharedObject.mutable,
-              ],
-            ]
-          : [],
-      ),
-  );
-}
-
 test("resolves each available venue's objects into the builders' typed inputs", () => {
   const access = evaluate(BOTH);
   const cetus = resolveVenueObjects(access, "cetus");
@@ -323,85 +299,6 @@ test("resolves each available venue's objects into the builders' typed inputs", 
     migrate: { bluefinConfig: ref(ids.bluefinConfig, true) },
     fees: { bluefinConfig: ref(ids.bluefinConfig, false) },
     buyback: { bluefinConfig: ref(ids.bluefinConfig, false) },
-  });
-
-  // The builders accept them as given, each at the mutability its call takes.
-  assert.ok(access.signing === "enabled");
-  const migrators = migratorsDeployment(access.deployment);
-  const calls = new MigratorCalls(migrators);
-  const sdk = new MigratorTransactions(migrators);
-  const types = { memeType: "0xa::meme::MEME", quoteType: "0x2::sui::SUI" };
-  const shared = <const M extends boolean>(id: string, mutable: M) => ({
-    objectId: id,
-    initialSharedVersion: "7",
-    mutable,
-  });
-  const created = new Transaction();
-  created.add(
-    calls.newCetusLaunch({
-      ...types,
-      ...cetus.create,
-      ticket: "0xb",
-      tickSpacing: 200,
-    }),
-  );
-  const migrated = sdk.migrateCetus({
-    ...types,
-    ...cetus.migrate,
-    memeSide: "b",
-    launch: shared("0xe1", true),
-    memeCurrency: shared("0xe2", true),
-  });
-  const collected = sdk.collectCetusFees({
-    ...types,
-    ...cetus.fees,
-    memeSide: "b",
-    vault: shared("0xe3", true),
-    memeCurrency: shared("0xe2", true),
-    pool: shared("0xe4", true),
-  });
-  const bluefinMigrated = sdk.migrateBluefin({
-    ...types,
-    ...bluefin.migrate,
-    launch: shared("0xe1", true),
-    memeCurrency: shared("0xe2", true),
-    quoteCurrency: shared("0xe5", false),
-    creationFee: 0n,
-  });
-  const bluefinCollected = sdk.collectBluefinFees({
-    ...types,
-    ...bluefin.fees,
-    vault: shared("0xe3", true),
-    memeCurrency: shared("0xe2", true),
-    pool: shared("0xe4", true),
-  });
-  const pick = (tx: Transaction, names: (keyof typeof ids)[]) => {
-    const inputs = sharedInputs(tx);
-    return Object.fromEntries(
-      names.map((name) => [name, inputs[ids[name].objectId]]),
-    );
-  };
-  assert.deepEqual(pick(created, ["cetusConfig", "cetusPools"]), {
-    cetusConfig: false,
-    cetusPools: true,
-  });
-  assert.deepEqual(
-    pick(migrated, ["cetusConfig", "cetusPools", "cetusBurnManager"]),
-    {
-      cetusConfig: false,
-      cetusPools: true,
-      cetusBurnManager: true,
-    },
-  );
-  assert.deepEqual(pick(collected, ["cetusConfig", "cetusBurnManager"]), {
-    cetusConfig: false,
-    cetusBurnManager: false,
-  });
-  assert.deepEqual(pick(bluefinMigrated, ["bluefinConfig"]), {
-    bluefinConfig: true,
-  });
-  assert.deepEqual(pick(bluefinCollected, ["bluefinConfig"]), {
-    bluefinConfig: false,
   });
 });
 

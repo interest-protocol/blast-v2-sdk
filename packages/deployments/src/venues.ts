@@ -4,7 +4,7 @@ import type {
   SuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
 import { sharedObjectReference } from "@interest-protocol/blast-core/sui";
-import type { MigratorVenue } from "@interest-protocol/blast-migrators-sdk/state";
+import type { MigratorVenue } from "@interest-protocol/blast-migrators-sdk/transactions";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";

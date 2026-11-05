@@ -16,12 +16,10 @@ import {
   getPresaleDeployment,
   launchpadDeployment,
   MAINNET_PRESALE_DEPLOYMENT,
-  migratorsDeployment,
   partnersDeployment,
   presaleDeployment,
 } from "@interest-protocol/blast-deployments-sdk";
 import { LaunchpadCalls } from "@interest-protocol/blast-launchpad-sdk/transactions";
-import { MigratorCalls } from "@interest-protocol/blast-migrators-sdk/transactions";
 import { PartnersCalls } from "@interest-protocol/blast-partners-sdk/transactions";
 import { PresaleCalls } from "@interest-protocol/blast-presale-sdk/transactions";
 import { BlastSuiCalls } from "@interest-protocol/blast-sui-sdk/transactions";
@@ -110,14 +108,6 @@ test("derives every package's call-ready deployment", () => {
     runtimeConfig: sharedObjects.launchpad.runtimeConfig,
   };
   assert.deepEqual(launchpadDeployment(deployment), launchpad);
-  assert.deepEqual(migratorsDeployment(deployment), {
-    packageId: packages.migrators?.packageId,
-    originalPackageId: packages.migrators?.originalPackageId,
-    launchpad,
-    migratorsVersion: sharedObjects.migrators?.packageVersion,
-    lpFeePolicy: sharedObjects.migrators?.lpFeePolicy,
-    venueConfig: sharedObjects.migrators?.venueConfig,
-  });
   assert.deepEqual(presaleDeployment(deployment), {
     ...packages.presale,
     ...sharedObjects.presale,
@@ -134,7 +124,6 @@ test("derives every package's call-ready deployment", () => {
   new AdminCalls(adminDeployment(deployment));
   new PartnersCalls(partnersDeployment(deployment));
   new LaunchpadCalls(launchpadDeployment(deployment));
-  new MigratorCalls(migratorsDeployment(deployment));
   new PresaleCalls(presaleDeployment(deployment));
   new BlastSuiCalls(blastSuiDeployment(deployment));
 });
@@ -208,10 +197,6 @@ test("derives each optional package's constants only when recorded", () => {
   assert.throws(
     () => blastSuiDeployment(bare),
     /packages\.blastSui is required/,
-  );
-  assert.throws(
-    () => migratorsDeployment(bare),
-    /packages\.migrators is required/,
   );
   assert.throws(() => presaleDeployment(bare), /packages\.presale is required/);
 });

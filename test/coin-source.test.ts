@@ -5,9 +5,6 @@ import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
 import { LaunchpadClient } from "@interest-protocol/blast-launchpad-sdk/client";
 import type { LaunchpadDeployment } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import { LaunchpadTransactions } from "@interest-protocol/blast-launchpad-sdk/transactions";
-import { MigratorsClient } from "@interest-protocol/blast-migrators-sdk/client";
-import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
-import { MigratorTransactions } from "@interest-protocol/blast-migrators-sdk/transactions";
 import { PresaleClient } from "@interest-protocol/blast-presale-sdk/client";
 import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
 import { PresaleTransactions } from "@interest-protocol/blast-presale-sdk/transactions";
@@ -46,14 +43,6 @@ const blastSui: BlastSuiDeployment = {
   vault: shared("0x11", true),
   admin,
 };
-const migrators: MigratorsDeployment = {
-  packageId: "0x321",
-  originalPackageId: "0x320",
-  launchpad,
-  migratorsVersion: shared("0x61", false),
-  lpFeePolicy: shared("0x40", false),
-  venueConfig: shared("0x60", false),
-};
 const presale: PresaleDeployment = {
   packageId: "0x5f",
   originalPackageId: "0x5e",
@@ -64,28 +53,6 @@ const presale: PresaleDeployment = {
   admin,
 };
 
-const launchSettings = {
-  memeType: "0xa::meme::MEME",
-  virtualQuote: 1_000n,
-  graduationTarget: 3_000n,
-  creationFee: 1_001n,
-  allocationPlan: {
-    curveMemeBps: 8_000n,
-    lpMemeBps: 1_900n,
-    lpQuoteBps: 9_900n,
-    recipients: [],
-  },
-  lpFeeSplit: {
-    creatorBps: 5_000n,
-    autoLpBps: 2_000n,
-    rewardsBps: 1_000n,
-    burnBps: 1_000n,
-    recipients: [{ destination: "0xf", bps: 1_000n }],
-  },
-  ticket: "0xb",
-  memeCurrency: shared("0xd", true),
-  tickSpacing: 200,
-};
 const bluefinMigration = {
   memeType: "0xa::meme::MEME",
   memeCurrency: shared("0xd", true),
@@ -99,7 +66,6 @@ function builders(construct: CoinSourceOptions) {
   const sui = { quoteType: SUI };
   const blast = new BlastSuiTransactions(blastSui, construct);
   const launch = new LaunchpadTransactions(launchpad, construct);
-  const migrator = new MigratorTransactions(migrators, construct);
   const sale = new PresaleTransactions(presale, construct);
   return {
     mintFunSui: (o: CoinSourceOptions) =>
@@ -123,29 +89,6 @@ function builders(construct: CoinSourceOptions) {
         memeType: "0xa::meme::MEME",
         launch: shared("0xc", true),
         quoteAmount: 1n,
-        ...o,
-      }),
-    createCetusLaunch: (o: CoinSourceOptions) =>
-      migrator.createCetusLaunch({
-        ...sui,
-        ...launchSettings,
-        cetusConfig: shared("0x70", false),
-        cetusPools: shared("0x71", true),
-        preShareBuy: { quoteAmount: 100n, minMemeOut: 1n, recipient: "0xe" },
-        ...o,
-      }),
-    createBluefinLaunch: (o: CoinSourceOptions) =>
-      migrator.createBluefinLaunch({
-        ...sui,
-        ...launchSettings,
-        feeRate: 10_000n,
-        ...o,
-      }),
-    migrateLaunchBluefin: (o: CoinSourceOptions) =>
-      migrator.migrateBluefin({
-        ...sui,
-        ...bluefinMigration,
-        launch: shared("0xc", true),
         ...o,
       }),
     commit: (o: CoinSourceOptions) =>
@@ -186,10 +129,6 @@ const SUI_COIN_COUNTS = {
   donateSui: 1,
   buy: 1,
   joinOpeningRound: 1,
-  // The creation fee and the pre-share purchase.
-  createCetusLaunch: 2,
-  createBluefinLaunch: 1,
-  migrateLaunchBluefin: 1,
   commit: 1,
   migratePresaleBluefin: 1,
 };
@@ -257,16 +196,6 @@ test("each client passes its coin source to its builders", () => {
         ...sui,
         launch: shared("0xc", true),
         quoteAmount: 1n,
-      }),
-    ),
-    [SUI],
-  );
-  assert.deepEqual(
-    coinSources(
-      new MigratorsClient(client, migrators, off).tx.migrateBluefin({
-        ...sui,
-        ...bluefinMigration,
-        launch: shared("0xc", true),
       }),
     ),
     [SUI],

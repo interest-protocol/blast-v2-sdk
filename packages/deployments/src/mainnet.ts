@@ -4,7 +4,6 @@ import {
   normalizeSuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
 import type { LaunchpadDeployment } from "@interest-protocol/blast-launchpad-sdk/transactions";
-import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
 import type { PartnersDeployment } from "@interest-protocol/blast-partners-sdk/transactions";
 import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
@@ -160,7 +159,6 @@ const mainnet = createMainnetDeployments(CANONICAL_MAINNET_PACKAGES);
 export const MAINNET_ADMIN_DEPLOYMENT = mainnet.admin;
 export const MAINNET_PARTNERS_DEPLOYMENT = mainnet.partners;
 export const MAINNET_LAUNCHPAD_DEPLOYMENT = mainnet.launchpad;
-export const MAINNET_MIGRATORS_DEPLOYMENT = mainnet.migrators;
 export const MAINNET_PRESALE_DEPLOYMENT = mainnet.presale;
 
 /**
@@ -214,17 +212,10 @@ function createMainnetDeployments(packages: typeof CANONICAL_MAINNET_PACKAGES) {
     admin,
     partnersPackageId: packages.partners.packageId,
   });
-  const migrators: MigratorsDeployment = Object.freeze({
-    ...packages.migrators,
-    launchpad,
-    migratorsVersion: CANONICAL_MAINNET_SHARED_OBJECTS.migrators.packageVersion,
-    lpFeePolicy: CANONICAL_MAINNET_SHARED_OBJECTS.migrators.lpFeePolicy,
-    venueConfig: CANONICAL_MAINNET_SHARED_OBJECTS.migrators.venueConfig,
-  });
   const presale: PresaleDeployment = Object.freeze({
     ...packages.presale,
     ...CANONICAL_MAINNET_SHARED_OBJECTS.presale,
     admin,
   });
-  return Object.freeze({ admin, partners, launchpad, migrators, presale });
+  return Object.freeze({ admin, partners, launchpad, presale });
 }

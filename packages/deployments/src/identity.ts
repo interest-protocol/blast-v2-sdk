@@ -2,8 +2,8 @@ import type {
   SharedObjectIdentity,
   SuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
-import type { MigratorVenue } from "@interest-protocol/blast-migrators-sdk/state";
-import { MIGRATOR_VENUES } from "@interest-protocol/blast-migrators-sdk/state";
+import type { MigratorVenue } from "@interest-protocol/blast-migrators-sdk/transactions";
+import { MIGRATOR_VENUES } from "@interest-protocol/blast-migrators-sdk/transactions";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import {
   normalizeSuiAddress,

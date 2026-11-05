@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
@@ -11,20 +11,16 @@ import {
   PRESALE_REWARD_LEAF_DOMAIN,
   validateRewardManifest,
 } from "@interest-protocol/blast-core/rewards/allocations";
-import type { HolderLedger } from "@interest-protocol/blast-core/rewards/holders";
 import {
   createHolderLedger,
-  holderWeights,
   resetHolderWeights,
 } from "@interest-protocol/blast-core/rewards/holders";
 import {
   assertRewardRoundMatchesManifest,
   pendingRewardAllocations,
 } from "@interest-protocol/blast-core/rewards/keeper";
-import { rewardRoundBcs } from "@interest-protocol/blast-core/rewards/state";
 import type { HolderRewardsStore } from "@interest-protocol/blast-holder-rewards-sdk/operator";
 import { holderRewardsOperator } from "@interest-protocol/blast-holder-rewards-sdk/operator";
-import { lpVaultBcs } from "@interest-protocol/blast-migrators-sdk/state";
 import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
 import {
   presaleRewardRoundBcs,
@@ -33,7 +29,7 @@ import {
 import { bcs } from "@mysten/sui/bcs";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Transaction } from "@mysten/sui/transactions";
-import { fromBase64, fromHex, normalizeSuiAddress } from "@mysten/sui/utils";
+import { fromBase64, normalizeSuiAddress } from "@mysten/sui/utils";
 import { withOperatorLock, writeOperatorJson } from "../operator/file-store.ts";
 import { runHolderRewardsOperator } from "../operator/holder-rewards.ts";
 
@@ -145,312 +141,6 @@ test("SDK operator checks the chain inside the caller's store lock", async (t) =
   );
   await assert.rejects(() => operator.index(1n), /chain/);
   assert.deepEqual(events, ["lock", "rpc", "unlock"]);
-});
-
-test("CLI resumes checkpoint batches and publishes, advances and relays the same accounting interval", async (t) => {
-  const dir = await mkdtemp(join(tmpdir(), "blast-holder-rewards-flow-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const address = normalizeSuiAddress;
-  const memeType = `${address("0x42")}::meme::MEME`;
-  const quoteType = `${address("0x2")}::sui::SUI`;
-  const alice = address("0xa");
-  const bob = address("0xb");
-  const vaultId = address("0xd");
-  const roundId = address("0xc");
-  const originalPackageId = address("0x99");
-  const packageId = address("0x100");
-  const shared = (objectId: string, mutable: boolean) => ({
-    objectId: address(objectId),
-    initialSharedVersion: "1",
-    mutable,
-  });
-  const uid = (id: string) => ({ id: { bytes: address(id) } });
-  const configPath = join(dir, "config.json");
-  const statePath = join(dir, "state.json");
-  const pendingPath = join(dir, "pending.json");
-  const manifestPath = join(dir, "rounds", "0", "manifest.json");
-  const readJson = async (path: string) =>
-    JSON.parse(await readFile(path, "utf8"));
-  const run = (command: string, ...args: string[]) =>
-    runHolderRewardsOperator([
-      command,
-      "--config",
-      configPath,
-      "--dir",
-      dir,
-      ...args,
-    ]);
-  await writeOperatorJson(configPath, {
-    grpcUrl: "http://127.0.0.1:0",
-    network: "mainnet",
-    chainId: "test-genesis",
-    deployment: {
-      packageId,
-      originalPackageId,
-      launchpad: {
-        packageId: address("0x41"),
-        originalPackageId: address("0x41"),
-        partnersPackageId: address("0xae"),
-        packageVersion: shared("0x42", false),
-        launchConfig: shared("0x43", false),
-        runtimeConfig: shared("0x44", false),
-        admin: { packageId: address("0xad"), acl: shared("0x45", false) },
-      },
-      migratorsVersion: shared("0x90", false),
-      lpFeePolicy: shared("0x91", false),
-      venueConfig: shared("0x92", false),
-    },
-    vaultId,
-    adminCapId: address("0x93"),
-    claimWindowMs: "604800000",
-    gasReserveAmount: "2020",
-    expectedTreasury: address("0xb"),
-    sender: alice,
-  });
-  await writeOperatorJson(statePath, {
-    chainId: "test-genesis",
-    vaultId,
-    activationCheckpoint: "0",
-    ledger: createHolderLedger(memeType, 0n),
-  });
-  const client = new SuiGrpcClient({
-    baseUrl: "http://127.0.0.1:0",
-    network: "mainnet",
-  });
-  const ledgerPrototype = Object.getPrototypeOf(client.ledgerService);
-  const requested: bigint[] = [];
-  let failAt: bigint | undefined = 100n;
-  let published: RewardManifest | undefined;
-  let scheduled: RewardManifest | undefined;
-  t.mock.method(console, "log", () => {});
-  t.mock.method(ledgerPrototype, "getServiceInfo", () => ({
-    response: Promise.resolve({
-      chainId: "test-genesis",
-      checkpointHeight: 101n,
-    }),
-  }));
-  t.mock.method(
-    ledgerPrototype,
-    "getCheckpoint",
-    (request: { checkpointId: { sequenceNumber: bigint } }) => {
-      const sequence = request.checkpointId.sequenceNumber;
-      requested.push(sequence);
-      if (sequence === failAt) throw new Error("injected archival RPC failure");
-      const changes =
-        sequence === 0n
-          ? [
-              { address: alice, amount: "100" },
-              { address: bob, amount: "100" },
-            ]
-          : sequence === 50n
-            ? [
-                { address: alice, amount: "-50" },
-                { address: bob, amount: "50" },
-              ]
-            : sequence === 100n
-              ? [
-                  { address: alice, amount: "-10" },
-                  { address: bob, amount: "10" },
-                ]
-              : [];
-      return {
-        response: Promise.resolve({
-          checkpoint: {
-            sequenceNumber: sequence,
-            digest: `cp-${sequence}`,
-            summary: {
-              previousDigest:
-                sequence === 0n ? undefined : `cp-${sequence - 1n}`,
-              timestamp: { seconds: sequence + 1n, nanos: 0 },
-            },
-            contents: { transactions: [{ transaction: `tx-${sequence}` }] },
-            transactions: [
-              {
-                digest: `tx-${sequence}`,
-                balanceChanges: changes.map((change) => ({
-                  ...change,
-                  coinType: memeType,
-                })),
-              },
-            ],
-          },
-        }),
-      };
-    },
-  );
-  t.mock.method(
-    Object.getPrototypeOf(client.core),
-    "getObject",
-    async (request: { objectId: string }) => {
-      const base = {
-        objectId: request.objectId,
-        owner: { $kind: "Shared", Shared: { initialSharedVersion: "1" } },
-      };
-      if (request.objectId === vaultId)
-        return {
-          object: {
-            ...base,
-            type: `${originalPackageId}::vault::LpVault<${memeType},${quoteType}>`,
-            content: lpVaultBcs
-              .serialize({
-                id: uid(vaultId),
-                launch_id: { bytes: address("0x11") },
-                pool_id: { bytes: address("0x10") },
-                partner_id: null,
-                protocol_meme_residual: { value: 0n },
-                protocol_quote_residual: { value: 0n },
-                unpaid_protocol_meme: { value: 0n },
-                unpaid_protocol_quote: { value: 0n },
-                fee_split: {
-                  owner: address(vaultId),
-                  key: null,
-                  value: {
-                    creatorBps: 0n,
-                    autoLpBps: 0n,
-                    rewardsBps: 10_000n,
-                    burnBps: 0n,
-                    recipients: [],
-                  },
-                  delay_ms: 172_800_000n,
-                  pending: null,
-                },
-                creator_meme: { value: 0n },
-                creator_quote: { value: 0n },
-                auto_lp_meme: { value: 0n },
-                auto_lp_quote: { value: 0n },
-                rewards_meme: { value: published ? 0n : 2020n },
-                rewards_quote: { value: published ? 0n : 4040n },
-                burn_quote: { value: 0n },
-                next_round: published ? 1n : 0n,
-                last_checkpoint: published ? 101n : null,
-                // The default two-hour notice: publish-tx schedules, then publishes once scheduled.
-                round_publication: roundPublication(vaultId, scheduled),
-              })
-              .toBytes(),
-          },
-        };
-      assert.equal(request.objectId, roundId);
-      assert.ok(published);
-      return {
-        object: {
-          ...base,
-          type: `${originalPackageId}::blast_holder_rewards::Round<${memeType},${quoteType}>`,
-          content: rewardRoundBcs
-            .serialize({
-              id: uid(roundId),
-              vault: { bytes: vaultId },
-              number: 0n,
-              root: Array.from(fromHex(published.root)),
-              leaf_count: 2n,
-              claimed: [1n],
-              meme: { value: 1266n },
-              quote: { value: 2532n },
-              claim_deadline_at_ms: 2_000_000_000_000n,
-              treasury: "0xb",
-              gas_reserve: null,
-            })
-            .toBytes(),
-        },
-      };
-    },
-  );
-
-  await assert.rejects(
-    () => run("index", "--until", "101"),
-    /injected archival RPC failure/,
-  );
-  assert.equal((await readJson(statePath)).ledger.nextCheckpoint, "100");
-  assert.deepEqual(await readdir(join(dir, "checkpoints")), ["batch-0.json"]);
-  assert.equal(
-    (await readJson(join(dir, "checkpoints", "batch-0.json"))).length,
-    100,
-  );
-  failAt = 101n;
-  await assert.rejects(
-    () => run("index", "--until", "101"),
-    /injected archival RPC failure/,
-  );
-  const committed = (await readJson(statePath)).ledger as HolderLedger;
-  assert.equal(committed.nextCheckpoint, "100");
-  assert.equal(committed.accounts[alice]?.balance, "50");
-  assert.deepEqual(await readdir(join(dir, "checkpoints")), ["batch-0.json"]);
-  // A crash after the journal rename but before state commit must overwrite this batch on retry.
-  await writeOperatorJson(join(dir, "checkpoints", "batch-100.json"), []);
-  failAt = undefined;
-  requested.length = 0;
-  await run("index", "--until", "101");
-  assert.deepEqual(requested, [100n, 101n]);
-  const ledger = (await readJson(statePath)).ledger as HolderLedger;
-  assert.equal(ledger.nextCheckpoint, "102");
-  assert.equal(ledger.accounts[alice]?.balance, "40");
-  assert.equal(ledger.accounts[bob]?.balance, "160");
-  assert.deepEqual(holderWeights(ledger), [
-    { address: alice, weight: 7_540_000n },
-    { address: bob, weight: 12_660_000n },
-  ]);
-  assert.deepEqual(
-    (await readJson(join(dir, "checkpoints", "batch-100.json"))).map(
-      (checkpoint: { sequence: string }) => checkpoint.sequence,
-    ),
-    ["100", "101"],
-  );
-
-  await run("prepare");
-  const prepared = (await readJson(pendingPath)) as RewardManifest;
-  assert.deepEqual(
-    prepared.allocations.map(({ beneficiary, memeAmount, quoteAmount }) => ({
-      beneficiary,
-      memeAmount,
-      quoteAmount,
-    })),
-    [
-      { beneficiary: alice, memeAmount: "754", quoteAmount: "754" },
-      { beneficiary: bob, memeAmount: "1266", quoteAmount: "1266" },
-    ],
-  );
-  await assert.rejects(
-    () => run("index", "--until", "101"),
-    /prepared round is pending/,
-  );
-  await run("publish-tx");
-  const publishTx = Transaction.from(
-    (await readJson(join(dir, "publish-tx.json"))).transaction,
-  );
-  assert.deepEqual(
-    publishTx.getData().commands.map((command) => command.MoveCall?.function),
-    ["sign_in", "schedule_round"],
-  );
-  assert.equal(publishTx.getData().commands[1]?.MoveCall?.package, packageId);
-  // Once the round waits in the vault, rerunning publish-tx publishes it.
-  scheduled = prepared;
-  await run("publish-tx");
-  assert.deepEqual(
-    Transaction.from((await readJson(join(dir, "publish-tx.json"))).transaction)
-      .getData()
-      .commands.map((command) => command.MoveCall?.function),
-    ["publish_round"],
-  );
-  scheduled = undefined;
-  published = prepared;
-  await run("advance", "--round", roundId);
-  await assert.rejects(() => readFile(pendingPath), { code: "ENOENT" });
-  const advanced = await readJson(statePath);
-  assert.equal(advanced.ledger.startCheckpoint, "101");
-  assert.deepEqual(holderWeights(advanced.ledger), []);
-  await run("advance", "--round", roundId, "--manifest", manifestPath);
-  assert.deepEqual(await readJson(statePath), advanced);
-  await run("relay", "--round", roundId, "--manifest", manifestPath);
-  const relayTx = Transaction.from(
-    (await readJson(join(dir, "rounds", "0", "relay-1.json"))).transaction,
-  );
-  assert.deepEqual(
-    relayTx.getData().commands.map((command) => command.MoveCall?.function),
-    ["claim"],
-  );
-  await assert.rejects(
-    () => readFile(join(dir, "rounds", "0", "relay-0.json")),
-    { code: "ENOENT" },
-  );
 });
 
 async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
@@ -741,35 +431,4 @@ async function presaleRoundJourney(t: TestContext, skippedDay: boolean) {
 for (const skippedDay of [false, true]) {
   test(`CLI runs a presale round ${skippedDay ? "after a skipped day" : "from activation"} with its own claim window`, (t) =>
     presaleRoundJourney(t, skippedDay));
-}
-
-/** A vault's round slot at the default two-hour notice, holding `scheduled` when given. */
-function roundPublication(vaultId: string, scheduled?: RewardManifest) {
-  return {
-    owner: normalizeSuiAddress(vaultId),
-    key: null,
-    delay_ms: 7_200_000n,
-    pending: scheduled
-      ? {
-          value: {
-            kind: "Action" as const,
-            action: {
-              number: BigInt(scheduled.number),
-              start_checkpoint: BigInt(scheduled.startCheckpoint),
-              end_checkpoint: BigInt(scheduled.endCheckpoint),
-              root: scheduled.root,
-              manifest_digest: scheduled.manifestDigest,
-              leaf_count: BigInt(scheduled.allocations.length),
-              meme_amount: BigInt(scheduled.memeAmount),
-              quote_amount: BigInt(scheduled.quoteAmount),
-              gas_reserve_amount: 0n,
-              claim_window_duration_ms: 604_800_000n,
-              expected_treasury: "0xb",
-            },
-          },
-          delay_ms: 7_200_000n,
-          ready_at_ms: 7_200_000n,
-        }
-      : null,
-  };
 }

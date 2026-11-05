@@ -3,16 +3,14 @@ import { grossGasBudget } from "@interest-protocol/blast-core/gas";
 import { moveResults } from "@interest-protocol/blast-core/ptb";
 import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
 import { normalizeSharedObjectReference } from "@interest-protocol/blast-core/sui";
-import type { LaunchTypes } from "@interest-protocol/blast-launchpad-sdk/transactions";
-import { normalizeLaunchTypes } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import type {
   Transaction,
   TransactionObjectArgument,
   TransactionObjectInput,
 } from "@mysten/sui/transactions";
-import { normalizeSuiAddress } from "@mysten/sui/utils";
+import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 
-export type CetusPoolCreation = LaunchTypes & {
+export type CetusPoolCreation = { memeType: string; quoteType: string } & {
   /** Runtime package and shared objects from the deployment's Cetus identities. */
   cetusPackageId: string;
   cetusConfig: SharedObjectReference<false>;
@@ -57,7 +55,7 @@ export function addCetusPoolWithLiquidity(
   tx: Transaction,
   options: CetusPoolCreation,
 ): CetusPoolCreationResult {
-  const { memeType, quoteType } = normalizeLaunchTypes(options);
+  const { memeType, quoteType } = normalizePair(options);
   const memeIsA = cetusMemeSide(memeType, quoteType) === "a";
   const typeArguments = memeIsA ? [memeType, quoteType] : [quoteType, memeType];
   const lowerTick = tickBits(options.lowerTick);
@@ -104,4 +102,11 @@ function tickBits(tick: number): number {
     throw new RangeError("tick must be an i32");
   }
   return tick >>> 0;
+}
+
+function normalizePair(types: { memeType: string; quoteType: string }) {
+  return {
+    memeType: normalizeStructTag(types.memeType),
+    quoteType: normalizeStructTag(types.quoteType),
+  };
 }

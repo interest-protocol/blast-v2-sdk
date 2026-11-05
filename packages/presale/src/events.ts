@@ -2,10 +2,7 @@ import type {
   DecodedDelayedEvent,
   DelayedKeySpecs,
 } from "@interest-protocol/blast-admin-sdk/events";
-import {
-  decodeDelayedEvent,
-  upgradeDelayedKey,
-} from "@interest-protocol/blast-admin-sdk/events";
+import { decodeDelayedEvent } from "@interest-protocol/blast-admin-sdk/events";
 import {
   addressBcs,
   moveTypeNameBcs,
@@ -594,7 +591,6 @@ export const presaleDelayedKeys = {
     valueBcs: rewardRoundTermsBcs,
     valueType: "{package}::presale_vault::RoundTerms",
   },
-  Upgrade: upgradeDelayedKey,
 } as const satisfies DelayedKeySpecs;
 
 export type DecodedPresaleDelayedEvent = DecodedDelayedEvent<

@@ -4,7 +4,17 @@ export function blake2b256(bytes: Uint8Array): Uint8Array {
   return blake2b(bytes, { dkLen: 32 });
 }
 
-/** Mirrors the contracts' Merkle `node`: `blake2b256(0x01 || left || right)`. */
+/**
+ * Mirrors `blast_core::merkle::leaf`: `blake2b256(0x00 || domain || payload)`,
+ * `domain` naming the tree's purpose (UTF-8) and `payload` the leaf's BCS.
+ */
+export function merkleLeaf(domain: string, payload: Uint8Array): Uint8Array {
+  return blake2b256(
+    new Uint8Array([0, ...new TextEncoder().encode(domain), ...payload]),
+  );
+}
+
+/** Mirrors `blast_core::merkle::node`: `blake2b256(0x01 || left || right)`. */
 export function merkleNode(left: Uint8Array, right: Uint8Array): Uint8Array {
   return blake2b256(new Uint8Array([1, ...left, ...right]));
 }

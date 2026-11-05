@@ -1,14 +1,14 @@
 import type {
   Delayed,
   DelayedAction,
-  Notice,
+  PendingDelay,
 } from "@interest-protocol/blast-core/bcs";
 import {
   addressBcs,
+  admission,
   delayedActionBcs,
   delayedBcs,
   delayedSetBcs,
-  migrationAdmission,
   moveTypeNameBcs,
   suiBalanceBcs,
   suiIdBcs,
@@ -23,11 +23,15 @@ import {
   requireBasisPoints,
   requireU64,
 } from "@interest-protocol/blast-core/integers";
-import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
+import type {
+  SharedObjectIdentity,
+  SharedObjectReference,
+} from "@interest-protocol/blast-core/sui";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
 import {
+  deriveObjectID,
   fromHex,
   normalizeStructTag,
   normalizeSuiAddress,
@@ -488,9 +492,9 @@ export type LaunchConfigState = {
   /** The applied notice for new witness admissions. */
   witnessDelayMs: bigint;
   /** A proposed next admission notice. */
-  pendingWitnessDelay: Notice | null;
+  pendingWitnessDelay: PendingDelay | null;
   /** Pending admissions; each keeps the notice it was scheduled under. */
-  pendingWitnesses: Readonly<Record<string, Notice>>;
+  pendingWitnesses: Readonly<Record<string, PendingDelay>>;
   migrationWitnessTypes: string[];
   protocolAllocation: { memeBps: bigint; quoteBps: bigint };
   /** The exact SUI, in MIST, `launch::finalize` requires. */
@@ -508,9 +512,9 @@ export type RuntimeConfigState = {
   /** The applied notice for new signer admissions. */
   claimSignerDelayMs: bigint;
   /** A proposed next signer notice. */
-  pendingClaimSignerDelay: Notice | null;
+  pendingClaimSignerDelay: PendingDelay | null;
   /** Pending signer admissions by hex key; each keeps the notice it was scheduled under. */
-  pendingClaimSigners: Readonly<Record<string, Notice>>;
+  pendingClaimSigners: Readonly<Record<string, PendingDelay>>;
   /** Blast's share of each trade fee, rounded up to Blast. */
   protocolFeeShareBps: bigint;
   protocolFeeSharePolicy: Delayed<null, bigint>;
@@ -542,6 +546,7 @@ export function decodeLaunchConfigObject(
 ): LaunchConfigState {
   requireObjectType(object, "launch_config", "LaunchConfig", originalPackageId);
   const parsed = launchConfigBcs.parse(object.content);
+  const witnesses = admission(parsed.migration_witnesses);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
     memeDecimals: [...parsed.meme_decimals],
@@ -550,7 +555,10 @@ export function decodeLaunchConfigObject(
     tradeFeesPolicy: parsed.trade_fees,
     protocolAllocationPolicy: parsed.protocol_allocation,
     creationFeePolicy: parsed.creation_fee,
-    ...migrationAdmission(parsed.migration_witnesses),
+    migrationWitnessTypes: witnesses.members,
+    witnessDelayMs: witnesses.delayMs,
+    pendingWitnessDelay: witnesses.pendingDelay,
+    pendingWitnesses: witnesses.pendingMembers,
     quoteFeeBps: parsed.trade_fees.value.quote_fee_bps,
     memeFeeBps: parsed.trade_fees.value.meme_fee_bps,
     protocolAllocation: { ...parsed.protocol_allocation.value },
@@ -575,9 +583,9 @@ export function decodeRuntimeConfigObject(
     claimSignerDelayMs: parsed.creator_claim_signers.delay_ms,
     pendingClaimSignerDelay: parsed.creator_claim_signers.pending_delay,
     pendingClaimSigners: Object.fromEntries(
-      parsed.creator_claim_signers.admissions.map(({ member, notice }) => [
+      parsed.creator_claim_signers.admissions.map(({ member, delay }) => [
         member,
-        notice,
+        delay,
       ]),
     ),
     protocolFeeShareBps: parsed.protocol_fee_share_bps.value,
@@ -696,5 +704,25 @@ export async function getLaunchConfig(
       content: object.content,
     },
     originalPackageId,
+  );
+}
+
+/**
+ * The ID of the `Launch<Meme, Quote>` for `memeType`:
+ * `derived_object::derive_address(launch_registry, LaunchKey<Meme>())`. The
+ * key has no fields (one `dummy_field: bool` byte); pass original package
+ * IDs, as `type_name::with_original_ids` would name them.
+ */
+export function launchId(
+  launchpad: {
+    originalPackageId: string;
+    launchRegistry: SharedObjectIdentity;
+  },
+  memeType: string,
+): string {
+  return deriveObjectID(
+    normalizeSuiObjectId(launchpad.launchRegistry.objectId),
+    `${normalizeSuiObjectId(launchpad.originalPackageId)}::launch::LaunchKey<${normalizeStructTag(memeType)}>`,
+    unitKeyBcs.serialize(null).toBytes(),
   );
 }

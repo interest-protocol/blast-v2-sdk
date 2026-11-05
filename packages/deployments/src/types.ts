@@ -3,8 +3,10 @@ import type {
   SuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
 import type { LaunchpadDeployment } from "@interest-protocol/blast-launchpad-sdk/transactions";
-import type { MigratorVenue } from "@interest-protocol/blast-migrators-sdk/state";
-import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
+import type {
+  MigratorsDeployment,
+  MigratorVenue,
+} from "@interest-protocol/blast-migrators-sdk/transactions";
 import type { BlastSuiDeployment } from "@interest-protocol/blast-sui-sdk/types";
 
 /** Blast deploys to Sui mainnet only (contracts ADR 0103). */

@@ -11,11 +11,6 @@ import {
   launchBcs,
   launchConfigBcs,
 } from "@interest-protocol/blast-launchpad-sdk/state";
-import {
-  lpFeePolicyBcs,
-  lpFeeSharePairBcs,
-  lpVaultBcs,
-} from "@interest-protocol/blast-migrators-sdk/state";
 import type { BcsType } from "@mysten/sui/bcs";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 
@@ -105,32 +100,6 @@ test("SDK object layouts follow the frozen Move field order", () => {
         creation_fee: delayed(0n),
       },
     ],
-    ["migrators", "vault", "LpVault", lpVaultBcs as never, vault()],
-    [
-      "migrators",
-      "lp_fee_policy",
-      "LpFeePolicy",
-      lpFeePolicyBcs as never,
-      {
-        id: uid("0x1"),
-        destination: delayed("0x2"),
-        defaults: delayed({ meme_bps: 0n, quote_bps: 0n }),
-        coins: {
-          ...owned,
-          entries: { id: normalizeSuiAddress("0x3"), size: 0n },
-          delay_ms: 172_800_000n,
-          pending: [],
-          pending_delay: null,
-        },
-      },
-    ],
-    [
-      "migrators",
-      "lp_fee_policy",
-      "SharePair",
-      lpFeeSharePairBcs as never,
-      { meme_bps: 0n, quote_bps: 0n },
-    ],
     [
       "migrators",
       "blast_holder_rewards",
@@ -208,30 +177,6 @@ function launch() {
     curve_fee_cap_id: null,
     blast_metadata_cap_id: null,
     partner_id: null,
-  };
-}
-
-function vault() {
-  return {
-    id: uid("0x1"),
-    launch_id: { bytes: "0x3" },
-    pool_id: { bytes: "0x2" },
-    partner_id: null,
-    protocol_meme_residual: balance,
-    protocol_quote_residual: balance,
-    unpaid_protocol_meme: balance,
-    unpaid_protocol_quote: balance,
-    fee_split: delayed(feeSplit),
-    creator_meme: balance,
-    creator_quote: balance,
-    auto_lp_meme: balance,
-    auto_lp_quote: balance,
-    rewards_meme: balance,
-    rewards_quote: balance,
-    burn_quote: balance,
-    next_round: 0n,
-    last_checkpoint: null,
-    round_publication: { ...owned, delay_ms: 0n, pending: null },
   };
 }
 

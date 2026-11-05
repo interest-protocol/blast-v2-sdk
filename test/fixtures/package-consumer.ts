@@ -65,6 +65,6 @@ export const legacy: [
 ];
 
 export type { SharedObjectReference } from "@interest-protocol/blast-core";
-export type { CetusMemeSide } from "@interest-protocol/blast-migrators-sdk/transactions";
+export type { CetusMemeSide } from "@interest-protocol/blast-core/cetus";
 export type { PresaleDeployment } from "@interest-protocol/blast-sdk";
 export { migrators };

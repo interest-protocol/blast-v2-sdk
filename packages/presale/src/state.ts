@@ -1,13 +1,13 @@
 import type {
   Delayed,
   DelayedAction,
-  Notice,
+  PendingDelay,
 } from "@interest-protocol/blast-core/bcs";
 import {
+  admission,
   delayedActionBcs,
   delayedBcs,
   delayedSetBcs,
-  migrationAdmission,
   moveTypeNameBcs,
   suiBalanceBcs,
   suiIdBcs,
@@ -18,11 +18,15 @@ import {
 import { normalizePositiveU64 } from "@interest-protocol/blast-core/integers";
 import type { RewardRoundTerms } from "@interest-protocol/blast-core/rewards/state";
 import { rewardRoundTermsBcs } from "@interest-protocol/blast-core/rewards/state";
-import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
+import type {
+  SharedObjectIdentity,
+  SharedObjectReference,
+} from "@interest-protocol/blast-core/sui";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
 import {
+  deriveObjectID,
   fromHex,
   normalizeStructTag,
   normalizeSuiAddress,
@@ -582,9 +586,9 @@ export type PresaleCreationPolicyState = SharedObjectReference<true> & {
   /** The applied notice for new witness admissions. */
   witnessDelayMs: bigint;
   /** A proposed next admission notice. */
-  pendingWitnessDelay: Notice | null;
+  pendingWitnessDelay: PendingDelay | null;
   /** Pending admissions; each keeps the notice it was scheduled under. */
-  pendingWitnesses: Readonly<Record<string, Notice>>;
+  pendingWitnesses: Readonly<Record<string, PendingDelay>>;
   allowedQuotes: string[];
   allowedMigrationWitnesses: string[];
 };
@@ -773,16 +777,16 @@ export function decodePresaleCreationPolicyObject(
     originalPackageId,
   );
   const parsed = creationPolicyBcs.parse(object.content);
-  const { migrationWitnessTypes, ...admission } = migrationAdmission(
-    parsed.migration_witnesses,
-  );
+  const witnesses = admission(parsed.migration_witnesses);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes, [
       parsed.migration_witnesses.owner,
     ]),
-    ...admission,
+    witnessDelayMs: witnesses.delayMs,
+    pendingWitnessDelay: witnesses.pendingDelay,
+    pendingWitnesses: witnesses.pendingMembers,
     allowedQuotes: parsed.allowed_quotes.contents,
-    allowedMigrationWitnesses: migrationWitnessTypes,
+    allowedMigrationWitnesses: witnesses.members,
   };
 }
 
@@ -961,4 +965,24 @@ function sharedIdentity(
     ),
     mutable: true,
   };
+}
+
+/**
+ * The ID of the `Presale<SaleToken, Quote>` for `saleTokenType`:
+ * `derived_object::derive_address(presale_registry, PresaleKey<SaleToken>())`.
+ * The key has no fields (one `dummy_field: bool` byte); pass original package
+ * IDs, as `type_name::with_original_ids` would name them.
+ */
+export function presaleId(
+  presale: {
+    originalPackageId: string;
+    presaleRegistry: SharedObjectIdentity;
+  },
+  saleTokenType: string,
+): string {
+  return deriveObjectID(
+    normalizeSuiObjectId(presale.presaleRegistry.objectId),
+    `${normalizeSuiObjectId(presale.originalPackageId)}::blast_presale::PresaleKey<${normalizeStructTag(saleTokenType)}>`,
+    unitKeyBcs.serialize(null).toBytes(),
+  );
 }

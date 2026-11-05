@@ -14,6 +14,10 @@
     "src"
   ],
   "exports": {
+    "./aborts": {
+      "types": "./dist/aborts.d.ts",
+      "default": "./dist/aborts.js"
+    },
     "./events": {
       "types": "./dist/events.d.ts",
       "default": "./dist/events.js"

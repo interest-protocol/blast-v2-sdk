@@ -2,14 +2,16 @@ import { requireU64 } from "@interest-protocol/blast-core/integers";
 import { moveResults } from "@interest-protocol/blast-core/ptb";
 import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
 import { normalizeSharedObjectReference } from "@interest-protocol/blast-core/sui";
-import type { LaunchTypes } from "@interest-protocol/blast-launchpad-sdk/transactions";
-import { normalizeLaunchTypes } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import type {
   Transaction,
   TransactionObjectArgument,
   TransactionObjectInput,
 } from "@mysten/sui/transactions";
-import { normalizeSuiAddress, SUI_TYPE_ARG } from "@mysten/sui/utils";
+import {
+  normalizeStructTag,
+  normalizeSuiAddress,
+  SUI_TYPE_ARG,
+} from "@mysten/sui/utils";
 
 /** Bluefin's pool metadata; amounts and prices always use atomic coin units. */
 export type BluefinCoinMetadata = {
@@ -18,7 +20,7 @@ export type BluefinCoinMetadata = {
   iconUrl?: string;
 };
 
-export type BluefinPoolCreation = LaunchTypes & {
+export type BluefinPoolCreation = { memeType: string; quoteType: string } & {
   /** Runtime package and config from the deployment's Bluefin venue identities. */
   bluefinPackageId: string;
   bluefinConfig: SharedObjectReference<true>;
@@ -65,7 +67,7 @@ export function addBluefinPoolWithLiquidity(
   tx: Transaction,
   options: BluefinPoolCreation,
 ): BluefinPoolCreationResult {
-  const types = normalizeLaunchTypes(options);
+  const types = normalizePair(options);
   const typeArguments = [types.memeType, types.quoteType];
   const target = (name: string) =>
     `${normalizeSuiAddress(options.bluefinPackageId)}::pool::${name}`;
@@ -159,12 +161,12 @@ export function addBluefinPoolWithLiquidity(
 /** Shares a fresh Bluefin pool after all calls that borrow it in this PTB. */
 export function shareBluefinPool(
   tx: Transaction,
-  options: LaunchTypes & {
+  options: { memeType: string; quoteType: string } & {
     bluefinPackageId: string;
     pool: TransactionObjectInput;
   },
 ): void {
-  const { memeType, quoteType } = normalizeLaunchTypes(options);
+  const { memeType, quoteType } = normalizePair(options);
   tx.moveCall({
     target: `${normalizeSuiAddress(options.bluefinPackageId)}::pool::share_pool_object`,
     typeArguments: [memeType, quoteType],
@@ -177,4 +179,11 @@ function tickBits(tick: number): number {
     throw new RangeError("tick must be an i32");
   }
   return tick >>> 0;
+}
+
+function normalizePair(types: { memeType: string; quoteType: string }) {
+  return {
+    memeType: normalizeStructTag(types.memeType),
+    quoteType: normalizeStructTag(types.quoteType),
+  };
 }

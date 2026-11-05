@@ -9,8 +9,8 @@ import {
   normalizeSharedObjectIdentity,
   normalizeSuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
-import type { MigratorVenue } from "@interest-protocol/blast-migrators-sdk/state";
-import { MIGRATOR_VENUES } from "@interest-protocol/blast-migrators-sdk/state";
+import type { MigratorVenue } from "@interest-protocol/blast-migrators-sdk/transactions";
+import { MIGRATOR_VENUES } from "@interest-protocol/blast-migrators-sdk/transactions";
 import type { PartnersDeployment } from "@interest-protocol/blast-partners-sdk/transactions";
 import { defineAftermathPresaleDeployment } from "@interest-protocol/blast-presale-sdk/aftermath";
 import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
@@ -395,24 +395,11 @@ export function blastSuiDeployment(
 }
 
 export function migratorsDeployment(
-  deployment: BlastDeployment,
+  _deployment: BlastDeployment,
 ): MigratorsDeploymentConstants {
-  const packageReference = requireGroup(
-    deployment.packages.migrators,
-    "packages.migrators",
+  throw new Error(
+    "WP5: migratorsDeployment needs the fresh-stack manifest (vault, core)",
   );
-  const objects = requireGroup(
-    deployment.sharedObjects.migrators,
-    "sharedObjects.migrators",
-  );
-  return {
-    packageId: packageReference.packageId,
-    originalPackageId: packageReference.originalPackageId,
-    launchpad: launchpadDeployment(deployment),
-    migratorsVersion: objects.packageVersion,
-    lpFeePolicy: objects.lpFeePolicy,
-    venueConfig: objects.venueConfig,
-  };
 }
 
 /** Returns the call-ready presale identities from a canonical deployment. */

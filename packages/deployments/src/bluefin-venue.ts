@@ -15,7 +15,6 @@ import {
   exactPrice,
   priceImpactBps,
 } from "@interest-protocol/blast-launchpad-sdk/market-data";
-import type { LpVaultState } from "@interest-protocol/blast-migrators-sdk/state";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
@@ -424,7 +423,12 @@ export function resolveBluefinVenueRoute(options: {
     poolTickSpacing: number;
     poolFeeRate: bigint;
   };
-  vault: Pick<LpVaultState, "objectId" | "poolId" | "memeType" | "quoteType">;
+  vault: {
+    objectId: string;
+    poolId: string;
+    memeType: string;
+    quoteType: string;
+  };
   pool: BluefinPoolState;
 }): BluefinVenueRoute {
   const { deployment, launch, vault, pool } = options;
