@@ -35,7 +35,7 @@ export type CetusPoolCreation = { memeType: string; quoteType: string } & {
 };
 
 export type CetusPoolCreationResult = {
-  /** Transfer to its owner; newCetusVault can consume it in the next PTB. */
+  /** The seeded position; transfer it to its owner. */
   position: TransactionObjectArgument;
   /** Residual Coins, including zero coins; consume or transfer both. */
   memeResidual: TransactionObjectArgument;
@@ -46,8 +46,8 @@ export type CetusPoolCreationResult = {
  * Creates and seeds a Cetus pool through the revision-15 pool_creator v3 API.
  * Coin types, input coins, fixed side and residuals follow cetusMemeSide.
  * Cetus shares the pool internally; its public API returns no pool handle.
- * Execute this PTB, read the shared pool/position IDs, then call newCetusVault
- * in a later PTB. No presale or TreasuryCap is needed for an unreserved pair.
+ * No sale or TreasuryCap is needed for an unreserved pair; a sale's own pool
+ * is created by `MigratorCalls.migrateCetus`.
  * ABI: CetusProtocol/cetus-contracts ddfbdeba, pool_creator.move and factory.move;
  * runtime package 0x260693ec785a6e6c9d81d58c7d2ff72f1288ae0fa6a9725abe05a6478b11f084.
  */

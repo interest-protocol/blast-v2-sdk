@@ -49,7 +49,7 @@ export type BluefinPoolCreation = { memeType: string; quoteType: string } & {
 export type BluefinPoolCreationResult = {
   /** Fresh owned Pool<Meme, Quote>. Call shareBluefinPool after composing. */
   pool: TransactionObjectArgument;
-  /** Position to pass to PresaleCalls.newBluefinVault, or transfer to its owner. */
+  /** The position; transfer it to its owner. */
   position: TransactionObjectArgument;
   /** Residual coins, including zero coins; callers must consume or transfer both. */
   memeResidual: TransactionObjectArgument;
@@ -58,9 +58,10 @@ export type BluefinPoolCreationResult = {
 
 /**
  * Creates Pool<Meme, Quote>, opens a position, and adds fixed-side liquidity.
- * Mirrors the pinned Bluefin Spot interface (91ce930). No presale is needed.
- * The fresh pool remains usable in this PTB, e.g. by newBluefinVault; the
- * caller must then share it, consume the position, and handle both residuals.
+ * Mirrors the pinned Bluefin Spot interface (91ce930). No sale is needed; a
+ * sale's own pool is created by `MigratorCalls.migrateBluefin`. The fresh pool
+ * remains usable in this PTB; the caller must then share it, consume the
+ * position, and handle both residuals.
  * The input coins cap spending; Bluefin aborts if the other side is too small.
  */
 export function addBluefinPoolWithLiquidity(
