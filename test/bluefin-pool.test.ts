@@ -1,16 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { finalizeCoinRegistration } from "@interest-protocol/blast-coin-sdk";
-import {
-  defineBlastDeployment,
-  presaleDeployment,
-} from "@interest-protocol/blast-deployments-sdk";
-import { PresaleCalls } from "@interest-protocol/blast-presale-sdk";
-import type { BluefinPoolCreation } from "@interest-protocol/blast-sdk/migrators";
+import type { BluefinPoolCreation } from "@interest-protocol/blast-migrators-sdk/bluefin-pool";
 import {
   addBluefinPoolWithLiquidity,
   shareBluefinPool,
-} from "@interest-protocol/blast-sdk/migrators";
+} from "@interest-protocol/blast-migrators-sdk/bluefin-pool";
 import { bcs } from "@mysten/sui/bcs";
 import type { TransactionArgument } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
@@ -20,7 +15,6 @@ import {
   normalizeSuiAddress,
   SUI_TYPE_ARG,
 } from "@mysten/sui/utils";
-import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
 
 const options: BluefinPoolCreation = {
   memeType: "0xa::meme::MEME",
@@ -45,26 +39,18 @@ const options: BluefinPoolCreation = {
   fixedMeme: true,
 };
 
-test("composes registry finalization, Bluefin pool/liquidity and a vault before sharing", () => {
+test("composes registry finalization and Bluefin pool/liquidity before sharing", () => {
   const tx = new Transaction();
   finalizeCoinRegistration(tx, {
     coinType: options.memeType,
     currency: "0xcc",
   });
   const result = addBluefinPoolWithLiquidity(tx, options);
-  tx.add(
-    new PresaleCalls(
-      presaleDeployment(defineBlastDeployment(NON_PRODUCTION_MANIFEST)),
-    ).newBluefinVault({
-      ...options,
-      pool: result.pool,
-      position: result.position,
-      feeRecipients: [{ recipient: "0x123", bps: 1_000n }],
-      holderRewardsBps: 9_000n,
-    }),
-  );
   shareBluefinPool(tx, { ...options, pool: result.pool });
-  tx.transferObjects([result.memeResidual, result.quoteResidual], "0x123");
+  tx.transferObjects(
+    [result.position, result.memeResidual, result.quoteResidual],
+    "0x123",
+  );
   const data = tx.getData();
   const calls = data.commands.flatMap((command) =>
     command.MoveCall ? [command.MoveCall] : [],
@@ -122,12 +108,9 @@ test("composes registry finalization, Bluefin pool/liquidity and a vault before 
     options.fixedAmount,
   );
   assert.equal(bcs.bool().parse(pure(add.arguments[7])), true);
-  const vault = find("new_vault");
-  assert.deepEqual(vault.arguments[0], add.arguments[3]);
-  assert.deepEqual(vault.arguments[6], open.arguments[1]);
   const share = find("share_pool_object");
   assert.deepEqual(share.arguments, [open.arguments[1]]);
-  assert.ok(calls.indexOf(vault) < calls.indexOf(share));
+  assert.ok(calls.indexOf(add) < calls.indexOf(share));
   assert.equal(find("zero").typeArguments[0], SUI_TYPE_ARG);
   assert.equal(
     data.inputs.filter(

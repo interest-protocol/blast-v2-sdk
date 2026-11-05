@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { finalizeCoinRegistration } from "@interest-protocol/blast-coin-sdk";
-import {
-  defineBlastDeployment,
-  presaleDeployment,
-} from "@interest-protocol/blast-deployments-sdk";
-import { PresaleTransactions } from "@interest-protocol/blast-presale-sdk";
-import type { CetusPoolCreation } from "@interest-protocol/blast-sdk/migrators";
-import { addCetusPoolWithLiquidity } from "@interest-protocol/blast-sdk/migrators";
+import type { CetusPoolCreation } from "@interest-protocol/blast-migrators-sdk/cetus-pool";
+import { addCetusPoolWithLiquidity } from "@interest-protocol/blast-migrators-sdk/cetus-pool";
 import { bcs } from "@mysten/sui/bcs";
 import type { TransactionArgument } from "@mysten/sui/transactions";
 import { Transaction } from "@mysten/sui/transactions";
@@ -16,7 +11,6 @@ import {
   normalizeStructTag,
   normalizeSuiAddress,
 } from "@mysten/sui/utils";
-import { NON_PRODUCTION_MANIFEST } from "./fixtures/non-production-deployment.ts";
 
 const options: CetusPoolCreation = {
   memeType: "0xa::meme::MEME",
@@ -129,7 +123,7 @@ test("uses the creation-cap v3 path for a reserved pair", () => {
   );
 });
 
-test("composes Currency finalization and leaves vault creation to the next PTB", () => {
+test("composes Currency finalization before the pool; Cetus returns no pool handle", () => {
   const tx = new Transaction();
   finalizeCoinRegistration(tx, {
     coinType: options.memeType,
@@ -147,33 +141,6 @@ test("composes Currency finalization and leaves vault creation to the next PTB",
     ["finalize_registration", "create_pool_v3"],
   );
   assert.equal("pool" in result, false);
-  const vault = new PresaleTransactions(
-    presaleDeployment(defineBlastDeployment(NON_PRODUCTION_MANIFEST)),
-  ).newCetusVault({
-    memeType: options.memeType,
-    quoteType: options.quoteType,
-    position: "0x905",
-    pool: { objectId: "0x90", initialSharedVersion: "7", mutable: false },
-    burnManager: { objectId: "0x72", initialSharedVersion: "3", mutable: true },
-    feeRecipients: [{ recipient: "0x123", bps: 1_000n }],
-    holderRewardsBps: 9_000n,
-  });
-  const call = vault
-    .getData()
-    .commands.find(
-      (command) => command.MoveCall?.function === "new_vault",
-    )?.MoveCall;
-  assert.ok(call);
-  assert.equal(call.module, "cetus");
-  assert.deepEqual(
-    call.typeArguments,
-    [
-      options.memeType,
-      options.quoteType,
-      options.memeType,
-      options.quoteType,
-    ].map(normalizeStructTag),
-  );
 });
 
 test("rejects signed ticks that cannot be encoded without losing information", () => {
