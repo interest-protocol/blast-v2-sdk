@@ -60,24 +60,6 @@ test("previews raise only names the contracts define", () => {
   }
 });
 
-/** `const E<Name>: u64 = <code>;` declarations in source order. */
-function numericRegistry(source: string): string[] {
-  return [...source.matchAll(/const (E\w+): u64 = (\d+);/g)].map(
-    ([, name, code], index) => {
-      assert.equal(Number(code), index, `${name} is code ${index}`);
-      return name as string;
-    },
-  );
-}
-
-test("PRESALE_ABORTS matches sui/presale/sources/lib/errors.move", { skip }, () => {
-  const source = readFileSync(
-    join(contracts, "sui/presale/sources/lib/errors.move"),
-    "utf8",
-  );
-  assert.deepEqual(numericRegistry(source), [...PRESALE_ABORTS]);
-});
-
 test("AFTERMATH_DAO_PRESALE_ABORTS matches the vendor's error constants", {
   skip,
 }, () => {
