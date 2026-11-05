@@ -1,8 +1,8 @@
-import { U64_MAX } from "@interest-protocol/blast-core/integers";
+import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
+import type { DecodedProtocolFeesPaid } from "@interest-protocol/blast-core/protocol-fees";
 import type {
   AllocationMemeAmounts,
   AllocationPlan,
-  FeeSplit,
   ProtocolAllocation,
 } from "./allocation.ts";
 import { apportionMeme } from "./allocation.ts";
@@ -16,7 +16,7 @@ import type { LaunchLifecycle } from "./state.ts";
 import { memeAtomicSupply } from "./template.ts";
 
 export type LaunchMigrationProjection = {
-  /** The pool's share, handed to the adapter. */
+  /** The pool's share, handed to the venue in the `Migration`. */
   meme: bigint;
   quote: bigint;
   disposedMeme: bigint;
@@ -34,15 +34,14 @@ export type LaunchEventProjection = {
   ticketId: string;
   memeType: string;
   quoteType: string;
-  migrationWitnessType: string;
+  /** The venue witness type the liquidity migrates to. */
+  venue: string;
   launcher: string;
   metadataCapId: string;
   lifecycle: LaunchLifecycle;
   decimals: number;
   atomicSupply: bigint;
   sellBurnBps: bigint;
-  poolTickSpacing: number;
-  poolFeeRate: bigint;
   lpFeeSplit: FeeSplit;
   /** The finalized plan, Blast's shares set. */
   allocationPlan: AllocationPlan;
@@ -79,8 +78,8 @@ export type LaunchEventProjection = {
   allocationPayments: LaunchAllocationPayment[];
   /** Live `CurveFeeCap`, from cap claims and reassignments. */
   curveFeeCapId: string | null;
-  /** Live Blast metadata capability, from cap claims and reassignments. */
-  blastMetadataCapId: string | null;
+  /** Live `CreatorMetadataCap`, from cap claims and reassignments. */
+  creatorMetadataCapId: string | null;
   /** Coin metadata after the most recent launch metadata update, if any. */
   memeMetadata: LaunchMemeMetadataProjection | null;
 };
@@ -113,7 +112,8 @@ export type LaunchpadConfigProjection = {
   } | null;
   /** Admitted Quotes; each creator picks its virtual reserve. */
   quotes: Readonly<Record<string, true>>;
-  migrationWitnesses: Readonly<Record<string, true>>;
+  /** Admitted venue witness types. */
+  venues: Readonly<Record<string, true>>;
   /**
    * Admitted Meme precisions. `LaunchConfig` starts with six and nine without
    * emitting an event, so the projection starts there too.
@@ -121,12 +121,10 @@ export type LaunchpadConfigProjection = {
   memeDecimals: Readonly<Record<number, true>>;
   /** Blast's one-time migration fee; `LaunchConfig` starts at 250 Meme / 150 Quote bps. */
   protocolAllocation: ProtocolAllocation;
+  /** Blast's LP-fee share of new vaults; `LaunchConfig` starts at 1,500 / 1,500 bps. */
+  protocolLpFees: { memeBps: bigint; quoteBps: bigint };
   /** SUI, in MIST, each launch pays at creation; zero initially. */
   creationFee: bigint;
-  /** Partners new launches may name, and when each stops being accepted. */
-  partners: Readonly<Record<string, bigint>>;
-  /** Where every protocol fee claim pays Blast. */
-  treasury: string | null;
 };
 
 export type LaunchpadAdministrationProjection = {
@@ -137,7 +135,7 @@ export type LaunchpadAdministrationProjection = {
         memeType: string;
         claimant: string;
         curveFeeCapId: string;
-        blastMetadataCapId: string;
+        creatorMetadataCapId: string;
       }
     >
   >;
@@ -148,9 +146,8 @@ export type LaunchpadAdministrationProjection = {
    * applies their values.
    */
   pendingPolicies: Readonly<Record<string, DecodedLaunchpadDelayedEvent>>;
-  /** Applied notices by `delayedPolicyKey`, without a set member. */
+  /** Applied delays by `delayedPolicyKey`, without a set member. */
   policyDelays: Readonly<Record<string, bigint>>;
-  paused: number | null;
 };
 
 export type LaunchpadEventProjection = {
@@ -174,33 +171,51 @@ export function createLaunchpadEventProjection(): LaunchpadEventProjection {
       protocolFeeShareBps: null,
       tradeFeeDefaults: null,
       quotes: {},
-      migrationWitnesses: {},
+      venues: {},
       memeDecimals: { 6: true, 9: true },
       protocolAllocation: { memeBps: 250n, quoteBps: 150n },
+      protocolLpFees: { memeBps: 1_500n, quoteBps: 1_500n },
       creationFee: 0n,
-      partners: {},
-      treasury: null,
     },
     administration: {
       creatorCapClaims: {},
       creatorClaimSigners: {},
       pendingPolicies: {},
       policyDelays: {},
-      paused: null,
     },
   };
 }
 
 /**
- * Applies one launchpad event, or one `delayed` event decoded by
- * `decodeLaunchpadDelayedEvent`, once. `eventCounts` counts launchpad events.
+ * Applies one launchpad event, one `delayed` event decoded by
+ * `decodeLaunchpadDelayedEvent`, or one core `ProtocolFeesPaid` (a launch's
+ * fees paid to the treasury and partner), once. `eventCounts` counts launchpad
+ * events.
  */
 export function reduceLaunchpadEvent(
   state: LaunchpadEventProjection,
-  event: DecodedLaunchpadEvent | DecodedLaunchpadDelayedEvent,
+  event:
+    | DecodedLaunchpadEvent
+    | DecodedLaunchpadDelayedEvent
+    | DecodedProtocolFeesPaid,
 ): LaunchpadEventProjection {
   const eventId = launchpadEventId(event);
   if (state.appliedEventIds[eventId]) return state;
+  if (event.source === "core")
+    // `protocol_fees::pay` empties the ledger it pays from.
+    return updateLaunch(
+      {
+        ...state,
+        appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
+      },
+      event.payload.origin,
+      (launch) => ({
+        ...launch,
+        protocolMemeFees: 0n,
+        protocolQuoteFees: 0n,
+        protocolSuiFees: 0n,
+      }),
+    );
   if (event.source === "delayed")
     return reduceDelayed(
       {
@@ -213,7 +228,6 @@ export function reduceLaunchpadEvent(
 
   const next: LaunchpadEventProjection = {
     ...state,
-    administration: reduceAdministrationPolicy(state.administration, event),
     appliedEventIds: { ...state.appliedEventIds, [eventId]: true },
     eventCounts: {
       ...state.eventCounts,
@@ -230,7 +244,7 @@ export function reduceLaunchpadEvent(
           ...state.tickets,
           [payload.ticket_id]: {
             ticketId: payload.ticket_id,
-            memeType: payload.meme,
+            memeType: event.memeType as string,
             decimals: payload.decimals,
             atomicSupply: memeAtomicSupply(payload.decimals),
             metadataCapId: payload.metadata_cap_id,
@@ -266,16 +280,14 @@ export function reduceLaunchpadEvent(
             launchId: payload.launch_id,
             ticketId: payload.ticket_id,
             memeType: ticket.memeType,
-            quoteType: payload.quote,
-            migrationWitnessType: payload.migration_witness,
+            quoteType: event.quoteType as string,
+            venue: payload.venue,
             launcher: ticket.launcher,
             metadataCapId: ticket.metadataCapId,
             lifecycle: payload.opening_round_ms > 0n ? "OpeningRound" : "Live",
             decimals: ticket.decimals,
             atomicSupply: ticket.atomicSupply,
             sellBurnBps: ticket.sellBurnBps,
-            poolTickSpacing: payload.pool_tick_spacing,
-            poolFeeRate: payload.pool_fee_rate,
             lpFeeSplit: payload.lp_fee_split,
             allocationPlan: payload.allocation_plan,
             memeAmounts,
@@ -304,7 +316,7 @@ export function reduceLaunchpadEvent(
             migration: null,
             allocationPayments: [],
             curveFeeCapId: null,
-            blastMetadataCapId: null,
+            creatorMetadataCapId: null,
             memeMetadata: null,
           },
         },
@@ -387,13 +399,6 @@ export function reduceLaunchpadEvent(
         creatorMemeFees: 0n,
         creatorQuoteFees: 0n,
       }));
-    case "ProtocolFeesClaimed":
-      return updateLaunch(next, event.payload.launch_id, (launch) => ({
-        ...launch,
-        protocolMemeFees: 0n,
-        protocolQuoteFees: 0n,
-        protocolSuiFees: 0n,
-      }));
     case "ProtocolFeesAccrued": {
       const payload = event.payload;
       return updateLaunch(next, payload.launch_id, (launch) => ({
@@ -442,34 +447,16 @@ export function reduceLaunchpadEvent(
         },
       }));
     }
-    case "QuoteSet": {
-      const { quote, allowed } = event.payload;
+    case "QuoteAllowed":
       return updateConfig(next, {
         ...state.config,
-        quotes: withEntry(state.config.quotes, quote, allowed || undefined),
-      });
-    }
-    case "PartnerAdded":
-      return updateConfig(next, {
-        ...state.config,
-        partners: withEntry(
-          state.config.partners,
-          event.payload.partner_id,
-          U64_MAX,
+        quotes: withEntry(
+          state.config.quotes,
+          event.quoteType as string,
+          event.payload.allowed || undefined,
         ),
       });
-    case "PartnerRemoved": {
-      const { partner_id, accepted_until_ms } = event.payload;
-      return updateConfig(next, {
-        ...state.config,
-        partners: withEntry(
-          state.config.partners,
-          partner_id,
-          accepted_until_ms,
-        ),
-      });
-    }
-    case "MemeDecimalsSet": {
+    case "MemeDecimalsAllowed": {
       const { decimals, allowed } = event.payload;
       return updateConfig(next, {
         ...state.config,
@@ -482,20 +469,21 @@ export function reduceLaunchpadEvent(
     }
     case "CreatorCapsClaimed": {
       const payload = event.payload;
-      const claimed = updateLaunchesByMeme(next, payload.meme, (launch) => ({
+      const memeType = event.memeType as string;
+      const claimed = updateLaunchesByMeme(next, memeType, (launch) => ({
         ...launch,
         curveFeeCapId: payload.curve_fee_cap_id,
-        blastMetadataCapId: payload.blast_metadata_cap_id,
+        creatorMetadataCapId: payload.creator_metadata_cap_id,
       }));
       return updateAdministration(claimed, {
         ...next.administration,
         creatorCapClaims: {
           ...next.administration.creatorCapClaims,
-          [payload.meme]: {
-            memeType: payload.meme,
+          [memeType]: {
+            memeType,
             claimant: event.sender,
             curveFeeCapId: payload.curve_fee_cap_id,
-            blastMetadataCapId: payload.blast_metadata_cap_id,
+            creatorMetadataCapId: payload.creator_metadata_cap_id,
           },
         },
       });
@@ -507,11 +495,11 @@ export function reduceLaunchpadEvent(
         curveFeeCapId: payload.curve_fee_cap_id,
       }));
     }
-    case "MetadataCapReassigned": {
+    case "CreatorMetadataCapReassigned": {
       const payload = event.payload;
       return updateLaunch(next, payload.launch_id, (launch) => ({
         ...launch,
-        blastMetadataCapId: payload.blast_metadata_cap_id,
+        creatorMetadataCapId: payload.creator_metadata_cap_id,
       }));
     }
     case "MemeMetadataUpdated": {
@@ -599,7 +587,7 @@ function updateAdministration(
   return { ...state, administration };
 }
 
-/** Applied launchpad settings and witness memberships from `delayed` events. */
+/** Applied launchpad settings and venue and signer memberships from delayed events. */
 function reduceDelayed(
   state: LaunchpadEventProjection,
   event: DecodedLaunchpadDelayedEvent,
@@ -620,6 +608,14 @@ function reduceDelayed(
           ...config,
           protocolAllocation: { ...event.payload.value },
         });
+      case "ProtocolLpFees":
+        return updateConfig(state, {
+          ...config,
+          protocolLpFees: {
+            memeBps: event.payload.value.meme_bps,
+            quoteBps: event.payload.value.quote_bps,
+          },
+        });
       case "CreationFee":
         return updateConfig(state, {
           ...config,
@@ -629,11 +625,6 @@ function reduceDelayed(
         return updateConfig(state, {
           ...config,
           protocolFeeShareBps: event.payload.value,
-        });
-      case "Treasury":
-        return updateConfig(state, {
-          ...config,
-          treasury: event.payload.value,
         });
     }
   }
@@ -651,7 +642,7 @@ function reduceDelayed(
     });
   return updateConfig(state, {
     ...config,
-    migrationWitnesses: withEntry(config.migrationWitnesses, member, admitted),
+    venues: withEntry(config.venues, member, admitted),
   });
 }
 
@@ -659,8 +650,7 @@ function reduceDelayed(
 function membershipChange(
   event: DecodedLaunchpadDelayedEvent,
 ): [string, true | undefined] | null {
-  if (event.name !== "ClaimSigners" && event.name !== "MigrationWitnesses")
-    return null;
+  if (event.name !== "ClaimSigners" && event.name !== "Venues") return null;
   if (event.kind === "MemberRemoved") return [event.payload.member, undefined];
   if (event.kind === "SetApplied" && event.payload.change.kind === "Admission")
     return [event.payload.change.member, true];
@@ -669,7 +659,7 @@ function membershipChange(
 
 /**
  * The projection key of a delayed value: its registry name, then the owning
- * `Launch` for cap reassignments, then the member for a witness or signer
+ * `Launch` for cap reassignments, then the member for a venue or signer
  * admission.
  */
 export function delayedPolicyKey(
@@ -678,11 +668,11 @@ export function delayedPolicyKey(
   let key: string = event.name;
   if (
     event.name === "CurveFeeCapReassignment" ||
-    event.name === "MetadataCapReassignment"
+    event.name === "CreatorMetadataCapReassignment"
   )
     key += `:${event.payload.owner}`;
   if (
-    (event.name === "MigrationWitnesses" || event.name === "ClaimSigners") &&
+    (event.name === "Venues" || event.name === "ClaimSigners") &&
     "change" in event.payload &&
     event.payload.change.kind === "Admission"
   )
@@ -690,16 +680,7 @@ export function delayedPolicyKey(
   return key;
 }
 
-function reduceAdministrationPolicy(
-  state: LaunchpadAdministrationProjection,
-  event: DecodedLaunchpadEvent,
-): LaunchpadAdministrationProjection {
-  if (event.kind === "Paused" || event.kind === "Unpaused")
-    return { ...state, paused: event.payload.paused };
-  return state;
-}
-
-/** Proposals and applied notices; readiness alone changes nothing. */
+/** Proposals and applied delays; readiness alone changes nothing. */
 function reduceDelayedPolicy(
   state: LaunchpadAdministrationProjection,
   event: DecodedLaunchpadDelayedEvent,

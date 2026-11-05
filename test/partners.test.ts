@@ -22,6 +22,7 @@ import {
   decodePartnerObject,
   PARTNER_DELAY_MS,
   partnerBcs,
+  partnerListBcs,
   partnerPayment,
 } from "@interest-protocol/blast-partners-sdk/state";
 import {
@@ -53,8 +54,20 @@ const partner = {
   initialSharedVersion: "5",
   mutable: true as const,
 };
-// The fresh stack's compiler ABI; events are structs there.
-const abi = readAbi("pr150-consumers.json", "partners");
+const abi = readAbi("production-partners-v1.json", "partners");
+/** `blast_partners` readers and the payout products compose; the rest are builders. */
+const NOT_BUILT = new Set([
+  "pay",
+  "delay_ms",
+  "max_share_bps",
+  "recipient",
+  "share_bps",
+  "pending_share_bps",
+  "is_share_ready",
+  "cap_id",
+  "pending_cap_id",
+  "is_cap_ready",
+]);
 const SUI = normalizeStructTag("0x2::sui::SUI");
 const terms = (share: bigint, cap: string, owner = id("0xb1")) => ({
   recipient: id("0xfee"),
@@ -102,10 +115,7 @@ test("builds every blast_partners call against the frozen ABI", () => {
   assert.deepEqual(
     assertBuildersMatchAbi(tx, abi, PARTNERS).sort(),
     abi.blast_partners?.functions
-      .filter(
-        (candidate) =>
-          candidate.name !== "pay" && candidate.name !== "delay_ms",
-      )
+      .filter((candidate) => !NOT_BUILT.has(candidate.name))
       .map((candidate) => `blast_partners::${candidate.name}`)
       .sort(),
   );
@@ -241,16 +251,35 @@ test("decodes a partner and previews its payment like blast_partners::pay", () =
   );
 });
 
-test("Partner and its events follow the frozen Move field order", () => {
+test("Partner, PartnerList and their events follow the frozen Move field order", () => {
   const frozen = abi.blast_partners;
-  assert.ok(frozen);
+  const list = abi.partner_list;
+  assert.ok(frozen && list);
+  // An event is a struct or an event of its module, as the artifact classifies it.
+  const all = [frozen, list].flatMap((module) => [
+    ...module.structs,
+    ...(module.events ?? []),
+  ]);
   const fields = (
     name: string,
-    list: { name: string; fields: { name: string }[] }[],
+    candidates: { name: string; fields: { name: string }[] }[] = all,
   ) =>
-    list
+    candidates
       .find((candidate) => candidate.name === name)
       ?.fields.map((field) => field.name);
+  assert.deepEqual(
+    Object.keys(
+      partnerListBcs.parse(
+        partnerListBcs
+          .serialize({
+            owner: id("0x3"),
+            acceptance_ends_at_ms: { id: id("0x4"), size: 0n },
+          })
+          .toBytes(),
+      ),
+    ),
+    fields("PartnerList"),
+  );
   assert.deepEqual(
     Object.keys(
       partnerBcs.parse(
@@ -262,14 +291,10 @@ test("Partner and its events follow the frozen Move field order", () => {
           .toBytes(),
       ),
     ),
-    fields("Partner", frozen.structs),
+    fields("Partner"),
   );
   for (const kind of Object.keys(partnerEventBcs) as PartnerEventKind[]) {
-    assert.deepEqual(
-      Object.keys(SAMPLES[kind]),
-      fields(kind, frozen.structs),
-      kind,
-    );
+    assert.deepEqual(Object.keys(SAMPLES[kind]), fields(kind), kind);
   }
 });
 
@@ -344,7 +369,60 @@ test("replays partner terms and payouts from events", () => {
 const SAMPLES: { [Kind in PartnerEventKind]: PartnerEventPayloads[Kind] } = {
   PartnerUpdated: { partner_id: id("0xb1"), recipient: id("0xfee") },
   PartnerPaid: { partner_id: id("0xb1"), amount: 1n },
+  PartnerAdded: { owner: id("0x3"), partner_id: id("0xb1") },
+  PartnerRemoved: {
+    owner: id("0x3"),
+    partner_id: id("0xb1"),
+    acceptance_ends_at_ms: 1n,
+  },
+  PartnerListDestroyed: { owner: id("0x3") },
 };
+
+test("replays each product's partner list from the partner-list events", () => {
+  const config = id("0x3");
+  const policy = id("0x4");
+  const removedAt = 1_000n + PARTNER_DELAY_MS;
+  const state = [
+    event("PartnerAdded", { owner: config, partner_id: id("0xb1") }),
+    event("PartnerAdded", { owner: config, partner_id: id("0xb2") }),
+    event("PartnerAdded", { owner: policy, partner_id: id("0xb1") }),
+    event("PartnerRemoved", {
+      owner: config,
+      partner_id: id("0xb2"),
+      acceptance_ends_at_ms: removedAt,
+    }),
+  ].reduce(reducePartnerEvent, createPartnersEventProjection());
+  const forever = (1n << 64n) - 1n;
+  assert.deepEqual(state.lists, {
+    [config]: { [id("0xb1")]: forever, [id("0xb2")]: removedAt },
+    [policy]: { [id("0xb1")]: forever },
+  });
+  // Re-adding a removed partner accepts it again.
+  const readded = reducePartnerEvent(
+    state,
+    event("PartnerAdded", { owner: config, partner_id: id("0xb2") }),
+  );
+  assert.equal(readded.lists[config]?.[id("0xb2")], forever);
+  const destroyed = reducePartnerEvent(
+    readded,
+    event("PartnerListDestroyed", { owner: policy }),
+  );
+  assert.deepEqual(Object.keys(destroyed.lists), [config]);
+  assert.equal(destroyed.eventCounts.PartnerAdded, 4);
+  assert.equal(destroyed.eventCounts.PartnerListDestroyed, 1);
+  // Partner-list events live in `partner_list`, not `blast_partners`.
+  assert.throws(
+    () =>
+      decodePartnerEvent(
+        {
+          ...entry("PartnerAdded", SAMPLES.PartnerAdded, null),
+          eventType: `${PARTNERS}::blast_partners::PartnerAdded`,
+        },
+        PARTNERS,
+      ),
+    /unexpected partner event type/,
+  );
+});
 
 let eventIndex = 0;
 function entry<Kind extends PartnerEventKind>(
@@ -357,7 +435,7 @@ function entry<Kind extends PartnerEventKind>(
     packageId: PARTNERS,
     module: "blast_partners",
     sender: id("0x5e"),
-    eventType: `${PARTNERS}::blast_partners::${kind}${coinType ? `<${coinType}>` : ""}`,
+    eventType: `${PARTNERS}::${kind.startsWith("PartnerList") || kind === "PartnerAdded" || kind === "PartnerRemoved" ? "partner_list" : "blast_partners"}::${kind}${coinType ? `<${coinType}>` : ""}`,
     bcs: (partnerEventBcs[kind] as (typeof partnerEventBcs)["PartnerPaid"])
       .serialize(payload as never)
       .toBytes(),

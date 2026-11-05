@@ -1,3 +1,4 @@
+import { U64_MAX } from "@interest-protocol/blast-core/integers";
 import type {
   DecodedPartnerDelayedEvent,
   DecodedPartnerEvent,
@@ -31,6 +32,12 @@ export type PartnersEventProjection = {
   /** Counts `blast_partners` events only. */
   eventCounts: Readonly<Record<PartnerEventKind, number>>;
   partners: Readonly<Record<string, PartnerProjection>>;
+  /**
+   * Each `PartnerList` by owner (the product configuration's ID): every
+   * partner it named and the millisecond its acceptance ends (`U64_MAX`
+   * while accepted without end). A destroyed list is removed.
+   */
+  lists: Readonly<Record<string, Readonly<Record<string, bigint>>>>;
 };
 
 export function createPartnersEventProjection(): PartnersEventProjection {
@@ -40,6 +47,7 @@ export function createPartnersEventProjection(): PartnersEventProjection {
       Object.keys(partnerEventBcs).map((kind) => [kind, 0]),
     ) as Record<PartnerEventKind, number>,
     partners: {},
+    lists: {},
   };
 }
 
@@ -66,6 +74,24 @@ export function reducePartnerEvent(
       [event.kind]: state.eventCounts[event.kind] + 1,
     },
   };
+  if (event.kind === "PartnerListDestroyed") {
+    const { [event.payload.owner]: _, ...lists } = state.lists;
+    return { ...next, lists };
+  }
+  if (event.kind === "PartnerAdded" || event.kind === "PartnerRemoved") {
+    const { owner, partner_id } = event.payload;
+    const acceptanceEndsAtMs =
+      event.kind === "PartnerAdded"
+        ? U64_MAX
+        : event.payload.acceptance_ends_at_ms;
+    return {
+      ...next,
+      lists: {
+        ...state.lists,
+        [owner]: { ...state.lists[owner], [partner_id]: acceptanceEndsAtMs },
+      },
+    };
+  }
   const partnerId = event.payload.partner_id;
   const current = state.partners[partnerId];
   if (event.kind === "PartnerUpdated")

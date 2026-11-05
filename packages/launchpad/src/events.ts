@@ -10,28 +10,30 @@ import {
   u64Bcs,
   unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
+import { bpsBcs } from "@interest-protocol/blast-core/bps";
 import type { SuiEventPosition } from "@interest-protocol/blast-core/events";
 import {
   normalizeSuiEventPosition,
   suiEventId,
 } from "@interest-protocol/blast-core/events";
-import { requireU64 } from "@interest-protocol/blast-core/integers";
+import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
+import { feeSplitBcs } from "@interest-protocol/blast-core/fee-split";
 import type { BcsType } from "@mysten/sui/bcs";
 import { bcs } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { normalizeSuiAddress, parseStructTag } from "@mysten/sui/utils";
-import type { AllocationPlan, FeeSplit } from "./allocation.ts";
 import {
-  allocationPlanBcs,
-  bpsBcs,
-  feeSplitBcs,
-  protocolAllocationBcs,
-} from "./allocation.ts";
+  normalizeStructTag,
+  normalizeSuiAddress,
+  parseStructTag,
+} from "@mysten/sui/utils";
+import type { AllocationPlan } from "./allocation.ts";
+import { allocationPlanBcs, protocolAllocationBcs } from "./allocation.ts";
 import type { CreatorRecipient } from "./state.ts";
 import {
   claimSignerKeyBcs,
   creatorRecipientBcs,
   decodeCreatorRecipient,
+  protocolLpFeesBcs,
   tradeFeesBcs,
 } from "./state.ts";
 
@@ -40,11 +42,9 @@ type EventFieldDescriptor =
   | "typeName"
   | "address"
   | "u64"
-  | "u32"
   | "u8"
   | "bool"
   | "optionId"
-  | "bytes"
   | "string"
   | "creatorRecipient"
   | "allocationPlan"
@@ -57,42 +57,43 @@ const tradeFees = {
   creator_quote_fee: "u64",
 } as const;
 
+/** The 18 `blast_fun::events` structs, in Move field order. */
 export const launchpadEventSpecs = {
-  Paused: { bits: "u8", paused: "u8" },
-  Unpaused: { bits: "u8", paused: "u8" },
-
-  Bought: {
-    launch_id: "id",
-    quote_in: "u64",
-    meme_out_gross: "u64",
-    meme_out_net: "u64",
-    quote_refund: "u64",
-    ...tradeFees,
-    meme_reserve: "u64",
-    real_quote_reserve: "u64",
-  },
+  MemeDecimalsAllowed: { decimals: "u8", allowed: "bool" },
+  /** The Quote is the event's type argument. */
+  QuoteAllowed: { allowed: "bool" },
   CreatorCapsClaimed: {
-    meme: "typeName",
     curve_fee_cap_id: "id",
-    blast_metadata_cap_id: "id",
+    creator_metadata_cap_id: "id",
   },
   CurveFeeCapReassigned: {
     launch_id: "id",
     curve_fee_cap_id: "id",
     recipient: "address",
   },
-  CreatorFeesClaimed: {
+  CreatorMetadataCapReassigned: {
     launch_id: "id",
-    meme_amount: "u64",
-    quote_amount: "u64",
+    creator_metadata_cap_id: "id",
+    recipient: "address",
+  },
+  MemeMetadataUpdated: {
+    launch_id: "id",
+    name: "string",
+    description: "string",
+    icon_url: "string",
+  },
+  LaunchTicketCreated: {
+    ticket_id: "id",
+    decimals: "u8",
+    metadata_cap_id: "id",
+    creator: "creatorRecipient",
+    burnable: "bool",
+    sell_burn_bps: "u64",
   },
   LaunchCreated: {
     launch_id: "id",
     ticket_id: "id",
-    quote: "typeName",
-    migration_witness: "typeName",
-    pool_tick_spacing: "u32",
-    pool_fee_rate: "u64",
+    venue: "typeName",
     lp_fee_split: "feeSplit",
     virtual_quote: "u64",
     graduation_target: "u64",
@@ -103,44 +104,7 @@ export const launchpadEventSpecs = {
     creation_fee: "u64",
     partner_id: "optionId",
   },
-  LaunchShared: {
-    launch_id: "id",
-    public_start_ms: "u64",
-  },
-  LaunchTicketCreated: {
-    ticket_id: "id",
-    meme: "typeName",
-    decimals: "u8",
-    metadata_cap_id: "id",
-    creator: "creatorRecipient",
-    burnable: "bool",
-    sell_burn_bps: "u64",
-  },
-  MemeDecimalsSet: { decimals: "u8", allowed: "bool" },
-  Migrated: {
-    launch_id: "id",
-    meme_amount: "u64",
-    quote_amount: "u64",
-    disposed_meme: "u64",
-    total_supply_after: "u64",
-  },
-  MigrationAllocationPaid: {
-    launch_id: "id",
-    destination: "address",
-    meme_amount: "u64",
-    quote_amount: "u64",
-  },
-  MemeMetadataUpdated: {
-    launch_id: "id",
-    name: "string",
-    description: "string",
-    icon_url: "string",
-  },
-  MetadataCapReassigned: {
-    launch_id: "id",
-    blast_metadata_cap_id: "id",
-    recipient: "address",
-  },
+  LaunchShared: { launch_id: "id", public_start_ms: "u64" },
   OpeningRoundJoined: { launch_id: "id", quote_amount: "u64", bids: "u64" },
   OpeningRoundSettled: {
     launch_id: "id",
@@ -155,26 +119,15 @@ export const launchpadEventSpecs = {
     meme_amount: "u64",
     quote_amount: "u64",
   },
-  PartnerAdded: { partner_id: "id" },
-  PartnerRemoved: { partner_id: "id", accepted_until_ms: "u64" },
-  ProtocolFeesAccrued: {
+  Bought: {
     launch_id: "id",
-    meme_amount: "u64",
-    quote_amount: "u64",
-  },
-  ProtocolFeesClaimed: {
-    launch_id: "id",
-    treasury: "address",
-    meme_amount: "u64",
-    quote_amount: "u64",
-    sui_amount: "u64",
-    partner_meme_amount: "u64",
-    partner_quote_amount: "u64",
-    partner_sui_amount: "u64",
-  },
-  QuoteSet: {
-    quote: "typeName",
-    allowed: "bool",
+    quote_in: "u64",
+    meme_out_gross: "u64",
+    meme_out_net: "u64",
+    quote_refund: "u64",
+    ...tradeFees,
+    meme_reserve: "u64",
+    real_quote_reserve: "u64",
   },
   Sold: {
     launch_id: "id",
@@ -185,20 +138,46 @@ export const launchpadEventSpecs = {
     meme_reserve: "u64",
     real_quote_reserve: "u64",
   },
+  MigrationAllocationPaid: {
+    launch_id: "id",
+    destination: "address",
+    meme_amount: "u64",
+    quote_amount: "u64",
+  },
+  Migrated: {
+    launch_id: "id",
+    meme_amount: "u64",
+    quote_amount: "u64",
+    disposed_meme: "u64",
+    total_supply_after: "u64",
+  },
+  CreatorFeesClaimed: {
+    launch_id: "id",
+    meme_amount: "u64",
+    quote_amount: "u64",
+  },
+  ProtocolFeesAccrued: {
+    launch_id: "id",
+    meme_amount: "u64",
+    quote_amount: "u64",
+  },
 } as const satisfies Record<string, Record<string, EventFieldDescriptor>>;
 
 export type LaunchpadEventKind = keyof typeof launchpadEventSpecs;
+
+/** Events typed by the Quote only, by the Meme only, or by neither. */
+const QUOTE_EVENTS: readonly LaunchpadEventKind[] = ["QuoteAllowed"];
+const MEME_EVENTS: readonly LaunchpadEventKind[] = ["LaunchTicketCreated"];
+const UNTYPED_EVENTS: readonly LaunchpadEventKind[] = ["MemeDecimalsAllowed"];
 
 type DescriptorOutputs = {
   id: string;
   typeName: string;
   address: string;
   u64: bigint;
-  u32: number;
   u8: number;
   bool: boolean;
   optionId: string | null;
-  bytes: Uint8Array;
   string: string;
   creatorRecipient: NonNullable<CreatorRecipient>;
   allocationPlan: AllocationPlan;
@@ -215,19 +194,6 @@ export type LaunchpadEventPayloads = {
   };
 };
 
-const U64Bcs = bcs.u64().transform({
-  input: (value: bigint) => requireU64("event u64", value),
-  output: (value) => BigInt(value),
-});
-const AddressBcs = bcs.Address.transform({
-  input: (value: string) => normalizeSuiAddress(value),
-  output: (value) => normalizeSuiAddress(value),
-});
-const BytesBcs = bcs.vector(bcs.u8()).transform({
-  input: (value: Uint8Array) => Array.from(value),
-  output: (value) => Uint8Array.from(value),
-});
-
 const CreatorRecipientBcs = creatorRecipientBcs.transform({
   input: (recipient: NonNullable<CreatorRecipient>) =>
     recipient.kind === "address"
@@ -243,13 +209,11 @@ const EVENT_FIELD_BCS: Record<
 > = {
   id: suiObjectIdBcs as BcsType<unknown, unknown>,
   typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
-  address: AddressBcs as BcsType<unknown, unknown>,
-  u64: U64Bcs as BcsType<unknown, unknown>,
-  u32: bcs.u32() as BcsType<unknown, unknown>,
+  address: addressBcs as BcsType<unknown, unknown>,
+  u64: u64Bcs as BcsType<unknown, unknown>,
   u8: bcs.u8() as BcsType<unknown, unknown>,
   bool: bcs.bool() as BcsType<unknown, unknown>,
   optionId: bcs.option(suiObjectIdBcs) as BcsType<unknown, unknown>,
-  bytes: BytesBcs as BcsType<unknown, unknown>,
   string: bcs.string() as BcsType<unknown, unknown>,
   creatorRecipient: CreatorRecipientBcs as BcsType<unknown, unknown>,
   allocationPlan: allocationPlanBcs as BcsType<unknown, unknown>,
@@ -280,10 +244,9 @@ export const launchpadEventBcs = Object.fromEntries(
 
 /**
  * Launchpad events are authenticated by their type, which names the original
- * package. Sui records the transaction's called package and module on each
- * event, not the emitting module: adapters in the migrators package emit
- * `Migrated` and `MigrationAllocationPaid`, and a Meme package's publication
- * emits `LaunchTicketCreated`.
+ * package. Sui records the transaction's called package on each event, not the
+ * emitting module: a venue's `migrate` in the same PTB, or a Meme package's
+ * publication (`LaunchTicketCreated`), may carry them.
  */
 export type LaunchpadEventPackageIdentity = {
   originalPackageId: string;
@@ -291,51 +254,49 @@ export type LaunchpadEventPackageIdentity = {
 
 export type LaunchpadEventPosition = SuiEventPosition;
 
-type DecodedLaunchpadEventBase = {
-  source: "launchpad";
-  sender: string;
-  position: LaunchpadEventPosition;
-};
-
 export type DecodedLaunchpadEvent = {
-  [Kind in LaunchpadEventKind]: DecodedLaunchpadEventBase & {
+  [Kind in LaunchpadEventKind]: {
+    source: "launchpad";
     kind: Kind;
+    /** The event's `Meme` type argument; null on `QuoteAllowed` and `MemeDecimalsAllowed`. */
+    memeType: string | null;
+    /** The event's `Quote` type argument; null on `LaunchTicketCreated` and `MemeDecimalsAllowed`. */
+    quoteType: string | null;
     payload: LaunchpadEventPayloads[Kind];
+    sender: string;
+    position: LaunchpadEventPosition;
   };
 }[LaunchpadEventKind];
 
+/** Decodes one `<launchpad original>::events::<Kind>[<Meme>][<Quote>]` event. */
 export function decodeLaunchpadEvent(
   event: SuiClientTypes.EventEntry,
   packages: LaunchpadEventPackageIdentity,
 ): DecodedLaunchpadEvent {
-  const originalPackageId = normalizeSuiAddress(packages.originalPackageId);
-  const envelope = parseStructTag(event.eventType);
+  const tag = parseStructTag(event.eventType);
+  const kind = tag.name as LaunchpadEventKind;
+  const types = tag.typeParams.map((type) => normalizeStructTag(type));
+  const arity = UNTYPED_EVENTS.includes(kind)
+    ? 0
+    : QUOTE_EVENTS.includes(kind) || MEME_EVENTS.includes(kind)
+      ? 1
+      : 2;
   if (
-    envelope.address !== originalPackageId ||
-    envelope.module !== "blast_events" ||
-    envelope.name !== "Event"
+    tag.address !== normalizeSuiAddress(packages.originalPackageId) ||
+    tag.module !== "events" ||
+    !Object.hasOwn(launchpadEventSpecs, kind) ||
+    types.length !== arity
   ) {
-    throw new TypeError("launchpad event has an unexpected event package");
+    throw new TypeError(`unexpected launchpad event type ${event.eventType}`);
   }
-  const [payloadTag, ...extra] = envelope.typeParams;
-  if (
-    payloadTag === undefined ||
-    extra.length > 0 ||
-    typeof payloadTag === "string" ||
-    payloadTag.address !== originalPackageId ||
-    payloadTag.module !== "events" ||
-    payloadTag.typeParams.length !== 0 ||
-    !Object.hasOwn(launchpadEventSpecs, payloadTag.name)
-  ) {
-    throw new TypeError("launchpad event has an unexpected payload type");
-  }
-
-  const kind = payloadTag.name as LaunchpadEventKind;
-  const payload = launchpadEventBcs[kind].parse(event.bcs);
   return {
     source: "launchpad",
     kind,
-    payload,
+    memeType: QUOTE_EVENTS.includes(kind) ? null : (types[0] ?? null),
+    quoteType: QUOTE_EVENTS.includes(kind)
+      ? (types[0] ?? null)
+      : (types[1] ?? null),
+    payload: launchpadEventBcs[kind].parse(event.bcs),
     sender: normalizeSuiAddress(event.sender),
     position: normalizeSuiEventPosition(event),
   } as DecodedLaunchpadEvent;
@@ -348,10 +309,11 @@ export function launchpadEventId(event: {
 }
 
 /**
- * Launchpad keys of `blast_admin::delayed` values. Every schedule, cancel,
- * apply and creation fact is emitted by `delayed` under one of these keys;
- * `owner` names the `LaunchConfig`, `RuntimeConfig`, `Launch` or
- * `PackageAdmin` that stores the value.
+ * Launchpad keys of `blast_admin` delayed values. Every schedule, cancel,
+ * apply and creation fact is emitted by `delayed`, `delayed_set` or
+ * `delayed_action` under one of these keys; `owner` names the `LaunchConfig`,
+ * `RuntimeConfig` or `Launch` that stores the value. `{core}` stands for the
+ * `blast_core` original package.
  */
 export const launchpadDelayedKeys = {
   TradeFees: {
@@ -361,8 +323,8 @@ export const launchpadDelayedKeys = {
     valueBcs: tradeFeesBcs,
     valueType: "{package}::launch_config::TradeFees",
   },
-  MigrationWitnesses: {
-    key: "launch_config::MigrationWitnessKey",
+  Venues: {
+    key: "launch_config::VenueKey",
     family: "set",
     keyBcs: unitKeyBcs,
     valueBcs: moveTypeNameBcs,
@@ -374,6 +336,13 @@ export const launchpadDelayedKeys = {
     keyBcs: unitKeyBcs,
     valueBcs: protocolAllocationBcs,
     valueType: "{package}::allocation::ProtocolAllocation",
+  },
+  ProtocolLpFees: {
+    key: "launch_config::ProtocolLpFeesKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: protocolLpFeesBcs,
+    valueType: "{package}::launch_config::ProtocolLpFees",
   },
   CreationFee: {
     key: "launch_config::CreationFeeKey",
@@ -387,14 +356,7 @@ export const launchpadDelayedKeys = {
     family: "setting",
     keyBcs: unitKeyBcs,
     valueBcs: bpsBcs,
-    valueType: "{package}::bps::Bps",
-  },
-  Treasury: {
-    key: "runtime_config::TreasuryKey",
-    family: "setting",
-    keyBcs: unitKeyBcs,
-    valueBcs: addressBcs,
-    valueType: "address",
+    valueType: "{core}::bps::Bps",
   },
   /** Hex Ed25519 keys that may sign account claims; revocation is `MemberRemoved`. */
   ClaimSigners: {
@@ -411,8 +373,8 @@ export const launchpadDelayedKeys = {
     valueBcs: addressBcs,
     valueType: "address",
   },
-  MetadataCapReassignment: {
-    key: "launch::MetadataCapReassignment",
+  CreatorMetadataCapReassignment: {
+    key: "launch::CreatorMetadataCapReassignment",
     family: "action",
     keyBcs: unitKeyBcs,
     valueBcs: addressBcs,
@@ -424,14 +386,24 @@ export type DecodedLaunchpadDelayedEvent = DecodedDelayedEvent<
   typeof launchpadDelayedKeys
 >;
 
-/** Decodes a `<adminPackageId>::delayed` event keyed by the launchpad. */
+/** Decodes a `blast_admin` delayed event keyed by the launchpad. */
 export function decodeLaunchpadDelayedEvent(
   event: SuiClientTypes.EventEntry,
-  packages: LaunchpadEventPackageIdentity & { adminPackageId: string },
+  packages: LaunchpadEventPackageIdentity & {
+    adminPackageId: string;
+    coreOriginalPackageId: string;
+  },
 ): DecodedLaunchpadDelayedEvent {
+  const core = normalizeSuiAddress(packages.coreOriginalPackageId);
+  const keys = Object.fromEntries(
+    Object.entries(launchpadDelayedKeys).map(([name, spec]) => [
+      name,
+      { ...spec, valueType: spec.valueType.replaceAll("{core}", core) },
+    ]),
+  ) as typeof launchpadDelayedKeys;
   return decodeDelayedEvent(event, {
     adminPackageId: packages.adminPackageId,
     packageId: packages.originalPackageId,
-    keys: launchpadDelayedKeys,
+    keys,
   });
 }

@@ -27,21 +27,23 @@ export type ObjectVersionReference = {
 
 /**
  * What a generated Meme package's publication created: the package, the
- * `LaunchTicket<Meme>` its initializer transferred to the publisher, and the
- * `Currency<Meme>` sent to the Coin Registry until `finalize_registration`
- * shares it.
+ * `LaunchTicket<Meme>` and the `TreasuryCap<Meme>` its initializer
+ * transferred to the publisher, and the `Currency<Meme>` sent to the Coin
+ * Registry until `finalize_registration` shares it. `createLaunch` takes the
+ * ticket and the cap together.
  */
 export type MemePublication = {
   packageId: string;
   memeType: string;
   ticket: ObjectVersionReference & { owner: string };
+  treasuryCap: ObjectVersionReference & { owner: string };
   pendingCurrency: ObjectVersionReference;
 };
 
 /** `sui::object::sui_coin_registry_address()`. */
 export const COIN_REGISTRY_ID = normalizeSuiObjectId("0xc");
 
-/** Reads a Meme publication's package, ticket, and pending currency from its effects. */
+/** Reads a Meme publication's package, ticket, treasury cap and pending currency from its effects. */
 export function readMemePublication(
   result: TransactionEffectsInput,
   launchpadOriginalPackageId: string,
@@ -83,6 +85,25 @@ export function readMemePublication(
   if (ticket.outputOwner?.$kind !== "AddressOwner") {
     throw new TypeError("launch ticket must be address-owned");
   }
+  const owner = normalizeSuiAddress(ticket.outputOwner.AddressOwner);
+  const treasuryCaps = created.filter(
+    (object) =>
+      isFrameworkTypeOf(
+        result,
+        object.objectId,
+        "coin",
+        "TreasuryCap",
+        memeType,
+      ) &&
+      object.outputOwner?.$kind === "AddressOwner" &&
+      normalizeSuiAddress(object.outputOwner.AddressOwner) === owner,
+  );
+  const [treasuryCap] = treasuryCaps;
+  if (treasuryCaps.length !== 1 || !treasuryCap) {
+    throw new TypeError(
+      "publication must send exactly one TreasuryCap<Meme> beside the ticket",
+    );
+  }
   const currencies = created.filter(
     (object) =>
       isCurrencyOf(result, object.objectId, memeType) &&
@@ -97,10 +118,8 @@ export function readMemePublication(
   return {
     packageId,
     memeType,
-    ticket: {
-      ...versionReference(ticket),
-      owner: normalizeSuiAddress(ticket.outputOwner.AddressOwner),
-    },
+    ticket: { ...versionReference(ticket), owner },
+    treasuryCap: { ...versionReference(treasuryCap), owner },
     pendingCurrency: versionReference(currencies[0]!),
   };
 }
@@ -186,12 +205,30 @@ function isCurrencyOf(
   objectId: string,
   memeType: string,
 ): boolean {
+  return isFrameworkTypeOf(
+    result,
+    objectId,
+    "coin_registry",
+    "Currency",
+    memeType,
+  );
+}
+
+/** Whether the object is `0x2::<module>::<name><memeType>`. */
+function isFrameworkTypeOf(
+  result: TransactionEffectsInput,
+  objectId: string,
+  module: string,
+  name: string,
+  memeType: string,
+): boolean {
   const tag = typeOf(result, objectId);
   const parameter = tag?.typeParams[0];
   return (
     tag?.address === normalizeSuiAddress("0x2") &&
-    tag.module === "coin_registry" &&
-    tag.name === "Currency" &&
+    tag.module === module &&
+    tag.name === name &&
+    tag.typeParams.length === 1 &&
     parameter !== undefined &&
     normalizeStructTag(parameter) === memeType
   );
