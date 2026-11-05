@@ -342,9 +342,10 @@ export class MigratorCalls {
 
   /**
    * `cetus::collect_fees<Meme, Quote, CoinA, CoinB>(vault, migrators_version,
-   * vault_version, treasury, currency, cetus_config, burn_manager, pool,
-   * clock)`: collects both positions' fees, splits them, burns the burn
-   * share's Meme and adds the auto-LP share back. Anyone may call it.
+   * vault_version, treasury, currency, cetus_config, burn_manager, pool)`:
+   * collects both positions' fees, splits them and burns the burn share's
+   * Meme; the auto-LP share waits in the vault for `compoundCetusAutoLp`.
+   * Anyone may call it.
    */
   collectCetusFees(options: CetusVaultInput): (tx: Transaction) => void {
     return this.#cetusFees("collect_fees", options);
@@ -362,8 +363,9 @@ export class MigratorCalls {
 
   /**
    * `bluefin::collect_fees<Meme, Quote>(vault, migrators_version,
-   * vault_version, treasury, currency, bluefin_config, pool, clock)`. Anyone
-   * may call it.
+   * vault_version, treasury, currency, bluefin_config, pool, clock)`: the
+   * auto-LP share waits in the vault for `compoundBluefinAutoLp`. Anyone may
+   * call it.
    */
   collectBluefinFees(options: BluefinVaultInput): (tx: Transaction) => void {
     return this.#bluefinFees("collect_fees", options);
@@ -374,6 +376,81 @@ export class MigratorCalls {
     options: BluefinVaultInput,
   ): (tx: Transaction) => void {
     return this.#bluefinFees("settle_and_apply_fee_split", options);
+  }
+
+  /**
+   * `cetus::compound_auto_lp<Meme, Quote, CoinA, CoinB>(vault,
+   * migrators_version, vault_version, cetus_config, pool, clock)`: adds the
+   * vault's waiting auto-LP Meme and Quote to its auto-LP position at the
+   * current price and keeps the rest for the next call. Anyone may call it;
+   * a Cetus refusal never blocks `collectCetusFees`.
+   */
+  compoundCetusAutoLp(
+    options: PairTypes & {
+      vault: SharedObjectIdentity;
+      cetus: { config: SharedObjectIdentity };
+      pool: SharedObjectIdentity;
+    },
+  ): (tx: Transaction) => void {
+    const typeArguments = cetusTypeArguments(options);
+    const objects = {
+      vault: normalizeSharedObjectIdentity("vault", options.vault),
+      config: normalizeSharedObjectIdentity(
+        "cetus.config",
+        options.cetus.config,
+      ),
+      pool: normalizeSharedObjectIdentity("pool", options.pool),
+    };
+    return (tx) => {
+      tx.moveCall({
+        target: this.#target("cetus", "compound_auto_lp"),
+        typeArguments,
+        arguments: [
+          deploymentObject(tx, objects.vault, true),
+          this.#migratorsVersion(tx),
+          this.#vaultVersion(tx),
+          deploymentObject(tx, objects.config, false),
+          deploymentObject(tx, objects.pool, true),
+          tx.object.clock(),
+        ],
+      });
+    };
+  }
+
+  /**
+   * `bluefin::compound_auto_lp<Meme, Quote>(vault, migrators_version,
+   * vault_version, bluefin_config, pool, clock)`; see `compoundCetusAutoLp`.
+   */
+  compoundBluefinAutoLp(
+    options: PairTypes & {
+      vault: SharedObjectIdentity;
+      bluefinConfig: SharedObjectIdentity;
+      pool: SharedObjectIdentity;
+    },
+  ): (tx: Transaction) => void {
+    const types = pair(options);
+    const objects = {
+      vault: normalizeSharedObjectIdentity("vault", options.vault),
+      config: normalizeSharedObjectIdentity(
+        "bluefinConfig",
+        options.bluefinConfig,
+      ),
+      pool: normalizeSharedObjectIdentity("pool", options.pool),
+    };
+    return (tx) => {
+      tx.moveCall({
+        target: this.#target("bluefin", "compound_auto_lp"),
+        typeArguments: types,
+        arguments: [
+          deploymentObject(tx, objects.vault, true),
+          this.#migratorsVersion(tx),
+          this.#vaultVersion(tx),
+          deploymentObject(tx, objects.config, false),
+          deploymentObject(tx, objects.pool, true),
+          tx.object.clock(),
+        ],
+      });
+    };
   }
 
   /**
@@ -500,7 +577,8 @@ export class MigratorCalls {
           deploymentObject(tx, objects.config, false),
           deploymentObject(tx, objects.burnManager, false),
           deploymentObject(tx, objects.pool, true),
-          tx.object.clock(),
+          // Only the split's apply reads the clock.
+          ...(name === "settle_and_apply_fee_split" ? [tx.object.clock()] : []),
         ],
       });
     };
@@ -584,6 +662,18 @@ export class MigratorTransactions {
 
   settleAndApplyBluefinFeeSplit(options: BluefinVaultInput): Transaction {
     return single(this.call.settleAndApplyBluefinFeeSplit(options));
+  }
+
+  compoundCetusAutoLp(
+    options: Parameters<MigratorCalls["compoundCetusAutoLp"]>[0],
+  ): Transaction {
+    return single(this.call.compoundCetusAutoLp(options));
+  }
+
+  compoundBluefinAutoLp(
+    options: Parameters<MigratorCalls["compoundBluefinAutoLp"]>[0],
+  ): Transaction {
+    return single(this.call.compoundBluefinAutoLp(options));
   }
 
   /** Signs in as `BuybackAdmin` with `adminCapId`, then `buybackAndBurnCetus`. */

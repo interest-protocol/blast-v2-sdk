@@ -155,10 +155,22 @@ export function delayedActionBcs<K, KeyInput, A, Input>(
   });
 }
 
-/** `blast_admin::delayed::PendingDelay`: an admission's deadline, or a proposed next delay. */
+/** `blast_admin::delayed::PendingDelay`: a proposed next delay, ready from `ready_at_ms`. */
 export type PendingDelay = { delay_ms: bigint; ready_at_ms: bigint };
 
 export const pendingDelayBcs = bcs.struct("PendingDelay", {
+  delay_ms: u64Bcs,
+  ready_at_ms: u64Bcs,
+});
+
+/**
+ * `blast_admin::delayed::Deadline`: a pending admission's or entry change's
+ * fixed deadline and the applied delay it was scheduled under; a later delay
+ * change never moves it.
+ */
+export type Deadline = { delay_ms: bigint; ready_at_ms: bigint };
+
+export const deadlineBcs = bcs.struct("Deadline", {
   delay_ms: u64Bcs,
   ready_at_ms: u64Bcs,
 });
@@ -169,7 +181,7 @@ export type DelayedSet<K, E> = {
   key: K;
   members: E[];
   delay_ms: bigint;
-  admissions: { member: E; delay: PendingDelay }[];
+  admissions: { member: E; deadline: Deadline }[];
   pending_delay: PendingDelay | null;
 };
 
@@ -218,7 +230,7 @@ export function delayedSetBcs<K, KeyInput, E, Input>(
       delay_ms: u64Bcs,
       admissions: bcs.struct("VecMap", {
         contents: bcs.vector(
-          bcs.struct("Entry", { key: member, value: pendingDelayBcs }),
+          bcs.struct("Entry", { key: member, value: deadlineBcs }),
         ),
       }),
       pending_delay: bcs.option(pendingDelayBcs),
@@ -229,7 +241,7 @@ export function delayedSetBcs<K, KeyInput, E, Input>(
         key: KeyInput;
         members: Input[];
         delay_ms: bigint;
-        admissions: { member: Input; delay: PendingDelay }[];
+        admissions: { member: Input; deadline: Deadline }[];
         pending_delay: PendingDelay | null;
       }) => ({
         owner: set.owner,
@@ -237,9 +249,9 @@ export function delayedSetBcs<K, KeyInput, E, Input>(
         members: { contents: set.members },
         delay_ms: set.delay_ms,
         admissions: {
-          contents: set.admissions.map(({ member, delay }) => ({
+          contents: set.admissions.map(({ member, deadline }) => ({
             key: member,
-            value: delay,
+            value: deadline,
           })),
         },
         pending_delay: set.pending_delay,
@@ -251,7 +263,7 @@ export function delayedSetBcs<K, KeyInput, E, Input>(
         delay_ms: set.delay_ms,
         admissions: set.admissions.contents.map(({ key, value }) => ({
           member: key,
-          delay: value,
+          deadline: value,
         })),
         pending_delay: set.pending_delay,
       }),
@@ -276,13 +288,13 @@ export function delayedSetChangeBcs<E, Input>(member: BcsType<E, Input>) {
   });
 }
 
-/** `blast_admin::delayed_map::EntryProposal<V>`: a value, or null to clear, and its delay. */
-export type EntryProposal<V> = { value: V | null; delay: PendingDelay };
+/** `blast_admin::delayed_map::EntryProposal<V>`: a value, or null to clear, and its fixed deadline. */
+export type EntryProposal<V> = { value: V | null; deadline: Deadline };
 
 export function entryProposalBcs<V, Input>(value: BcsType<V, Input>) {
   return bcs.struct("EntryProposal", {
     value: bcs.option(value),
-    delay: pendingDelayBcs,
+    deadline: deadlineBcs,
   });
 }
 
@@ -355,7 +367,7 @@ export function delayedMapBcs<K, KeyInput, E, EntryInput, V, Input>(
         delay_ms: bigint;
         pending: {
           entry: EntryInput;
-          proposal: { value: Input | null; delay: PendingDelay };
+          proposal: { value: Input | null; deadline: Deadline };
         }[];
         pending_delay: PendingDelay | null;
       }) => ({
@@ -387,7 +399,7 @@ export function delayedMapBcs<K, KeyInput, E, EntryInput, V, Input>(
 
 /**
  * A `DelayedSet` admission view: the admitted members, the applied delay, the
- * proposed next delay, and each scheduled admission's delay by member. Used
+ * proposed next delay, and each scheduled admission's deadline by member. Used
  * for venue, witness and claim-signer allowlists alike.
  */
 export function admission<E extends string>(set: DelayedSet<unknown, E>) {
@@ -396,7 +408,7 @@ export function admission<E extends string>(set: DelayedSet<unknown, E>) {
     delayMs: set.delay_ms,
     pendingDelay: set.pending_delay,
     pendingMembers: Object.fromEntries(
-      set.admissions.map(({ member, delay }) => [member, delay]),
-    ) as Readonly<Record<E, PendingDelay>>,
+      set.admissions.map(({ member, deadline }) => [member, deadline]),
+    ) as Readonly<Record<E, Deadline>>,
   };
 }

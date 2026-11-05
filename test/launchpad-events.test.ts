@@ -30,12 +30,12 @@ import type { BcsType } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils";
 import { orderedEventFields } from "./abi.ts";
-import type { LaunchpadFixture } from "./fixtures/launchpad-a1a8f6c.ts";
+import type { LaunchpadFixture } from "./fixtures/launchpad-68db57b.ts";
 import {
   FIXTURE_PACKAGE_ID,
   LAUNCHPAD_FIXTURE_HEX,
   launchpadFixture,
-} from "./fixtures/launchpad-a1a8f6c.ts";
+} from "./fixtures/launchpad-68db57b.ts";
 
 const packages: LaunchpadEventPackageIdentity = {
   originalPackageId: "0x122",
@@ -186,6 +186,8 @@ test("replays lifecycle, reserves, and fees from ordered events", () => {
         destination: "0xb",
         meme_amount: 50_000_000n,
         quote_amount: 10n,
+        meme_vesting_id: null,
+        quote_vesting_id: null,
       },
       8,
     ),
@@ -266,6 +268,8 @@ test("replays lifecycle, reserves, and fees from ordered events", () => {
       destination: normalizeSuiObjectId("0xb"),
       meme: 50_000_000n,
       quote: 10n,
+      memeVestingId: null,
+      quoteVestingId: null,
     },
   ]);
 
@@ -741,6 +745,10 @@ test("replays the Move-printed launch events into the Move-printed launch", () =
       destination: normalizeSuiObjectId("0xfeed"),
       meme: 25_000_000_000_000_000n,
       quote: 308_641_972_531n,
+      memeVestingId:
+        "0xb3deee5877043bf9f9459d507b4f52ba5b7435816330df775190812c7a9ea457",
+      quoteVestingId:
+        "0x5b305d274d4e05f77a456f16932537b10060cad28be71e5ad4b20269221c9465",
     },
   ]);
   const paid = decodeProtocolFeesPaid(

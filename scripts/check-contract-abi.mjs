@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
  * refreeze at contracts main with `check:abi:write` for an approved change,
  * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
  */
-const BASELINE_COMMIT = "a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f";
+const BASELINE_COMMIT = "68db57b32f196a78cd952a718b462b758f882ded";
 const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
@@ -29,6 +29,8 @@ const BLAST_SUI_BOOSTS_BASELINE = {
 };
 const LAUNCH_STACK_FREEZE =
   "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#215: the fresh one-way launch stack, first freeze";
+const DEEP_REVIEW_FIXES =
+  "contracts #217: every product's unpause also requires the core Treasury guarded; MigrationAllocationPaid names its vesting schedules; venue auto-LP compounding moves to compound_auto_lp";
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDeclarations = [
   {
@@ -36,6 +38,7 @@ const artifactDeclarations = [
     approvedAbiAmendments: [
       LAUNCH_STACK_FREEZE,
       "contracts #179, #199 and #211: generic package_version::PackageVersion<OTW> and package_admin::PackageAdmin<OTW> replace upgrade_custody and operational_version",
+      "contracts #220: delayed::Deadline holds a pending admission's or entry change's fixed deadline; PendingDelay is only a proposed next delay",
     ],
     packages: [["admin", "admin", "blast_admin"]],
   },
@@ -54,7 +57,7 @@ const artifactDeclarations = [
   },
   {
     path: "production-vault-v1.json",
-    approvedAbiAmendments: [LAUNCH_STACK_FREEZE],
+    approvedAbiAmendments: [LAUNCH_STACK_FREEZE, DEEP_REVIEW_FIXES],
     packages: [["vault", "vault", "blast_vault"]],
   },
   {
@@ -62,6 +65,7 @@ const artifactDeclarations = [
     approvedAbiAmendments: [
       LAUNCH_STACK_FREEZE,
       "contracts #200: one product-agnostic blast_migrators venue package for launches and presales",
+      DEEP_REVIEW_FIXES,
     ],
     packages: [["migrators", "migrators", "blast_migrators"]],
   },
@@ -70,6 +74,7 @@ const artifactDeclarations = [
     approvedAbiAmendments: [
       LAUNCH_STACK_FREEZE,
       "contracts #204: launch::migrate returns a Migration for the venue's migrate; generic administration, core roles and the core Treasury ledger",
+      DEEP_REVIEW_FIXES,
     ],
     packages: [
       ["launchpad", "launchpad", "blast_fun"],
@@ -86,6 +91,7 @@ const artifactDeclarations = [
     approvedAbiAmendments: [
       LAUNCH_STACK_FREEZE,
       "contracts #202: blast_presale::migrate returns a Migration for the venue's migrate; the presale's own venues, vault and rewards are removed",
+      DEEP_REVIEW_FIXES,
     ],
     packages: [["presale", "presale", "blast_presale"]],
   },
@@ -577,6 +583,7 @@ const functionClassifiers = {
         "collect_fees",
         "settle_and_apply_fee_split",
         "buyback_and_burn",
+        "compound_auto_lp",
       ].map((name) => `${venue}::${name}`),
     ),
   }),

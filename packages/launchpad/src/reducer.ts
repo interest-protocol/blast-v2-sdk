@@ -27,6 +27,10 @@ export type LaunchAllocationPayment = {
   destination: string;
   meme: bigint;
   quote: bigint;
+  /** The vesting schedule holding `meme` when the recipient vests; else null. */
+  memeVestingId: string | null;
+  /** The vesting schedule holding `quote` when the recipient vests; else null. */
+  quoteVestingId: string | null;
 };
 
 export type LaunchEventProjection = {
@@ -426,6 +430,8 @@ export function reduceLaunchpadEvent(
             destination: payload.destination,
             meme: payload.meme_amount,
             quote: payload.quote_amount,
+            memeVestingId: payload.meme_vesting_id,
+            quoteVestingId: payload.quote_vesting_id,
           },
         ],
       }));

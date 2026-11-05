@@ -4,7 +4,7 @@ TypeScript SDKs for the Blast contracts on Sui mainnet. Contract source and
 generated Move references live in
 [interest-protocol/blast-v2-contracts](https://github.com/interest-protocol/blast-v2-contracts);
 this SDK is frozen to contracts
-[`a1a8f6c`](https://github.com/interest-protocol/blast-v2-contracts/tree/a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f/sui),
+[`68db57b`](https://github.com/interest-protocol/blast-v2-contracts/tree/68db57b32f196a78cd952a718b462b758f882ded/sui),
 the one-way launch stack of ADR 0137 (see [docs/abi.md](docs/abi.md)).
 
 Contract state and completed events are authoritative. The SDK builds
@@ -208,9 +208,11 @@ the witness registry (`VenueAdmin`), and the package's `unpause` and
 One `blast_migrators` package serves launches and presales. `MigratorCalls`
 builds `cetus::prepare`/`bluefin::prepare` and each venue's `migrate` for the
 product compositions; `MigratorTransactions` builds permissionless fee
-collection (`collectCetusFees`, `collectBluefinFees`), the settled fee-split
-switch (`settleAndApply*FeeSplit`) and buybacks (`BuybackAdmin`). Every venue
-call passes both the migrators and the vault `PackageVersion`.
+collection (`collectCetusFees`, `collectBluefinFees`), auto-LP compounding
+(`compoundCetusAutoLp`, `compoundBluefinAutoLp`; collection leaves the auto-LP
+share waiting in the vault), the settled fee-split switch
+(`settleAndApply*FeeSplit`) and buybacks (`BuybackAdmin`). Every venue call
+passes both the migrators and the vault `PackageVersion`.
 
 - Migrators has no pause bits; the SDK defines none and `Paused<BLAST_MIGRATORS>`
   never occurs.

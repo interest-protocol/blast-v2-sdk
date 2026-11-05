@@ -249,7 +249,10 @@ test("decodes the fee and creation policies", () => {
             members: [cetusVenue],
             delay_ms: 172_800_000n,
             admissions: [
-              { member: vendorVenue, delay: { delay_ms: 0n, ready_at_ms: 9n } },
+              {
+                member: vendorVenue,
+                deadline: { delay_ms: 0n, ready_at_ms: 9n },
+              },
             ],
             pending_delay: null,
           },

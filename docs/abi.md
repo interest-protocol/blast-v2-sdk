@@ -15,8 +15,8 @@ function and event, and compares the result byte for byte with `abi/`.
 checks out the commit pinned in `.github/workflows/check.yml`.
 
 The launch stack is frozen at contracts
-[`a1a8f6c`](https://github.com/interest-protocol/blast-v2-contracts/tree/a1a8f6c99552603d1bbfdfbcb06b4d0c2c316c6f/sui)
-(ADR 0137 with its 2026-11-05 amendment, PRs #178-#215):
+[`68db57b`](https://github.com/interest-protocol/blast-v2-contracts/tree/68db57b32f196a78cd952a718b462b758f882ded/sui)
+(ADR 0137 with its 2026-11-05 amendment, PRs #178-#220):
 
 | Artifact | Move packages | Events |
 | --- | --- | --- |

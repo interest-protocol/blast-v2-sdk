@@ -318,6 +318,7 @@ test("admin calls take the witness after the vault or registry", () => {
         witness,
         "shared:0xa3",
         "shared-mut:0xa2",
+        "shared:0xc2",
         "pure",
       ],
     ],

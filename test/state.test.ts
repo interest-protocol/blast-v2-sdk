@@ -22,12 +22,12 @@ import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 import { DERIVED_ID_FIXTURE } from "./fixtures/derived-ids.ts";
-import type { LaunchpadFixture } from "./fixtures/launchpad-a1a8f6c.ts";
+import type { LaunchpadFixture } from "./fixtures/launchpad-68db57b.ts";
 import {
   FIXTURE_PACKAGE_ID,
   LAUNCHPAD_FIXTURE_HEX,
   launchpadFixture,
-} from "./fixtures/launchpad-a1a8f6c.ts";
+} from "./fixtures/launchpad-68db57b.ts";
 
 const launchId = `0x${LAUNCHPAD_FIXTURE_HEX.launchId}`;
 const registryId = `0x${LAUNCHPAD_FIXTURE_HEX.registryId}`;

@@ -236,7 +236,7 @@ for (const [memeType, memeIsA] of [
       pool: O.pool,
     };
     // (&mut vault, migrators_version, vault_version, treasury, &mut currency,
-    //  cetus_config, burn_manager, &mut pool, clock)
+    //  cetus_config, burn_manager, &mut pool); only the split's apply adds clock.
     const feeArguments = [
       "shared-mut:0x7a",
       migratorsVersion,
@@ -246,18 +246,43 @@ for (const [memeType, memeIsA] of [
       "shared:0xc0f",
       "shared:0xb0",
       "shared-mut:0x9001",
-      "clock",
     ];
-    for (const [name, step] of [
-      ["collect_fees", calls.collectCetusFees(vault)],
-      ["settle_and_apply_fee_split", calls.settleAndApplyCetusFeeSplit(vault)],
+    for (const [name, step, expected] of [
+      ["collect_fees", calls.collectCetusFees(vault), feeArguments],
+      [
+        "settle_and_apply_fee_split",
+        calls.settleAndApplyCetusFeeSplit(vault),
+        [...feeArguments, "clock"],
+      ],
     ] as const) {
       const tx = new Transaction();
       tx.add(step);
       assert.deepEqual(targets(tx), [target("cetus", name)]);
       assert.deepEqual(moveCallTypeArguments(tx)[0], cetusTypes);
-      assert.deepEqual(moveCallArguments(tx, 0), feeArguments);
+      assert.deepEqual(moveCallArguments(tx, 0), expected);
     }
+
+    const compound = new Transaction();
+    compound.add(
+      calls.compoundCetusAutoLp({
+        memeType,
+        quoteType: SUI,
+        vault: O.vault,
+        cetus: { config: O.cetusConfig },
+        pool: O.pool,
+      }),
+    );
+    assert.deepEqual(targets(compound), [target("cetus", "compound_auto_lp")]);
+    assert.deepEqual(moveCallTypeArguments(compound)[0], cetusTypes);
+    // (&mut vault, migrators_version, vault_version, cetus_config, &mut pool, clock)
+    assert.deepEqual(moveCallArguments(compound, 0), [
+      "shared-mut:0x7a",
+      migratorsVersion,
+      vaultVersion,
+      "shared:0xc0f",
+      "shared-mut:0x9001",
+      "clock",
+    ]);
 
     const tx = new Transaction();
     const witness = tx.moveCall({ target: "0xad::blast_acl::sign_in" });
@@ -364,6 +389,28 @@ test("Bluefin fee routes and buyback take <Meme, Quote> in Move order", () => {
     ]);
   }
 
+  const compound = new Transaction();
+  compound.add(
+    calls.compoundBluefinAutoLp({
+      memeType: MEME_B,
+      quoteType: SUI,
+      vault: O.vault,
+      bluefinConfig: O.bluefinConfig,
+      pool: O.pool,
+    }),
+  );
+  assert.deepEqual(targets(compound), [target("bluefin", "compound_auto_lp")]);
+  assert.deepEqual(moveCallTypeArguments(compound)[0], [memeB, sui]);
+  // (&mut vault, migrators_version, vault_version, bluefin_config, &mut pool, clock)
+  assert.deepEqual(moveCallArguments(compound, 0), [
+    "shared-mut:0x7a",
+    migratorsVersion,
+    vaultVersion,
+    "shared:0xbf",
+    "shared-mut:0x9001",
+    "clock",
+  ]);
+
   const tx = new Transaction();
   tx.add(
     calls.buybackAndBurnBluefin({
@@ -461,6 +508,12 @@ test("MigratorTransactions signs in as BuybackAdmin before the buyback", () => {
   assert.deepEqual(targets(txs.settleAndApplyBluefinFeeSplit(bluefinVault)), [
     target("bluefin", "settle_and_apply_fee_split"),
   ]);
+  assert.deepEqual(targets(txs.compoundCetusAutoLp(cetus)), [
+    target("cetus", "compound_auto_lp"),
+  ]);
+  assert.deepEqual(targets(txs.compoundBluefinAutoLp(bluefinVault)), [
+    target("bluefin", "compound_auto_lp"),
+  ]);
 });
 
 test("rejects an incomplete deployment", () => {
@@ -483,5 +536,5 @@ test("rejects an incomplete deployment", () => {
 });
 
 test("every classified blast_migrators builder is built and matches the frozen ABI", () => {
-  coverage.assertEveryBuilder(10);
+  coverage.assertEveryBuilder(12);
 });
