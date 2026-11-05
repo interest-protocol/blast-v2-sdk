@@ -10,6 +10,7 @@ import { requireU64 } from "../integers.ts";
 import {
   blake2b256,
   merkleLayers,
+  merkleLeaf,
   merkleNode,
   merkleProof,
   merkleRoot,
@@ -30,7 +31,7 @@ export type RewardProof = {
   proof: string[];
 };
 export type RewardManifest = {
-  version: 1;
+  version: 2;
   vaultId: string;
   number: string;
   startCheckpoint: string;
@@ -45,7 +46,6 @@ export type RewardManifest = {
 /** Complete commitment after durable paged construction; it does not contain all proofs in memory. */
 export type RewardManifestSummary = Omit<RewardManifest, "allocations"> & {
   leafCount: number;
-  leafDomain: RewardLeafDomain;
 };
 
 /**
@@ -93,14 +93,16 @@ const manifestHeaderBcs = bcs.struct("RewardManifestHeader", {
   start: bcs.u64(),
   end: bcs.u64(),
 });
-/** Leaf domain of `blast_fun_migrators` holder-reward rounds. */
-export const MIGRATOR_REWARD_LEAF_DOMAIN = "\x00blast-holder-rewards-v1";
-/** Leaf domain of `blast_presale::holder_rewards` rounds; same leaf layout. */
-export const PRESALE_REWARD_LEAF_DOMAIN = "\x00blast-presale-holder-rewards-v1";
-/** The package whose rounds a manifest pays: each hashes leaves under its own domain. */
-export type RewardLeafDomain =
-  | typeof MIGRATOR_REWARD_LEAF_DOMAIN
-  | typeof PRESALE_REWARD_LEAF_DOMAIN;
+/**
+ * `blast_vault::constants::reward_leaf_domain`: every vault's rounds hash
+ * their leaves as `merkle::leaf(REWARD_LEAF_DOMAIN, bcs(leaf))`.
+ */
+export const REWARD_LEAF_DOMAIN = "blast-holder-rewards-v2";
+
+/** One leaf digest: `blake2b256(0x00 || REWARD_LEAF_DOMAIN || bcs(leaf))`. */
+function rewardLeaf(bytes: Uint8Array): Uint8Array {
+  return merkleLeaf(REWARD_LEAF_DOMAIN, bytes);
+}
 
 /** Exact atomic-unit allocations, rounded down. Dust stays in the vault rewards balance. */
 export function allocateHolderRewards(
@@ -136,21 +138,25 @@ export function allocateHolderRewards(
 }
 
 /**
- * Quote atoms = floor(budget * wallet weight / frozen global weight), never a page denominator.
- * Remainders stay holder-owned; sum quoteAllocated over every page to calculate global dust.
- * Inputs are distinct qualifying wallets in canonical order; carry lastAddress into the next page.
+ * Atoms of each asset = floor(budget * wallet weight / frozen global weight), never a page
+ * denominator. Remainders stay holder-owned; sum memeAllocated and quoteAllocated over every page
+ * to calculate global dust. Inputs are distinct qualifying wallets in canonical order; carry
+ * lastAddress into the next page.
  */
 export function allocateHolderRewardPage(
   holders: readonly HolderWeight[],
+  memeBudget: bigint,
   quoteBudget: bigint,
   totalWeight: bigint,
   afterAddress?: string,
 ) {
+  requireU64("memeBudget", memeBudget);
   requireU64("quoteBudget", quoteBudget);
   if (totalWeight <= 0n) throw new RangeError("global weight must be positive");
   let lastAddress =
     afterAddress === undefined ? undefined : rewardAddress(afterAddress);
   let pageWeight = 0n;
+  let memeAllocated = 0n;
   let quoteAllocated = 0n;
   const allocations: RewardAllocation[] = [];
   for (const holder of holders) {
@@ -163,13 +169,21 @@ export function allocateHolderRewardPage(
     pageWeight += holder.weight;
     if (pageWeight > totalWeight)
       throw new RangeError("page weight exceeds global weight");
+    const memeAmount = (memeBudget * holder.weight) / totalWeight;
     const quoteAmount = (quoteBudget * holder.weight) / totalWeight;
-    if (quoteAmount > 0n)
-      allocations.push({ beneficiary, memeAmount: 0n, quoteAmount });
+    if (memeAmount > 0n || quoteAmount > 0n)
+      allocations.push({ beneficiary, memeAmount, quoteAmount });
+    memeAllocated += memeAmount;
     quoteAllocated += quoteAmount;
     lastAddress = beneficiary;
   }
-  return { allocations, pageWeight, quoteAllocated, lastAddress };
+  return {
+    allocations,
+    pageWeight,
+    memeAllocated,
+    quoteAllocated,
+    lastAddress,
+  };
 }
 
 /** Builds the public payout list and every positional proof, independent of the signing key. */
@@ -179,9 +193,7 @@ export function buildRewardManifest(options: {
   startCheckpoint: bigint;
   endCheckpoint: bigint;
   allocations: readonly RewardAllocation[];
-  leafDomain: RewardLeafDomain;
 }): RewardManifest {
-  const leafPrefix = new TextEncoder().encode(options.leafDomain);
   const vaultId = rewardAddress(options.vaultId);
   requireU64("number", options.number);
   requireU64("startCheckpoint", options.startCheckpoint);
@@ -221,9 +233,7 @@ export function buildRewardManifest(options: {
     quote: allocation.quoteAmount,
   }));
   const layers = merkleLayers(
-    leaves.map((leaf) =>
-      blake2b256(concat(leafPrefix, leafBcs.serialize(leaf).toBytes())),
-    ),
+    leaves.map((leaf) => rewardLeaf(leafBcs.serialize(leaf).toBytes())),
   );
   const memeAmount = requireU64(
     "total Meme",
@@ -234,7 +244,7 @@ export function buildRewardManifest(options: {
     allocations.reduce((sum, item) => sum + item.quoteAmount, 0n),
   );
   return {
-    version: 1,
+    version: 2,
     vaultId,
     number: options.number.toString(),
     startCheckpoint: options.startCheckpoint.toString(),
@@ -298,7 +308,6 @@ export async function buildRewardManifestPages(
     options.pageSize > MAX_REWARD_LEAVES
   )
     throw new RangeError("invalid page size");
-  const leafPrefix = new TextEncoder().encode(options.leafDomain);
   const digest = blake2b.create({ dkLen: 32 });
   digest.update(
     manifestHeaderBcs
@@ -331,7 +340,6 @@ export async function buildRewardManifestPages(
     options,
     vaultId,
     digest,
-    leafPrefix,
     store,
     writeHashes,
   );
@@ -343,7 +351,7 @@ export async function buildRewardManifestPages(
   const root = (await readHashes(level, 0, 1))[0];
   if (root === undefined) throw new Error("missing Merkle root");
   const summary: RewardManifestSummary = {
-    version: 1,
+    version: 2,
     vaultId,
     number: options.number.toString(),
     startCheckpoint: options.startCheckpoint.toString(),
@@ -353,9 +361,8 @@ export async function buildRewardManifestPages(
     memeAmount: memeAmount.toString(),
     quoteAmount: quoteAmount.toString(),
     leafCount: options.leafCount,
-    leafDomain: options.leafDomain,
   };
-  await writeManifestProofs(options, summary, leafPrefix, store, readHashes);
+  await writeManifestProofs(options, summary, store, readHashes);
   return summary;
 }
 
@@ -402,7 +409,6 @@ async function writeManifestLeaves(
   options: PagedManifestOptions,
   vaultId: string,
   digest: ReturnType<typeof blake2b.create>,
-  leafPrefix: Uint8Array,
   store: RewardManifestPageStore,
   writeHashes: WriteRewardHashes,
 ) {
@@ -428,7 +434,7 @@ async function writeManifestLeaves(
         quoteAmount + allocation.quoteAmount,
       );
       digest.update(bytes);
-      hashes.push(toHex(blake2b256(concat(leafPrefix, bytes))));
+      hashes.push(toHex(rewardLeaf(bytes)));
     }
     await writeHashes(0, offset, hashes);
   }
@@ -466,7 +472,6 @@ async function buildManifestMerkleLayers(
 async function writeManifestProofs(
   options: PagedManifestOptions,
   summary: RewardManifestSummary,
-  leafPrefix: Uint8Array,
   store: RewardManifestPageStore,
   readHashes: ReadRewardHashes,
 ) {
@@ -479,11 +484,8 @@ async function writeManifestProofs(
     const proofs = allocations.map((allocation, i): RewardProof => {
       if (
         toHex(
-          blake2b256(
-            concat(
-              leafPrefix,
-              rewardLeafBytes(options, summary.vaultId, allocation, offset + i),
-            ),
+          rewardLeaf(
+            rewardLeafBytes(options, summary.vaultId, allocation, offset + i),
           ),
         ) !== hashes[i]
       )
@@ -498,7 +500,7 @@ async function writeManifestProofs(
     });
     await fillManifestProofs(options, offset, proofs, readHashes);
     for (const proof of proofs)
-      if (!verifyRewardSummaryProof(summary, proof, options.leafDomain))
+      if (!verifyRewardSummaryProof(summary, proof))
         throw new Error("proof does not match constructed root");
     await store.writeProofs(offset, proofs);
     const stored = await store.readProofs(offset, count);
@@ -554,12 +556,10 @@ function rewardProofPagesMatch(
 export function verifyRewardProof(
   manifest: RewardManifest,
   allocation: RewardProof,
-  leafDomain: RewardLeafDomain,
 ): boolean {
   return verifyRewardSummaryProof(
-    { ...manifest, leafCount: manifest.allocations.length, leafDomain },
+    { ...manifest, leafCount: manifest.allocations.length },
     allocation,
-    leafDomain,
   );
 }
 
@@ -567,10 +567,7 @@ export function verifyRewardProof(
 export function verifyRewardSummaryProof(
   manifest: RewardManifestSummary,
   allocation: RewardProof,
-  leafDomain: RewardLeafDomain,
 ): boolean {
-  if (manifest.leafDomain !== leafDomain) return false;
-  const leafPrefix = new TextEncoder().encode(leafDomain);
   try {
     let index = Number(requireU64("index", BigInt(allocation.index)));
     const count = manifest.leafCount;
@@ -582,20 +579,17 @@ export function verifyRewardSummaryProof(
       allocation.proof.length !== Math.ceil(Math.log2(count))
     )
       return false;
-    let digest = blake2b256(
-      concat(
-        leafPrefix,
-        leafBcs
-          .serialize({
-            vault: rewardAddress(manifest.vaultId),
-            number: requireU64("number", BigInt(manifest.number)),
-            index: BigInt(index),
-            beneficiary: rewardAddress(allocation.beneficiary),
-            meme: requireU64("meme", BigInt(allocation.memeAmount)),
-            quote: requireU64("quote", BigInt(allocation.quoteAmount)),
-          })
-          .toBytes(),
-      ),
+    let digest = rewardLeaf(
+      leafBcs
+        .serialize({
+          vault: rewardAddress(manifest.vaultId),
+          number: requireU64("number", BigInt(manifest.number)),
+          index: BigInt(index),
+          beneficiary: rewardAddress(allocation.beneficiary),
+          meme: requireU64("meme", BigInt(allocation.memeAmount)),
+          quote: requireU64("quote", BigInt(allocation.quoteAmount)),
+        })
+        .toBytes(),
     );
     for (const sibling of allocation.proof) {
       const bytes = rewardDigest(sibling);
@@ -612,11 +606,8 @@ export function verifyRewardSummaryProof(
 /** Structural validation only; ready-plan evidence must prove durable construction upstream. */
 export function validateRewardManifestSummary(
   summary: RewardManifestSummary,
-  leafDomain: RewardLeafDomain,
 ): RewardManifestSummary {
-  if (summary.leafDomain !== leafDomain)
-    throw new TypeError("manifest leaf domain mismatch");
-  if (summary.version !== 1) throw new Error("unsupported manifest version");
+  if (summary.version !== 2) throw new Error("unsupported manifest version");
   if (summary.vaultId !== rewardAddress(summary.vaultId))
     throw new TypeError("noncanonical vault");
   for (const key of [
@@ -648,9 +639,8 @@ export function validateRewardManifestSummary(
 /** Rejects edited totals, roots, ordering, proofs and manifests before creating transactions. */
 export function validateRewardManifest(
   manifest: RewardManifest,
-  leafDomain: RewardLeafDomain,
 ): RewardManifest {
-  if (manifest.version !== 1) throw new Error("unsupported manifest version");
+  if (manifest.version !== 2) throw new Error("unsupported manifest version");
   const expected = buildRewardManifest({
     vaultId: manifest.vaultId,
     number: BigInt(manifest.number),
@@ -661,7 +651,6 @@ export function validateRewardManifest(
       memeAmount: BigInt(allocation.memeAmount),
       quoteAmount: BigInt(allocation.quoteAmount),
     })),
-    leafDomain,
   });
   for (const key of [
     "vaultId",
@@ -703,8 +692,4 @@ export function rewardDigest(value: string): Uint8Array {
   if (!/^[0-9a-f]{64}$/.test(value))
     throw new TypeError("digest must be 32 canonical hex bytes");
   return fromHex(value);
-}
-
-function concat(left: Uint8Array, right: Uint8Array): Uint8Array {
-  return new Uint8Array([...left, ...right]);
 }

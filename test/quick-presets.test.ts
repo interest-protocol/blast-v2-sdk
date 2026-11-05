@@ -20,11 +20,13 @@ const fingerprint = deploymentFingerprint(deployment);
 const venues = {
   cetus: { available: true },
   bluefin: { available: true },
+  aftermathDao: { available: true },
 } as const;
 const enabled: ProtocolAccess = {
   signing: "enabled",
   deployment,
   fingerprint,
+  paused: { vault: 0, launchpad: 0, presale: 0, migrators: 0 },
   venues,
 };
 const values: QuickPresetValues = {
@@ -39,11 +41,10 @@ const values: QuickPresetValues = {
     recipients: [],
   },
   lpFeeSplit: {
-    creatorBps: 10_000n,
-    autoLpBps: 0n,
-    rewardsBps: 0n,
-    burnBps: 0n,
-    recipients: [],
+    routes: [
+      { destination: { kind: "Owner" }, bps: 8_000n },
+      { destination: { kind: "HolderRewards" }, bps: 2_000n },
+    ],
   },
 };
 const preset = (overrides: Partial<QuickPreset> = {}) =>

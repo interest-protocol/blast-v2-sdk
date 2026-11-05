@@ -1,14 +1,12 @@
-import type { DelayedAction } from "@interest-protocol/blast-core/bcs";
 import type {
-  RewardLeafDomain,
   RewardManifest,
   RewardProof,
 } from "@interest-protocol/blast-core/rewards/allocations";
 import {
   allocateHolderRewards,
   buildRewardManifest,
-  PRESALE_REWARD_LEAF_DOMAIN,
   rewardAddress,
+  validateRewardManifest,
 } from "@interest-protocol/blast-core/rewards/allocations";
 import {
   coinPackageCreationCheckpoint,
@@ -25,21 +23,23 @@ import {
   resetHolderWeights,
 } from "@interest-protocol/blast-core/rewards/holders";
 import {
-  assertRewardRoundMatchesManifest,
+  assertRoundMatchesManifest,
   pendingRewardAllocations,
-} from "@interest-protocol/blast-core/rewards/keeper";
-import type { RewardRoundTerms } from "@interest-protocol/blast-core/rewards/state";
-import type { SharedObjectReference } from "@interest-protocol/blast-core/sui";
-import type { MigratorsDeployment } from "@interest-protocol/blast-migrators-sdk/transactions";
+} from "@interest-protocol/blast-vault-sdk/reducer";
+import type {
+  RoundState,
+  VaultState,
+} from "@interest-protocol/blast-vault-sdk/state";
 import {
-  getPresaleRewardRound,
-  getPresaleVault,
-} from "@interest-protocol/blast-presale-sdk/state";
-import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/transactions";
-import { PresaleTransactions } from "@interest-protocol/blast-presale-sdk/transactions";
+  decodeVaultObject,
+  getRound,
+} from "@interest-protocol/blast-vault-sdk/state";
+import type { VaultDeployment } from "@interest-protocol/blast-vault-sdk/transactions";
+import { VaultTransactions } from "@interest-protocol/blast-vault-sdk/transactions";
 import type { Signer } from "@mysten/sui/cryptography";
 import type { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { Transaction } from "@mysten/sui/transactions";
+import { fromHex } from "@mysten/sui/utils";
 
 const CHECKPOINT_BATCH_SIZE = 100;
 const RELAY_BATCH_SIZE = 10;
@@ -72,19 +72,17 @@ export type HolderRewardsStore = {
 export type HolderRewardsOperatorConfig = {
   /** Expected genesis checkpoint digest; every command rejects another chain. */
   chainId: string;
-  /** The package whose vault funds the rounds; `migrators` when omitted. */
-  product?: "migrators" | "presale";
+  /** Call-ready `blast_vault` deployment (`vaultDeployment(blast)`). */
+  vault: VaultDeployment;
   /**
-   * Call-ready deployment of that product: `MigratorsDeployment` (including
-   * its launchpad deployment) or `PresaleDeployment`.
+   * The launch's or presale's `vault::Vault`, whose holder-rewards route
+   * funds every round; take it from verified history (`VaultCreated`) or
+   * `vaultId`.
    */
-  deployment: MigratorsDeployment | PresaleDeployment;
-  /** The migrated launch's `LpVault` or presale package's `Vault`, whose holder share funds every round. */
   vaultId: string;
   /**
-   * Blast `blast_acl::AdminCap` that signs in to publish: holding the
-   * launchpad's `RewardsAdmin` role for migrators, or the presale's
-   * `blast_presale_domain::RewardsAdmin` role for a presale.
+   * Blast `blast_acl::AdminCap` that signs in to schedule a round: it must
+   * hold `blast_core::blast_domain::RewardsAdmin`.
    */
   adminCapId?: string;
   /**
@@ -115,7 +113,7 @@ export type HolderRewardsRelay = {
 
 /** Holder-rewards keeper over a caller-supplied store. Every command holds the store lock. */
 export type HolderRewardsOperator = {
-  /** The vault's reward balances, round cursor, and product summary. */
+  /** The vault's reward balances, round cursor, and sale. */
   inspect(): Promise<Record<string, unknown>>;
   /** Replays finalized checkpoints through `until` into the stored ledger. */
   index(until: bigint): Promise<void>;
@@ -138,33 +136,6 @@ export type HolderRewardsOperator = {
   ): Promise<HolderRewardsRelay>;
 };
 
-/** The vault fields every product's rounds read. */
-type RewardsVault = SharedObjectReference<true> & {
-  memeType: string;
-  quoteType: string;
-  rewardsMeme: bigint;
-  rewardsQuote: bigint;
-  nextRound: bigint;
-  lastCheckpoint: bigint | null;
-  summary: Record<string, unknown>;
-};
-/** A funded round in the keeper's shape. */
-type RewardsRound = SharedObjectReference<true> & {
-  vaultId: string;
-  number: bigint;
-  root: string;
-  leafCount: number;
-  claimed: bigint[];
-};
-/** One product's vault, leaf domain, round reader, and transaction builders. */
-type RewardsProduct = {
-  leafDomain: RewardLeafDomain;
-  vault: RewardsVault;
-  readRound(roundId: string): Promise<RewardsRound>;
-  publish(manifest: RewardManifest, adminCapId: string): Transaction;
-  claim(round: RewardsRound, allocations: readonly RewardProof[]): Transaction;
-};
-
 type OperatorState = {
   chainId: string;
   vaultId: string;
@@ -176,8 +147,8 @@ type OperatorContext = {
   client: SuiGrpcClient;
   config: HolderRewardsOperatorConfig;
   store: HolderRewardsStore;
-  vault: RewardsVault;
-  product: RewardsProduct;
+  vault: VaultState;
+  transactions: VaultTransactions;
   checkpointHeight: bigint | undefined;
 };
 
@@ -212,13 +183,13 @@ async function openContext(
   const info = await client.ledgerService.getServiceInfo({}).response;
   if (info.chainId !== config.chainId)
     throw new Error("RPC chain does not match configured genesis chainId");
-  const product = await loadProduct(client, config);
+  const transactions = new VaultTransactions(config.vault);
   return {
     client,
     config,
     store,
-    vault: product.vault,
-    product,
+    vault: await readVault(client, transactions, config.vaultId),
+    transactions,
     checkpointHeight: info.checkpointHeight,
   };
 }
@@ -242,8 +213,19 @@ async function readConfirmedRound(
   manifest: RewardManifest,
 ) {
   if (!roundId) throw new Error("supply the confirmed round object ID");
-  const round = await context.product.readRound(roundId);
-  assertRewardRoundMatchesManifest(round, manifest, context.product.leafDomain);
+  const round = await getRound(
+    context.client,
+    roundId,
+    context.transactions.call.deployment,
+  );
+  if (
+    round.memeType !== context.vault.memeType ||
+    round.quoteType !== context.vault.quoteType
+  )
+    throw new Error("round pays another coin pair");
+  // The round commits only its root: check the manifest's own leaves and proofs first.
+  validateRewardManifest(manifest);
+  assertRoundMatchesManifest(round, manifest);
   return round;
 }
 async function readState(context: OperatorContext): Promise<OperatorState> {
@@ -254,12 +236,14 @@ async function readState(context: OperatorContext): Promise<OperatorState> {
   assertState(state, context.config, context.vault);
   return state;
 }
-function inspectVault(vault: RewardsVault): Record<string, unknown> {
+function inspectVault(vault: VaultState): Record<string, unknown> {
   return {
     vaultId: vault.objectId,
     memeType: vault.memeType,
     quoteType: vault.quoteType,
-    ...vault.summary,
+    origin: vault.terms.origin,
+    packageWitness: vault.terms.packageWitness,
+    poolId: vault.poolId,
     rewardsMeme: vault.rewardsMeme,
     rewardsQuote: vault.rewardsQuote,
     nextRound: vault.nextRound,
@@ -310,7 +294,7 @@ async function indexHolders(
 }
 
 async function prepareRound(context: OperatorContext): Promise<RewardManifest> {
-  const { store, config, vault, product } = context;
+  const { store, config, vault } = context;
   if (await store.read("pending"))
     throw new Error("a prepared round already exists");
   const state = await readState(context);
@@ -349,7 +333,6 @@ async function prepareRound(context: OperatorContext): Promise<RewardManifest> {
     startCheckpoint: start,
     endCheckpoint: end,
     allocations: allocation.allocations,
-    leafDomain: product.leafDomain,
   });
   const round = `rounds/${manifest.number}`;
   await write(store, `${round}/accounting`, {
@@ -372,10 +355,38 @@ async function publishRound(
   context: OperatorContext,
   supplied: RewardManifest | undefined,
 ): Promise<Transaction> {
-  const { config, product } = context;
-  const manifest = await readManifest(context, supplied);
+  const { config, vault, transactions } = context;
+  const manifest = validateRewardManifest(
+    await readManifest(context, supplied),
+  );
+  const target = {
+    memeType: vault.memeType,
+    quoteType: vault.quoteType,
+    vault,
+  };
+  if (isScheduled(vault, manifest))
+    return withSender(transactions.publishRound(target), config);
   if (!config.adminCapId) throw new Error("adminCapId required");
-  return withSender(product.publish(manifest, config.adminCapId), config);
+  const round = {
+    ...target,
+    adminCapId: config.adminCapId,
+    number: BigInt(manifest.number),
+    startCheckpoint: BigInt(manifest.startCheckpoint),
+    endCheckpoint: BigInt(manifest.endCheckpoint),
+    root: fromHex(manifest.root),
+    manifestDigest: fromHex(manifest.manifestDigest),
+    leafCount: BigInt(manifest.allocations.length),
+    memeAmount: BigInt(manifest.memeAmount),
+    quoteAmount: BigInt(manifest.quoteAmount),
+    ...roundTerms(config),
+  };
+  // A scheduled round waits the vault's round notice; at zero it publishes in the same PTB.
+  return withSender(
+    vault.roundDelayMs === 0n
+      ? transactions.scheduleAndPublishRound(round)
+      : transactions.scheduleRound(round),
+    config,
+  );
 }
 
 async function advanceRound(
@@ -411,11 +422,11 @@ async function relayRewards(
     signer?: Signer | undefined;
   },
 ): Promise<HolderRewardsRelay> {
-  const { product, config, client, store } = context;
+  const { transactions, config, client, store } = context;
   const { signer } = options;
   const manifest = await readManifest(context, options.manifest);
   const round = await readConfirmedRound(context, roundId, manifest);
-  const pending = pendingRewardAllocations(round, manifest, product.leafDomain);
+  const pending = pendingRewardAllocations(round, manifest);
   const relay: HolderRewardsRelay = {
     roundNumber: manifest.number,
     batches: [],
@@ -424,7 +435,7 @@ async function relayRewards(
     const batch = pending.slice(offset, offset + RELAY_BATCH_SIZE);
     const first = batch[0];
     if (!first) continue;
-    const transaction = product.claim(round, batch);
+    const transaction = claimTransaction(transactions, round, batch);
     if (!signer) {
       relay.batches.push({
         firstIndex: first.index,
@@ -453,7 +464,7 @@ async function relayRewards(
 async function bootstrap(
   client: SuiGrpcClient,
   config: HolderRewardsOperatorConfig,
-  vault: RewardsVault,
+  vault: VaultState,
 ): Promise<OperatorState> {
   const first = await coinPackageCreationCheckpoint(client, vault.memeType);
   const { object } = await client.ledgerService.getObject({
@@ -479,7 +490,7 @@ async function bootstrap(
 function assertState(
   state: OperatorState,
   config: HolderRewardsOperatorConfig,
-  vault: RewardsVault,
+  vault: VaultState,
 ) {
   if (
     state.chainId !== config.chainId ||
@@ -511,72 +522,7 @@ function write(
   );
 }
 
-/** Reads the configured product's vault and binds its round reader and builders. */
-async function loadProduct(
-  client: SuiGrpcClient,
-  config: HolderRewardsOperatorConfig,
-): Promise<RewardsProduct> {
-  if (config.product === "presale") {
-    const transactions = new PresaleTransactions(
-      config.deployment as PresaleDeployment,
-    );
-    const { originalPackageId } = transactions.call.deployment;
-    const state = await getPresaleVault(
-      client,
-      config.vaultId,
-      originalPackageId,
-    );
-    const pair = { memeType: state.memeType, quoteType: state.quoteType };
-    const vault: RewardsVault = {
-      ...state,
-      // Presale rounds pay only Quote; holder Meme goes to the treasury.
-      rewardsMeme: 0n,
-      rewardsQuote: state.holderRewardsQuote,
-      summary: {
-        presaleId: state.presaleId,
-        feeRecipients: state.feeRecipients,
-        holderRewardsBps: state.holderRewardsBps,
-      },
-    };
-    return {
-      leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
-      vault,
-      readRound: async (roundId) => {
-        const round = await getPresaleRewardRound(
-          client,
-          roundId,
-          originalPackageId,
-        );
-        return {
-          ...round,
-          leafCount: Number(round.leafCount),
-          claimed: round.claimedBitmap,
-        };
-      },
-      publish: (manifest, adminCapId) => {
-        if (isScheduled(state.roundPublication, manifest))
-          return transactions.publishHolderRewardRound({ ...pair, vault });
-        const round = {
-          ...pair,
-          vault,
-          adminCapId,
-          manifest,
-          ...roundTerms(config),
-        };
-        return state.roundPublication.delay_ms === 0n
-          ? transactions.scheduleAndPublishHolderRewardRound(round)
-          : transactions.scheduleHolderRewardRound(round);
-      },
-      claim: (round, allocations) =>
-        transactions.claimHolderRewards({ ...pair, round, allocations }),
-    };
-  }
-  throw new Error(
-    "WP5: migrators vault rounds move to the vault package (VaultTransactions)",
-  );
-}
-
-/** The configured terms a round schedule needs; every product requires all three. */
+/** The configured terms a round schedule needs; all three are explicit. */
 function roundTerms(config: HolderRewardsOperatorConfig) {
   if (!config.claimWindowMs || !/^\d+$/.test(config.claimWindowMs))
     throw new Error("publish-tx needs claimWindowMs");
@@ -590,20 +536,60 @@ function roundTerms(config: HolderRewardsOperatorConfig) {
   if (config.expectedTreasury === undefined)
     throw new Error("publish-tx needs explicit expectedTreasury");
   return {
-    claimWindowMs: BigInt(config.claimWindowMs),
+    claimWindowDurationMs: BigInt(config.claimWindowMs),
     gasReserveAmount: BigInt(config.gasReserveAmount),
-    expectedTreasury: config.expectedTreasury,
+    expectedTreasury: rewardAddress(config.expectedTreasury),
   };
 }
 
 /** True when `manifest` is the round already waiting in the vault's publication slot. */
-function isScheduled(
-  publication: DelayedAction<null, RewardRoundTerms>,
-  manifest: RewardManifest,
-): boolean {
-  const change = publication.pending?.value;
+function isScheduled(vault: VaultState, manifest: RewardManifest): boolean {
+  const change = vault.pendingRoundPublication?.value;
   return (
     change?.kind === "Action" &&
     change.action.manifest_digest === manifest.manifestDigest
+  );
+}
+
+/** One PTB of `holder_rewards::claim` calls, one per unpaid leaf. */
+function claimTransaction(
+  transactions: VaultTransactions,
+  round: RoundState,
+  allocations: readonly RewardProof[],
+): Transaction {
+  return transactions.claimRewards({
+    memeType: round.memeType,
+    quoteType: round.quoteType,
+    round,
+    leaves: allocations.map((allocation) => ({
+      index: BigInt(allocation.index),
+      beneficiary: allocation.beneficiary,
+      memeAmount: BigInt(allocation.memeAmount),
+      quoteAmount: BigInt(allocation.quoteAmount),
+      proof: allocation.proof.map((sibling) => fromHex(sibling)),
+    })),
+  });
+}
+
+/** Reads the configured shared `vault::Vault<Meme, Quote>`. */
+async function readVault(
+  client: SuiGrpcClient,
+  transactions: VaultTransactions,
+  vaultId: string,
+): Promise<VaultState> {
+  const { object } = await client.core.getObject({
+    objectId: rewardAddress(vaultId),
+    include: { content: true },
+  });
+  if (object.owner.$kind !== "Shared")
+    throw new Error("the vault must be a shared object");
+  return decodeVaultObject(
+    {
+      objectId: object.objectId,
+      initialSharedVersion: object.owner.Shared.initialSharedVersion,
+      type: object.type,
+      content: object.content,
+    },
+    transactions.call.deployment,
   );
 }

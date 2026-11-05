@@ -72,7 +72,7 @@ const deployment = defineBlastDeployment(manifest);
 const launch = {
   memeType: BLAST_BLUEFIN.memeType,
   quoteType: BLAST_BLUEFIN.quoteType,
-  migrationWitnessType: `${BLAST_BLUEFIN.migratorsPackageId}::bluefin::Witness`,
+  venue: `${BLAST_BLUEFIN.migratorsPackageId}::bluefin::Venue`,
   poolTickSpacing: BLAST_BLUEFIN.tickSpacing,
   poolFeeRate: BigInt(BLAST_BLUEFIN.feeRate),
 };
@@ -302,13 +302,13 @@ test("refuses a route outside the deployment's Bluefin lineage and tiers", () =>
     deployment: defineBlastDeployment({ ...manifest, packages, sharedObjects }),
   });
   rejects("foreign-lineage", {
-    launch: { ...launch, migrationWitnessType: `${FOREIGN}::bluefin::Witness` },
+    launch: { ...launch, venue: `${FOREIGN}::bluefin::Venue` },
   });
   rejects("foreign-lineage", { pool: { ...pool, originalPackageId: FOREIGN } });
   rejects("route-substitution", {
     launch: {
       ...launch,
-      migrationWitnessType: `${BLAST_BLUEFIN.migratorsPackageId}::cetus::Witness`,
+      venue: `${BLAST_BLUEFIN.migratorsPackageId}::cetus::Venue`,
     },
   });
   rejects("route-substitution", { vault: { ...vault, poolId: FOREIGN } });
