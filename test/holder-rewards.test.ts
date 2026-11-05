@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { merkleLeaf } from "@interest-protocol/blast-core/merkle";
 import {
   allocateHolderRewards,
   buildRewardManifest,
-  MIGRATOR_REWARD_LEAF_DOMAIN,
+  REWARD_LEAF_DOMAIN,
   verifyRewardProof,
 } from "@interest-protocol/blast-core/rewards/allocations";
 import {
@@ -13,7 +14,8 @@ import {
   holderWeights,
   resetHolderWeights,
 } from "@interest-protocol/blast-core/rewards/holders";
-import { normalizeSuiAddress } from "@mysten/sui/utils";
+import { bcs } from "@mysten/sui/bcs";
+import { normalizeSuiAddress, toHex } from "@mysten/sui/utils";
 
 const ALICE = normalizeSuiAddress("0xa");
 const BOB = normalizeSuiAddress("0xb");
@@ -30,15 +32,16 @@ const checkpoint = (
   changes,
 });
 
-test("published contract vector is reproduced byte for byte", () => {
-  const expected = JSON.parse(
+test("contracts' v2 vector is reproduced byte for byte", () => {
+  const vector = JSON.parse(
     readFileSync(
       new URL("./fixtures/holder-rewards.json", import.meta.url),
       "utf8",
     ),
   );
+  assert.equal(vector.version, 2);
+  assert.equal(vector.leafDomain, REWARD_LEAF_DOMAIN);
   const actual = buildRewardManifest({
-    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
     vaultId: "0xd",
     number: 0n,
     startCheckpoint: 10n,
@@ -49,7 +52,28 @@ test("published contract vector is reproduced byte for byte", () => {
       { beneficiary: "0xc", memeAmount: 50n, quoteAmount: 60n },
     ],
   });
-  assert.deepEqual(actual, expected);
+  const { leafDomain: _, allocations, ...commitment } = vector;
+  assert.deepEqual(actual, {
+    ...commitment,
+    allocations: allocations.map(
+      ({ leaf: _leaf, ...allocation }: { leaf: string }) => allocation,
+    ),
+  });
+  // Each leaf is `merkle::leaf(domain, bcs(vault, round, index, beneficiary, meme, quote))`.
+  for (const allocation of allocations) {
+    const payload = new Uint8Array([
+      ...bcs.Address.serialize(vector.vaultId).toBytes(),
+      ...bcs.u64().serialize(vector.number).toBytes(),
+      ...bcs.u64().serialize(allocation.index).toBytes(),
+      ...bcs.Address.serialize(allocation.beneficiary).toBytes(),
+      ...bcs.u64().serialize(allocation.memeAmount).toBytes(),
+      ...bcs.u64().serialize(allocation.quoteAmount).toBytes(),
+    ]);
+    assert.equal(
+      toHex(merkleLeaf(REWARD_LEAF_DOMAIN, payload)),
+      allocation.leaf,
+    );
+  }
 });
 
 test("zero-address transfers are tracked but never become eligible recipients", () => {
@@ -90,7 +114,6 @@ test("zero eligible holders never grant historical funds to a made-up recipient"
 
 test("odd-sized tree verifies all leaves and binds recipient, amount, vault and round", () => {
   const manifest = buildRewardManifest({
-    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
     vaultId: "0xd",
     number: 0n,
     startCheckpoint: 10n,
@@ -100,31 +123,19 @@ test("odd-sized tree verifies all leaves and binds recipient, amount, vault and 
     ),
   });
   for (const allocation of manifest.allocations) {
+    assert.equal(verifyRewardProof(manifest, allocation), true);
     assert.equal(
-      verifyRewardProof(manifest, allocation, MIGRATOR_REWARD_LEAF_DOMAIN),
-      true,
-    );
-    assert.equal(
-      verifyRewardProof(
-        manifest,
-        { ...allocation, quoteAmount: "19" },
-        MIGRATOR_REWARD_LEAF_DOMAIN,
-      ),
+      verifyRewardProof(manifest, { ...allocation, quoteAmount: "19" }),
       false,
     );
     assert.equal(
-      verifyRewardProof(
-        { ...manifest, number: "1" },
-        allocation,
-        MIGRATOR_REWARD_LEAF_DOMAIN,
-      ),
+      verifyRewardProof({ ...manifest, number: "1" }, allocation),
       false,
     );
     assert.equal(
       verifyRewardProof(
         { ...manifest, vaultId: normalizeSuiAddress("0xe") },
         allocation,
-        MIGRATOR_REWARD_LEAF_DOMAIN,
       ),
       false,
     );
@@ -143,7 +154,6 @@ test("a manifest rejects duplicate beneficiaries and zero allocations", () => {
   assert.throws(
     () =>
       buildRewardManifest({
-        leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
         ...options,
         allocations: [
           { beneficiary: ALICE, memeAmount: 1n, quoteAmount: 0n },
@@ -155,7 +165,6 @@ test("a manifest rejects duplicate beneficiaries and zero allocations", () => {
   assert.throws(
     () =>
       buildRewardManifest({
-        leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
         ...options,
         allocations: [{ beneficiary: ALICE, memeAmount: 0n, quoteAmount: 0n }],
       }),
@@ -274,7 +283,6 @@ test("holder ordering and manifest commitments do not depend on host collation",
     expected,
   );
   const manifest = buildRewardManifest({
-    leafDomain: MIGRATOR_REWARD_LEAF_DOMAIN,
     vaultId: "0xd",
     number: 0n,
     startCheckpoint: 0n,

@@ -1,17 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { decodeHolderCheckpoint } from "@interest-protocol/blast-core/rewards/checkpoints";
-import {
-  decodeRewardRound,
-  rewardIsClaimed,
-  rewardRoundBcs,
-} from "@interest-protocol/blast-core/rewards/state";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 const addr = normalizeSuiAddress;
 const MEME = `${addr("0x42")}::meme::MEME`;
 const QUOTE = `${addr("0x2")}::sui::SUI`;
-const uid = (id: string) => ({ id: { bytes: addr(id) } });
 
 test("checkpoint decoder verifies complete ordered transaction contents and selects the coin", () => {
   const checkpoint = {
@@ -54,62 +48,4 @@ test("checkpoint decoder verifies complete ordered transaction contents and sele
       ),
     /digest/,
   );
-});
-
-test("round bitmap decodes claims across word boundaries", () => {
-  const content = rewardRoundBcs
-    .serialize({
-      id: uid("0xc"),
-      vault: { bytes: addr("0xd") },
-      number: 1n,
-      root: new Array(32).fill(1),
-      leaf_count: 257n,
-      claimed: [1n << 255n, 1n],
-      meme: { value: 20n },
-      quote: { value: 40n },
-      claim_deadline_at_ms: 2_000_000_000_000n,
-      treasury: "0xb",
-      gas_reserve: null,
-    })
-    .toBytes();
-  const round = decodeRewardRound(
-    {
-      objectId: addr("0xc"),
-      type: `${addr("0x99")}::blast_holder_rewards::Round<${MEME},${QUOTE}>`,
-      content,
-      initialSharedVersion: "1",
-      mutable: true,
-    },
-    "0x99",
-  );
-  assert.equal(round.vaultId, addr("0xd"));
-  assert.equal(round.claimDeadlineMs, 2_000_000_000_000n);
-  assert.equal(round.treasury, addr("0xb"));
-  assert.equal(round.gasReserveRemaining, null);
-  assert.throws(
-    () =>
-      decodeRewardRound(
-        { ...round, content: Uint8Array.from([...content, 0]) },
-        "0x99",
-      ),
-    /BCS length/,
-  );
-  assert.throws(
-    () =>
-      decodeRewardRound(
-        {
-          objectId: addr("0xc"),
-          type: `${addr("0x98")}::blast_holder_rewards::Round<${MEME},${QUOTE}>`,
-          content,
-          initialSharedVersion: "1",
-          mutable: true,
-        },
-        "0x99",
-      ),
-    /invalid holder-reward round type/,
-  );
-  assert.equal(rewardIsClaimed(round, 254), false);
-  assert.equal(rewardIsClaimed(round, 255), true);
-  assert.equal(rewardIsClaimed(round, 256), true);
-  assert.throws(() => rewardIsClaimed(round, 257), /index/);
 });

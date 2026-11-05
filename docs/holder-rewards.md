@@ -1,40 +1,39 @@
 # Holder rewards
 
-Holder rewards live in the migrators package (`blast_holder_rewards`, contracts
-ADR 0089) and, for presales, in the presale package (`holder_rewards`); the separate distributor package, its enrollment, `PublisherCap`,
-and pause switch are gone. Every LP-fee collection credits the creator's
-`FeeSplit` rewards share to the launch's `LpVault`. A Blast administrator
-schedules a Merkle allocation of those funds on the vault; once the vault's
-round notice has passed (two hours from vault creation), anyone publishes it as a shared
-`Round`, and anyone can relay a proof; each leaf pays its committed beneficiary
-once.
+Holder rewards live in the vault package (`blast_vault::holder_rewards`,
+contracts ADR 0137). Every launch and every presale migrates into a
+`vault::Vault<Meme, Quote>`; each fee collection credits the sale's
+`HolderRewards` fee-split route to the vault's rewards balances, in Meme and in
+Quote. Presale vaults pay Meme too. A Blast administrator holding
+`blast_core::blast_domain::RewardsAdmin` schedules a Merkle allocation of those
+funds on the vault; once the vault's round notice has passed (two hours from
+vault creation), anyone publishes it as a shared `Round`, and anyone can relay
+a proof. Each leaf pays its committed beneficiary once.
 
 `@interest-protocol/blast-sdk/holder-rewards` supplies integer holder
-accounting, Merkle manifests, round reads, permissionless payout helpers, and
-`holderRewardsOperator`: the index, prepare, publish, advance, and relay
-workflow over a `HolderRewardsStore` that you supply. The transaction builders
-are `MigratorTransactions.scheduleHolderRewardRound`,
-`publishHolderRewardRound` (permissionless, no terms),
-`scheduleAndPublishHolderRewardRound` (one PTB, only at a zero notice),
-`cancelHolderRewardRound`, the `*HolderRewardRoundDelay` notice builders, and
-`claimHolderRewards`.
-The Node operator is `npm run holder-rewards -- <command> ...` from this
-repository; it runs the same workflow over a file store (`operator/`). The
-builders require verified deployment IDs. Presale's registered October 9
-lineage predates the reserve/routing APIs; those require a new verified
-publication and a safe financial cutover. See [presale rounds](presale.md#allowlists-and-reward-rounds).
+accounting, Merkle manifests, and `holderRewardsOperator`: the index, prepare,
+publish, advance, and relay workflow over a `HolderRewardsStore` that you
+supply. Round reads and builders are the vault package's: `getVault`,
+`getRound`, `assertRoundMatchesManifest`, `pendingRewardAllocations`, and
+`VaultTransactions.scheduleRound`, `publishRound` (permissionless),
+`scheduleAndPublishRound` (one PTB, only at a zero round notice),
+`cancelRound`, the `*RoundDelay` builders, `claimRewards`, `settleGasReserve`
+and `closeRound`. The Node operator is `npm run holder-rewards -- <command> ...`
+from this repository; it runs the same workflow over a file store
+(`operator/`).
 
 ## Rounds
 
-`publish_round` requires the vault's next round number, a checkpoint interval
-that starts where the previous round ended for migrators, or at/after it for
-the new presale daily publication logic, a 32-byte root and manifest digest,
-1 to 65,536 leaves, and a nonzero budget within the vault's unreserved rewards.
-It reserves that budget into the `Round`. The leaf is the Blake2b-256 hash of
-`0x00 || "blast-holder-rewards-v1" || bcs(vault ID, round, index, beneficiary,
-meme, quote)`, internal nodes hash `0x01 || left || right`, and a lone last node
-pairs with itself. `buildRewardManifest` reproduces the contracts' vector
-(`contracts/docs/vectors/holder-rewards.json`) byte for byte.
+`schedule_round` and `publish_round` require the vault's next round number, a
+checkpoint interval that starts at or after the previous round's end, a 32-byte
+root and manifest digest, 1 to 65,536 leaves, and a nonzero budget within the
+vault's unreserved rewards; the gas reserve is at most 10% of the round's
+Quote. Publication reserves that budget into the `Round`. The leaf is
+`merkle::leaf(REWARD_LEAF_DOMAIN, bcs(vault ID, round, index, beneficiary,
+meme, quote))` = Blake2b-256 of `0x00 || "blast-holder-rewards-v2" || payload`;
+internal nodes hash `0x01 || left || right`, and a lone last node pairs with
+itself. `buildRewardManifest` reproduces the contracts' vector
+(`contracts/docs/vectors/holder-rewards.json`, version 2) byte for byte.
 
 ```ts
 const manifest = buildRewardManifest({
@@ -44,47 +43,60 @@ const manifest = buildRewardManifest({
   endCheckpoint,
   allocations,
 });
-const schedule = client.blastMigrators.tx.scheduleHolderRewardRound({
+const vaults = new VaultTransactions(vaultDeployment(blast));
+const schedule = vaults.scheduleRound({
   memeType,
   quoteType,
-  vault, // the shared LpVault, mutable
-  adminCapId,
-  manifest,
-  claimWindowMs: 604_800_000n, // claims stay open seven days from publication
+  vault, // the shared Vault
+  adminCapId, // holds RewardsAdmin
+  number: BigInt(manifest.number),
+  startCheckpoint: BigInt(manifest.startCheckpoint),
+  endCheckpoint: BigInt(manifest.endCheckpoint),
+  root: fromHex(manifest.root),
+  manifestDigest: fromHex(manifest.manifestDigest),
+  leafCount: BigInt(manifest.allocations.length),
+  memeAmount: BigInt(manifest.memeAmount),
+  quoteAmount: BigInt(manifest.quoteAmount),
   gasReserveAmount: 0n, // at most 10% of the round's Quote
-  expectedTreasury,
+  claimWindowDurationMs: 604_800_000n, // claims stay open seven days from publication
+  expectedTreasury, // the core Treasury's destination
 });
-// After the vault's round notice (two hours by default), anyone publishes it.
-const publish = client.blastMigrators.tx.publishHolderRewardRound({
+// After the vault's round notice, anyone publishes it.
+const publish = vaults.publishRound({ memeType, quoteType, vault });
+// Validate the public manifest before relaying its proofs.
+validateRewardManifest(manifest);
+const relay = vaults.claimRewards({
   memeType,
   quoteType,
-  vault,
-});
-const relay = client.blastMigrators.tx.claimHolderRewards({
-  memeType,
-  quoteType,
-  round, // the shared Round, mutable
-  allocations: pendingRewardAllocations(roundState, manifest),
+  round, // the shared Round
+  leaves: pendingRewardAllocations(roundState, manifest).map((leaf) => ({
+    index: BigInt(leaf.index),
+    beneficiary: leaf.beneficiary,
+    memeAmount: BigInt(leaf.memeAmount),
+    quoteAmount: BigInt(leaf.quoteAmount),
+    proof: leaf.proof.map((sibling) => fromHex(sibling)),
+  })),
 });
 ```
 
 ## Paged construction
 
-For large daily presale allocations, `allocateHolderRewardPage` divides every
-wallet's weight by the same frozen global weight. Supply distinct qualifying
-wallets in canonical address order and carry each result's `lastAddress` into
-the next page. Count qualifying wallets before atomic-unit flooring, sum
-`pageWeight` to check complete global coverage, and sum `quoteAllocated` to
-calculate holder-owned dust. This helper applies no pricing or eligibility policy.
+For large allocations, `allocateHolderRewardPage` divides every wallet's weight
+by the same frozen global weight, for both the Meme and the Quote budget. Supply
+distinct qualifying wallets in canonical address order and carry each result's
+`lastAddress` into the next page. Count qualifying wallets before atomic-unit
+flooring, sum `pageWeight` to check complete global coverage, and sum
+`memeAllocated` and `quoteAllocated` to calculate holder-owned dust. This helper
+applies no pricing or eligibility policy.
 
 `buildRewardManifestPages` consumes a `RewardManifestPageStore` with bounded
-allocation, Merkle-hash and proof reads/writes. It preserves the existing BCS
-digest, leaf domains, positional indices and odd-node pairing byte for byte.
-The caller selects a positive bounded `pageSize`; the 65,536 positive-leaf limit
-still applies. Every output page is read back, every proof is checked against
-the root, and the function returns a `RewardManifestSummary` only after all
-pages complete. Working memory grows with the selected page size and proof
-depth rather than all beneficiaries.
+allocation, Merkle-hash and proof reads/writes. It preserves the BCS digest,
+leaf domain, positional indices and odd-node pairing byte for byte. The caller
+selects a positive bounded `pageSize`; the 65,536 positive-leaf limit still
+applies. Every output page is read back, every proof is checked against the
+root, and the function returns a `RewardManifestSummary` only after all pages
+complete. Working memory grows with the selected page size and proof depth
+rather than all beneficiaries.
 
 The store must bind one immutable allocation snapshot and output namespace,
 reject overwrites with different content, and resolve writes only after
@@ -92,12 +104,9 @@ durability. Repeating construction after a crash replays identical writes.
 Snapshot identity, hashes, durable progress, locks and readiness evidence belong
 to the caller's persistence layer. Keep proofs publicly available through a
 paged endpoint; a summary alone cannot recover them.
-
-`PresaleTransactions.scheduleHolderRewardRound` accepts the completed
-summary without loading all proofs. Its summary checks cover canonical fields,
-the presale leaf domain, bounded leaf count, positive funding and full digest
-lengths. They cannot prove allocations or eligibility from a summary alone:
-the caller must require complete durable construction evidence before signing.
+`validateRewardManifestSummary` checks a summary's canonical fields, bounded
+leaf count, positive funding and digest lengths; it cannot prove allocations or
+eligibility, so require complete durable construction evidence before signing.
 `verifyRewardSummaryProof` checks an individual proof against that commitment.
 
 ## Operator configuration
@@ -107,52 +116,26 @@ Create a JSON config outside the public artifacts:
 ```json
 {
   "grpcUrl": "https://YOUR-ARCHIVAL-SUI-GRPC-ENDPOINT",
-  "network": "testnet",
-  "chainId": "EXPECTED-GENESIS-DIGEST",
-  "deployment": {
-    "packageId": "0xCALLABLE_MIGRATORS_PACKAGE",
-    "originalPackageId": "0xORIGINAL_MIGRATORS_PACKAGE",
-    "launchpad": {
-      "packageId": "0xCALLABLE_LAUNCHPAD_PACKAGE",
-      "originalPackageId": "0xORIGINAL_LAUNCHPAD_PACKAGE",
-      "adminPackageId": "0xBLAST_ADMIN_PACKAGE",
-      "partnersPackageId": "0xBLAST_PARTNERS_PACKAGE",
-      "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-      "launchConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-      "runtimeConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-      "acl": { "objectId": "0xBLAST_ACL", "initialSharedVersion": "1", "mutable": false }
-    },
-    "migratorsVersion": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-    "lpFeePolicy": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false },
-    "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1", "mutable": false }
-  },
-  "vaultId": "0xVERIFIED_LP_VAULT",
-  "adminCapId": "0xBLAST_ADMIN_CAP_WITH_REWARDS_ADMIN",
-  "sender": "0xADMIN_MULTISIG",
-  "excludedAddresses": []
-}
-```
-
-For a presale vault, set `"product": "presale"`, pass the call-ready
-`PresaleDeployment` (`getPresaleDeployment("mainnet")`) as `deployment`, the
-`Vault` ID as `vaultId`, and a Blast `AdminCap` holding the presale's
-`blast_presale_domain::RewardsAdmin` role as `adminCapId`; `publish-tx` signs it
-in. Presale publication also requires `expectedTreasury` and an explicit
-`gasReserveAmount` (zero disables reimbursement). A changed governed treasury
-aborts publication before funds move. Presale rounds need `claimWindowMs`: claims stay open
-that long from publication. Presale
-manifests use `PRESALE_REWARD_LEAF_DOMAIN`, and `relay` reads the presale
-`holder_rewards::Round`; the commands are otherwise the same.
-
-```json
-{
-  "grpcUrl": "https://YOUR-ARCHIVAL-SUI-GRPC-ENDPOINT",
   "network": "mainnet",
   "chainId": "EXPECTED-GENESIS-DIGEST",
-  "product": "presale",
-  "deployment": { "packageId": "0x...", "originalPackageId": "0x...", "venueConfig": { "objectId": "0x...", "initialSharedVersion": "1" }, "creationPolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "feePolicy": { "objectId": "0x...", "initialSharedVersion": "1" }, "admin": { "packageId": "0x...", "acl": { "objectId": "0x...", "initialSharedVersion": "1" } } },
-  "vaultId": "0xVERIFIED_PRESALE_VAULT",
-  "adminCapId": "0xBLAST_ADMIN_CAP",
+  "vault": {
+    "packageId": "0xCALLABLE_VAULT_PACKAGE",
+    "originalPackageId": "0xORIGINAL_VAULT_PACKAGE",
+    "registry": { "objectId": "0x...", "initialSharedVersion": "1" },
+    "packageVersion": { "objectId": "0x...", "initialSharedVersion": "1" },
+    "packageAdmin": { "objectId": "0x...", "initialSharedVersion": "1" },
+    "core": {
+      "packageId": "0xBLAST_CORE",
+      "originalPackageId": "0xBLAST_CORE",
+      "treasury": { "objectId": "0x...", "initialSharedVersion": "1" }
+    },
+    "admin": {
+      "packageId": "0xBLAST_ADMIN",
+      "acl": { "objectId": "0xBLAST_ACL", "initialSharedVersion": "1" }
+    }
+  },
+  "vaultId": "0xVERIFIED_VAULT",
+  "adminCapId": "0xBLAST_ADMIN_CAP_WITH_REWARDS_ADMIN",
   "claimWindowMs": "604800000",
   "gasReserveAmount": "0",
   "expectedTreasury": "0xVERIFIED_BLAST_TREASURY",
@@ -161,15 +144,17 @@ manifests use `PRESALE_REWARD_LEAF_DOMAIN`, and `relay` reads the presale
 }
 ```
 
-`adminCapId` and `sender` are needed only for `publish-tx`. `deployment` is the
-call-ready `MigratorsDeployment` (`migratorsDeployment(blast)` produces it from
-a registered release). The vault ID must come from verified migration history
-(`VaultCreated`). The provider must serve checkpoints back to coin-package
-creation and the vault's initial shared object version. The operator checks
-genesis, checkpoint ordering and digest continuity, transaction completeness,
-timestamps, and nonnegative balances. It trusts the provider's derived balance
-changes; it does not independently verify checkpoint signatures or reconstruct
-every object effect.
+`vault` is the call-ready `VaultDeployment` (`vaultDeployment(blast)` produces
+it from a registered release). The vault ID must come from verified migration
+history (`VaultCreated`) or `vaultId`. `adminCapId`, `claimWindowMs`,
+`gasReserveAmount` (zero disables reimbursement), `expectedTreasury` and
+`sender` are needed only for `publish-tx`; a changed core treasury aborts
+publication before funds move. The provider must serve checkpoints back to
+coin-package creation and the vault's initial shared object version. The
+operator checks genesis, checkpoint ordering and digest continuity, transaction
+completeness, timestamps, and nonnegative balances. It trusts the provider's
+derived balance changes; it does not independently verify checkpoint
+signatures or reconstruct every object effect.
 
 ## Account, publish, pay
 
@@ -195,7 +180,7 @@ npm run holder-rewards -- relay --config config.json --dir operator-data --round
 Collection is permissionless and venue specific
 (`MigratorTransactions.collectCetusFees` or `collectBluefinFees`); the operator
 does not collect. `prepare` allocates the vault's whole unreserved rewards
-balance at the time it runs.
+balance, in both assets, at the time it runs.
 
 `index` replays from the coin's defining package creation, starts reward
 weighting at the vault's creation (migration), and saves batches of up to 100
@@ -252,7 +237,9 @@ independent claims.
 Publication is trusted allocation: a Blast administrator can allocate rewards
 to itself, omit holders, or commit a malformed tree. On-chain checks prevent
 reserving more than the vault's unreserved rewards but do not prove the root's
-totals or historical eligibility. Incorrect commitments have no cancellation
-or sweep. Funded claims stay payable while the migrators package version is
-current; the migrators package stays upgradeable (ADR 0088), so an upgrade
-advances the version and relinks claims.
+totals or historical eligibility. A scheduled round can be cancelled before
+publication; a published round returns its unclaimed balances and unsettled gas
+reserve to the vault at its claim deadline (`close_round`, permissionless).
+Claims never pause and stay payable while the vault package version is
+current; a vault upgrade advances the version and the migrators relink in the
+same window.

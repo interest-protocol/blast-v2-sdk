@@ -102,14 +102,6 @@
       "types": "./dist/rewards/holders.d.ts",
       "default": "./dist/rewards/holders.js"
     },
-    "./rewards/keeper": {
-      "types": "./dist/rewards/keeper.d.ts",
-      "default": "./dist/rewards/keeper.js"
-    },
-    "./rewards/state": {
-      "types": "./dist/rewards/state.d.ts",
-      "default": "./dist/rewards/state.js"
-    },
     "./roles": {
       "types": "./dist/roles.d.ts",
       "default": "./dist/roles.js"

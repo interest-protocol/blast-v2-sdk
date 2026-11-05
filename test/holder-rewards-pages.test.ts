@@ -3,7 +3,6 @@ import test from "node:test";
 import { itemAt } from "@interest-protocol/blast-core/arrays";
 import type {
   RewardAllocation,
-  RewardLeafDomain,
   RewardManifestPageStore,
   RewardProof,
 } from "@interest-protocol/blast-core/rewards/allocations";
@@ -13,8 +12,6 @@ import {
   buildRewardManifest,
   buildRewardManifestPages,
   MAX_REWARD_LEAVES,
-  MIGRATOR_REWARD_LEAF_DOMAIN,
-  PRESALE_REWARD_LEAF_DOMAIN,
   validateRewardManifestSummary,
   verifyRewardSummaryProof,
 } from "@interest-protocol/blast-core/rewards/allocations";
@@ -28,7 +25,6 @@ const options: Omit<Parameters<typeof buildRewardManifest>[0], "allocations"> =
     number: 2n,
     startCheckpoint: 21n,
     endCheckpoint: 30n,
-    leafDomain: PRESALE_REWARD_LEAF_DOMAIN,
   };
 
 function pageStore(read: RewardManifestPageStore["readAllocations"]) {
@@ -91,26 +87,30 @@ test("allocation pages use one global denominator and preserve zero-atom qualifi
     weight: BigInt(i + 1),
   }));
   const total = holders.reduce((sum, item) => sum + item.weight, 0n);
-  const expected = allocateHolderRewards(holders, 0n, 20n);
+  const expected = allocateHolderRewards(holders, 7n, 20n);
   for (const size of [1, 3, 8, 17]) {
     const actual: RewardAllocation[] = [];
     let last: string | undefined;
-    let allocated = 0n;
+    let memeAllocated = 0n;
+    let quoteAllocated = 0n;
     let weight = 0n;
     for (let offset = 0; offset < holders.length; offset += size) {
       const page = allocateHolderRewardPage(
         holders.slice(offset, offset + size),
+        7n,
         20n,
         total,
         last,
       );
       actual.push(...page.allocations);
-      allocated += page.quoteAllocated;
+      memeAllocated += page.memeAllocated;
+      quoteAllocated += page.quoteAllocated;
       weight += page.pageWeight;
       last = page.lastAddress;
     }
     assert.deepEqual(actual, expected.allocations);
-    assert.equal(20n - allocated, expected.quoteDust);
+    assert.equal(7n - memeAllocated, expected.memeDust);
+    assert.equal(20n - quoteAllocated, expected.quoteDust);
     assert.equal(weight, total);
     assert.ok(
       actual.length < holders.length,
@@ -118,13 +118,15 @@ test("allocation pages use one global denominator and preserve zero-atom qualifi
     );
   }
   assert.throws(
-    () => allocateHolderRewardPage(holders.slice(0, 1), 20n, total, address(0)),
+    () =>
+      allocateHolderRewardPage(holders.slice(0, 1), 0n, 20n, total, address(0)),
     /distinct/,
   );
   assert.throws(
     () =>
       allocateHolderRewardPage(
         [itemAt(holders, 1), itemAt(holders, 0)],
+        0n,
         20n,
         total,
       ),
@@ -134,94 +136,83 @@ test("allocation pages use one global denominator and preserve zero-atom qualifi
     () =>
       allocateHolderRewardPage(
         [{ address: address(0), weight: -1n }],
+        0n,
         20n,
         total,
       ),
     /nonnegative/,
   );
   assert.throws(
-    () => allocateHolderRewardPage(holders, 20n, total - 1n),
+    () => allocateHolderRewardPage(holders, 0n, 20n, total - 1n),
     /exceeds/,
   );
 });
 
-test("paged BCS, roots and proofs match monolithic bytes across odd leaves, domains, pages and interrupted resume", async () => {
+test("paged BCS, roots and proofs match monolithic bytes across odd leaves, pages and interrupted resume", async () => {
   for (const count of [1, 3, 7, 128, 129]) {
     const rows = allocations(count);
-    const domains: readonly RewardLeafDomain[] = [
-      MIGRATOR_REWARD_LEAF_DOMAIN,
-      PRESALE_REWARD_LEAF_DOMAIN,
-    ];
-    for (const leafDomain of domains) {
-      const expected = buildRewardManifest({
-        ...options,
-        leafDomain,
-        allocations: rows,
-      });
-      const { allocations: expectedProofs, ...expectedHeader } = expected;
-      for (const pageSize of [1, 3, 32]) {
-        const fixture = pageStore(async (offset, size) =>
-          rows.slice(offset, offset + size),
-        );
-        const write = fixture.store.writeHashes;
-        let crashed = false;
-        fixture.store.writeHashes = async (...args) => {
-          await write(...args);
-          if (!crashed) {
-            crashed = true;
-            throw new Error("injected crash after durable page");
+    const expected = buildRewardManifest({
+      ...options,
+      allocations: rows,
+    });
+    const { allocations: expectedProofs, ...expectedHeader } = expected;
+    for (const pageSize of [1, 3, 32]) {
+      const fixture = pageStore(async (offset, size) =>
+        rows.slice(offset, offset + size),
+      );
+      const write = fixture.store.writeHashes;
+      let crashed = false;
+      fixture.store.writeHashes = async (...args) => {
+        await write(...args);
+        if (!crashed) {
+          crashed = true;
+          throw new Error("injected crash after durable page");
+        }
+      };
+      await assert.rejects(
+        buildRewardManifestPages(
+          { ...options, leafCount: count, pageSize },
+          fixture.store,
+        ),
+        /injected crash/,
+      );
+      fixture.store.writeHashes = write;
+      if (count === 129 && pageSize === 32) {
+        const writeProofs = fixture.store.writeProofs;
+        let proofCrash = false;
+        fixture.store.writeProofs = async (...args) => {
+          await writeProofs(...args);
+          if (!proofCrash) {
+            proofCrash = true;
+            throw new Error("injected crash after durable proof");
           }
         };
         await assert.rejects(
           buildRewardManifestPages(
-            { ...options, leafDomain, leafCount: count, pageSize },
+            { ...options, leafCount: count, pageSize },
             fixture.store,
           ),
-          /injected crash/,
+          /durable proof/,
         );
-        fixture.store.writeHashes = write;
-        if (count === 129 && pageSize === 32) {
-          const writeProofs = fixture.store.writeProofs;
-          let proofCrash = false;
-          fixture.store.writeProofs = async (...args) => {
-            await writeProofs(...args);
-            if (!proofCrash) {
-              proofCrash = true;
-              throw new Error("injected crash after durable proof");
-            }
-          };
-          await assert.rejects(
-            buildRewardManifestPages(
-              { ...options, leafDomain, leafCount: count, pageSize },
-              fixture.store,
-            ),
-            /durable proof/,
-          );
-          fixture.store.writeProofs = writeProofs;
-        }
-        const actual = await buildRewardManifestPages(
-          { ...options, leafDomain, leafCount: count, pageSize },
-          fixture.store,
-        );
-        assert.deepEqual(actual, {
-          ...expectedHeader,
-          leafCount: count,
-          leafDomain,
-        });
-        assert.deepEqual([...fixture.proofs.values()], expectedProofs);
-        assert.ok(fixture.stats.allocations <= pageSize);
-        assert.ok(fixture.stats.hashes <= 2 * pageSize);
-        assert.ok(fixture.stats.proofs <= pageSize);
-        assert.equal(validateRewardManifestSummary(actual, leafDomain), actual);
-        assert.equal(
-          verifyRewardSummaryProof(
-            actual,
-            itemAt(expectedProofs, 0),
-            leafDomain,
-          ),
-          true,
-        );
+        fixture.store.writeProofs = writeProofs;
       }
+      const actual = await buildRewardManifestPages(
+        { ...options, leafCount: count, pageSize },
+        fixture.store,
+      );
+      assert.deepEqual(actual, {
+        ...expectedHeader,
+        leafCount: count,
+      });
+      assert.deepEqual([...fixture.proofs.values()], expectedProofs);
+      assert.ok(fixture.stats.allocations <= pageSize);
+      assert.ok(fixture.stats.hashes <= 2 * pageSize);
+      assert.ok(fixture.stats.proofs <= pageSize);
+      assert.equal(validateRewardManifestSummary(actual), actual);
+      assert.equal(
+        verifyRewardSummaryProof(actual, itemAt(expectedProofs, 0)),
+        true,
+      );
     }
   }
 });

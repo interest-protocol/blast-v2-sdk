@@ -59,12 +59,12 @@ export async function runHolderRewardsOperator(args: string[]): Promise<void> {
   if (
     !config.chainId ||
     !config.grpcUrl ||
-    !config.deployment ||
+    !config.vault ||
     !config.vaultId ||
     config.network !== "mainnet"
   )
     throw new Error(
-      "config needs grpcUrl, network, expected genesis chainId, deployment and vaultId",
+      "config needs grpcUrl, network, expected genesis chainId, vault and vaultId",
     );
   const client = new SuiGrpcClient({
     baseUrl: config.grpcUrl,
