@@ -1,165 +1,81 @@
-/**
- * Every `#[error(code = N)]` constant of the fresh-stack `blast_presale`
- * package, by module; a name's index is its code. `test/presale-aborts.test.ts`
- * checks it against the contracts source at the commit
- * `abi/pr150-consumers.json` freezes. Other packages reuse module names such
- * as `cetus`, `bluefin`, `bps` and `package_admin`: check the abort's package.
- */
-export const PRESALE_ABORTS = {
-  blast_presale: [
-    "EInvalidAssetPair",
-    "EInvalidRaiseTarget",
-    "EInvalidTokenAllocation",
-    "EInvalidWindow",
-    "EInvalidEligibilityPolicy",
-    "EInvalidLifecycle",
-    "EPresaleEnded",
-    "EPresaleNotEnded",
-    "EZeroCommitment",
-    "EWalletCapExceeded",
-    "EParticipantCapacityReached",
-    "EInvalidEligibilityProof",
-    "EWrongEligibilityPolicy",
-    "ETotalCommitmentOverflow",
-    "ENoCommitment",
-    "EWrongPresaleCap",
-    "ELiquidityDeadlineNotReached",
-    "EInitialSupplyNotZero",
-    "EInvalidFeeSplit",
-    "EWrongMigrationWitness",
-    "EBelowMinimumCommitment",
-    "EUnreachableRaise",
-    "EUnseedablePrice",
-    "EInvalidUncappedPhase",
-    "EUncappedPhaseNotOpen",
-    "EPresaleFilled",
-    "EInvalidRaiseAllocation",
-    "EInvalidVestingTerms",
-    "EPresaleNotStarted",
-    "EPresaleStarted",
-    "EProtocolFeesUnchanged",
-    "EWrongPartner",
-    "ENoPartnerPayout",
-    "EInvalidHardCap",
-    "EMissingSetting",
-    "ESaleTokenNotUnregulated",
-    "EAboveFeePolicy",
-    "EProtocolFeesIncreased",
-  ],
-  blast_presale_package: ["EInvalidPauseBits", "EPauseUnchanged", "EPaused"],
-  aftermath: [
-    "EPoolMismatch",
-    "EDaoFeePoolMismatch",
-    "EWrongPresale",
-    "EInvalidDaoFee",
-    "EWrongVault",
-  ],
-  holder_rewards: [
-    "EWrongRound",
-    "EOverlappingInterval",
-    "EInvalidIndex",
-    "EAlreadyClaimed",
-    "EInvalidBeneficiary",
-    "EInvalidProof",
-    "EWrongVault",
-    "EClaimsStillOpen",
-    "EEmptyClaim",
-    "EInsufficientBudget",
-    "EReserveSettled",
-    "EOverReserve",
-    "ETreasuryChanged",
-    "EClaimDeadlineOverflow",
-    "EClaimsClosed",
-  ],
-  cetus: ["EInvalidCoinOrder", "EPositionPoolMismatch", "EWrongCoinPair"],
-  bluefin: ["EPositionPoolMismatch", "EInvalidTier", "ESymbolTooLong"],
-  presale_vault: [
-    "ENoMigrationResiduals",
-    "EZeroLiquidity",
-    "EWrongPresaleCap",
-    "EWrongPartner",
-    "EInvalidCommitment",
-    "EInvalidLeafCount",
-    "EEmptyBudget",
-    "EEmptyInterval",
-    "EBudgetOverflow",
-    "EZeroTreasury",
-    "EZeroClaimWindow",
-    "EWrongRoundProposal",
-    "EGasReserveTooLarge",
-    "EMemeRewardsUnsupported",
-  ],
-  fee_policy: ["EInvalidFees", "EInvalidDestination"],
-  creation_policy: [
-    "EAllowanceUnchanged",
-    "EQuoteNotAllowed",
-    "EMigrationWitnessNotAllowed",
-    "EInvalidMigrationWitness",
-    "EPartnerNotAccepted",
-  ],
-  bps: ["EInvalidBps"],
-  package_admin: ["EWrongUpgradeAction", "EInvalidDigest", "EUnguardedNotice"],
-} as const;
-
-export type PresaleAbortModule = keyof typeof PRESALE_ABORTS;
-export type PresaleAbortName =
-  (typeof PRESALE_ABORTS)[PresaleAbortModule][number];
+import { abortName } from "@interest-protocol/blast-core/aborts";
 
 /**
- * The error constant a presale-package Move abort names: `module` is the
- * abort location's module and `code` its clever error code (`errorCode` in
- * `@mysten/sui` execution errors). Null for any other module or code.
- *
- * The key is the module name only: check first that the abort location's
- * package is the presale package, or a migrators `cetus` abort would be named
- * as the presale one.
+ * The `blast_presale` error registry (`sui/presale/sources/errors.move`): a
+ * name's index is its numeric abort code. Codes are package-wide, raised from
+ * `blast_presale`, `creation_policy` and `fee_policy` alike, so check first
+ * that the abort location's package is the presale package. A presale call
+ * also aborts inside `blast_core` (`coreAbortName`), `blast_admin`
+ * (`adminAbortName`) and `blast_partners`.
  */
-export function presaleAbortName(
-  module: string,
-  code: number,
-): PresaleAbortName | null {
-  return abortName(PRESALE_ABORTS, module, code) as PresaleAbortName | null;
+export const PRESALE_ABORTS = [
+  "EUnguardedDelay",
+  "EAllowanceUnchanged",
+  "EQuoteNotAllowed",
+  "EVenueNotAllowed",
+  "EInvalidVenue",
+  "EInvalidFees",
+  "EInvalidAssetPair",
+  "EInvalidRaiseTarget",
+  "EInvalidTokenAllocation",
+  "EInvalidWindow",
+  "EInvalidEligibilityPolicy",
+  "EInvalidLifecycle",
+  "EPresaleEnded",
+  "EPresaleNotEnded",
+  "EZeroCommitment",
+  "EWalletCapExceeded",
+  "EParticipantCapacityReached",
+  "EInvalidEligibilityProof",
+  "EWrongEligibilityPolicy",
+  "ETotalCommitmentOverflow",
+  "ENoCommitment",
+  "EWrongPresaleCap",
+  "ELiquidityDeadlineNotReached",
+  "EInitialSupplyNotZero",
+  "EBelowMinimumCommitment",
+  "EUnreachableRaise",
+  "EUnseedablePrice",
+  "EInvalidUncappedPhase",
+  "EUncappedPhaseNotOpen",
+  "EPresaleFilled",
+  "EInvalidRaiseAllocation",
+  "EPresaleNotStarted",
+  "EPresaleStarted",
+  "EProtocolFeesUnchanged",
+  "EInvalidHardCap",
+  "EMissingSetting",
+  "ESaleTokenNotUnregulated",
+  "EAboveFeePolicy",
+  "EProtocolFeesIncreased",
+] as const;
+
+export type PresaleAbortName = (typeof PRESALE_ABORTS)[number];
+
+/** The error a `blast_presale` abort `code` names; null for an unknown code. */
+export function presaleAbortName(code: number): PresaleAbortName | null {
+  return abortName(PRESALE_ABORTS, code);
 }
 
 /**
- * Every `#[error(code = N)]` constant of the Aftermath DAO-pool vendor package
- * `blast_aftermath_dao_presale`, by module and indexed by code, checked like
- * `PRESALE_ABORTS`.
+ * The `#[error(code = N)]` constants of the Aftermath DAO-pool vendor package
+ * `blast_aftermath_dao_presale`, indexed by code. Its `migrate` also aborts
+ * inside `blast_core` (a wrong venue or package witness on the hand-off) and
+ * Aftermath's packages.
  */
-export const AFTERMATH_PRESALE_ABORTS = {
-  blast_aftermath_dao_presale: [
-    "EPoolMismatch",
-    "EDaoFeePoolMismatch",
-    "EWrongPresale",
-    "EWrongMigrator",
-  ],
-} as const;
+export const AFTERMATH_DAO_PRESALE_ABORTS = [
+  "EPoolMismatch",
+  "EDaoFeePoolMismatch",
+  "EInvalidPackageWitness",
+  "EWrongPackageWitness",
+] as const;
 
-export type AftermathPresaleAbortName =
-  (typeof AFTERMATH_PRESALE_ABORTS)["blast_aftermath_dao_presale"][number];
+export type AftermathDaoPresaleAbortName =
+  (typeof AFTERMATH_DAO_PRESALE_ABORTS)[number];
 
-/**
- * The error constant an abort in the Aftermath vendor package names; null for
- * any other module or code. Check first that the abort location's package is
- * the vendor package. Its `migrate` also aborts inside `blast_presale` and
- * Aftermath's packages: name the former with `presaleAbortName`.
- */
-export function aftermathPresaleAbortName(
-  module: string,
+/** The error a vendor abort `code` names; null for an unknown code. */
+export function aftermathDaoPresaleAbortName(
   code: number,
-): AftermathPresaleAbortName | null {
-  return abortName(
-    AFTERMATH_PRESALE_ABORTS,
-    module,
-    code,
-  ) as AftermathPresaleAbortName | null;
-}
-
-function abortName(
-  aborts: Readonly<Record<string, readonly string[]>>,
-  module: string,
-  code: number,
-): string | null {
-  if (!Object.hasOwn(aborts, module) || !Number.isInteger(code)) return null;
-  return aborts[module]?.[code] ?? null;
+): AftermathDaoPresaleAbortName | null {
+  return abortName(AFTERMATH_DAO_PRESALE_ABORTS, code);
 }

@@ -1,158 +1,171 @@
-import { suiObjectIdBcs } from "@interest-protocol/blast-core/bcs";
+import {
+  moveTypeNameBcs,
+  suiObjectIdBcs,
+  suiUidBcs,
+  u64Bcs,
+} from "@interest-protocol/blast-core/bcs";
 import type { SuiEventPosition } from "@interest-protocol/blast-core/events";
 import { normalizeSuiEventPosition } from "@interest-protocol/blast-core/events";
 import { deploymentObject } from "@interest-protocol/blast-core/ptb";
-import type {
-  SharedObjectReference,
-  SuiPackageReference,
-} from "@interest-protocol/blast-core/sui";
+import type { SharedObjectIdentity } from "@interest-protocol/blast-core/sui";
 import {
-  normalizeSharedObjectReference,
+  normalizeSharedObjectIdentity,
   normalizeSuiPackageReference,
 } from "@interest-protocol/blast-core/sui";
-import type { LaunchTypes } from "@interest-protocol/blast-launchpad-sdk/transactions";
-import { normalizeLaunchTypes } from "@interest-protocol/blast-launchpad-sdk/transactions";
 import { bcs } from "@mysten/sui/bcs";
-import type { SuiClientTypes } from "@mysten/sui/client";
+import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
 import type {
+  Transaction,
   TransactionArgument,
-  TransactionObjectArgument,
   TransactionObjectInput,
   TransactionResult,
 } from "@mysten/sui/transactions";
-import { Transaction } from "@mysten/sui/transactions";
 import {
   normalizeStructTag,
   normalizeSuiAddress,
+  normalizeSuiObjectId,
   parseStructTag,
 } from "@mysten/sui/utils";
-import type { AftermathLpCoin } from "./aftermath-lp.ts";
-import { assertAftermathLpCoin } from "./aftermath-lp.ts";
-import type {
-  PresaleCreation,
-  PresaleDeployment,
-  PresalePayout,
-  PresaleTermsSettings,
-} from "./transactions.ts";
-import { PresaleCalls } from "./transactions.ts";
 
-// The Aftermath DAO-pool vendor package (`blast_aftermath_dao_presale`,
-// contracts ADR 0104): a `blast_presale` migrator into a 50/50 Aftermath pool
-// behind a DAO-fee pool that pays the partner treasury. Its pool's weights and
-// fees are the module's constants, so its sales carry no pool tier (ADR 0111).
+// The Aftermath DAO-pool vendor package `blast_aftermath_dao_presale`: an
+// immutable presale venue over `blast_core` alone. Its `AdminCap` prepares a
+// sale token with the `CreatePoolCapV2` of a fresh LP coin and receives the
+// `VenueTicket` `blast_presale::new` redeems; anyone then migrates the funded
+// sale into a 50/50 Aftermath pool wrapped in a DAO-fee pool paying the
+// partner treasury. It creates no vault and is never in the `VaultRegistry`.
 
-/** The published vendor package; it is immutable, so both IDs are the same. */
-export type AftermathDaoPresaleDeployment = SuiPackageReference;
-
-/** A vendor sale's types: its sale token and Quote, and its fresh Aftermath LP coin. */
-export type AftermathDaoTypes = LaunchTypes & {
-  /** The fresh LP coin `Lp` whose `CreatePoolCapV2` the sale's pool creation holds. */
-  lpType: string;
+/**
+ * The published vendor package (immutable, so both IDs are equal), its
+ * `AdminCap` when known, and the Aftermath shared objects its `migrate` takes.
+ */
+export type AftermathDaoPresaleDeployment = {
+  packageId: string;
+  originalPackageId: string;
+  adminCapId?: string;
+  aftermath: {
+    /** Aftermath AMM's shared `pool_registry::PoolRegistry`. */
+    poolRegistry: SharedObjectIdentity;
+    /** Aftermath DAO-fee package's shared `version::Version`. */
+    daoFeeVersion: SharedObjectIdentity;
+  };
 };
 
+/** Constants of `blast_aftermath_dao_presale`, mirrored for display only. */
+export const AFTERMATH_DAO_FEE_BPS = 200;
+/** The partner treasury: every pool's DAO fees and owner cap. */
+export const AFTERMATH_DAO_TREASURY = normalizeSuiAddress(
+  "0x37cf46b499f740e653644bd2f7a8ed97f248e8b3c69d5d12c97d7845a54c0cd8",
+);
+/** Owns every pool's LP coin, locking it forever. */
+export const AFTERMATH_DAO_BURN_ADDRESS = normalizeSuiAddress("0x0");
+
+export function normalizeAftermathDaoPresaleDeployment(
+  deployment: AftermathDaoPresaleDeployment,
+): AftermathDaoPresaleDeployment {
+  return {
+    ...normalizeSuiPackageReference("aftermathDaoPresale", deployment),
+    ...(deployment.adminCapId === undefined
+      ? {}
+      : { adminCapId: normalizeSuiObjectId(deployment.adminCapId) }),
+    aftermath: {
+      poolRegistry: normalizeSharedObjectIdentity(
+        "aftermathDaoPresale.aftermath.poolRegistry",
+        deployment.aftermath.poolRegistry,
+      ),
+      daoFeeVersion: normalizeSharedObjectIdentity(
+        "aftermathDaoPresale.aftermath.daoFeeVersion",
+        deployment.aftermath.daoFeeVersion,
+      ),
+    },
+  };
+}
+
+/**
+ * `blast_aftermath_dao_presale` calls in Move argument order; `&mut
+ * TxContext` is implicit. `PackageWitness` is always the presale's
+ * `blast_presale_package::PackageWitness`, so only a `Migration` the presale
+ * sealed can consume the reservation.
+ */
 export class AftermathDaoPresaleCalls {
   readonly deployment: AftermathDaoPresaleDeployment;
-  readonly presale: PresaleCalls;
+  /** `blast_aftermath_dao_presale::Venue`, the witness the `CreationPolicy` admits. */
+  readonly venueType: string;
+  /** The presale's package witness, `prepare`'s fourth type argument. */
+  readonly packageWitnessType: string;
 
   constructor(
     deployment: AftermathDaoPresaleDeployment,
-    presale: PresaleDeployment,
+    presale: { originalPackageId: string },
   ) {
-    this.deployment = normalizeSuiPackageReference(
-      "aftermathDaoPresale",
-      deployment,
+    this.deployment = normalizeAftermathDaoPresaleDeployment(deployment);
+    this.venueType = normalizeStructTag(
+      `${this.deployment.originalPackageId}::blast_aftermath_dao_presale::Venue`,
     );
-    this.presale = new PresaleCalls(presale);
+    this.packageWitnessType = normalizeStructTag(
+      `${normalizeSuiObjectId(presale.originalPackageId)}::blast_presale_package::PackageWitness`,
+    );
   }
 
   /**
-   * `new` (vendor `AdminCap`): starts a sale that migrates through this
-   * package and returns its `PresaleInitializer`. Configure it with
-   * `presale.configurePresaleTerms`; the vendor's `finalize` sets the LP-fee
-   * split.
+   * `prepare<Lp, SaleToken, Quote, PackageWitness>(admin_cap,
+   * create_pool_cap)`: shares the sale token's `PoolCreation<Lp, SaleToken>`
+   * and returns the `VenueTicket<SaleToken, Quote>` the same PTB passes to
+   * `blast_presale::new`. The contract cannot bind `Lp` to the capability; a
+   * wrong `Lp` aborts only at migration, so pass the verified
+   * `AftermathLpCoin`'s `lpType` and `createPoolCapId`.
    */
-  start(
-    options: LaunchTypes & {
-      adminCap: TransactionObjectInput;
-      treasuryCap: TransactionObjectInput;
-    },
-  ) {
+  prepare(options: {
+    lpType: string;
+    saleTokenType: string;
+    quoteType: string;
+    adminCap: TransactionObjectInput;
+    createPoolCap: TransactionObjectInput;
+  }) {
+    const typeArguments = [
+      normalizeStructTag(options.lpType),
+      normalizeStructTag(options.saleTokenType),
+      normalizeStructTag(options.quoteType),
+      this.packageWitnessType,
+    ];
     return (tx: Transaction): TransactionResult =>
       tx.moveCall({
-        target: this.#target("new"),
-        typeArguments: this.#saleTypes(options),
-        arguments: [
-          tx.object(options.adminCap),
-          deploymentObject(tx, this.presale.deployment.packageVersion, false),
-          tx.object(options.treasuryCap),
-          deploymentObject(tx, this.presale.deployment.creationPolicy, false),
-          deploymentObject(tx, this.presale.deployment.feePolicy, false),
-        ],
-      });
-  }
-
-  /**
-   * `finalize` (vendor `AdminCap`): names the treasury as the sale's only
-   * LP-fee recipient, finalizes it, sends its `PresaleCap` to the treasury,
-   * shares a `PoolCreation<Lp>` binding the verified LP coin's
-   * `CreatePoolCapV2` to it, and returns the pending `Presale`, which the
-   * same PTB must `share`. It aborts with `EWrongMigrator` for an initializer
-   * another migrator started. Throws unless `lpCoin` is the
-   * `AftermathLpCoin` `verifyAftermathLpCoin` returned.
-   */
-  finalize(
-    options: LaunchTypes & {
-      adminCap: TransactionObjectInput;
-      initializer: TransactionArgument;
-      memeCurrency: SharedObjectReference<true>;
-      /** The verified fresh LP coin whose `CreatePoolCapV2` the sale binds. */
-      lpCoin: AftermathLpCoin;
-    },
-  ) {
-    const lpCoin = assertAftermathLpCoin(options.lpCoin);
-    const typeArguments = [lpCoin.lpType, ...this.#saleTypes(options)];
-    return (tx: Transaction): TransactionResult =>
-      tx.moveCall({
-        target: this.#target("finalize"),
+        target: this.#target("prepare"),
         typeArguments,
         arguments: [
           tx.object(options.adminCap),
-          deploymentObject(tx, this.presale.deployment.packageVersion, false),
-          options.initializer,
-          sharedObject(tx, "memeCurrency", options.memeCurrency, true),
-          tx.object(lpCoin.createPoolCapId),
+          tx.object(options.createPoolCap),
         ],
       });
   }
 
   /**
-   * `migrate` (anyone, while the sale is `Funded`): consumes the sale's
-   * shared `PoolCreation<Lp>`, seeds the 50/50 Aftermath pool, wraps it in the
-   * DAO-fee pool paying the treasury, and locks the LP at `0x0`.
+   * `migrate<Lp, SaleToken, Quote>(migration, pool_creation, pool_registry,
+   * dao_fee_version)`: redeems the presale's `Migration` from the same PTB,
+   * consumes the shared `PoolCreation` (from `PoolCreationReserved`), seeds
+   * the pool, shares the DAO-fee pool and locks the LP.
    */
-  migrate(
-    options: AftermathDaoTypes & {
-      presale: SharedObjectReference<true>;
-      /** The sale's `PoolCreation<Lp>`, from `PoolCreationReserved`; consumed. */
-      poolCreation: SharedObjectReference<true>;
-      /** Aftermath's shared `PoolRegistry`. */
-      poolRegistry: SharedObjectReference<true>;
-      /** The Aftermath DAO-fee package's shared `Version`. */
-      daoFeeVersion: SharedObjectReference<false>;
-    },
-  ) {
+  migrate(options: {
+    migration: TransactionArgument;
+    lpType: string;
+    saleTokenType: string;
+    quoteType: string;
+    poolCreation: SharedObjectIdentity;
+  }) {
+    const typeArguments = [
+      normalizeStructTag(options.lpType),
+      normalizeStructTag(options.saleTokenType),
+      normalizeStructTag(options.quoteType),
+    ];
+    const { aftermath } = this.deployment;
     return (tx: Transaction): void => {
       tx.moveCall({
         target: this.#target("migrate"),
-        typeArguments: this.#lpTypes(options),
+        typeArguments,
         arguments: [
-          sharedObject(tx, "presale", options.presale, true),
-          deploymentObject(tx, this.presale.deployment.packageVersion, false),
-          sharedObject(tx, "poolCreation", options.poolCreation, true),
-          deploymentObject(tx, this.presale.deployment.feePolicy, false),
-          sharedObject(tx, "poolRegistry", options.poolRegistry, true),
-          sharedObject(tx, "daoFeeVersion", options.daoFeeVersion, false),
-          tx.object.clock(),
+          options.migration,
+          deploymentObject(tx, options.poolCreation, true),
+          deploymentObject(tx, aftermath.poolRegistry, true),
+          deploymentObject(tx, aftermath.daoFeeVersion, false),
         ],
       });
     };
@@ -161,107 +174,187 @@ export class AftermathDaoPresaleCalls {
   #target(functionName: string): string {
     return `${this.deployment.packageId}::blast_aftermath_dao_presale::${functionName}`;
   }
-
-  #saleTypes(types: LaunchTypes): string[] {
-    const { memeType, quoteType } = normalizeLaunchTypes(types);
-    return [memeType, quoteType];
-  }
-
-  #lpTypes(types: AftermathDaoTypes): string[] {
-    return [normalizeStructTag(types.lpType), ...this.#saleTypes(types)];
-  }
 }
 
-export class AftermathDaoPresaleTransactions {
-  readonly call: AftermathDaoPresaleCalls;
+// === State ===
 
-  constructor(
-    deployment: AftermathDaoPresaleDeployment,
-    presale: PresaleDeployment,
+/**
+ * BCS of the Aftermath AMM `pool::CreatePoolCapV2`: its UID only; the LP
+ * coin's `TreasuryCap` and `CoinMetadata` are dynamic fields of it.
+ */
+const createPoolCapV2Bcs = bcs.struct("CreatePoolCapV2", { id: suiUidBcs });
+
+/**
+ * BCS of the shared `PoolCreation<Lp, SaleToken>`:
+ * `{id, package_witness: TypeName, create_pool_cap: CreatePoolCapV2}`.
+ */
+export const poolCreationBcs = bcs.struct("PoolCreation", {
+  id: suiUidBcs,
+  package_witness: moveTypeNameBcs,
+  create_pool_cap: createPoolCapV2Bcs,
+});
+
+export type PoolCreationState = {
+  objectId: string;
+  lpType: string;
+  saleTokenType: string;
+  /** The product package witness the reservation is bound to (original IDs). */
+  packageWitness: string;
+  createPoolCapId: string;
+};
+
+/** Decodes a `PoolCreation<Lp, SaleToken>` object of the vendor package. */
+export function decodePoolCreationObject(
+  object: { objectId: string; type: string; content: Uint8Array },
+  deployment: Pick<AftermathDaoPresaleDeployment, "originalPackageId">,
+): PoolCreationState {
+  const tag = parseStructTag(object.type);
+  const [lpType, saleTokenType, ...extra] = tag.typeParams;
+  if (
+    tag.address !== normalizeSuiAddress(deployment.originalPackageId) ||
+    tag.module !== "blast_aftermath_dao_presale" ||
+    tag.name !== "PoolCreation" ||
+    lpType === undefined ||
+    saleTokenType === undefined ||
+    extra.length > 0
   ) {
-    this.call = new AftermathDaoPresaleCalls(deployment, presale);
+    throw new TypeError(`object ${object.objectId} is not a PoolCreation`);
   }
+  const parsed = poolCreationBcs.parse(object.content);
+  const objectId = normalizeSuiObjectId(object.objectId);
+  if (normalizeSuiObjectId(parsed.id.id.bytes) !== objectId) {
+    throw new TypeError(`object ${object.objectId} has a mismatched UID`);
+  }
+  return {
+    objectId,
+    lpType: normalizeStructTag(lpType),
+    saleTokenType: normalizeStructTag(saleTokenType),
+    packageWitness: parsed.package_witness,
+    createPoolCapId: normalizeSuiObjectId(parsed.create_pool_cap.id.id.bytes),
+  };
+}
 
-  /**
-   * One PTB, with the vendor `AdminCap`: `new`, every setter but the LP-fee
-   * split (with `set_partner` when `partner` is given), the vendor's
-   * `finalize`, then `share` from `startMs`. The `PresaleCap` goes to the
-   * treasury inside `finalize`, so nothing is returned to the sender.
-   */
-  createSale(
-    options: LaunchTypes &
-      PresaleTermsSettings &
-      Pick<PresaleCreation, "startMs"> & {
-        adminCap: TransactionObjectInput;
-        treasuryCap: TransactionObjectInput;
-        memeCurrency: SharedObjectReference<true>;
-        lpCoin: AftermathLpCoin;
+/**
+ * The vendor sale created in transaction `creationDigest`: its one
+ * `PoolCreationReserved` (`prepare` and the sale's `new` share one PTB) and
+ * the live `PoolCreation`, which `migrate` takes; `poolCreation` is null once
+ * the sale migrated. Null when the transaction reserved no pool creation.
+ */
+export async function findPoolCreation(
+  client: ClientWithCoreApi,
+  options: {
+    deployment: Pick<AftermathDaoPresaleDeployment, "originalPackageId">;
+    creationDigest: string;
+  },
+): Promise<{
+  poolCreationId: string;
+  lpType: string;
+  saleTokenType: string;
+  quoteType: string;
+  packageWitness: string;
+  poolCreation: (PoolCreationState & SharedObjectIdentity) | null;
+} | null> {
+  const result = await client.core.getTransaction({
+    digest: options.creationDigest,
+    include: { events: true },
+  });
+  const transaction = result.Transaction ?? result.FailedTransaction;
+  const reservedType = `${normalizeSuiAddress(options.deployment.originalPackageId)}::blast_aftermath_dao_presale::PoolCreationReserved`;
+  const reservations = (transaction.events ?? []).flatMap((event) => {
+    const tag = parseStructTag(event.eventType);
+    const [lpType, saleTokenType, quoteType, ...extra] = tag.typeParams;
+    if (
+      `${tag.address}::${tag.module}::${tag.name}` !== reservedType ||
+      lpType === undefined ||
+      saleTokenType === undefined ||
+      quoteType === undefined ||
+      extra.length > 0
+    )
+      return [];
+    return [
+      {
+        lpType: normalizeStructTag(lpType),
+        saleTokenType: normalizeStructTag(saleTokenType),
+        quoteType: normalizeStructTag(quoteType),
+        payload: aftermathDaoPresaleEventBcs.PoolCreationReserved.parse(
+          event.bcs,
+        ),
       },
-  ): Transaction {
-    const tx = new Transaction();
-    const initializer = tx.add(this.call.start(options));
-    tx.add(
-      this.call.presale.configurePresaleTerms({ ...options, initializer }),
+    ];
+  });
+  if (reservations.length > 1) {
+    throw new TypeError(
+      `transaction ${options.creationDigest} reserved ${reservations.length} pool creations`,
     );
-    const presale = tx.add(this.call.finalize({ ...options, initializer }));
-    tx.add(this.call.presale.share({ ...options, presale }));
-    return tx;
   }
-
-  /**
-   * `migrate`, then, on a partnered sale, `pay_protocol_fees_with_partner` in
-   * the same PTB.
-   */
-  migrate(
-    options: Parameters<AftermathDaoPresaleCalls["migrate"]>[0] & PresalePayout,
-  ): Transaction {
-    const tx = new Transaction();
-    tx.add(this.call.migrate(options));
-    const { partner } = options;
-    if (partner) {
-      tx.add(
-        this.call.presale.payProtocolFeesWithPartner({ ...options, partner }),
+  const [reservation] = reservations;
+  if (!reservation) return null;
+  const poolCreationId = normalizeSuiObjectId(
+    reservation.payload.pool_creation_id,
+  );
+  const { objects } = await client.core.getObjects({
+    objectIds: [poolCreationId],
+    include: { content: true },
+  });
+  const object = objects[0];
+  let poolCreation: (PoolCreationState & SharedObjectIdentity) | null = null;
+  if (object && !(object instanceof Error)) {
+    if (object.owner.$kind !== "Shared") {
+      throw new TypeError(`PoolCreation ${poolCreationId} is not shared`);
+    }
+    poolCreation = {
+      ...decodePoolCreationObject(object, options.deployment),
+      initialSharedVersion: object.owner.Shared.initialSharedVersion,
+    };
+    if (
+      poolCreation.lpType !== reservation.lpType ||
+      poolCreation.saleTokenType !== reservation.saleTokenType
+    ) {
+      throw new TypeError(
+        `PoolCreation ${poolCreationId} does not match its reservation`,
       );
     }
-    return tx;
   }
+  return {
+    poolCreationId,
+    lpType: reservation.lpType,
+    saleTokenType: reservation.saleTokenType,
+    quoteType: reservation.quoteType,
+    packageWitness: reservation.payload.package_witness,
+    poolCreation,
+  };
 }
 
 // === Events ===
 
-const poolCreationReservedBcs = bcs.struct("PoolCreationReserved", {
-  presale_id: suiObjectIdBcs,
-  pool_creation_id: suiObjectIdBcs,
-});
-
-const migratedBcs = bcs.struct("Migrated", {
-  presale_id: suiObjectIdBcs,
-  pool_id: suiObjectIdBcs,
-  dao_fee_pool_id: suiObjectIdBcs,
-  owner_cap_id: suiObjectIdBcs,
-  lp_coin_id: suiObjectIdBcs,
-  lp: bcs.u64().transform({
-    input: (value: bigint) => value,
-    output: (value) => BigInt(value),
+export const aftermathDaoPresaleEventBcs = {
+  PoolCreationReserved: bcs.struct("PoolCreationReserved", {
+    pool_creation_id: suiObjectIdBcs,
+    package_witness: moveTypeNameBcs,
   }),
-});
-
-type AftermathDaoEventTypes = {
-  lpType: string;
-  memeType: string;
-  quoteType: string;
-  position: SuiEventPosition;
+  Migrated: bcs.struct("Migrated", {
+    presale_id: suiObjectIdBcs,
+    pool_id: suiObjectIdBcs,
+    dao_fee_pool_id: suiObjectIdBcs,
+    owner_cap_id: suiObjectIdBcs,
+    lp_coin_id: suiObjectIdBcs,
+    lp: u64Bcs,
+  }),
 };
 
-export type DecodedAftermathDaoPresaleEvent =
-  | (AftermathDaoEventTypes & {
-      kind: "PoolCreationReserved";
-      payload: ReturnType<typeof poolCreationReservedBcs.parse>;
-    })
-  | (AftermathDaoEventTypes & {
-      kind: "Migrated";
-      payload: ReturnType<typeof migratedBcs.parse>;
-    });
+export type AftermathDaoPresaleEventKind =
+  keyof typeof aftermathDaoPresaleEventBcs;
+
+export type DecodedAftermathDaoPresaleEvent = {
+  [Kind in AftermathDaoPresaleEventKind]: {
+    kind: Kind;
+    payload: ReturnType<(typeof aftermathDaoPresaleEventBcs)[Kind]["parse"]>;
+    lpType: string;
+    saleTokenType: string;
+    quoteType: string;
+    position: SuiEventPosition;
+  };
+}[AftermathDaoPresaleEventKind];
 
 /**
  * Decodes `PoolCreationReserved` (its `pool_creation_id` is what `migrate`
@@ -269,44 +362,28 @@ export type DecodedAftermathDaoPresaleEvent =
  */
 export function decodeAftermathDaoPresaleEvent(
   event: SuiClientTypes.EventEntry,
-  deployment: AftermathDaoPresaleDeployment,
+  deployment: Pick<AftermathDaoPresaleDeployment, "originalPackageId">,
 ): DecodedAftermathDaoPresaleEvent {
   const tag = parseStructTag(event.eventType);
-  const [lpType, memeType, quoteType, ...extra] = tag.typeParams;
-  const codec =
-    tag.name === "PoolCreationReserved"
-      ? poolCreationReservedBcs
-      : tag.name === "Migrated"
-        ? migratedBcs
-        : null;
+  const kind = tag.name as AftermathDaoPresaleEventKind;
+  const [lpType, saleTokenType, quoteType, ...extra] = tag.typeParams;
   if (
     tag.address !== normalizeSuiAddress(deployment.originalPackageId) ||
     tag.module !== "blast_aftermath_dao_presale" ||
-    codec === null ||
+    !Object.hasOwn(aftermathDaoPresaleEventBcs, kind) ||
     lpType === undefined ||
-    memeType === undefined ||
+    saleTokenType === undefined ||
     quoteType === undefined ||
     extra.length > 0
   ) {
     throw new TypeError(`unexpected Aftermath DAO event ${event.eventType}`);
   }
   return {
-    kind: tag.name,
-    payload: codec.parse(event.bcs),
+    kind,
+    payload: aftermathDaoPresaleEventBcs[kind].parse(event.bcs),
     lpType: normalizeStructTag(lpType),
-    memeType: normalizeStructTag(memeType),
+    saleTokenType: normalizeStructTag(saleTokenType),
     quoteType: normalizeStructTag(quoteType),
     position: normalizeSuiEventPosition(event),
   } as DecodedAftermathDaoPresaleEvent;
-}
-
-function sharedObject<const Mutable extends boolean>(
-  tx: Transaction,
-  name: string,
-  reference: SharedObjectReference<Mutable>,
-  mutable: Mutable,
-): TransactionObjectArgument {
-  return tx.sharedObjectRef(
-    normalizeSharedObjectReference(name, reference, mutable),
-  );
 }

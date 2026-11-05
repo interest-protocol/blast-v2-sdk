@@ -1,27 +1,42 @@
 import type {
   Delayed,
-  DelayedAction,
+  DelayedSet,
   PendingDelay,
 } from "@interest-protocol/blast-core/bcs";
 import {
   admission,
-  delayedActionBcs,
+  balanceBcs,
   delayedBcs,
   delayedSetBcs,
   moveTypeNameBcs,
-  suiBalanceBcs,
   suiIdBcs,
   suiObjectIdBcs,
   suiUidBcs,
+  tableBcs,
+  u64Bcs,
   unitKeyBcs,
+  vecSetBcs,
 } from "@interest-protocol/blast-core/bcs";
+import { bpsBcs } from "@interest-protocol/blast-core/bps";
+import type { FeeSplit } from "@interest-protocol/blast-core/fee-split";
+import { feeSplitBcs } from "@interest-protocol/blast-core/fee-split";
 import { normalizePositiveU64 } from "@interest-protocol/blast-core/integers";
-import type { RewardRoundTerms } from "@interest-protocol/blast-core/rewards/state";
-import { rewardRoundTermsBcs } from "@interest-protocol/blast-core/rewards/state";
+import type {
+  Recipient,
+  VestingTerms,
+} from "@interest-protocol/blast-core/payout";
+import {
+  recipientBcs,
+  vestingTermsBcs,
+} from "@interest-protocol/blast-core/payout";
+import type { Ledger } from "@interest-protocol/blast-core/protocol-fees";
+import { ledgerBcs } from "@interest-protocol/blast-core/protocol-fees";
 import type {
   SharedObjectIdentity,
   SharedObjectReference,
 } from "@interest-protocol/blast-core/sui";
+import { vaultId } from "@interest-protocol/blast-vault-sdk/state";
+import type { VaultDeployment } from "@interest-protocol/blast-vault-sdk/transactions";
 import { bcs } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
@@ -67,7 +82,7 @@ export type UncappedPhase = {
  * `blast_presale::HardCap`: from `startsAfterMs` into the window the sale takes
  * Quote only up to its raise, first come, first served; before then it
  * overflows. With `closesWhenFilled`, anyone may settle the sale as soon as its
- * raise is full under the hard cap (contracts ADR 0110).
+ * raise is full under the hard cap.
  */
 export type HardCap = {
   startsAfterMs: bigint;
@@ -75,42 +90,25 @@ export type HardCap = {
 };
 
 /**
- * `blast_presale::VestingTerms`: linear vesting from the schedule's start,
- * migration for a recipient share and the claim for a participant. Nothing vests
- * before `cliffMs`; the vested amount then steps up every `periodMs` until all
- * `periods` have elapsed.
+ * `blast_presale::RecipientShare`: one recipient's BPS share of the supply or
+ * of the raise, paid at migration or vested from it as its core `Recipient`
+ * says.
  */
-export type VestingTerms = {
-  cliffMs: bigint;
-  periodMs: bigint;
-  periods: bigint;
-};
-
-/**
- * `blast_presale::RecipientShare`: a BPS share of the supply, the raise, or LP
- * fees for an address. A token or raise share may vest from migration; a fee
- * share may not. Decoded shares always carry `vesting`, null when unvested.
- */
-export type BpsShare = {
-  recipient: string;
+export type RecipientShare = {
+  recipient: Recipient;
   bps: bigint;
-  vesting?: VestingTerms | null;
 };
 
-/**
- * `blast_presale::RecipientPayout`: exact atoms apportioned at creation, and
- * the terms they vest under from migration, if any.
- */
+/** `blast_presale::RecipientPayout`: the exact atoms apportioned at creation. */
 export type RecipientPayout = {
-  recipient: string;
+  recipient: Recipient;
   amount: bigint;
-  vesting: VestingTerms | null;
 };
 
 /**
  * `fee_policy::ProtocolFees`: Blast's BPS of the accepted raise, of the token
  * supply, and of each collected LP-fee asset. A presale snapshots them at
- * creation.
+ * creation; the LP-fee rates pass to its vault at migration.
  */
 export type ProtocolFees = {
   raiseBps: bigint;
@@ -130,37 +128,23 @@ export type PresaleLifecycle = (typeof PRESALE_LIFECYCLES)[number];
 
 // === BCS layouts (field order is the Move declaration order) ===
 
-const u64 = bcs.u64().transform({
-  input: (value: bigint) => value,
-  output: (value) => BigInt(value),
-});
-const address = bcs.Address.transform({
-  input: (value: string) => normalizeSuiAddress(value),
-  output: (value) => normalizeSuiAddress(value),
-});
 const digest = bcs.vector(bcs.u8()).transform({
   input: (value: string) => Array.from(fromHex(value)),
   output: (value) => toHex(Uint8Array.from(value)),
-});
-/** `bps::Bps(u64)`: a validated rate, laid out as its one `u64`. */
-const bps = bcs.struct("Bps", { pos0: u64 }).transform({
-  input: (value: bigint) => ({ pos0: value }),
-  output: (value) => value.pos0,
-});
-/** `sui::vec_set::VecSet<TypeName>` as normalized type strings. */
-const typeNameSet = bcs.struct("VecSet", {
-  contents: bcs.vector(moveTypeNameBcs),
 });
 
 /** BCS layout of `blast_presale::EligibilityPolicy`. */
 export const eligibilityPolicyBcs = bcs
   .enum("EligibilityPolicy", {
     Open: bcs.struct("Open", {
-      wallet_cap: u64,
-      max_participants: u64,
-      min_commitment: u64,
+      wallet_cap: u64Bcs,
+      max_participants: u64Bcs,
+      min_commitment: u64Bcs,
     }),
-    Allowlisted: bcs.struct("Allowlisted", { root: digest, leaf_count: u64 }),
+    Allowlisted: bcs.struct("Allowlisted", {
+      root: digest,
+      leaf_count: u64Bcs,
+    }),
   })
   .transform({
     input: (policy: EligibilityPolicy) =>
@@ -193,12 +177,12 @@ export const eligibilityPolicyBcs = bcs
 /** BCS layout of `blast_presale::UncappedPhase`. */
 export const uncappedPhaseBcs = bcs
   .struct("UncappedPhase", {
-    starts_after_ms: u64,
+    starts_after_ms: u64Bcs,
     access: bcs.enum("UncappedAccess", {
       Eligible: null,
       Anyone: bcs.struct("Anyone", {
-        max_participants: u64,
-        min_commitment: u64,
+        max_participants: u64Bcs,
+        min_commitment: u64Bcs,
       }),
     }),
   })
@@ -230,7 +214,10 @@ export const uncappedPhaseBcs = bcs
 
 /** BCS layout of `blast_presale::HardCap`. */
 export const hardCapBcs = bcs
-  .struct("HardCap", { starts_after_ms: u64, closes_when_filled: bcs.bool() })
+  .struct("HardCap", {
+    starts_after_ms: u64Bcs,
+    closes_when_filled: bcs.bool(),
+  })
   .transform({
     input: (value: HardCap) => ({
       starts_after_ms: value.startsAfterMs,
@@ -242,47 +229,19 @@ export const hardCapBcs = bcs
     }),
   });
 
-/** BCS layout of `blast_presale::VestingTerms`. */
-export const vestingTermsBcs = bcs
-  .struct("VestingTerms", { cliff_ms: u64, period_ms: u64, periods: u64 })
-  .transform({
-    input: (value: VestingTerms) => ({
-      cliff_ms: value.cliffMs,
-      period_ms: value.periodMs,
-      periods: value.periods,
-    }),
-    output: (value): VestingTerms => ({
-      cliffMs: value.cliff_ms,
-      periodMs: value.period_ms,
-      periods: value.periods,
-    }),
-  });
-const optionVesting = bcs.option(vestingTermsBcs);
-
-const bpsShareBcs = bcs
-  .struct("RecipientShare", { recipient: address, bps, vesting: optionVesting })
-  .transform({
-    input: (value: BpsShare) => ({ ...value, vesting: value.vesting ?? null }),
-    output: (value): BpsShare => value,
-  });
-const payoutBcs = bcs
-  .struct("RecipientPayout", {
-    recipient: address,
-    amount: u64,
-    vesting: optionVesting,
-  })
-  .transform({
-    input: (value: RecipientPayout) => value,
-    output: (value): RecipientPayout => value,
-  });
+/** BCS layout of `blast_presale::RecipientPayout`. */
+export const recipientPayoutBcs = bcs.struct("RecipientPayout", {
+  recipient: recipientBcs,
+  amount: u64Bcs,
+});
 
 /** BCS layout of `fee_policy::ProtocolFees`. */
 export const protocolFeesBcs = bcs
   .struct("ProtocolFees", {
-    raise_bps: bps,
-    token_bps: bps,
-    lp_fee_meme_bps: bps,
-    lp_fee_quote_bps: bps,
+    raise_bps: bpsBcs,
+    token_bps: bpsBcs,
+    lp_fee_meme_bps: bpsBcs,
+    lp_fee_quote_bps: bpsBcs,
   })
   .transform({
     input: (value: ProtocolFees) => ({
@@ -313,97 +272,70 @@ export const lifecycleBcs = bcs
     output: (value): PresaleLifecycle => value.$kind,
   });
 
-/** BCS layout of `blast_presale::FeeSplit`: the LP-fee recipients, then the holder-reward share. */
-export const presaleFeeSplitBcs = bcs.struct("FeeSplit", {
-  fee_recipients: bcs.vector(bpsShareBcs),
-  holder_rewards_bps: bps,
-});
-
 /** BCS layout of `blast_presale::Presale<SaleToken, Quote>`. */
 export const presaleBcs = bcs.struct("Presale", {
   id: suiUidBcs,
   presale_cap_id: suiIdBcs,
   lifecycle: lifecycleBcs,
-  duration_ms: u64,
-  liquidity_window_ms: u64,
-  start_ms: u64,
-  raise_target: u64,
+  duration_ms: u64Bcs,
+  liquidity_window_ms: u64Bcs,
+  start_ms: u64Bcs,
+  raise_target: u64Bcs,
   eligibility: eligibilityPolicyBcs,
   uncapped: bcs.option(uncappedPhaseBcs),
   hard_cap: bcs.option(hardCapBcs),
-  migration_witness: moveTypeNameBcs,
-  fee_split: presaleFeeSplitBcs,
-  total_commitments: u64,
-  participants: u64,
-  quote: suiBalanceBcs,
-  token_allocation: u64,
-  participant_vesting: optionVesting,
-  sale_tokens: suiBalanceBcs,
-  liquidity_tokens: suiBalanceBcs,
-  recipient_payouts: bcs.vector(payoutBcs),
-  recipient_tokens: suiBalanceBcs,
-  raise_payouts: bcs.vector(payoutBcs),
+  venue: moveTypeNameBcs,
+  fee_split: feeSplitBcs,
+  total_commitments: u64Bcs,
+  participants: u64Bcs,
+  quote: balanceBcs,
+  token_allocation: u64Bcs,
+  participant_vesting: bcs.option(vestingTermsBcs),
+  sale_tokens: balanceBcs,
+  liquidity_tokens: balanceBcs,
+  recipient_payouts: bcs.vector(recipientPayoutBcs),
+  recipient_tokens: balanceBcs,
+  raise_payouts: bcs.vector(recipientPayoutBcs),
   protocol_fees: protocolFeesBcs,
-  protocol_quote: u64,
-  protocol_tokens: suiBalanceBcs,
+  protocol_quote: u64Bcs,
+  protocol_tokens: balanceBcs,
   partner_id: bcs.option(suiObjectIdBcs),
-  unpaid_protocol_quote: bcs.option(suiBalanceBcs),
+  fee_ledger: ledgerBcs,
+});
+
+/** BCS layout of `blast_presale::PresaleCap`, the creator's owned capability. */
+export const presaleCapBcs = bcs.struct("PresaleCap", {
+  id: suiUidBcs,
+  presale_id: suiObjectIdBcs,
 });
 
 /** BCS layout of `blast_presale::Commitment`, stored under `CommitmentKey(address)`. */
 export const commitmentBcs = bcs.struct("Commitment", {
-  quote: u64,
-  wallet_cap: u64,
-});
-
-/** BCS layout of `presale_vault::Vault<Meme, Quote>`. */
-export const presaleVaultBcs = bcs.struct("Vault", {
-  id: suiUidBcs,
-  presale_id: suiIdBcs,
-  presale_cap_id: suiIdBcs,
-  pool_id: suiIdBcs,
-  fee_split: delayedBcs(unitKeyBcs, presaleFeeSplitBcs),
-  protocol_fees: delayedBcs(unitKeyBcs, protocolFeesBcs),
-  partner_id: bcs.option(suiObjectIdBcs),
-  unpaid_protocol_meme: suiBalanceBcs,
-  unpaid_protocol_quote: suiBalanceBcs,
-  migration_meme_residual: suiBalanceBcs,
-  migration_quote_residual: suiBalanceBcs,
-  holder_rewards_quote: suiBalanceBcs,
-  next_round: u64,
-  last_checkpoint: bcs.option(u64),
-  round_publication: delayedActionBcs(unitKeyBcs, rewardRoundTermsBcs),
+  quote: u64Bcs,
+  wallet_cap: u64Bcs,
 });
 
 /** BCS layout of `fee_policy::FeePolicy`, the package's one shared fee policy. */
 export const feePolicyBcs = bcs.struct("FeePolicy", {
   id: suiUidBcs,
-  destination: delayedBcs(unitKeyBcs, address),
   fees: delayedBcs(unitKeyBcs, protocolFeesBcs),
+});
+
+/**
+ * `blast_partners::partner_list::PartnerList`: the owner (here the
+ * `CreationPolicy`) and the `Table<ID, u64>` of accepted partners.
+ */
+const partnerListBcs = bcs.struct("PartnerList", {
+  owner: suiObjectIdBcs,
+  acceptance_ends_at_ms: tableBcs,
 });
 
 /** BCS layout of `creation_policy::CreationPolicy`, the package's one shared creation policy. */
 export const creationPolicyBcs = bcs.struct("CreationPolicy", {
   id: suiUidBcs,
-  allowed_quotes: typeNameSet,
-  migration_witnesses: delayedSetBcs(unitKeyBcs, moveTypeNameBcs),
-});
-
-/** BCS layout of `holder_rewards::Round<Meme, Quote>`. */
-
-/** The canonical round keeps optional gas custody separate from holder balances. */
-export const presaleRewardRoundBcs = bcs.struct("Round", {
-  id: suiUidBcs,
-  vault_id: suiIdBcs,
-  number: u64,
-  claim_deadline_ms: u64,
-  root: digest,
-  leaf_count: u64,
-  claimed_bitmap: bcs.vector(bcs.u256()),
-  meme: suiBalanceBcs,
-  quote: suiBalanceBcs,
-  treasury: address,
-  gas_reserve: bcs.option(suiBalanceBcs),
+  allowed_quotes: vecSetBcs(moveTypeNameBcs),
+  venues: delayedSetBcs(unitKeyBcs, moveTypeNameBcs),
+  partners: partnerListBcs,
 });
 
 // === Decoded objects ===
@@ -416,15 +348,14 @@ export type PresaleObject = {
 };
 
 export type PresaleState = SharedObjectReference<true> & {
-  /** The `SaleToken` type argument. */
-  memeType: string;
+  saleTokenType: string;
   quoteType: string;
   presaleCapId: string;
   lifecycle: PresaleLifecycle;
   /** The window's length: as created until the sale closes early, then the time it ran. */
   durationMs: bigint;
   liquidityWindowMs: bigint;
-  /** When commitments open, which may be after the share; zero while Pending. */
+  /** When commitments open, fixed by `share`; zero while Pending. */
   startMs: bigint;
   /**
    * Exclusive commitment end, derived from the start; zero while Pending. An
@@ -450,9 +381,10 @@ export type PresaleState = SharedObjectReference<true> & {
    * zero while Pending.
    */
   hardCapFromMs: bigint | null;
-  migrationWitness: string;
-  feeRecipients: BpsShare[];
-  holderRewardsBps: bigint;
+  /** The venue witness type (original IDs) the sale migrates to; see `venueOf`. */
+  venue: string;
+  /** The LP-fee split the sale's vault starts with. */
+  feeSplit: FeeSplit;
   totalCommitments: bigint;
   /**
    * Wallets holding an undelivered commitment: each joins with its first
@@ -480,117 +412,42 @@ export type PresaleState = SharedObjectReference<true> & {
   raisePayouts: RecipientPayout[];
   /** Blast's rates: snapshotted at creation; Blast's `FeeAdmin` may replace them before the start. */
   protocolFees: ProtocolFees;
-  /** Blast's share of the raise, paid on migration. */
+  /** Blast's share of the raise, moved into `feeLedger` on migration. */
   protocolQuote: bigint;
-  /**
-   * Blast's token share still in custody: paid on migration, or by
-   * `pay_protocol_fees_with_partner` for a partnered sale; locked forever on
-   * cancellation.
-   */
+  /** Blast's token share still in custody until migration; locked forever on cancellation. */
   protocolTokens: bigint;
-  /** The Blast partner named at creation, paid its cut of Blast's raise share. */
+  /** The Blast partner named at creation, paid its cut of Blast's fees. */
   partnerId: string | null;
   /**
-   * Blast's raise fee a partnered sale's migration holds until
-   * `pay_protocol_fees_with_partner`; null before migration, after the payout, and without a
-   * partner.
+   * Blast's raise and token fees from migration until paid: paid at once
+   * without a partner, held for `pay_protocol_fees_with_partner` with one.
    */
-  unpaidProtocolQuote: bigint | null;
+  feeLedger: Ledger;
 };
 
-/**
- * `presale_vault::Vault<Meme, Quote>`: a presale's position after migration,
- * or an owner's own position locked directly by `cetus::new_vault` or
- * `bluefin::new_vault` (contracts ADR 0109).
- */
-export type PresaleVaultState = SharedObjectReference<true> & {
-  memeType: string;
-  quoteType: string;
-  /** The zero ID for a vault without a presale; see `isVaultWithoutPresale`. */
-  presaleId: string;
-  /** The zero ID for a vault without a presale, so no `PresaleCap` matches it. */
-  presaleCapId: string;
-  poolId: string;
-  feeRecipients: BpsShare[];
-  holderRewardsBps: bigint;
-  /**
-   * The presale's snapshotted rates, or the `FeePolicy`'s at creation for a
-   * vault without a presale; only the LP-fee shares apply to the vault.
-   */
-  protocolFees: ProtocolFees;
-  feeSplitPolicy: Delayed<
-    null,
-    { fee_recipients: BpsShare[]; holder_rewards_bps: bigint }
-  >;
-  protocolFeesPolicy: Delayed<null, ProtocolFees>;
-  /**
-   * The partner the sale, or the owner of a vault without a presale, named,
-   * paid its cut of Blast's LP fees; null for none.
-   */
-  partnerId: string | null;
-  /** Blast's LP fees a partnered vault holds until `payProtocolLpFeesWithPartner`. */
-  unpaidProtocolMeme: bigint;
-  unpaidProtocolQuote: bigint;
-  migrationMemeResidual: bigint;
-  migrationQuoteResidual: bigint;
-  /**
-   * Holder-reward Quote not yet reserved by a round. Holder Meme fees go to
-   * the treasury when collected, so the vault holds no holder Meme.
-   */
-  holderRewardsQuote: bigint;
-  nextRound: bigint;
-  /** Earliest checkpoint the next round may start at; null before the first round. */
-  lastCheckpoint: bigint | null;
-  /**
-   * The vault's round notice and any scheduled round (`Action`) or notice
-   * change (`Delay`); anyone publishes a ready round.
-   */
-  roundPublication: DelayedAction<null, RewardRoundTerms>;
-};
-
-export type PresaleRewardRoundState = SharedObjectReference<true> & {
-  memeType: string;
-  quoteType: string;
-  vaultId: string;
-  number: bigint;
-  claimDeadlineMs: bigint;
-  root: string;
-  leafCount: bigint;
-  /** Claim bitmap, 256 leaves per word; see `presaleRewardIsClaimed`. */
-  claimedBitmap: bigint[];
-  memeRemaining: bigint;
-  quoteRemaining: bigint;
-  treasury: string;
-  /** Quote atoms still reserved; null when reimbursement was disabled or after terminal settlement. */
-  gasReserveRemaining: bigint | null;
-};
-
-/**
- * `fee_policy::FeePolicy`: the rates new presales snapshot and the address
- * every protocol payout goes to. A creation must size its allocations against
- * the current `tokenBps`.
- */
+/** `fee_policy::FeePolicy`: the rates new presales snapshot. */
 export type PresaleFeePolicyState = SharedObjectReference<true> & {
-  destination: string;
   fees: ProtocolFees;
-  destinationPolicy: Delayed<null, string>;
   feesPolicy: Delayed<null, ProtocolFees>;
 };
 
 /**
- * `creation_policy::CreationPolicy`: the Quote types and migration witnesses
- * (`PresaleCalls.migrationWitnessType`) new presales may use, as normalized
- * type strings. Checked once, at creation; existing sales are unaffected.
+ * `creation_policy::CreationPolicy`: the Quote types, venue witnesses and
+ * partners new presales may use, as normalized type strings and IDs. Checked
+ * once, at creation; existing sales are unaffected. Accepted partners are
+ * entries of the `partners.acceptanceTableId` table.
  */
 export type PresaleCreationPolicyState = SharedObjectReference<true> & {
-  /** The applied notice for new witness admissions. */
-  witnessDelayMs: bigint;
-  /** A proposed next admission notice. */
-  pendingWitnessDelay: PendingDelay | null;
-  /** Pending admissions; each keeps the notice it was scheduled under. */
-  pendingWitnesses: Readonly<Record<string, PendingDelay>>;
   allowedQuotes: string[];
-  allowedMigrationWitnesses: string[];
+  venues: string[];
+  /** The applied delay for new venue admissions. */
+  venueDelayMs: bigint;
+  /** A proposed next admission delay. */
+  pendingVenueDelay: PendingDelay | null;
+  /** Pending admissions; each keeps the delay it was scheduled under. */
+  pendingVenues: Readonly<Record<string, PendingDelay>>;
+  venuesPolicy: DelayedSet<null, string>;
+  partners: { owner: string; acceptanceTableId: string; size: bigint };
 };
 
 export type PresaleCommitment = { quote: bigint; walletCap: bigint };
@@ -599,49 +456,39 @@ export function decodePresaleObject(
   object: PresaleObject,
   originalPackageId: string,
 ): PresaleState {
-  const [memeType, quoteType] = pairTypes(
-    object,
-    "blast_presale",
-    "Presale",
-    originalPackageId,
-  );
+  const [saleTokenType, quoteType] = pairTypes(object, originalPackageId);
   const parsed = presaleBcs.parse(object.content);
-  const windows = presaleWindowsOf(parsed);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes),
-    memeType,
+    saleTokenType,
     quoteType,
     presaleCapId: normalizeSuiObjectId(parsed.presale_cap_id.bytes),
     lifecycle: parsed.lifecycle,
     durationMs: parsed.duration_ms,
     liquidityWindowMs: parsed.liquidity_window_ms,
     startMs: parsed.start_ms,
-    ...windows,
+    ...presaleWindowsOf(parsed),
     raiseTarget: parsed.raise_target,
     eligibility: parsed.eligibility,
     uncapped: parsed.uncapped,
     hardCap: parsed.hard_cap,
-    migrationWitness: parsed.migration_witness,
-    feeRecipients: parsed.fee_split.fee_recipients,
-    holderRewardsBps: parsed.fee_split.holder_rewards_bps,
+    venue: parsed.venue,
+    feeSplit: parsed.fee_split,
     totalCommitments: parsed.total_commitments,
     participants: parsed.participants,
-    quote: BigInt(parsed.quote.value),
+    quote: parsed.quote,
     tokenAllocation: parsed.token_allocation,
     participantVesting: parsed.participant_vesting,
-    saleTokens: BigInt(parsed.sale_tokens.value),
-    liquidityTokens: BigInt(parsed.liquidity_tokens.value),
+    saleTokens: parsed.sale_tokens,
+    liquidityTokens: parsed.liquidity_tokens,
     recipientPayouts: parsed.recipient_payouts,
-    recipientTokens: BigInt(parsed.recipient_tokens.value),
+    recipientTokens: parsed.recipient_tokens,
     raisePayouts: parsed.raise_payouts,
     protocolFees: parsed.protocol_fees,
     protocolQuote: parsed.protocol_quote,
-    protocolTokens: BigInt(parsed.protocol_tokens.value),
+    protocolTokens: parsed.protocol_tokens,
     partnerId: parsed.partner_id,
-    unpaidProtocolQuote:
-      parsed.unpaid_protocol_quote === null
-        ? null
-        : BigInt(parsed.unpaid_protocol_quote.value),
+    feeLedger: parsed.fee_ledger,
   };
 }
 
@@ -672,103 +519,22 @@ function presaleWindowsOf(
   );
 }
 
-/**
- * Whether `presaleId`, a vault's `presaleId` or a `VaultCreated` event's
- * `presale_id`, is the zero ID of a vault an owner created without a presale.
- */
-export function isVaultWithoutPresale(presaleId: string): boolean {
-  return BigInt(normalizeSuiObjectId(presaleId)) === 0n;
-}
-
-export function decodePresaleVaultObject(
-  object: PresaleObject,
-  originalPackageId: string,
-): PresaleVaultState {
-  const [memeType, quoteType] = pairTypes(
-    object,
-    "presale_vault",
-    "Vault",
-    originalPackageId,
-  );
-  const parsed = presaleVaultBcs.parse(object.content);
-  return {
-    ...sharedIdentity(object, parsed.id.id.bytes, [
-      parsed.fee_split.owner,
-      parsed.protocol_fees.owner,
-      parsed.round_publication.owner,
-    ]),
-    memeType,
-    quoteType,
-    presaleId: normalizeSuiObjectId(parsed.presale_id.bytes),
-    presaleCapId: normalizeSuiObjectId(parsed.presale_cap_id.bytes),
-    poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
-    feeRecipients: parsed.fee_split.value.fee_recipients,
-    holderRewardsBps: parsed.fee_split.value.holder_rewards_bps,
-    protocolFees: parsed.protocol_fees.value,
-    feeSplitPolicy: parsed.fee_split,
-    protocolFeesPolicy: parsed.protocol_fees,
-    partnerId: parsed.partner_id,
-    unpaidProtocolMeme: BigInt(parsed.unpaid_protocol_meme.value),
-    unpaidProtocolQuote: BigInt(parsed.unpaid_protocol_quote.value),
-    migrationMemeResidual: BigInt(parsed.migration_meme_residual.value),
-    migrationQuoteResidual: BigInt(parsed.migration_quote_residual.value),
-    holderRewardsQuote: BigInt(parsed.holder_rewards_quote.value),
-    nextRound: parsed.next_round,
-    lastCheckpoint: parsed.last_checkpoint,
-    roundPublication: parsed.round_publication,
-  };
-}
-
-export function decodePresaleRewardRoundObject(
-  object: PresaleObject,
-  originalPackageId: string,
-): PresaleRewardRoundState {
-  const [memeType, quoteType] = pairTypes(
-    object,
-    "holder_rewards",
-    "Round",
-    originalPackageId,
-  );
-  const parsed = presaleRewardRoundBcs.parse(object.content);
-  return {
-    ...sharedIdentity(object, parsed.id.id.bytes),
-    memeType,
-    quoteType,
-    vaultId: normalizeSuiObjectId(parsed.vault_id.bytes),
-    number: parsed.number,
-    claimDeadlineMs: parsed.claim_deadline_ms,
-    root: parsed.root,
-    leafCount: parsed.leaf_count,
-    claimedBitmap: parsed.claimed_bitmap.map(BigInt),
-    memeRemaining: BigInt(parsed.meme.value),
-    quoteRemaining: BigInt(parsed.quote.value),
-    treasury: parsed.treasury,
-    gasReserveRemaining:
-      parsed.gas_reserve === null ? null : BigInt(parsed.gas_reserve.value),
-  };
-}
-
 export function decodePresaleFeePolicyObject(
   object: PresaleObject,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): PresaleFeePolicyState {
   assertSingletonType(object, "fee_policy", "FeePolicy", originalPackageId);
   const parsed = feePolicyBcs.parse(object.content);
   return {
-    ...sharedIdentity(object, parsed.id.id.bytes, [
-      parsed.destination.owner,
-      parsed.fees.owner,
-    ]),
-    destination: parsed.destination.value,
+    ...sharedIdentity(object, parsed.id.id.bytes, [parsed.fees.owner]),
     fees: parsed.fees.value,
-    destinationPolicy: parsed.destination,
     feesPolicy: parsed.fees,
   };
 }
 
 export function decodePresaleCreationPolicyObject(
   object: PresaleObject,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): PresaleCreationPolicyState {
   assertSingletonType(
     object,
@@ -777,29 +543,24 @@ export function decodePresaleCreationPolicyObject(
     originalPackageId,
   );
   const parsed = creationPolicyBcs.parse(object.content);
-  const witnesses = admission(parsed.migration_witnesses);
+  const venues = admission(parsed.venues);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes, [
-      parsed.migration_witnesses.owner,
+      parsed.venues.owner,
+      parsed.partners.owner,
     ]),
-    witnessDelayMs: witnesses.delayMs,
-    pendingWitnessDelay: witnesses.pendingDelay,
-    pendingWitnesses: witnesses.pendingMembers,
-    allowedQuotes: parsed.allowed_quotes.contents,
-    allowedMigrationWitnesses: witnesses.members,
+    allowedQuotes: parsed.allowed_quotes,
+    venues: venues.members,
+    venueDelayMs: venues.delayMs,
+    pendingVenueDelay: venues.pendingDelay,
+    pendingVenues: venues.pendingMembers,
+    venuesPolicy: parsed.venues,
+    partners: {
+      owner: parsed.partners.owner,
+      acceptanceTableId: parsed.partners.acceptance_ends_at_ms.id,
+      size: parsed.partners.acceptance_ends_at_ms.size,
+    },
   };
-}
-
-/** Mirrors `holder_rewards::claim_bit`: whether leaf `index` was already paid. */
-export function presaleRewardIsClaimed(
-  round: Pick<PresaleRewardRoundState, "leafCount" | "claimedBitmap">,
-  index: bigint,
-): boolean {
-  if (index < 0n || index >= round.leafCount) {
-    throw new RangeError("claim index out of bounds");
-  }
-  const word = round.claimedBitmap[Number(index / 256n)] ?? 0n;
-  return (word & (1n << (index % 256n))) !== 0n;
 }
 
 export async function getPresale(
@@ -813,32 +574,10 @@ export async function getPresale(
   );
 }
 
-export async function getPresaleVault(
-  client: ClientWithCoreApi,
-  objectId: string,
-  originalPackageId: string,
-): Promise<PresaleVaultState> {
-  return decodePresaleVaultObject(
-    await getSharedObject(client, objectId),
-    originalPackageId,
-  );
-}
-
-export async function getPresaleRewardRound(
-  client: ClientWithCoreApi,
-  objectId: string,
-  originalPackageId: string,
-): Promise<PresaleRewardRoundState> {
-  return decodePresaleRewardRoundObject(
-    await getSharedObject(client, objectId),
-    originalPackageId,
-  );
-}
-
 export async function getPresaleFeePolicy(
   client: ClientWithCoreApi,
   objectId: string,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): Promise<PresaleFeePolicyState> {
   return decodePresaleFeePolicyObject(
     await getSharedObject(client, objectId),
@@ -849,7 +588,7 @@ export async function getPresaleFeePolicy(
 export async function getPresaleCreationPolicy(
   client: ClientWithCoreApi,
   objectId: string,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): Promise<PresaleCreationPolicyState> {
   return decodePresaleCreationPolicyObject(
     await getSharedObject(client, objectId),
@@ -906,23 +645,21 @@ async function getSharedObject(
 
 function pairTypes(
   object: PresaleObject,
-  module: string,
-  name: string,
   originalPackageId: string,
 ): [string, string] {
   const tag = parseStructTag(object.type);
-  const [memeType, quoteType, ...extra] = tag.typeParams;
+  const [saleTokenType, quoteType, ...extra] = tag.typeParams;
   if (
-    tag.module !== module ||
-    tag.name !== name ||
-    memeType === undefined ||
+    tag.module !== "blast_presale" ||
+    tag.name !== "Presale" ||
+    saleTokenType === undefined ||
     quoteType === undefined ||
     extra.length > 0 ||
     tag.address !== normalizeSuiAddress(originalPackageId)
   ) {
-    throw new TypeError(`object ${object.objectId} is not a presale ${name}`);
+    throw new TypeError(`object ${object.objectId} is not a presale Presale`);
   }
-  return [normalizeStructTag(memeType), normalizeStructTag(quoteType)];
+  return [normalizeStructTag(saleTokenType), normalizeStructTag(quoteType)];
 }
 
 /** The package's shared singletons have no type arguments. */
@@ -930,21 +667,20 @@ function assertSingletonType(
   object: PresaleObject,
   module: string,
   name: string,
-  originalPackageId?: string,
+  originalPackageId: string,
 ): void {
   const tag = parseStructTag(object.type);
   if (
     tag.module !== module ||
     tag.name !== name ||
     tag.typeParams.length !== 0 ||
-    (originalPackageId !== undefined &&
-      tag.address !== normalizeSuiAddress(originalPackageId))
+    tag.address !== normalizeSuiAddress(originalPackageId)
   ) {
     throw new TypeError(`object ${object.objectId} is not a presale ${name}`);
   }
 }
 
-/** `owners` are the object's `delayed` values' owners, which must be the object. */
+/** `owners` are the object's delayed values' and partner list's owners, which must be the object. */
 function sharedIdentity(
   object: PresaleObject,
   uid: string,
@@ -953,7 +689,7 @@ function sharedIdentity(
   const objectId = normalizeSuiObjectId(object.objectId);
   if (
     normalizeSuiObjectId(uid) !== objectId ||
-    owners.some((owner) => owner !== objectId)
+    owners.some((owner) => normalizeSuiObjectId(owner) !== objectId)
   ) {
     throw new TypeError(`object ${object.objectId} has a mismatched UID`);
   }
@@ -984,5 +720,23 @@ export function presaleId(
     normalizeSuiObjectId(presale.presaleRegistry.objectId),
     `${normalizeSuiObjectId(presale.originalPackageId)}::blast_presale::PresaleKey<${normalizeStructTag(saleTokenType)}>`,
     unitKeyBcs.serialize(null).toBytes(),
+  );
+}
+
+/**
+ * The ID of the vault a migrated presale's venue created: the vault's
+ * `vaultId` keyed by `blast_presale::blast_presale_package::PackageWitness`
+ * (original IDs) and the presale ID. The Aftermath DAO-pool vendor creates no
+ * vault, so its sales have none.
+ */
+export function presaleVaultId(
+  vault: Pick<VaultDeployment, "originalPackageId" | "registry">,
+  presale: { originalPackageId: string },
+  presaleId: string,
+): string {
+  return vaultId(
+    vault,
+    `${normalizeSuiObjectId(presale.originalPackageId)}::blast_presale_package::PackageWitness`,
+    presaleId,
   );
 }

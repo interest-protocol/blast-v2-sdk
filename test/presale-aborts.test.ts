@@ -1,206 +1,98 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-
+import type { CoreAbortName } from "@interest-protocol/blast-core/aborts";
+import { CORE_ABORTS } from "@interest-protocol/blast-core/aborts";
 import type { PresaleAbortName } from "@interest-protocol/blast-presale-sdk/aborts";
 import {
-  AFTERMATH_PRESALE_ABORTS,
-  aftermathPresaleAbortName,
+  AFTERMATH_DAO_PRESALE_ABORTS,
+  aftermathDaoPresaleAbortName,
   PRESALE_ABORTS,
   presaleAbortName,
 } from "@interest-protocol/blast-presale-sdk/aborts";
 import type { PresaleAbortCode } from "@interest-protocol/blast-presale-sdk/math";
 
-// Each ABI is frozen at its artifact's commit; this test reads the sources at
-// the same commit with `git archive`, never from the working tree. The map
-// follows the fresh stack's source snapshot, not the historical publication.
-const artifact = (name: string) =>
-  JSON.parse(readFileSync(new URL(`../abi/${name}`, import.meta.url), "utf8"));
-const frozenCommit = (name: string): string =>
-  (artifact(name) as { baseline: { contractsCommit: string } }).baseline
-    .contractsCommit;
-const PRESALE_COMMIT = (
-  artifact("pr150-consumers.json") as { contractsCommit: string }
-).contractsCommit;
-const AFTERMATH_COMMIT = frozenCommit(
-  "production-aftermath-dao-presale-v1.json",
-);
 const configured = process.env.BLAST_CONTRACTS_DIR;
 const contracts = configured ?? "../blast-v2-contracts";
-// A configured repository must hold the pinned sources; only an absent
-// default checkout skips, as in `abi-parity.test.ts`.
+// A configured checkout must hold the sources; only an absent default skips.
 const skip =
   configured === undefined && !existsSync(contracts)
     ? `requires BLAST_CONTRACTS_DIR or ${contracts}`
     : false;
 
-// Typechecks only while every abort a preview throws is a name the map knows.
-const previewAbortName = (code: PresaleAbortCode): PresaleAbortName => code;
+// Typechecks only while every abort a preview throws is a presale or core name.
+const previewAbortName = (
+  code: PresaleAbortCode,
+): PresaleAbortName | CoreAbortName => code;
 
-test("names a presale abort by its module and code", () => {
-  assert.equal(presaleAbortName("blast_presale", 25), "EPresaleFilled");
-  assert.equal(presaleAbortName("blast_presale", 0), "EInvalidAssetPair");
-  assert.equal(presaleAbortName("blast_presale", 30), "EProtocolFeesUnchanged");
-  assert.equal(presaleAbortName("blast_presale", 31), "EWrongPartner");
-  assert.equal(presaleAbortName("blast_presale", 32), "ENoPartnerPayout");
-  assert.equal(presaleAbortName("blast_presale", 33), "EInvalidHardCap");
-  assert.equal(presaleAbortName("blast_presale", 34), "EMissingSetting");
-  assert.equal(
-    presaleAbortName("blast_presale", 35),
-    "ESaleTokenNotUnregulated",
-  );
-  assert.equal(presaleAbortName("blast_presale", 36), "EAboveFeePolicy");
-  assert.equal(presaleAbortName("blast_presale", 37), "EProtocolFeesIncreased");
-  assert.equal(presaleAbortName("presale_vault", 3), "EWrongPartner");
-  assert.equal(presaleAbortName("fee_policy", 1), "EInvalidDestination");
-  assert.equal(presaleAbortName("package_admin", 1), "EInvalidDigest");
-  assert.equal(presaleAbortName("package_admin", 2), "EUnguardedNotice");
-  assert.equal(presaleAbortName("creation_policy", 4), "EPartnerNotAccepted");
-  assert.equal(presaleAbortName("holder_rewards", 1), "EOverlappingInterval");
-  assert.equal(presaleAbortName("holder_rewards", 8), "EEmptyClaim");
-  assert.equal(presaleAbortName("holder_rewards", 9), "EInsufficientBudget");
-  assert.equal(presaleAbortName("holder_rewards", 10), "EReserveSettled");
-  assert.equal(presaleAbortName("holder_rewards", 11), "EOverReserve");
-  assert.equal(presaleAbortName("holder_rewards", 12), "ETreasuryChanged");
-  assert.equal(
-    presaleAbortName("holder_rewards", 13),
-    "EClaimDeadlineOverflow",
-  );
-  assert.equal(presaleAbortName("holder_rewards", 14), "EClaimsClosed");
-  assert.equal(presaleAbortName("holder_rewards", 15), null);
-  assert.equal(presaleAbortName("presale_vault", 10), "EZeroClaimWindow");
-  assert.equal(presaleAbortName("presale_vault", 11), "EWrongRoundProposal");
-  assert.equal(presaleAbortName("presale_vault", 12), "EGasReserveTooLarge");
-  assert.equal(
-    presaleAbortName("presale_vault", 13),
-    "EMemeRewardsUnsupported",
-  );
-  assert.equal(presaleAbortName("presale_vault", 14), null);
-  assert.equal(presaleAbortName("bps", 0), "EInvalidBps");
-  assert.equal(presaleAbortName("bluefin", 1), "EInvalidTier");
-  assert.equal(
-    presaleAbortName("bluefin", 2),
-    previewAbortName("ESymbolTooLong"),
-  );
+test("names a presale abort by its package-wide code", () => {
+  assert.equal(presaleAbortName(0), "EUnguardedDelay");
+  assert.equal(presaleAbortName(3), "EVenueNotAllowed");
+  assert.equal(presaleAbortName(29), "EPresaleFilled");
+  assert.equal(presaleAbortName(38), "EProtocolFeesIncreased");
+  assert.equal(presaleAbortName(39), null);
+  assert.equal(presaleAbortName(-1), null);
+  assert.equal(presaleAbortName(1.5), null);
+  assert.equal(PRESALE_ABORTS.length, 39);
+  assert.equal(previewAbortName("EInvalidBps"), "EInvalidBps");
 });
 
-test("names an Aftermath vendor abort by its module and code", () => {
-  assert.equal(
-    aftermathPresaleAbortName("blast_aftermath_dao_presale", 0),
+test("names a vendor abort by its code", () => {
+  assert.deepEqual([0, 1, 2, 3, 4].map(aftermathDaoPresaleAbortName), [
     "EPoolMismatch",
-  );
-  assert.equal(
-    aftermathPresaleAbortName("blast_aftermath_dao_presale", 2),
-    "EWrongPresale",
-  );
-  assert.equal(
-    aftermathPresaleAbortName("blast_aftermath_dao_presale", 3),
-    "EWrongMigrator",
-  );
-  assert.equal(
-    aftermathPresaleAbortName("blast_aftermath_dao_presale", 4),
+    "EDaoFeePoolMismatch",
+    "EInvalidPackageWitness",
+    "EWrongPackageWitness",
     null,
+  ]);
+});
+
+test("previews raise only names the contracts define", () => {
+  for (const name of [
+    "EInvalidBps",
+    "EInvalidVestingTerms",
+    "EInvalidRecipient",
+    "EInvalidRoute",
+    "EInvalidFeeSplit",
+  ] as const) {
+    assert.ok((CORE_ABORTS as readonly string[]).includes(name), name);
+  }
+});
+
+/** `const E<Name>: u64 = <code>;` declarations in source order. */
+function numericRegistry(source: string): string[] {
+  return [...source.matchAll(/const (E\w+): u64 = (\d+);/g)].map(
+    ([, name, code], index) => {
+      assert.equal(Number(code), index, `${name} is code ${index}`);
+      return name as string;
+    },
   );
-  // The vendor's module is not a presale-package module, and vice versa.
-  assert.equal(presaleAbortName("blast_aftermath_dao_presale", 0), null);
-  assert.equal(aftermathPresaleAbortName("blast_presale", 0), null);
+}
+
+test("PRESALE_ABORTS matches sui/presale/sources/errors.move", { skip }, () => {
+  const source = readFileSync(
+    join(contracts, "sui/presale/sources/errors.move"),
+    "utf8",
+  );
+  assert.deepEqual(numericRegistry(source), [...PRESALE_ABORTS]);
 });
 
-test("returns null for an unknown module or code", () => {
-  assert.equal(presaleAbortName("blast_presale", 38), null);
-  assert.equal(presaleAbortName("blast_presale", -1), null);
-  assert.equal(presaleAbortName("blast_presale", 1.5), null);
-  assert.equal(presaleAbortName("merkle_tree", 0), null);
-  assert.equal(presaleAbortName("launch", 0), null);
-  assert.equal(presaleAbortName("constructor", 0), null);
-  // Untyped callers: an array key or numeric string is not a code.
-  assert.equal(presaleAbortName("blast_presale", "length" as never), null);
-  assert.equal(presaleAbortName("blast_presale", "25" as never), null);
-});
-
-test(`matches every #[error(code = N)] constant at contracts ${PRESALE_COMMIT}`, {
+test("AFTERMATH_DAO_PRESALE_ABORTS matches the vendor's error constants", {
   skip,
 }, () => {
-  assert.deepEqual(
-    PRESALE_ABORTS,
-    declaredAbortsAt(PRESALE_COMMIT, "sui/presale/sources"),
-  );
-});
-
-test(`matches the Aftermath vendor's error constants at contracts ${AFTERMATH_COMMIT}`, {
-  skip,
-}, () => {
-  assert.deepEqual(
-    AFTERMATH_PRESALE_ABORTS,
-    declaredAbortsAt(
-      AFTERMATH_COMMIT,
-      "sui/vendors/aftermath_dao_presale/sources",
+  const source = readFileSync(
+    join(
+      contracts,
+      "sui/vendors/aftermath_dao_presale/sources/blast_aftermath_dao_presale.move",
     ),
+    "utf8",
   );
+  const declared = [
+    ...source.matchAll(/#\[error\(code = (\d+)\)\]\s*const (E\w+)/g),
+  ].map(([, code, name], index) => {
+    assert.equal(Number(code), index, `${name} is code ${index}`);
+    return name;
+  });
+  assert.deepEqual(declared, [...AFTERMATH_DAO_PRESALE_ABORTS]);
 });
-
-function declaredAbortsAt(
-  commit: string,
-  directory: string,
-): Record<string, string[]> {
-  const root = mkdtempSync(join(tmpdir(), "blast-presale-aborts-"));
-  try {
-    const archive = spawnSync(
-      "git",
-      ["-C", contracts, "archive", "--format=tar", commit, directory],
-      { maxBuffer: 64 * 1024 * 1024 },
-    );
-    assert.equal(
-      archive.status,
-      0,
-      `${contracts} must contain ${commit}: ${archive.stderr}`,
-    );
-    const extract = spawnSync("tar", ["-x", "-C", root], {
-      input: archive.stdout,
-    });
-    assert.equal(extract.status, 0, String(extract.stderr));
-    return declaredAborts(join(root, directory));
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
-/** Every `#[error(code = N)]` constant name by module, indexed by code. */
-function declaredAborts(sources: string): Record<string, string[]> {
-  const declared: Record<string, string[]> = {};
-  for (const file of readdirSync(sources).filter((name) =>
-    name.endsWith(".move"),
-  )) {
-    const source = readFileSync(join(sources, file), "utf8");
-    const module = /^module\s+\w+::(\w+);/m.exec(source)?.[1];
-    assert.ok(module, `${file} declares a module`);
-    const names: string[] = [];
-    for (const [, code, name] of source.matchAll(
-      /#\[error\(code\s*=\s*(\d+)\)\]\s*const\s+(\w+)\s*:/g,
-    )) {
-      assert.equal(
-        names[Number(code)],
-        undefined,
-        `${module} reuses code ${code}`,
-      );
-      names[Number(code)] = name as string;
-    }
-    // A constant the pattern above misses would otherwise drop out silently.
-    assert.equal(
-      names.filter(Boolean).length,
-      source.match(/^\s*const\s+E\w*\s*:/gm)?.length ?? 0,
-      `${module} declares every error constant with #[error(code = N)]`,
-    );
-    if (names.length > 0) declared[module] = names;
-  }
-  return declared;
-}
