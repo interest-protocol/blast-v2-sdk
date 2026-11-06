@@ -1,12 +1,12 @@
-import { FROZEN_ABI } from "./release.ts";
+import { FROZEN_ABI, SDK_RELEASE } from "./release.ts";
 import type { BlastDeploymentInput } from "./types.ts";
 
 /**
  * Canonical November 6 publication, verified from the contracts deployment
- * record and live shared-object owners. sdk.commit names the SDK source base
- * used to assemble this unreleased binding, not an npm release.
+ * record and live shared-object owners. sdk.commit pins the same reviewed
+ * implementation as the coordinated npm release.
  * Routes and route-release evidence remain empty until live venue validation.
- * The vault and both products are paused; SDK_RELEASE also blocks signing.
+ * The vault and both products are paused.
  */
 export const CANONICAL_MAINNET_MANIFEST: BlastDeploymentInput = {
   schemaVersion: 2,
@@ -187,8 +187,8 @@ export const CANONICAL_MAINNET_MANIFEST: BlastDeploymentInput = {
     },
   },
   sdk: {
-    version: "0.2.0",
-    commit: "8f3057fd87c9568dad581c8abcbb058ce8267ebc",
+    version: SDK_RELEASE.version,
+    commit: "8d88037ac836c0f0e14d52a03151340294e8041e",
   },
   evidence: [],
 };

@@ -555,7 +555,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
   assert.ok(nonProduction.includes("environment-mismatch"));
   // A different canonical lineage is registered.
   assert.ok(nonProduction.includes("foreign-lineage"));
-  assert.equal(nonProduction.includes("sdk-unreleased"), true);
+  assert.equal(nonProduction.includes("sdk-unreleased"), false);
 
   const relabeled = {
     ...manifest,
@@ -582,8 +582,12 @@ test("the fresh ABI requires a coordinated SDK release and matching runtime", ()
   assert.equal(BLAST_DEPLOYMENTS.mainnet?.environment, "production");
   assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
   assert.equal(SDK_RELEASE.version, "0.2.0");
-  assert.equal(SDK_RELEASE.published, false);
-  assert.equal(SDK_RELEASE.commit, null);
+  assert.equal(SDK_RELEASE.published, true);
+  assert.equal(SDK_RELEASE.commit, "8d88037ac836c0f0e14d52a03151340294e8041e");
+  assert.deepEqual(BLAST_DEPLOYMENTS.mainnet?.sdk, {
+    version: SDK_RELEASE.version,
+    commit: SDK_RELEASE.commit,
+  });
   const packageJson = JSON.parse(
     readFileSync(
       new URL("../packages/blast-sdk/package.json", import.meta.url),
@@ -622,7 +626,7 @@ test("the fresh ABI requires a coordinated SDK release and matching runtime", ()
         runtime,
       }),
     ),
-    ["foreign-lineage", "sdk-unreleased", "sdk-mismatch"],
+    ["foreign-lineage", "sdk-mismatch"],
   );
   for (const sdk of [
     { ...released, published: false },
@@ -752,6 +756,21 @@ test("observes the chain and shared-object identities through the Core API", asy
       runtime: observed,
     }).signing,
     "enabled",
+  );
+});
+
+test("npm publication does not bypass canonical mainnet route evidence", () => {
+  const mainnet = BLAST_DEPLOYMENTS.mainnet;
+  assert.ok(mainnet);
+  assert.deepEqual(
+    codes(
+      evaluateProtocolAccess({
+        manifest: mainnet,
+        mode: "production",
+        runtime: runtimeFor(mainnet, { vault: 1, launchpad: 7, presale: 7 }),
+      }),
+    ),
+    ["missing-evidence"],
   );
 });
 

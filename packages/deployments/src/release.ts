@@ -35,20 +35,20 @@ export type SdkRelease = Readonly<{
   name: string;
   /** package.json `version`. */
   version: string;
-  /** False until this SDK version is released to npm. */
+  /** True in the coordinated npm release build. */
   published: boolean;
-  /** The released source commit; null for a working copy. */
+  /** Reviewed SDK source commit, before release metadata; null for a working copy. */
   commit: string | null;
 }>;
 
 /**
- * Unreleased source build of the fresh launch stack. Its deployment and the
- * coordinated SDK release register their own package IDs and release
- * identity.
+ * Coordinated 0.2.0 release of the canonical November 6 launch stack.
+ * The commit pins the reviewed implementation; npm gitHead records the
+ * packaging commit, which also updates this release metadata.
  */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
   version: "0.2.0",
-  published: false,
-  commit: null,
+  published: true,
+  commit: "8d88037ac836c0f0e14d52a03151340294e8041e",
 });
