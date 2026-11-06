@@ -143,8 +143,10 @@ test("migrators abort codes follow errors.move", () => {
     "EWrongCoinPair",
     "EInvalidTier",
     "ESymbolTooLong",
+    "EInvalidAutoLpPrice",
   ]);
   assert.equal(migratorsAbortName(3), "EInvalidTier");
-  assert.equal(migratorsAbortName(5), null);
+  assert.equal(migratorsAbortName(5), "EInvalidAutoLpPrice");
+  assert.equal(migratorsAbortName(6), null);
   assert.equal(migratorsAbortName(-1), null);
 });

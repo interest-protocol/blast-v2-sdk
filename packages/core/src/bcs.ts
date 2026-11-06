@@ -96,7 +96,7 @@ export function proposalBcs<T, Input>(value: BcsType<T, Input>) {
 
 /** `blast_admin::delayed::Delayed<K, T>`: readiness never applies a value implicitly. */
 export type Delayed<K, T> = {
-  owner: string;
+  parent: string;
   key: K;
   value: T;
   delay_ms: bigint;
@@ -109,7 +109,7 @@ export function delayedBcs<K, KeyInput, T, Input>(
   value: BcsType<T, Input>,
 ) {
   return bcs.struct("Delayed", {
-    owner: suiObjectIdBcs,
+    parent: suiObjectIdBcs,
     key,
     value,
     delay_ms: u64Bcs,
@@ -137,7 +137,7 @@ export function delayedChangeBcs<A, Input>(action: BcsType<A, Input>) {
 
 /** `blast_admin::delayed_action::DelayedAction<K, A>`: a one-shot action slot. */
 export type DelayedAction<K, A> = {
-  owner: string;
+  parent: string;
   key: K;
   delay_ms: bigint;
   pending: Proposal<DelayedChange<A>> | null;
@@ -148,7 +148,7 @@ export function delayedActionBcs<K, KeyInput, A, Input>(
   action: BcsType<A, Input>,
 ) {
   return bcs.struct("DelayedAction", {
-    owner: suiObjectIdBcs,
+    parent: suiObjectIdBcs,
     key,
     delay_ms: u64Bcs,
     pending: bcs.option(proposalBcs(delayedChangeBcs(action))),
@@ -177,7 +177,7 @@ export const deadlineBcs = bcs.struct("Deadline", {
 
 /** `blast_admin::delayed_set::DelayedSet<K, E>`: admissions wait; removals are immediate. */
 export type DelayedSet<K, E> = {
-  owner: string;
+  parent: string;
   key: K;
   members: E[];
   delay_ms: bigint;
@@ -224,7 +224,7 @@ export function delayedSetBcs<K, KeyInput, E, Input>(
 ) {
   return bcs
     .struct("DelayedSet", {
-      owner: suiObjectIdBcs,
+      parent: suiObjectIdBcs,
       key,
       members: bcs.struct("VecSet", { contents: bcs.vector(member) }),
       delay_ms: u64Bcs,
@@ -237,14 +237,14 @@ export function delayedSetBcs<K, KeyInput, E, Input>(
     })
     .transform({
       input: (set: {
-        owner: string;
+        parent: string;
         key: KeyInput;
         members: Input[];
         delay_ms: bigint;
         admissions: { member: Input; deadline: Deadline }[];
         pending_delay: PendingDelay | null;
       }) => ({
-        owner: set.owner,
+        parent: set.parent,
         key: set.key,
         members: { contents: set.members },
         delay_ms: set.delay_ms,
@@ -257,7 +257,7 @@ export function delayedSetBcs<K, KeyInput, E, Input>(
         pending_delay: set.pending_delay,
       }),
       output: (set): DelayedSet<K, E> => ({
-        owner: set.owner,
+        parent: set.parent,
         key: set.key,
         members: set.members.contents,
         delay_ms: set.delay_ms,
@@ -333,7 +333,7 @@ export function delayedMapChangeBcs<E, EntryInput, V, Input>(
  * `Table` (read by dynamic field), one delay, and inline pending changes.
  */
 export type DelayedMap<K, E, V> = {
-  owner: string;
+  parent: string;
   key: K;
   entries: { id: string; size: bigint };
   delay_ms: bigint;
@@ -348,7 +348,7 @@ export function delayedMapBcs<K, KeyInput, E, EntryInput, V, Input>(
 ) {
   return bcs
     .struct("DelayedMap", {
-      owner: suiObjectIdBcs,
+      parent: suiObjectIdBcs,
       key,
       entries: tableBcs,
       delay_ms: u64Bcs,
@@ -361,7 +361,7 @@ export function delayedMapBcs<K, KeyInput, E, EntryInput, V, Input>(
     })
     .transform({
       input: (map: {
-        owner: string;
+        parent: string;
         key: KeyInput;
         entries: { id: string; size: bigint };
         delay_ms: bigint;
@@ -371,7 +371,7 @@ export function delayedMapBcs<K, KeyInput, E, EntryInput, V, Input>(
         }[];
         pending_delay: PendingDelay | null;
       }) => ({
-        owner: map.owner,
+        parent: map.parent,
         key: map.key,
         entries: map.entries,
         delay_ms: map.delay_ms,
@@ -384,7 +384,7 @@ export function delayedMapBcs<K, KeyInput, E, EntryInput, V, Input>(
         pending_delay: map.pending_delay,
       }),
       output: (map): DelayedMap<K, E, V> => ({
-        owner: map.owner,
+        parent: map.parent,
         key: map.key,
         entries: map.entries,
         delay_ms: map.delay_ms,

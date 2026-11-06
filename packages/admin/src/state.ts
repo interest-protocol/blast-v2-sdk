@@ -61,7 +61,7 @@ export function decodeAclObject(
   const objectId = normalizeSuiObjectId(object.objectId);
   if (
     normalizeSuiObjectId(parsed.id.id.bytes) !== objectId ||
-    parsed.super_admin_transfer.owner !== objectId
+    parsed.super_admin_transfer.parent !== objectId
   ) {
     throw new TypeError(`ACL ${object.objectId} has a mismatched UID`);
   }
@@ -300,7 +300,7 @@ export function decodePackageAdminObject(
     "PackageAdmin",
   );
   const parsed = packageAdminBcs.parse(object.content);
-  if (parsed.upgrade.owner !== normalizeSuiObjectId(parsed.id.id.bytes))
+  if (parsed.upgrade.parent !== normalizeSuiObjectId(parsed.id.id.bytes))
     throw new TypeError("administration object UID mismatch");
   const cap = parsed.upgrade_cap;
   return {

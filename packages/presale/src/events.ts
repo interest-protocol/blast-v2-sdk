@@ -350,7 +350,7 @@ export function decodePresalePolicyEvent(
 /**
  * Presale keys of `blast_admin` delayed values. Every schedule, cancel,
  * apply and creation fact is emitted by `blast_admin` under one of these
- * keys; `owner` names the `CreationPolicy` or `FeePolicy` that stores it. The
+ * keys; `parent` names the `CreationPolicy` or `FeePolicy` that stores it. The
  * package's upgrade key is the admin package's `upgradeDelayedKey`.
  */
 export const presaleDelayedKeys = {

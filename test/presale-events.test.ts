@@ -313,7 +313,7 @@ function decodeDelayed(
 }
 
 test("projects the fee policy and venue allowlist from delayed events", () => {
-  const owner = normalizeSuiAddress("0xf0");
+  const parent = normalizeSuiAddress("0xf0");
   const fees = {
     raiseBps: 200n,
     tokenBps: 100n,
@@ -324,14 +324,14 @@ test("projects the fee policy and venue allowlist from delayed events", () => {
   let state = createPresaleEventProjection();
   for (const event of [
     decodeDelayed("DelayedCreated", "Fees", {
-      owner,
+      parent,
       key: null,
       value: fees,
       delay_ms: 0n,
     }),
-    decodeDelayed("SetCreated", "Venues", { owner, key: null, delay_ms: 0n }),
+    decodeDelayed("SetCreated", "Venues", { parent, key: null, delay_ms: 0n }),
     decodeDelayed("SetScheduled", "Venues", {
-      owner,
+      parent,
       key: null,
       change: { kind: "Admission", member: venue },
       delay_ms: 0n,
@@ -347,7 +347,7 @@ test("projects the fee policy and venue allowlist from delayed events", () => {
   state = reducePresaleEvent(
     state,
     decodeDelayed("SetApplied", "Venues", {
-      owner,
+      parent,
       key: null,
       change: { kind: "Admission", member: venue },
       delay_ms: 0n,
@@ -358,7 +358,7 @@ test("projects the fee policy and venue allowlist from delayed events", () => {
   state = reducePresaleEvent(
     state,
     decodeDelayed("MemberRemoved", "Venues", {
-      owner,
+      parent,
       key: null,
       member: venue,
     }),

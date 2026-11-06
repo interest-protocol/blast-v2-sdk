@@ -9,13 +9,12 @@ events stay authoritative.
 `scripts/check-contract-abi.mjs` extracts the contracts repository
 ([interest-protocol/blast-v2-contracts](https://github.com/interest-protocol/blast-v2-contracts))
 at the baseline commit with `git archive`, runs `sui move summary` on each
-package with the pinned Sui CLI `1.77.2-51d177ad7d65`, classifies every public
-function and event, and compares the result byte for byte with `abi/`.
+package with the pinned Sui CLI `1.77.2-51d177ad7d65`, classifies every public function, private entry and event, and compares the result byte for byte with `abi/`.
 `npm run check:abi` reads `../blast-v2-contracts` (or `BLAST_CONTRACTS_DIR`); CI
 checks out the commit pinned in `.github/workflows/check.yml`.
 
 The launch stack is frozen at contracts
-[`b50d0c3`](https://github.com/interest-protocol/blast-v2-contracts/tree/b50d0c3bee50b637a673d1ccb64b5413af4ba518/sui)
+[`86ee8cf`](https://github.com/interest-protocol/blast-v2-contracts/tree/86ee8cf9df8e9b2ec920f9564e2fda8afbf82106/sui)
 (ADR 0137 with its 2026-11-05 amendment, PRs #178-#220, and ADR 0138's sealed
 treasury caps, PR #219):
 
@@ -165,3 +164,5 @@ Native facts are stored separately from decoded Blast events and are independent
 deduplicated. Reducers do not infer ownership, returned-object routing,
 publication effects, deletion, or sharing from an event that does not contain
 that fact.
+
+The canonical manifest is backed by the [November 6 deployment record](https://github.com/interest-protocol/blast-v2-contracts/blob/main/deployments/sui/mainnet/2026-11-06-canonical-launch-stack.json). Auto-LP compounding now requires an `AutoLpAdmin` cap and inclusive Q64.64 price bounds; its private entry consumes and re-shares the pool. Collection stays permissionless.

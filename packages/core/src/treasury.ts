@@ -54,7 +54,7 @@ export function decodeTreasuryObject(
   const objectId = normalizeSuiObjectId(object.objectId);
   if (
     normalizeSuiObjectId(parsed.id.id.bytes) !== objectId ||
-    parsed.destination.owner !== objectId
+    parsed.destination.parent !== objectId
   ) {
     throw new TypeError(`treasury ${object.objectId} has a mismatched UID`);
   }

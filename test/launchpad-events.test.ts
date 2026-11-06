@@ -821,7 +821,7 @@ function delayed(
       sender: "0xd",
       eventType: `0xad::${delayedEventModule(kind)}::${kind}<${original}::${spec.key}, ${valueType}>`,
       bcs: delayedEventBcs(kind, spec)
-        .serialize({ owner: "0xc0", key: null, ...payload } as never)
+        .serialize({ parent: "0xc0", key: null, ...payload } as never)
         .toBytes(),
       json: null,
       checkpoint: "9",

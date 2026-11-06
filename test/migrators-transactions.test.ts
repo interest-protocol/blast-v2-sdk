@@ -274,6 +274,9 @@ for (const [memeType, memeIsA] of [
     const compound = new Transaction();
     compound.add(
       calls.compoundCetusAutoLp({
+        adminCap: "0xcafe",
+        minSqrtPrice: 1n,
+        maxSqrtPrice: 100n,
         memeType,
         quoteType: SUI,
         vault: O.vault,
@@ -288,8 +291,12 @@ for (const [memeType, memeIsA] of [
       "shared-mut:0x7a",
       migratorsVersion,
       vaultVersion,
+      "shared:0xac1",
+      "object:0xcafe",
       "shared:0xc0f",
       "shared-mut:0x9001",
+      "pure",
+      "pure",
       "clock",
     ]);
 
@@ -401,6 +408,9 @@ test("Bluefin fee routes and buyback take <Meme, Quote> in Move order", () => {
   const compound = new Transaction();
   compound.add(
     calls.compoundBluefinAutoLp({
+      adminCap: "0xcafe",
+      minSqrtPrice: 1n,
+      maxSqrtPrice: 100n,
       memeType: MEME_B,
       quoteType: SUI,
       vault: O.vault,
@@ -415,8 +425,12 @@ test("Bluefin fee routes and buyback take <Meme, Quote> in Move order", () => {
     "shared-mut:0x7a",
     migratorsVersion,
     vaultVersion,
+    "shared:0xac1",
+    "object:0xcafe",
     "shared:0xbf",
     "shared-mut:0x9001",
+    "pure",
+    "pure",
     "clock",
   ]);
 
@@ -517,12 +531,28 @@ test("MigratorTransactions signs in as BuybackAdmin before the buyback", () => {
   assert.deepEqual(targets(txs.settleAndApplyBluefinFeeSplit(bluefinVault)), [
     target("bluefin", "settle_and_apply_fee_split"),
   ]);
-  assert.deepEqual(targets(txs.compoundCetusAutoLp(cetus)), [
-    target("cetus", "compound_auto_lp"),
-  ]);
-  assert.deepEqual(targets(txs.compoundBluefinAutoLp(bluefinVault)), [
-    target("bluefin", "compound_auto_lp"),
-  ]);
+  assert.deepEqual(
+    targets(
+      txs.compoundCetusAutoLp({
+        ...cetus,
+        adminCap: "0xcafe",
+        minSqrtPrice: 1n,
+        maxSqrtPrice: 100n,
+      }),
+    ),
+    [target("cetus", "compound_auto_lp")],
+  );
+  assert.deepEqual(
+    targets(
+      txs.compoundBluefinAutoLp({
+        ...bluefinVault,
+        adminCap: "0xcafe",
+        minSqrtPrice: 1n,
+        maxSqrtPrice: 100n,
+      }),
+    ),
+    [target("bluefin", "compound_auto_lp")],
+  );
 });
 
 test("rejects an incomplete deployment", () => {
@@ -546,4 +576,38 @@ test("rejects an incomplete deployment", () => {
 
 test("every classified blast_migrators builder is built and matches the frozen ABI", () => {
   coverage.assertEveryBuilder(12);
+});
+
+test("auto-LP validates inclusive price bounds before building a command", () => {
+  const options = {
+    memeType: MEME_A,
+    quoteType: SUI,
+    vault: O.vault,
+    cetus: { config: O.cetusConfig },
+    pool: O.pool,
+    adminCap: "0xcafe",
+    minSqrtPrice: 1n,
+    maxSqrtPrice: 100n,
+  };
+  for (const bounds of [
+    { minSqrtPrice: 0n, maxSqrtPrice: 100n },
+    { minSqrtPrice: 101n, maxSqrtPrice: 100n },
+    { minSqrtPrice: 1n, maxSqrtPrice: 1n << 128n },
+  ])
+    assert.throws(
+      () => calls.compoundCetusAutoLp({ ...options, ...bounds }),
+      RangeError,
+    );
+  const tx = new Transaction();
+  tx.add(
+    calls.compoundCetusAutoLp({
+      ...options,
+      minSqrtPrice: 10n,
+      maxSqrtPrice: 10n,
+    }),
+  );
+  assert.deepEqual(
+    pureBytes(tx, 0).map((bytes) => bcs.u128().parse(bytes)),
+    ["10", "10"],
+  );
 });

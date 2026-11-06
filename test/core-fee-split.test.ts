@@ -130,7 +130,7 @@ test("CoreCalls.feeSplit builds every route, then fee_split::new", () => {
 });
 
 test("core roles name blast_domain types in the original package", () => {
-  assert.equal(CORE_ROLES.length, 9);
+  assert.equal(CORE_ROLES.length, 10);
   assert.ok(CORE_ROLES.includes("VenueAdmin"));
   assert.equal(
     coreRoleType(core, "RewardsAdmin"),

@@ -676,7 +676,7 @@ export function delayedPolicyKey(
     event.name === "CurveFeeCapReassignment" ||
     event.name === "CreatorMetadataCapReassignment"
   )
-    key += `:${event.payload.owner}`;
+    key += `:${event.payload.parent}`;
   if (
     (event.name === "Venues" || event.name === "ClaimSigners") &&
     "change" in event.payload &&

@@ -13,7 +13,7 @@ import {
   normalizeSuiObjectId,
 } from "@mysten/sui/utils";
 
-/** The immutable `blast_admin` package and its shared singleton `blast_acl::ACL`. */
+/** The canonical `blast_admin` package (immutability deferred) and its shared singleton `blast_acl::ACL`. */
 export type AdminDeployment = {
   packageId: string;
   acl: SharedObjectIdentity;

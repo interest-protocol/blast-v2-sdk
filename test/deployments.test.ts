@@ -9,7 +9,6 @@ import {
   BLAST_DEPLOYMENTS,
   blastSuiDeployment,
   coreDeployment,
-  DeploymentManifestError,
   defineBlastDeployment,
   FROZEN_ABI,
   getBlastDeployment,
@@ -297,13 +296,46 @@ test("accepts only mainnet, bound to its genesis digest", () => {
   );
 });
 
-test("no deployment is registered until the fresh stack is published", () => {
-  assert.deepEqual(BLAST_DEPLOYMENTS, {});
-  assert.throws(
-    () => getBlastDeployment("mainnet"),
-    (error: unknown) =>
-      error instanceof DeploymentManifestError && error.code === "unpublished",
+test("canonical publication binds all launch-stack shared identities", () => {
+  const mainnet = getBlastDeployment("mainnet");
+  assert.equal(BLAST_DEPLOYMENTS.mainnet, mainnet);
+  assert.equal(
+    mainnet.packages.admin.packageId,
+    "0xb4c52669d7a07ce26d8fc91ba577b0a05f1f3d0cb9b1ba230c6419fb7ddd55fd",
   );
+  assert.equal(
+    mainnet.sharedObjects.vault.packageAdmin.initialSharedVersion,
+    "2",
+  );
+  assert.equal(
+    mainnet.sharedObjects.launchpad.launchConfig.objectId,
+    "0x2313c26286ab4809593b4216135cff085ade5882f2e58b44621baf33bcd79e9c",
+  );
+  assert.equal(
+    mainnet.source.contractsCommit,
+    "86ee8cf9df8e9b2ec920f9564e2fda8afbf82106",
+  );
+  // These are different Move types; positional publication order is not an identity.
+  assert.deepEqual(
+    Object.fromEntries(
+      ["creationPolicy", "feePolicy", "presaleRegistry"].map((key) => [
+        key,
+        mainnet.sharedObjects.presale[
+          key as keyof typeof mainnet.sharedObjects.presale
+        ].objectId,
+      ]),
+    ),
+    {
+      creationPolicy:
+        "0x5e61581b1bb526dbe914e972d32c5253e8bff0ebec6acf3570ab228d7f6841af",
+      feePolicy:
+        "0xada8e6835fb4aab775aedd76d4de7ecef87044d4403fb76028615396622f233b",
+      presaleRegistry:
+        "0x2e6a741d72a33f1fb97f734c450f4f8713e5f403959cab0e435d7e41b55c65bc",
+    },
+  );
+  assert.deepEqual(mainnet.routes, []);
+  assert.deepEqual(mainnet.evidence, []);
 });
 
 test("rejects placeholder package IDs", () => {

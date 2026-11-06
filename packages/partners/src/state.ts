@@ -72,8 +72,8 @@ export function decodePartnerObject(
   const objectId = normalizeSuiObjectId(object.objectId);
   if (
     normalizeSuiObjectId(parsed.id.id.bytes) !== objectId ||
-    parsed.share_bps.owner !== objectId ||
-    parsed.cap_id.owner !== objectId
+    parsed.share_bps.parent !== objectId ||
+    parsed.cap_id.parent !== objectId
   ) {
     throw new TypeError(`partner ${object.objectId} has a mismatched UID`);
   }
@@ -127,11 +127,11 @@ export function partnerPayment(
 /**
  * BCS layout of `blast_partners::partner_list::PartnerList`, embedded in a
  * product's configuration (`LaunchConfig.partners`,
- * `CreationPolicy.partners`). `owner` is that configuration's ID; each
+ * `CreationPolicy.partners`). `parent` is that configuration's ID; each
  * accepted partner is an entry of the `acceptance_ends_at_ms` table.
  */
 export const partnerListBcs = bcs.struct("PartnerList", {
-  owner: suiObjectIdBcs,
+  parent: suiObjectIdBcs,
   acceptance_ends_at_ms: tableBcs,
 });
 

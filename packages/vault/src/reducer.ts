@@ -351,7 +351,7 @@ function applyDelayedEvent(
   state: VaultEventProjection,
   event: DecodedVaultDelayedEvent,
 ): VaultEventProjection {
-  const owner = event.payload.owner;
+  const owner = event.payload.parent;
   switch (event.name) {
     case "FeeSplit":
       switch (event.kind) {

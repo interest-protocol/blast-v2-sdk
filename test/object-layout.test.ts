@@ -19,7 +19,7 @@ import type { BcsType } from "@mysten/sui/bcs";
 import { fromHex } from "@mysten/sui/utils";
 import { launchpadFixture } from "./fixtures/launchpad-68db57b.ts";
 import { PRESALE_FIXTURE } from "./fixtures/presale-a1a8f6c.ts";
-import { VAULT_FIXTURE } from "./fixtures/vault-a1a8f6c.ts";
+import { VAULT_FIXTURE } from "./fixtures/vault-86ee8cf.ts";
 
 type FrozenStruct = { name: string; fields: { name: string }[] };
 type Artifact = {

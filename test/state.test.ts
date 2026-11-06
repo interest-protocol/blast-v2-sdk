@@ -341,11 +341,11 @@ test("decodes launch and runtime configuration from literal contract bytes", () 
   });
   assert.equal(config.creationFee, 5_000_000_000n);
   // Every delayed value names the object storing it.
-  assert.equal(config.tradeFeesPolicy.owner, config.objectId);
+  assert.equal(config.tradeFeesPolicy.parent, config.objectId);
   assert.equal(config.tradeFeesPolicy.pending, null);
   assert.equal(config.creationFeePolicy.delay_ms, 0n);
   assert.deepEqual(config.partners, {
-    owner: configId,
+    parent: configId,
     acceptance_ends_at_ms: {
       id: "0xa058cccb1180e0c063232bed5fcf330614d57c74f056f8b3db0317812e129eb2",
       size: 1n,
@@ -364,7 +364,7 @@ test("decodes launch and runtime configuration from literal contract bytes", () 
   assert.equal(runtime.pendingClaimSignerDelay, null);
   assert.deepEqual(runtime.pendingClaimSigners, {});
   assert.equal(runtime.protocolFeeShareBps, 3_000n);
-  assert.equal(runtime.protocolFeeSharePolicy.owner, runtime.objectId);
+  assert.equal(runtime.protocolFeeSharePolicy.parent, runtime.objectId);
 });
 
 test("reads a partner's acceptance from the config's PartnerList table", async () => {

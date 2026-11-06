@@ -38,22 +38,22 @@ export const partnerEventBcs = {
     amount: u64Bcs,
   }),
   /**
-   * `partner_list::add`: the list owned by `owner` (a product configuration's
+   * `partner_list::add`: the list owned by `parent` (a product configuration's
    * ID) accepts `partner_id` without end.
    */
   PartnerAdded: bcs.struct("PartnerAdded", {
-    owner: suiObjectIdBcs,
+    parent: suiObjectIdBcs,
     partner_id: suiObjectIdBcs,
   }),
   /** `partner_list::remove`: new sales stop naming the partner from `acceptance_ends_at_ms`. */
   PartnerRemoved: bcs.struct("PartnerRemoved", {
-    owner: suiObjectIdBcs,
+    parent: suiObjectIdBcs,
     partner_id: suiObjectIdBcs,
     acceptance_ends_at_ms: u64Bcs,
   }),
-  /** `partner_list::destroy`: the list owned by `owner` and its entries are gone. */
+  /** `partner_list::destroy`: the list owned by `parent` and its entries are gone. */
   PartnerListDestroyed: bcs.struct("PartnerListDestroyed", {
-    owner: suiObjectIdBcs,
+    parent: suiObjectIdBcs,
   }),
 };
 

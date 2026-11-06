@@ -56,7 +56,7 @@ test("mirrors blast_admin::delayed's notice ceiling and guards", () => {
   assert.equal(MAX_DELAY_MS, 30n * 24n * 60n * 60n * 1_000n);
   const notice = { delay_ms: 7_200_000n, ready_at_ms: 1n };
   const delayed = {
-    owner: "0x1",
+    parent: "0x1",
     key: null,
     value: 0n,
     delay_ms: 7_200_000n,
@@ -76,7 +76,7 @@ test("mirrors blast_admin::delayed's notice ceiling and guards", () => {
     false,
   );
   const action = {
-    owner: "0x1",
+    parent: "0x1",
     key: null,
     delay_ms: 7_200_000n,
     pending: null,
@@ -90,7 +90,7 @@ test("mirrors blast_admin::delayed's notice ceiling and guards", () => {
     false,
   );
   const set = {
-    owner: "0x1",
+    parent: "0x1",
     key: null,
     members: [],
     delay_ms: 7_200_000n,

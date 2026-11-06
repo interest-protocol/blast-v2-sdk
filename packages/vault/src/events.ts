@@ -181,7 +181,7 @@ export function decodeVaultEvent(
 }
 
 /**
- * The vault package's `blast_admin` delayed keys. `owner` is the `Vault` for
+ * The vault package's `blast_admin` delayed keys. `parent` is the `Vault` for
  * the three `vault::*` keys and the `VaultRegistry` for `WitnessesKey`.
  */
 export const vaultDelayedKeys = {

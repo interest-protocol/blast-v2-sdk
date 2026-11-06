@@ -327,7 +327,7 @@ function shared(objectId: string) {
 
 function transferSlot(recipient: string | null, delay = false) {
   return {
-    owner: id("0xac"),
+    parent: id("0xac"),
     key: null,
     delay_ms: 604_800_000n,
     pending:
@@ -351,7 +351,7 @@ function transfer(
   eventIndex += 1;
   const change = { kind: "Action", action: id("0xb0b") } as const;
   const payload = {
-    owner: id("0xac"),
+    parent: id("0xac"),
     key: null,
     change,
     delay_ms: 604_800_000n,
@@ -551,7 +551,7 @@ test("decodes one package's PackageVersion and PackageAdmin by OTW", () => {
           policy: 0,
         },
         upgrade: {
-          owner: id("0x9b"),
+          parent: id("0x9b"),
           key: null,
           delay_ms: 172_800_000n,
           pending: null,
@@ -619,7 +619,7 @@ test("replays one package's administration from its typed events", () => {
         sender: id("0x5e"),
         eventType: `${ADMIN_PACKAGE}::delayed_action::${kind}<${ADMIN_PACKAGE}::package_admin::UpgradeKey<${OTW}>, ${ADMIN_PACKAGE}::package_admin::UpgradeAction>`,
         bcs: delayedEventBcs(kind, upgradeDelayedKey(OTW))
-          .serialize({ owner: id("0x9b"), key: null, ...payload } as never)
+          .serialize({ parent: id("0x9b"), key: null, ...payload } as never)
           .toBytes(),
         json: null,
         checkpoint: "11",

@@ -196,7 +196,7 @@ export type DecodedPackageAdministrationEvent = {
  * Move records `package_witness` with `type_name::with_defining_ids`; each
  * product defines its `PackageWitness` in its first version, so the defining
  * ID is the original ID the SDK compares against. The event type names the
- * immutable v1 `blast_admin`.
+ * original v1 `blast_admin`.
  */
 export function decodePackageAdministrationEvent(
   event: SuiClientTypes.EventEntry,
@@ -228,7 +228,7 @@ export function decodePackageAdministrationEvent(
 
 /**
  * Every lifecycle event the `blast_admin` delayed modules emit, generic in the
- * owner's key `K` and the value types: `delayed` (`Delayed*`),
+ * parent's key `K` and the value types: `delayed` (`Delayed*`),
  * `delayed_action` (`Action*`), `delayed_set` (`Set*`, `MemberRemoved`) and
  * `delayed_map` (`Map*`): 21 kinds.
  */
@@ -337,96 +337,96 @@ export type DelayedKeySpecs = Readonly<Record<string, DelayedKeySpec>>;
 
 /** Move field order of each event; `Value` is `T`, `A`, `E` or `V`. */
 export type DelayedEventPayloads<Key, Value, Entry> = {
-  DelayedCreated: { owner: string; key: Key; value: Value; delay_ms: bigint };
+  DelayedCreated: { parent: string; key: Key; value: Value; delay_ms: bigint };
   DelayedScheduled: {
-    owner: string;
+    parent: string;
     key: Key;
     value: Value;
     delay_ms: bigint;
     ready_at_ms: bigint;
   };
   DelayedCancelled: {
-    owner: string;
+    parent: string;
     key: Key;
     value: Value;
     delay_ms: bigint;
     ready_at_ms: bigint;
   };
   DelayedApplied: {
-    owner: string;
+    parent: string;
     key: Key;
     previous_value: Value;
     value: Value;
     delay_ms: bigint;
   };
-  DelayedDestroyed: { owner: string; key: Key };
-  ActionCreated: { owner: string; key: Key; delay_ms: bigint };
+  DelayedDestroyed: { parent: string; key: Key };
+  ActionCreated: { parent: string; key: Key; delay_ms: bigint };
   ActionScheduled: {
-    owner: string;
+    parent: string;
     key: Key;
     change: DelayedChange<Value>;
     delay_ms: bigint;
     ready_at_ms: bigint;
   };
   ActionCancelled: {
-    owner: string;
+    parent: string;
     key: Key;
     change: DelayedChange<Value>;
     delay_ms: bigint;
     ready_at_ms: bigint;
   };
   ActionApplied: {
-    owner: string;
+    parent: string;
     key: Key;
     change: DelayedChange<Value>;
     delay_ms: bigint;
   };
-  ActionDestroyed: { owner: string; key: Key };
-  SetCreated: { owner: string; key: Key; delay_ms: bigint };
+  ActionDestroyed: { parent: string; key: Key };
+  SetCreated: { parent: string; key: Key; delay_ms: bigint };
   SetScheduled: {
-    owner: string;
+    parent: string;
     key: Key;
     change: DelayedSetChange<Value>;
     delay_ms: bigint;
     ready_at_ms: bigint;
   };
   SetCancelled: {
-    owner: string;
+    parent: string;
     key: Key;
     change: DelayedSetChange<Value>;
     delay_ms: bigint;
     ready_at_ms: bigint;
   };
   SetApplied: {
-    owner: string;
+    parent: string;
     key: Key;
     change: DelayedSetChange<Value>;
     delay_ms: bigint;
   };
-  SetDestroyed: { owner: string; key: Key };
-  MemberRemoved: { owner: string; key: Key; member: Value };
-  MapCreated: { owner: string; key: Key; delay_ms: bigint };
+  SetDestroyed: { parent: string; key: Key };
+  MemberRemoved: { parent: string; key: Key; member: Value };
+  MapCreated: { parent: string; key: Key; delay_ms: bigint };
   MapScheduled: {
-    owner: string;
+    parent: string;
     key: Key;
     change: DelayedMapChange<Entry, Value>;
     delay_ms: bigint;
     ready_at_ms: bigint;
   };
   MapCancelled: {
-    owner: string;
+    parent: string;
     key: Key;
     change: DelayedMapChange<Entry, Value>;
     delay_ms: bigint;
     ready_at_ms: bigint;
   };
   MapApplied: {
-    owner: string;
+    parent: string;
     key: Key;
     change: DelayedMapChange<Entry, Value>;
     delay_ms: bigint;
   };
-  MapDestroyed: { owner: string; key: Key };
+  MapDestroyed: { parent: string; key: Key };
 };
 
 type SpecKey<Spec> =
@@ -439,7 +439,7 @@ type SpecEntry<Spec> = Spec extends { entryBcs: BcsDecoder<infer Entry> }
 
 /**
  * A decoded delayed event. `name` is the consumer's registry name for `K`;
- * `owner` is the ID of the object storing the value.
+ * `parent` is the ID of the object storing the value.
  */
 export type DecodedDelayedEvent<Specs extends DelayedKeySpecs> = {
   [Name in keyof Specs & string]: {
@@ -538,7 +538,7 @@ export function delayedEventBcs(
   // Every decoder in a spec is a full BcsType; the spec only promises `parse`.
   const value = spec.valueBcs as BcsType<unknown, unknown>;
   const head = {
-    owner: suiObjectIdBcs,
+    parent: suiObjectIdBcs,
     key: spec.keyBcs as BcsType<unknown, unknown>,
   };
   const timing = { delay_ms: u64Bcs, ready_at_ms: u64Bcs };

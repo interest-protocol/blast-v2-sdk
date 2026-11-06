@@ -212,9 +212,10 @@ async function roundJourney(
           partnerId: null,
           residuals: "Owner",
         },
+        venue: `${address("0x30").slice(2)}::venue::Venue`,
         pool_id: address("0x22"),
         fee_split: {
-          owner: vaultId,
+          parent: vaultId,
           key: null,
           value: {
             routes: [{ destination: { kind: "HolderRewards" }, bps: 10_000n }],
@@ -223,7 +224,7 @@ async function roundJourney(
           pending: null,
         },
         protocol_bps: {
-          owner: vaultId,
+          parent: vaultId,
           key: null,
           value: { meme_bps: 0n, quote_bps: 0n },
           delay_ms: 172_800_000n,
@@ -248,7 +249,7 @@ async function roundJourney(
         next_round: published ? number + 1n : number,
         last_checkpoint: published ? 2n : previousEnd,
         round_publication: {
-          owner: vaultId,
+          parent: vaultId,
           key: null,
           delay_ms: roundDelayMs,
           pending: scheduled
