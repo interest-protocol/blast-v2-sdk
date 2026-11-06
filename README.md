@@ -328,7 +328,8 @@ Each public workspace owns its version, dependencies and export map; internal
 dependencies are ordinary npm versions. Publish in the order of the root
 `workspaces` array with `npm publish --workspace <package-name>`.
 `SDK_RELEASE` identifies the coordinated npm build and its reviewed implementation
-commit. npm `gitHead` identifies the packaging commit. The partner REST client
+commit. Git tag `sdk-v0.2.0` identifies the exact published source; npm does not
+record `gitHead` for this worktree publication. The partner REST client
 remains at its already published `0.1.0`; its published files are unchanged.
 
 The canonical manifest is backed by the [November 6 deployment record](https://github.com/interest-protocol/blast-v2-contracts/blob/main/deployments/sui/mainnet/2026-11-06-canonical-launch-stack.json). Auto-LP compounding now requires an `AutoLpAdmin` cap and inclusive Q64.64 price bounds; its private entry consumes and re-shares the pool. Collection stays permissionless.

@@ -43,8 +43,8 @@ export type SdkRelease = Readonly<{
 
 /**
  * Coordinated 0.2.0 release of the canonical November 6 launch stack.
- * The commit pins the reviewed implementation; npm gitHead records the
- * packaging commit, which also updates this release metadata.
+ * The commit pins the reviewed implementation; the sdk-v0.2.0 Git tag records
+ * the packaging commit, which also updates this release metadata.
  */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
