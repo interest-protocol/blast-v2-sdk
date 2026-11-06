@@ -1,13 +1,14 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "b50d0c3bee50b637a673d1ccb64b5413af4ba518",
+    "contractsCommit": "86ee8cf9df8e9b2ec920f9564e2fda8afbf82106",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#215: the fresh one-way launch stack, first freeze",
       "contracts #200: one product-agnostic blast_migrators venue package for launches and presales",
       "contracts #217: every product's unpause also requires the core Treasury guarded; MigrationAllocationPaid names its vesting schedules; venue auto-LP compounding moves to compound_auto_lp",
-      "contracts ADR 0138 (PR #219): a generated coin's TreasuryCap is sealed under its product in blast_core::sealed_treasury_cap::SealedTreasuryCap; launch_ticket::new and the new blast_presale::sale_token::new return the sealed cap, launch::new and blast_presale::new open it, launch_config::venue_admission and creation_policy::venue_admission issue the VenueAdmission cetus::prepare takes with &mut SealedTreasuryCap, bluefin::prepare takes &SealedTreasuryCap, and presale_coin_template is the presale's generated sale-token package"
+      "contracts ADR 0138 (PR #219): a generated coin's TreasuryCap is sealed under its product in blast_core::sealed_treasury_cap::SealedTreasuryCap; launch_ticket::new and the new blast_presale::sale_token::new return the sealed cap, launch::new and blast_presale::new open it, launch_config::venue_admission and creation_policy::venue_admission issue the VenueAdmission cetus::prepare takes with &mut SealedTreasuryCap, bluefin::prepare takes &SealedTreasuryCap, and presale_coin_template is the presale's generated sale-token package",
+      "contracts #225: canonical auto-LP compounding checks the venue price and bounds spent liquidity"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -503,7 +504,7 @@
             {
               "name": "compound_auto_lp",
               "sdk": "builder",
-              "entry": false,
+              "entry": true,
               "typeParameters": [
                 {
                   "name": "Meme",
@@ -609,10 +610,80 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "ACL",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminCap",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "bluefin_spot",
                           "name": "config"
                         },
                         "name": "GlobalConfig",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "bluefin_spot",
+                      "name": "pool"
+                    },
+                    "name": "Pool",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Meme"
+                        },
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Quote"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                "u128",
+                "u128",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
                         "type_arguments": []
                       }
                     }
@@ -624,38 +695,10 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "bluefin_spot",
-                          "name": "pool"
-                        },
-                        "name": "Pool",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Meme"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Quote"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
                           "address": "sui",
-                          "name": "clock"
+                          "name": "tx_context"
                         },
-                        "name": "Clock",
+                        "name": "TxContext",
                         "type_arguments": []
                       }
                     }
@@ -1029,7 +1072,22 @@
                   ]
                 },
                 "u32",
-                "u64"
+                "u64",
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
               ],
               "returns": [
                 {
@@ -1808,7 +1866,7 @@
             {
               "name": "compound_auto_lp",
               "sdk": "builder",
-              "entry": false,
+              "entry": true,
               "typeParameters": [
                 {
                   "name": "Meme",
@@ -1924,6 +1982,36 @@
                     {
                       "Datatype": {
                         "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "ACL",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminCap",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
                           "address": "cetus_clmm",
                           "name": "config"
                         },
@@ -1934,33 +2022,30 @@
                   ]
                 },
                 {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "cetus_clmm",
-                          "name": "pool"
+                  "Datatype": {
+                    "module": {
+                      "address": "cetus_clmm",
+                      "name": "pool"
+                    },
+                    "name": "Pool",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "CoinA"
                         },
-                        "name": "Pool",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "CoinA"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "CoinB"
-                            },
-                            "phantom": true
-                          }
-                        ]
+                        "phantom": true
+                      },
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "CoinB"
+                        },
+                        "phantom": true
                       }
-                    }
-                  ]
+                    ]
+                  }
                 },
+                "u128",
+                "u128",
                 {
                   "Reference": [
                     false,

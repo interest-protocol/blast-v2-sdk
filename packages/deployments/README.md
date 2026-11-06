@@ -17,9 +17,9 @@ and optional venue sets (Cetus, Bluefin, the Aftermath DAO vendor).
 `launchpadDeployment` and `presaleDeployment` derive each package's call-ready
 deployment from it.
 
-`BLAST_DEPLOYMENTS` is empty until the publish script writes the mainnet
-manifest; `getBlastDeployment` throws `DeploymentManifestError("unpublished")`
-until then. `evaluateProtocolAccess` decides whether a manifest may sign and
+`getBlastDeployment("mainnet")` returns the canonical November 6 deployment.
+Vault and both products remain paused; route evidence and the coordinated
+SDK npm release remain pending. `evaluateProtocolAccess` decides whether a manifest may sign and
 reports each package's observed pause mask. `admissionRunbook` builds the
 contracts' paused admission, notice raise and unpause sequence
 (`deployments/README.md`, "Admission while paused").

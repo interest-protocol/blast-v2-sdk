@@ -16,8 +16,9 @@ shared with launches; a migrated sale's LP lives in a `blast_vault` vault
 (`@interest-protocol/blast-vault-sdk`), which the sale's `PresaleCap` holder
 controls through `prove_owner`. The vendor creates no vault.
 
-The fresh stack is unpublished; no mainnet manifest is registered. Pass the IDs
-the publish and `package_admin::wrap` effects return:
+The canonical November 6 stack is registered in `getBlastDeployment("mainnet")`.
+Use `presaleDeployment` to select its call identities; explicit objects follow
+the same schema:
 
 ```ts
 const presale = new PresaleTransactions({

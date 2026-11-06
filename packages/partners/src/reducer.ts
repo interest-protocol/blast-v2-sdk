@@ -33,7 +33,7 @@ export type PartnersEventProjection = {
   eventCounts: Readonly<Record<PartnerEventKind, number>>;
   partners: Readonly<Record<string, PartnerProjection>>;
   /**
-   * Each `PartnerList` by owner (the product configuration's ID): every
+   * Each `PartnerList` by parent (the product configuration's ID): every
    * partner it named and the millisecond its acceptance ends (`U64_MAX`
    * while accepted without end). A destroyed list is removed.
    */
@@ -60,7 +60,7 @@ export function reducePartnerEvent(
   if (state.appliedEventIds[eventId]) return state;
   const applied = { ...state.appliedEventIds, [eventId]: true as const };
   if (event.source === "delayed") {
-    const partnerId = event.payload.owner;
+    const partnerId = event.payload.parent;
     return withPartner(
       { ...state, appliedEventIds: applied },
       reduceTerms(state.partners[partnerId] ?? empty(partnerId), event),
@@ -75,11 +75,11 @@ export function reducePartnerEvent(
     },
   };
   if (event.kind === "PartnerListDestroyed") {
-    const { [event.payload.owner]: _, ...lists } = state.lists;
+    const { [event.payload.parent]: _, ...lists } = state.lists;
     return { ...next, lists };
   }
   if (event.kind === "PartnerAdded" || event.kind === "PartnerRemoved") {
-    const { owner, partner_id } = event.payload;
+    const { parent, partner_id } = event.payload;
     const acceptanceEndsAtMs =
       event.kind === "PartnerAdded"
         ? U64_MAX
@@ -88,7 +88,7 @@ export function reducePartnerEvent(
       ...next,
       lists: {
         ...state.lists,
-        [owner]: { ...state.lists[owner], [partner_id]: acceptanceEndsAtMs },
+        [parent]: { ...state.lists[parent], [partner_id]: acceptanceEndsAtMs },
       },
     };
   }

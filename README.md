@@ -4,7 +4,7 @@ TypeScript SDKs for the Blast contracts on Sui mainnet. Contract source and
 generated Move references live in
 [interest-protocol/blast-v2-contracts](https://github.com/interest-protocol/blast-v2-contracts);
 this SDK is frozen to contracts
-[`b50d0c3`](https://github.com/interest-protocol/blast-v2-contracts/tree/b50d0c3bee50b637a673d1ccb64b5413af4ba518/sui),
+[`86ee8cf`](https://github.com/interest-protocol/blast-v2-contracts/tree/86ee8cf9df8e9b2ec920f9564e2fda8afbf82106/sui),
 the one-way launch stack of ADR 0137 with the sealed treasury caps of ADR 0138
 (see [docs/abi.md](docs/abi.md)).
 
@@ -16,9 +16,8 @@ The packages are ESM with TypeScript declarations and no Node, browser or
 storage dependencies of their own: they run on Node 22+, browsers, edge
 workers and other ES2023 runtimes. Node 22.12+ can also `require()` them.
 
-```sh
-npm install @interest-protocol/blast-sdk@0.2.0 @mysten/sui@2.26.2 @mysten/move-bytecode-template@0.4.1
-```
+SDK 0.2.0 is an unreleased source build. Build the workspaces with `npm ci`
+and `npm run build`; use npm installation instructions only after release.
 
 ## Packages
 
@@ -58,7 +57,7 @@ needs.
 
 ## 0.2.0 is a one-way break
 
-0.2.0 targets a fresh, unpublished launch stack and replaces the 0.1.x
+0.2.0 targets a canonical November 6 launch stack and replaces the 0.1.x
 surface outright; there is no compatibility layer. The last SDK commit that
 carried the 2026-10-28 mainnet bindings is `main` `f78b2e7`; pin it to talk
 to that stack.
@@ -96,9 +95,11 @@ shared singletons grouped by owner (`core.treasury`, `vault.registry`,
 `aftermathDao`), migration routes, and the contracts commit and ABI digests it
 was built from.
 
-`BLAST_DEPLOYMENTS` is empty and `getBlastDeployment("mainnet")` throws
-`DeploymentManifestError("unpublished")` until the contracts' publish script
-writes the fresh stack's manifest. Pass your own manifest to
+`getBlastDeployment("mainnet")` returns the canonical November 6 manifest.
+Its shared-object versions come from live owners. Vault and both products
+remain paused; routes and route-release evidence remain empty until live venue
+validation. SDK 0.2.0 is still an unreleased source build, so production signing
+remains disabled. Pass an explicit manifest to
 `defineBlastDeployment`; `launchpadDeployment`, `presaleDeployment`,
 `vaultDeployment`, `migratorsDeployment` and `coreDeployment` derive each
 package's call-ready identities from it.
@@ -324,3 +325,5 @@ Each public workspace owns its version, dependencies and export map; internal
 dependencies are ordinary npm versions. Publish in the order of the root
 `workspaces` array with `npm publish --workspace <package-name>`.
 `SDK_RELEASE.published` stays false until the coordinated release.
+
+The canonical manifest is backed by the [November 6 deployment record](https://github.com/interest-protocol/blast-v2-contracts/blob/main/deployments/sui/mainnet/2026-11-06-canonical-launch-stack.json). Auto-LP compounding now requires an `AutoLpAdmin` cap and inclusive Q64.64 price bounds; its private entry consumes and re-shares the pool. Collection stays permissionless.

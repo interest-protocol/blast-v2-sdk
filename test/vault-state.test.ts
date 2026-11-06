@@ -59,6 +59,7 @@ test("decodes the Move-printed Vault with every balance and pending change", () 
       memeType: fixture.memeType,
       quoteType: fixture.quoteType,
       terms: undefined,
+      venue: fixture.venue,
       poolId: fixture.poolId,
       feeSplit: { routes: split },
       feeSplitDelayMs: 172_800_000n,

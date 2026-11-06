@@ -13,7 +13,7 @@ import { assertBuildersMatchAbi, readAbi } from "./abi.ts";
 import { PRESALE_DEPLOYMENT } from "./fixtures/presale-deployment.ts";
 import { fixture, deployment as vaultDeployment } from "./vault-helpers.ts";
 
-// The Move-printed vault (`test/fixtures/vault-a1a8f6c.move`) under a presale
+// The Move-printed vault (`test/fixtures/vault-86ee8cf.move`) under a presale
 // deployment whose vault package is the fixture's.
 const presale = { ...PRESALE_DEPLOYMENT, vault: vaultDeployment };
 const identity: PresaleCreatorDeployment = {

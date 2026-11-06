@@ -16,6 +16,7 @@ import type { PresaleDeployment } from "@interest-protocol/blast-presale-sdk/tra
 import type { BlastSuiDeployment } from "@interest-protocol/blast-sui-sdk/types";
 import type { VaultDeployment } from "@interest-protocol/blast-vault-sdk/transactions";
 import { isValidTransactionDigest } from "@mysten/sui/utils";
+import { CANONICAL_MAINNET_MANIFEST } from "./mainnet.ts";
 import type {
   BlastDeployment,
   BlastDeploymentInput,
@@ -126,12 +127,10 @@ export class DeploymentManifestError extends Error {
   }
 }
 
-/**
- * Released deployments, the only production identities. The fresh launch
- * stack (contracts ADR 0137) is unpublished: its publish script writes the
- * mainnet entry.
- */
-export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({});
+/** Canonical published identities; access checks separately gate signing. */
+export const BLAST_DEPLOYMENTS: BlastDeploymentRegistry = Object.freeze({
+  mainnet: defineBlastDeployment(CANONICAL_MAINNET_MANIFEST),
+});
 
 /**
  * Validates, normalizes, and freezes one manifest into the runtime identity

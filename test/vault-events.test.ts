@@ -27,7 +27,7 @@ test("decodes each Move-emitted vault event with its type arguments", () => {
       vault_id: fixture.vaultId,
       pool_id: fixture.poolId,
       position_id:
-        "0xa64c316e84b1b8442b74aa01371401c77ebc9dbcf316dbbc95c5f3bd1cff93b7",
+        "0xd05f6de254fc218a4bb4b8e9c10f97eb1ab43d8c317135867d6099b6b9109bd4",
       liquidity: 123_456_789n,
       terms: "Owner",
       residual_meme_amount: 7n,
@@ -181,7 +181,7 @@ test("decodes the vault's delayed proposals by key", () => {
   assert.equal(split.name, "FeeSplit");
   assert.equal(split.kind, "DelayedScheduled");
   assert.deepEqual(split.payload, {
-    owner: fixture.vaultId,
+    parent: fixture.vaultId,
     key: null,
     value: { routes: [{ destination: { kind: "Owner" }, bps: 10_000n }] },
     delay_ms: 172_800_000n,

@@ -215,7 +215,7 @@ test("decodes the fee and creation policies", () => {
         .serialize({
           id: { id: { bytes: address(policy) } },
           fees: {
-            owner: policy,
+            parent: policy,
             key: null,
             value: fees,
             delay_ms: 0n,
@@ -244,7 +244,7 @@ test("decodes the fee and creation policies", () => {
           id: { id: { bytes: address(policy) } },
           allowed_quotes: [sui],
           venues: {
-            owner: policy,
+            parent: policy,
             key: null,
             members: [cetusVenue],
             delay_ms: 172_800_000n,
@@ -257,7 +257,7 @@ test("decodes the fee and creation policies", () => {
             pending_delay: null,
           },
           partners: {
-            owner: policy,
+            parent: policy,
             acceptance_ends_at_ms: { id: "0x7ab1e", size: 2n },
           },
         })
@@ -272,7 +272,7 @@ test("decodes the fee and creation policies", () => {
     [vendorVenue]: { delay_ms: 0n, ready_at_ms: 9n },
   });
   assert.deepEqual(creation.partners, {
-    owner: address(policy),
+    parent: address(policy),
     acceptanceTableId: address("0x7ab1e"),
     size: 2n,
   });

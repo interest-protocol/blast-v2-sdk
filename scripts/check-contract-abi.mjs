@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
  * refreeze at contracts main with `check:abi:write` for an approved change,
  * and keep CI's checkout (`.github/workflows/check.yml`) on the same commit.
  */
-const BASELINE_COMMIT = "b50d0c3bee50b637a673d1ccb64b5413af4ba518";
+const BASELINE_COMMIT = "86ee8cf9df8e9b2ec920f9564e2fda8afbf82106";
 const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
@@ -69,6 +69,7 @@ const artifactDeclarations = [
       "contracts #200: one product-agnostic blast_migrators venue package for launches and presales",
       DEEP_REVIEW_FIXES,
       SEALED_TREASURY_CAPS,
+      "contracts #225: canonical auto-LP compounding checks the venue price and bounds spent liquidity",
     ],
     packages: [["migrators", "migrators", "blast_migrators"]],
   },
@@ -298,6 +299,7 @@ function normalizeModule(packageName, moduleName, summary) {
     .filter(
       ([name, definition]) =>
         definition.visibility === "Public" ||
+        definition.entry ||
         (packageName === "blast_boosts_aftermath" &&
           moduleName === "operations" &&
           name === "observe"),

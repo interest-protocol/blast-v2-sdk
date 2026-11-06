@@ -69,17 +69,17 @@ const NOT_BUILT = new Set([
   "is_cap_ready",
 ]);
 const SUI = normalizeStructTag("0x2::sui::SUI");
-const terms = (share: bigint, cap: string, owner = id("0xb1")) => ({
+const terms = (share: bigint, cap: string, parent = id("0xb1")) => ({
   recipient: id("0xfee"),
   share_bps: {
-    owner,
+    parent,
     key: null,
     value: share,
     delay_ms: PARTNER_DELAY_MS,
     pending: null,
   },
   cap_id: {
-    owner,
+    parent,
     key: null,
     value: id(cap),
     delay_ms: PARTNER_DELAY_MS,
@@ -272,7 +272,7 @@ test("Partner, PartnerList and their events follow the frozen Move field order",
       partnerListBcs.parse(
         partnerListBcs
           .serialize({
-            owner: id("0x3"),
+            parent: id("0x3"),
             acceptance_ends_at_ms: { id: id("0x4"), size: 0n },
           })
           .toBytes(),
@@ -369,13 +369,13 @@ test("replays partner terms and payouts from events", () => {
 const SAMPLES: { [Kind in PartnerEventKind]: PartnerEventPayloads[Kind] } = {
   PartnerUpdated: { partner_id: id("0xb1"), recipient: id("0xfee") },
   PartnerPaid: { partner_id: id("0xb1"), amount: 1n },
-  PartnerAdded: { owner: id("0x3"), partner_id: id("0xb1") },
+  PartnerAdded: { parent: id("0x3"), partner_id: id("0xb1") },
   PartnerRemoved: {
-    owner: id("0x3"),
+    parent: id("0x3"),
     partner_id: id("0xb1"),
     acceptance_ends_at_ms: 1n,
   },
-  PartnerListDestroyed: { owner: id("0x3") },
+  PartnerListDestroyed: { parent: id("0x3") },
 };
 
 test("replays each product's partner list from the partner-list events", () => {
@@ -383,11 +383,11 @@ test("replays each product's partner list from the partner-list events", () => {
   const policy = id("0x4");
   const removedAt = 1_000n + PARTNER_DELAY_MS;
   const state = [
-    event("PartnerAdded", { owner: config, partner_id: id("0xb1") }),
-    event("PartnerAdded", { owner: config, partner_id: id("0xb2") }),
-    event("PartnerAdded", { owner: policy, partner_id: id("0xb1") }),
+    event("PartnerAdded", { parent: config, partner_id: id("0xb1") }),
+    event("PartnerAdded", { parent: config, partner_id: id("0xb2") }),
+    event("PartnerAdded", { parent: policy, partner_id: id("0xb1") }),
     event("PartnerRemoved", {
-      owner: config,
+      parent: config,
       partner_id: id("0xb2"),
       acceptance_ends_at_ms: removedAt,
     }),
@@ -400,12 +400,12 @@ test("replays each product's partner list from the partner-list events", () => {
   // Re-adding a removed partner accepts it again.
   const readded = reducePartnerEvent(
     state,
-    event("PartnerAdded", { owner: config, partner_id: id("0xb2") }),
+    event("PartnerAdded", { parent: config, partner_id: id("0xb2") }),
   );
   assert.equal(readded.lists[config]?.[id("0xb2")], forever);
   const destroyed = reducePartnerEvent(
     readded,
-    event("PartnerListDestroyed", { owner: policy }),
+    event("PartnerListDestroyed", { parent: policy }),
   );
   assert.deepEqual(Object.keys(destroyed.lists), [config]);
   assert.equal(destroyed.eventCounts.PartnerAdded, 4);
@@ -476,7 +476,7 @@ function delayed(
       sender: id("0x5e"),
       eventType: `${ADMIN}::${delayedEventModule(kind)}::${kind}<${PARTNERS}::${spec.key}, ${spec.valueType}>`,
       bcs: delayedEventBcs(kind, spec)
-        .serialize({ owner: id("0xb1"), key: null, ...payload } as never)
+        .serialize({ parent: id("0xb1"), key: null, ...payload } as never)
         .toBytes(),
       json: null,
       checkpoint: "9",

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "b50d0c3bee50b637a673d1ccb64b5413af4ba518",
+    "contractsCommit": "86ee8cf9df8e9b2ec920f9564e2fda8afbf82106",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0137 (amended 2026-11-05) and PRs #178-#215: the fresh one-way launch stack, first freeze",
@@ -2203,6 +2203,21 @@
                       }
                     }
                   ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 }
               ],
               "returns": []
@@ -4232,6 +4247,21 @@
                     "name": "ID",
                     "type_arguments": []
                   }
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 }
               ],
               "returns": [
@@ -5679,6 +5709,19 @@
                         "name": "migration"
                       },
                       "name": "VaultTerms",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "venue",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "std",
+                        "name": "type_name"
+                      },
+                      "name": "TypeName",
                       "type_arguments": []
                     }
                   }

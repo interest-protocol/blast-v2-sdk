@@ -4,6 +4,7 @@ import { grossGasBudget } from "@interest-protocol/blast-core/gas";
 import {
   requirePositiveU64,
   requireU64,
+  requireU128,
 } from "@interest-protocol/blast-core/integers";
 import { deploymentObject } from "@interest-protocol/blast-core/ptb";
 import { coreRoleType } from "@interest-protocol/blast-core/roles";
@@ -400,19 +401,17 @@ export class MigratorCalls {
     return this.#bluefinFees("settle_and_apply_fee_split", options);
   }
 
-  /**
-   * `cetus::compound_auto_lp<Meme, Quote, CoinA, CoinB>(vault,
-   * migrators_version, vault_version, cetus_config, pool, clock)`: adds the
-   * vault's waiting auto-LP Meme and Quote to its auto-LP position at the
-   * current price and keeps the rest for the next call. Anyone may call it;
-   * a Cetus refusal never blocks `collectCetusFees`.
+  /** Adds waiting auto-LP balances under AutoLpAdmin and keeper price bounds.
+   * The private entry consumes and re-shares the pool, so put it last in a PTB.
+   * Bounds are inclusive Q64.64 sqrt prices in venue pool coin order.
    */
   compoundCetusAutoLp(
-    options: PairTypes & {
-      vault: SharedObjectIdentity;
-      cetus: { config: SharedObjectIdentity };
-      pool: SharedObjectIdentity;
-    },
+    options: PairTypes &
+      AutoLpInput & {
+        vault: SharedObjectIdentity;
+        cetus: { config: SharedObjectIdentity };
+        pool: SharedObjectIdentity;
+      },
   ): (tx: Transaction) => void {
     const typeArguments = cetusTypeArguments(options);
     const objects = {
@@ -423,6 +422,7 @@ export class MigratorCalls {
       ),
       pool: normalizeSharedObjectIdentity("pool", options.pool),
     };
+    const [min, max] = autoLpPriceBounds(options);
     return (tx) => {
       tx.moveCall({
         target: this.#target("cetus", "compound_auto_lp"),
@@ -431,24 +431,26 @@ export class MigratorCalls {
           deploymentObject(tx, objects.vault, true),
           this.#migratorsVersion(tx),
           this.#vaultVersion(tx),
+          deploymentObject(tx, this.deployment.vault.admin.acl, false),
+          tx.object(options.adminCap),
           deploymentObject(tx, objects.config, false),
           deploymentObject(tx, objects.pool, true),
+          tx.pure.u128(min),
+          tx.pure.u128(max),
           tx.object.clock(),
         ],
       });
     };
   }
 
-  /**
-   * `bluefin::compound_auto_lp<Meme, Quote>(vault, migrators_version,
-   * vault_version, bluefin_config, pool, clock)`; see `compoundCetusAutoLp`.
-   */
+  /** Bluefin's private AutoLpAdmin entry; see compoundCetusAutoLp. */
   compoundBluefinAutoLp(
-    options: PairTypes & {
-      vault: SharedObjectIdentity;
-      bluefinConfig: SharedObjectIdentity;
-      pool: SharedObjectIdentity;
-    },
+    options: PairTypes &
+      AutoLpInput & {
+        vault: SharedObjectIdentity;
+        bluefinConfig: SharedObjectIdentity;
+        pool: SharedObjectIdentity;
+      },
   ): (tx: Transaction) => void {
     const types = pair(options);
     const objects = {
@@ -459,6 +461,7 @@ export class MigratorCalls {
       ),
       pool: normalizeSharedObjectIdentity("pool", options.pool),
     };
+    const [min, max] = autoLpPriceBounds(options);
     return (tx) => {
       tx.moveCall({
         target: this.#target("bluefin", "compound_auto_lp"),
@@ -467,8 +470,12 @@ export class MigratorCalls {
           deploymentObject(tx, objects.vault, true),
           this.#migratorsVersion(tx),
           this.#vaultVersion(tx),
+          deploymentObject(tx, this.deployment.vault.admin.acl, false),
+          tx.object(options.adminCap),
           deploymentObject(tx, objects.config, false),
           deploymentObject(tx, objects.pool, true),
+          tx.pure.u128(min),
+          tx.pure.u128(max),
           tx.object.clock(),
         ],
       });
@@ -773,4 +780,20 @@ function requireU32(name: string, value: number): number {
     throw new RangeError(`${name} must be a u32`);
   }
   return value;
+}
+
+/** Authority and inclusive pool-order Q64.64 bounds for a private auto-LP entry. */
+export type AutoLpInput = {
+  adminCap: TransactionObjectInput;
+  minSqrtPrice: bigint;
+  maxSqrtPrice: bigint;
+};
+
+function autoLpPriceBounds(options: AutoLpInput): readonly [bigint, bigint] {
+  const min = requireU128("minSqrtPrice", options.minSqrtPrice);
+  const max = requireU128("maxSqrtPrice", options.maxSqrtPrice);
+  if (min === 0n || min > max) {
+    throw new RangeError("auto-LP needs 0 < minSqrtPrice <= maxSqrtPrice");
+  }
+  return [min, max];
 }

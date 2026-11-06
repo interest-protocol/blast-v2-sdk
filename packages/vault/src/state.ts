@@ -76,6 +76,7 @@ export type RoundTerms = ReturnType<typeof roundTermsBcs.parse>;
 export const vaultBcs = bcs.struct("Vault", {
   id: suiUidBcs,
   terms: vaultTermsBcs,
+  venue: moveTypeNameBcs,
   pool_id: suiObjectIdBcs,
   fee_split: delayedBcs(unitKeyBcs, feeSplitBcs),
   protocol_bps: delayedBcs(unitKeyBcs, protocolBpsBcs),
@@ -174,6 +175,7 @@ export type VaultState = SharedObjectIdentity & {
   memeType: string;
   quoteType: string;
   terms: VaultTerms;
+  venue: string;
   poolId: string;
   feeSplit: FeeSplit;
   feeSplitDelayMs: bigint;
@@ -219,9 +221,9 @@ export function decodeVaultObject(
   const objectId = normalizeSuiObjectId(object.objectId);
   if (
     normalizeSuiObjectId(parsed.id.id.bytes) !== objectId ||
-    parsed.fee_split.owner !== objectId ||
-    parsed.protocol_bps.owner !== objectId ||
-    parsed.round_publication.owner !== objectId ||
+    parsed.fee_split.parent !== objectId ||
+    parsed.protocol_bps.parent !== objectId ||
+    parsed.round_publication.parent !== objectId ||
     parsed.protocol.origin !== objectId
   ) {
     throw new TypeError(`vault ${object.objectId} has a mismatched UID`);
@@ -231,6 +233,7 @@ export function decodeVaultObject(
     memeType,
     quoteType,
     terms: parsed.terms,
+    venue: parsed.venue,
     poolId: parsed.pool_id,
     feeSplit: parsed.fee_split.value,
     feeSplitDelayMs: parsed.fee_split.delay_ms,
@@ -416,7 +419,7 @@ export function decodeVaultRegistryObject(
   const objectId = normalizeSuiObjectId(object.objectId);
   if (
     normalizeSuiObjectId(parsed.id.id.bytes) !== objectId ||
-    parsed.witnesses.owner !== objectId
+    parsed.witnesses.parent !== objectId
   ) {
     throw new TypeError(`registry ${object.objectId} has a mismatched UID`);
   }

@@ -14,7 +14,7 @@ import type {
 import { Transaction } from "@mysten/sui/transactions";
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
 
-/** The immutable `blast_partners` package and the ACL its `PartnerAdmin` signs in to. */
+/** The canonical `blast_partners` package (immutability deferred) and the ACL its `PartnerAdmin` signs in to. */
 export type PartnersDeployment = {
   packageId: string;
   admin: AdminDeployment;

@@ -19,11 +19,11 @@ export type BlastNetwork = (typeof BLAST_NETWORKS)[number];
  * required. A venue's packages are recorded whole or not at all.
  */
 export type BlastPackages = Readonly<{
-  /** Immutable `blast_admin`, home of the shared ACL and package administration. */
+  /** `blast_admin` (native compatible cap at the multisig pending final audit), home of the shared ACL and package administration. */
   admin: SuiPackageReference;
-  /** Immutable `blast_partners`. */
+  /** `blast_partners`; immutability deferred until final audit. */
   partners: SuiPackageReference;
-  /** Immutable `blast_core`, home of the shared `Treasury`. */
+  /** `blast_core` (immutability deferred until final audit), home of the shared `Treasury`. */
   core: SuiPackageReference;
   /** `blast_fun_vesting`, which types the vesting objects payouts create. */
   vesting: SuiPackageReference;

@@ -1,6 +1,6 @@
-// Fixture generator for test/fixtures/vault-a1a8f6c.ts. It is not compiled by the SDK and is
+// Fixture generator for test/fixtures/vault-86ee8cf.ts. It is not compiled by the SDK and is
 // never added to the contracts repository. It runs against the real `blast_vault` package at
-// contracts a1a8f6c9 and its test-only `vault_fixture`. To regenerate: copy `sui/{admin,core,
+// contracts 86ee8cf9 and its test-only `vault_fixture`. To regenerate: copy `sui/{admin,core,
 // partners,vesting,vault}` from that commit to a scratch directory (sources, manifests and
 // `vault/tests/vault_fixture.move` only), set `blast_vault` in `vault/Move.toml` to
 // 0x0b1a5f00000000000000000000000000000000000000000000000000000000f3, write this file to
@@ -53,7 +53,7 @@ fun print_vault_fixture() {
         fee_split::route(fee_split::address_destination(FEE_ADDRESS), bps::new(1_000)),
     ]);
     let terms = f.terms_for(split, 1_500, 1_000, true, false);
-    let vault = f.new_vault(terms);
+    let vault = f.new_vault(terms, scenario.ctx());
     let residual_meme = f.meme(7);
     vault.share_with_position(
         &vault_fixture::venue(),
@@ -76,7 +76,7 @@ fun print_vault_fixture() {
 
     // OwnerBalancesClaimed.
     let (meme, quote) = vault.claim_owner_balances(
-        vault_fixture::owner_proof(),
+        f.owner_proof(),
         f.version(),
         scenario.ctx(),
     );
@@ -144,7 +144,7 @@ fun print_vault_fixture() {
     label(b"round_settled");
     debug::print(&bcs::to_bytes(&round));
     f.clock_mut().increment_for_testing(CLAIM_WINDOW_MS);
-    round.close_round(f.version(), &mut vault, f.clock());
+    round.close_round(f.version(), &mut vault, f.clock(), scenario.ctx());
     print_last_event<RoundClosed<VAULT_FIXTURE, QUOTE>>(b"RoundClosed");
     scenario.next_tx(vault_fixture::sender());
 
@@ -152,7 +152,7 @@ fun print_vault_fixture() {
     f.collect(&mut vault, 3_000_001, 4_000_003, scenario.ctx());
     print_last_event<FeesCollected<VAULT_FIXTURE, QUOTE>>(b"FeesCollected2");
     vault.schedule_fee_split(
-        vault_fixture::owner_proof(),
+        f.owner_proof(),
         f.version(),
         vault_fixture::owner_split(),
         f.clock(),

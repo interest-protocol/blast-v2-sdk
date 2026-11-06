@@ -553,8 +553,8 @@ test("never lets a non-production or fixture identity sign in production", () =>
     }),
   );
   assert.ok(nonProduction.includes("environment-mismatch"));
-  // No fresh-stack deployment is registered yet.
-  assert.ok(nonProduction.includes("unreleased-deployment"));
+  // A different canonical lineage is registered.
+  assert.ok(nonProduction.includes("foreign-lineage"));
   assert.equal(nonProduction.includes("sdk-unreleased"), true);
 
   const relabeled = {
@@ -579,7 +579,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
 });
 
 test("the fresh ABI requires a coordinated SDK release and matching runtime", () => {
-  assert.equal(BLAST_DEPLOYMENTS.mainnet, undefined);
+  assert.equal(BLAST_DEPLOYMENTS.mainnet?.environment, "production");
   assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
   assert.equal(SDK_RELEASE.version, "0.2.0");
   assert.equal(SDK_RELEASE.published, false);
@@ -622,7 +622,7 @@ test("the fresh ABI requires a coordinated SDK release and matching runtime", ()
         runtime,
       }),
     ),
-    ["unreleased-deployment", "sdk-unreleased", "sdk-mismatch"],
+    ["foreign-lineage", "sdk-unreleased", "sdk-mismatch"],
   );
   for (const sdk of [
     { ...released, published: false },
@@ -681,7 +681,7 @@ test("the fresh ABI requires a coordinated SDK release and matching runtime", ()
 test("pins the frozen ABI to the contracts baseline and every artifact key", () => {
   assert.equal(
     FROZEN_ABI.contractsCommit,
-    "b50d0c3bee50b637a673d1ccb64b5413af4ba518",
+    "86ee8cf9df8e9b2ec920f9564e2fda8afbf82106",
   );
   assert.deepEqual(Object.keys(FROZEN_ABI.artifacts), [...ARTIFACT_KEYS]);
   for (const [key, digest] of Object.entries(FROZEN_ABI.artifacts)) {

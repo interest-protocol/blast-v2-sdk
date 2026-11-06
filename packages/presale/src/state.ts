@@ -439,7 +439,7 @@ export type PresaleCreationPolicyState = SharedObjectReference<true> & {
   /** Pending admissions; each keeps the deadline it was scheduled with. */
   pendingVenues: Readonly<Record<string, Deadline>>;
   venuesPolicy: DelayedSet<null, string>;
-  partners: { owner: string; acceptanceTableId: string; size: bigint };
+  partners: { parent: string; acceptanceTableId: string; size: bigint };
 };
 
 export type PresaleCommitment = { quote: bigint; walletCap: bigint };
@@ -518,7 +518,7 @@ export function decodePresaleFeePolicyObject(
   assertSingletonType(object, "fee_policy", "FeePolicy", originalPackageId);
   const parsed = feePolicyBcs.parse(object.content);
   return {
-    ...sharedIdentity(object, parsed.id.id.bytes, [parsed.fees.owner]),
+    ...sharedIdentity(object, parsed.id.id.bytes, [parsed.fees.parent]),
     fees: parsed.fees.value,
     feesPolicy: parsed.fees,
   };
@@ -538,8 +538,8 @@ export function decodePresaleCreationPolicyObject(
   const venues = admission(parsed.venues);
   return {
     ...sharedIdentity(object, parsed.id.id.bytes, [
-      parsed.venues.owner,
-      parsed.partners.owner,
+      parsed.venues.parent,
+      parsed.partners.parent,
     ]),
     allowedQuotes: parsed.allowed_quotes,
     venues: venues.members,
@@ -548,7 +548,7 @@ export function decodePresaleCreationPolicyObject(
     pendingVenues: venues.pendingMembers,
     venuesPolicy: parsed.venues,
     partners: {
-      owner: parsed.partners.owner,
+      parent: parsed.partners.parent,
       acceptanceTableId: parsed.partners.acceptance_ends_at_ms.id,
       size: parsed.partners.acceptance_ends_at_ms.size,
     },
