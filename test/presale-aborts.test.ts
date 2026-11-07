@@ -63,10 +63,13 @@ test("previews raise only names the contracts define", () => {
 test("AFTERMATH_DAO_PRESALE_ABORTS matches the vendor's error constants", {
   skip,
 }, () => {
+  const sui = join(contracts, "sui");
+  const group = existsSync(join(sui, "launch")) ? "launch" : "";
   const source = readFileSync(
     join(
-      contracts,
-      "sui/vendors/aftermath_dao_presale/sources/blast_aftermath_dao_presale.move",
+      sui,
+      group,
+      "vendors/aftermath_dao_presale/sources/blast_aftermath_dao_presale.move",
     ),
     "utf8",
   );
