@@ -15,7 +15,7 @@ import test from "node:test";
 
 const contractsDirectory =
   process.env.BLAST_CONTRACTS_DIR ?? "../blast-v2-contracts";
-const contractsManifest = join(contractsDirectory, "sui/core/Move.toml");
+const contractsWorkspace = join(contractsDirectory, "sui/README.md");
 /** Artifact file → package key → event count. */
 const expectedEvents = {
   "production-admin-v1.json": { admin: 36 },
@@ -70,7 +70,7 @@ function countEvents(artifact: Artifact, packageName: string): number {
 }
 
 test("matches the frozen production Move ABI", {
-  skip: existsSync(contractsManifest)
+  skip: existsSync(contractsWorkspace)
     ? false
     : "requires the sibling blast-v2 contracts checkout",
 }, () => {

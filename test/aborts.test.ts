@@ -19,8 +19,12 @@ const skip =
 
 /** `const E<Name>: u64 = <code>;` declarations, each code its index. */
 function numericRegistry(directory: string): string[] {
+  const sui = join(contracts, "sui");
+  // CI also checks the release commit, which predates the purpose folders.
+  const group = directory === "admin" ? "governance" : "launch";
+  const packageRoot = existsSync(join(sui, "launch")) ? join(sui, group) : sui;
   const source = readFileSync(
-    join(contracts, "sui", directory, "sources/lib/errors.move"),
+    join(packageRoot, directory, "sources/lib/errors.move"),
     "utf8",
   );
   return [...source.matchAll(/const (E\w+): u64 = (\d+);/g)].map(
