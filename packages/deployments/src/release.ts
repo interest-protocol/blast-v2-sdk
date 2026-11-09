@@ -42,13 +42,13 @@ export type SdkRelease = Readonly<{
 }>;
 
 /**
- * Coordinated 0.2.0 release of the canonical November 6 launch stack.
- * The commit pins the reviewed implementation; the sdk-v0.2.0 Git tag records
+ * Coordinated 0.2.1 release with route evidence for the November 6 launch stack.
+ * The commit pins the reviewed implementation; the sdk-v0.2.1 Git tag records
  * the packaging commit, which also updates this release metadata.
  */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
-  version: "0.2.0",
+  version: "0.2.1",
   published: true,
   commit: "8d88037ac836c0f0e14d52a03151340294e8041e",
 });
