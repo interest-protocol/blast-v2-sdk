@@ -50,5 +50,5 @@ export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
   version: "0.2.1",
   published: true,
-  commit: "8d88037ac836c0f0e14d52a03151340294e8041e",
+  commit: "7712284e5089e62acd43e1bc2d2641633a61b32d",
 });
