@@ -334,8 +334,16 @@ test("canonical publication binds all launch-stack shared identities", () => {
         "0x2e6a741d72a33f1fb97f734c450f4f8713e5f403959cab0e435d7e41b55c65bc",
     },
   );
-  assert.deepEqual(mainnet.routes, []);
-  assert.deepEqual(mainnet.evidence, []);
+  assert.deepEqual(
+    mainnet.evidence.map(({ check, checkpoint }) => [check, checkpoint]),
+    [
+      ["Canonical venue and quote admission", "342367197"],
+      ["Bluefin launchpad migration on rehearsal packages", "343256659"],
+      ["Bluefin presale migration on rehearsal packages", "343256751"],
+      ["Cetus launchpad migration on rehearsal packages", "343256659"],
+      ["Cetus presale migration on rehearsal packages", "343256751"],
+    ],
+  );
 });
 
 test("rejects placeholder package IDs", () => {

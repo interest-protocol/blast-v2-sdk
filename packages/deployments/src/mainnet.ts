@@ -5,8 +5,8 @@ import type { BlastDeploymentInput } from "./types.ts";
  * Canonical November 6 publication, verified from the contracts deployment
  * record and live shared-object owners. sdk.commit pins the same reviewed
  * implementation as the coordinated npm release.
- * Routes and route-release evidence remain empty until live venue validation.
- * The vault and both products are paused.
+ * Route evidence is documented in docs/mainnet-route-evidence.md.
+ * The vault and both products were paused at verification.
  */
 export const CANONICAL_MAINNET_MANIFEST: BlastDeploymentInput = {
   schemaVersion: 2,
@@ -64,6 +64,24 @@ export const CANONICAL_MAINNET_MANIFEST: BlastDeploymentInput = {
         "0x85fdb7e3d28162b99e0df758069a3d23cff874c400b2160fc0d4618aefd3ec5c",
       originalPackageId:
         "0x85fdb7e3d28162b99e0df758069a3d23cff874c400b2160fc0d4618aefd3ec5c",
+    },
+    cetusClmm: {
+      packageId:
+        "0x260693ec785a6e6c9d81d58c7d2ff72f1288ae0fa6a9725abe05a6478b11f084",
+      originalPackageId:
+        "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb",
+    },
+    cetusLpBurn: {
+      packageId:
+        "0xc4aabc874f5060d3147d8f74c14e3a8a1f9f8d92edea138a51635395ed167cd9",
+      originalPackageId:
+        "0x12d73de9a6bc3cb658ec9dc0fe7de2662be1cea5c76c092fcc3606048cdbac27",
+    },
+    bluefinSpot: {
+      packageId:
+        "0xd075338d105482f1527cbfd363d6413558f184dec36d9138a70261e87f486e9c",
+      originalPackageId:
+        "0x3492c874c1e3b3e2984e8c41b589e642d4d0a5d6459e5a9cfc2d52fd7c89c267",
     },
   },
   sharedObjects: {
@@ -169,8 +187,54 @@ export const CANONICAL_MAINNET_MANIFEST: BlastDeploymentInput = {
         initialSharedVersion: "2",
       },
     },
+    cetus: {
+      config: {
+        objectId:
+          "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f",
+        initialSharedVersion: "1574190",
+      },
+      pools: {
+        objectId:
+          "0xf699e7f2276f5c9a75944b37a0c5b5d9ddfd2471bf6242483b03ab2887d198d0",
+        initialSharedVersion: "1574190",
+      },
+      burnManager: {
+        objectId:
+          "0x1d94aa32518d0cb00f9de6ed60d450c9a2090761f326752ffad06b2e9404f845",
+        initialSharedVersion: "327723159",
+      },
+    },
+    bluefin: {
+      config: {
+        objectId:
+          "0x03db251ba509a8d5d8777b6338836082335d93eecbdd09a11e190a1cff51c352",
+        initialSharedVersion: "406496849",
+      },
+    },
   },
-  routes: [],
+  routes: [
+    { venue: "cetus", tiers: [{ tickSpacing: 200, feeRate: "10000" }] },
+    {
+      venue: "bluefin",
+      tiers: [
+        { tickSpacing: 2, feeRate: "100" },
+        { tickSpacing: 4, feeRate: "200" },
+        { tickSpacing: 6, feeRate: "300" },
+        { tickSpacing: 8, feeRate: "400" },
+        { tickSpacing: 10, feeRate: "500" },
+        { tickSpacing: 20, feeRate: "1000" },
+        { tickSpacing: 30, feeRate: "1500" },
+        { tickSpacing: 40, feeRate: "2000" },
+        { tickSpacing: 60, feeRate: "2500" },
+        { tickSpacing: 80, feeRate: "3000" },
+        { tickSpacing: 100, feeRate: "4000" },
+        { tickSpacing: 120, feeRate: "6000" },
+        { tickSpacing: 160, feeRate: "8000" },
+        { tickSpacing: 200, feeRate: "10000" },
+        { tickSpacing: 220, feeRate: "20000" },
+      ],
+    },
+  ],
   source: {
     contractsCommit: FROZEN_ABI.contractsCommit,
     abi: FROZEN_ABI.artifacts,
@@ -188,7 +252,38 @@ export const CANONICAL_MAINNET_MANIFEST: BlastDeploymentInput = {
   },
   sdk: {
     version: SDK_RELEASE.version,
-    commit: "8d88037ac836c0f0e14d52a03151340294e8041e",
+    commit: "7712284e5089e62acd43e1bc2d2641633a61b32d",
   },
-  evidence: [],
+  evidence: [
+    {
+      check: "Canonical venue and quote admission",
+      transactionDigest: "7HHZeepG6z5MJDjcnJ517cjN7uAuLdqt5HCpQxmTQZw9",
+      checkpoint: "342367197",
+      verifiedAtMs: "1794109714329",
+    },
+    {
+      check: "Bluefin launchpad migration on rehearsal packages",
+      transactionDigest: "HgjC76qSBPApYYNM6GernvR3NpgdfpEXZCyPqi2B5sZt",
+      checkpoint: "343256659",
+      verifiedAtMs: "1794203060880",
+    },
+    {
+      check: "Bluefin presale migration on rehearsal packages",
+      transactionDigest: "5iT1hSmrJX26n5qFWMFkKZdo4MrqqrH26vjSm2MB13mZ",
+      checkpoint: "343256751",
+      verifiedAtMs: "1794203060880",
+    },
+    {
+      check: "Cetus launchpad migration on rehearsal packages",
+      transactionDigest: "HgjC76qSBPApYYNM6GernvR3NpgdfpEXZCyPqi2B5sZt",
+      checkpoint: "343256659",
+      verifiedAtMs: "1794203060880",
+    },
+    {
+      check: "Cetus presale migration on rehearsal packages",
+      transactionDigest: "5iT1hSmrJX26n5qFWMFkKZdo4MrqqrH26vjSm2MB13mZ",
+      checkpoint: "343256751",
+      verifiedAtMs: "1794203060880",
+    },
+  ],
 };

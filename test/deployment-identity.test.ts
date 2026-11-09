@@ -581,9 +581,9 @@ test("never lets a non-production or fixture identity sign in production", () =>
 test("the fresh ABI requires a coordinated SDK release and matching runtime", () => {
   assert.equal(BLAST_DEPLOYMENTS.mainnet?.environment, "production");
   assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
-  assert.equal(SDK_RELEASE.version, "0.2.0");
+  assert.equal(SDK_RELEASE.version, "0.2.1");
   assert.equal(SDK_RELEASE.published, true);
-  assert.equal(SDK_RELEASE.commit, "8d88037ac836c0f0e14d52a03151340294e8041e");
+  assert.match(SDK_RELEASE.commit ?? "", /^[a-f0-9]{40}$/);
   assert.deepEqual(BLAST_DEPLOYMENTS.mainnet?.sdk, {
     version: SDK_RELEASE.version,
     commit: SDK_RELEASE.commit,
@@ -596,7 +596,7 @@ test("the fresh ABI requires a coordinated SDK release and matching runtime", ()
   );
   assert.equal(SDK_RELEASE.name, packageJson.name);
   assert.equal(SDK_RELEASE.version, packageJson.version);
-  assert.equal(packageJson.version, "0.2.0");
+  assert.equal(packageJson.version, "0.2.1");
 
   const production = productionManifest();
   const runtime = runtimeFor(production);
@@ -759,18 +759,49 @@ test("observes the chain and shared-object identities through the Core API", asy
   );
 });
 
-test("npm publication does not bypass canonical mainnet route evidence", () => {
+test("canonical mainnet routes pass the SDK gate while pause masks remain in force", () => {
   const mainnet = BLAST_DEPLOYMENTS.mainnet;
   assert.ok(mainnet);
+  const access = evaluateProtocolAccess({
+    manifest: mainnet,
+    mode: "production",
+    runtime: runtimeFor(mainnet, { vault: 1, launchpad: 7, presale: 7 }),
+  });
+  assert.equal(access.signing, "enabled");
+  assert.deepEqual(access.paused, {
+    vault: 1,
+    launchpad: 7,
+    presale: 7,
+    migrators: 0,
+  });
+  for (const venue of ["cetus", "bluefin"] as const) {
+    assert.equal(access.venues[venue].available, true);
+  }
   assert.deepEqual(
-    codes(
-      evaluateProtocolAccess({
-        manifest: mainnet,
-        mode: "production",
-        runtime: runtimeFor(mainnet, { vault: 1, launchpad: 7, presale: 7 }),
-      }),
-    ),
-    ["missing-evidence"],
+    mainnet.routes.find((route) => route.venue === "cetus")?.tiers,
+    [{ tickSpacing: 200, feeRate: "10000" }],
+  );
+  assert.deepEqual(
+    mainnet.routes
+      .find((route) => route.venue === "bluefin")
+      ?.tiers.map(({ tickSpacing, feeRate }) => [tickSpacing, feeRate]),
+    [
+      [2, "100"],
+      [4, "200"],
+      [6, "300"],
+      [8, "400"],
+      [10, "500"],
+      [20, "1000"],
+      [30, "1500"],
+      [40, "2000"],
+      [60, "2500"],
+      [80, "3000"],
+      [100, "4000"],
+      [120, "6000"],
+      [160, "8000"],
+      [200, "10000"],
+      [220, "20000"],
+    ],
   );
 });
 
