@@ -1,224 +1,371 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requireBasisPoints } from "@interest-protocol/blast-core/integers";
+import type { DelayedEventKind } from "@interest-protocol/blast-admin-sdk/events";
 import type {
   BlastSuiEventKind,
   BlastSuiEventPayloads,
   BlastSuiNativeFact,
+  BlastSuiProjection,
+  DecodedBlastSuiDelayedEvent,
   DecodedBlastSuiEvent,
-  VaultCustodyEvent,
+  blastSuiDelayedKeys,
 } from "@interest-protocol/blast-sui-sdk";
 import {
   blastSuiEventSpecs,
   createBlastSuiProjection,
+  decodeBlastSuiDelayedEvent,
+  decodeBlastSuiEvent,
+  INITIAL_REDEEM_FEE_DELAY_MS,
   reduceBlastSuiInput,
 } from "@interest-protocol/blast-sui-sdk";
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
+import {
+  BLAST_SUI_FIXTURE,
+  blastSuiDelayedEntry,
+  blastSuiEventEntry,
+  FIXTURE_POOL_0,
+  FIXTURE_POOL_1,
+  FIXTURE_POOL_2,
+  FIXTURE_RECEIPT_ID,
+  FIXTURE_VAULT_ID,
+  fixtureEventBytes,
+} from "./blast-sui-golden.ts";
 
-const vaultId = normalizeSuiObjectId("0x1");
-const firstReceiptId = normalizeSuiObjectId("0x2");
-const secondReceiptId = normalizeSuiObjectId("0x3");
+const packages = { packageId: "0x123", originalPackageId: "0x122" };
+const blastSui = {
+  originalPackageId: packages.originalPackageId,
+  admin: {
+    packageId: "0xad",
+    acl: { objectId: "0xac", initialSharedVersion: "3" },
+  },
+};
+const delayedIdentity = {
+  adminPackageId: blastSui.admin.packageId,
+  originalPackageId: packages.originalPackageId,
+};
+const vaultId = FIXTURE_VAULT_ID;
+/** The fixture cancels a second receipt whose request it does not print. */
+const CANCELLED_RECEIPT_ID =
+  "0xd1f922e3cb6c9213b400810a6aa63cd6ccc67dac3d702b8eb7032e447456996b";
 
-test("replays the ordered vault lifecycle from event-derived facts", () => {
-  const events = [
-    event("VaultCreated", {
-      vault_id: vaultId,
-      validator: normalizeSuiAddress("0x4"),
-      pool_id: normalizeSuiObjectId("0x5"),
-      fun_reserve_sui: 1_000n,
-      bootstrap_sui: 200n,
-      locked_blast_sui: 300n,
-      redeem_fee_bps: requireBasisPoints("redeem fee", 25n),
-      custody: custody(1),
-    }),
-    event("FunSuiMinted", { sui_in: 100n, custody: custody(2) }),
-    event("FunSuiRedeemed", { fun_in: 40n, custody: custody(3) }),
-    event("BlastSuiDepositRequested", {
-      receipt_id: firstReceiptId,
-      vault_id: vaultId,
-      pool_id: normalizeSuiObjectId("0x5"),
-      principal_sui: 70n,
-      activation_epoch: 9n,
-      custody: custody(4),
-    }),
-    event("BlastSuiDepositClaimed", {
-      receipt_id: firstReceiptId,
-      vault_id: vaultId,
-      principal_sui: 70n,
-      contributed_sui: 65n,
-      pool_tokens: 60n,
-      blast_out: 55n,
-      custody: custody(5),
-    }),
-    event("BlastSuiDepositRequested", {
-      receipt_id: secondReceiptId,
-      vault_id: vaultId,
-      pool_id: normalizeSuiObjectId("0x5"),
-      principal_sui: 30n,
-      activation_epoch: 10n,
-      custody: custody(6),
-    }),
-    event("BlastSuiDepositCancelled", {
-      receipt_id: secondReceiptId,
-      vault_id: vaultId,
-      principal_sui: 30n,
-      returned_sui: 29n,
-    }),
-    event("BlastSuiDonated", { sui_in: 11n, custody: custody(7) }),
-    event("BlastSuiRedeemed", {
-      blast_in: 13n,
-      gross_sui: 12n,
-      fee_sui: 2n,
-      net_sui: 10n,
-      custody: custody(8),
-    }),
-    event("FunYieldSwept", {
-      liquid_sui: 8n,
-      pool_tokens: 7n,
-      swept_sui: 6n,
-      custody: custody(9),
-    }),
-    event("RedeemFeeChanged", {
-      old_redeem_fee_bps: requireBasisPoints("old fee", 25n),
-      new_redeem_fee_bps: requireBasisPoints("new fee", 40n),
-    }),
-    event("VaultSynced", { custody: custody(10) }),
-    event("NativeStakeUnwound", { custody: custody(11) }),
-  ];
+/** Every Move-printed event, decoded, in the fixture's scenario order. */
+const fixture = (
+  Object.keys(BLAST_SUI_FIXTURE.events) as BlastSuiEventKind[]
+).map((kind, eventIndex) =>
+  decodeBlastSuiEvent(
+    blastSuiEventEntry(kind, fixtureEventBytes(kind), packages, eventIndex),
+    packages,
+  ),
+);
 
-  let projection = createBlastSuiProjection();
-  for (const lifecycleEvent of events) {
-    projection = reduceBlastSuiInput(projection, lifecycleEvent);
-    assert.strictEqual(
-      reduceBlastSuiInput(projection, lifecycleEvent),
-      projection,
-    );
-  }
+function fixtureEvent<Kind extends BlastSuiEventKind>(
+  kind: Kind,
+): Extract<DecodedBlastSuiEvent, { kind: Kind }> {
+  const event = fixture.find((candidate) => candidate.kind === kind);
+  assert.ok(event, kind);
+  return event as Extract<DecodedBlastSuiEvent, { kind: Kind }>;
+}
 
-  assert.deepEqual(projection.vault?.custody, custody(11));
-  assert.strictEqual(projection.latestCustody, projection.vault?.custody);
-  assert.equal(projection.vault?.custody.fun_supply, 11_041n);
-  assert.equal(projection.vault?.custody.blast_supply, 11_042n);
-  assert.equal(projection.vault?.redeemFeeBps, 40n);
-  assert.equal(projection.vault?.unwindOnly, true);
-  assert.equal(projection.vault?.syncCount, 1);
-  assert.deepEqual(projection.totals, {
-    funMintedSui: 100n,
-    funRedeemedFun: 40n,
-    depositPrincipalSui: 100n,
-    depositContributedSui: 65n,
-    depositClaimedPoolTokens: 60n,
-    depositClaimedBlastSui: 55n,
-    depositCancelledReturnedSui: 29n,
-    donatedSui: 11n,
-    blastRedeemed: 13n,
-    redemptionGrossSui: 12n,
-    redemptionFeeSui: 2n,
-    redemptionNetSui: 10n,
-    sweptYieldSui: 6n,
-  });
-  assert.deepEqual(projection.receipts[firstReceiptId], {
-    receiptId: firstReceiptId,
-    vaultId,
-    poolId: normalizeSuiObjectId("0x5"),
-    principalSui: 70n,
-    activationEpoch: 9n,
-    status: "claimed",
-    contributedSui: 65n,
-    poolTokens: 60n,
-    blastOut: 55n,
-    returnedSui: 0n,
-  });
-  assert.equal(projection.receipts[secondReceiptId]?.status, "cancelled");
-  assert.equal(projection.receipts[secondReceiptId]?.returnedSui, 29n);
-  assert.equal(
-    projection.native.depositReceiptOwners[firstReceiptId],
-    undefined,
-  );
-  assert.deepEqual(projection.native.returnedCoinRecipients, {});
+let syntheticIndex = 0;
+/** A decoded event outside the fixture, at its own transaction position. */
+function event<Kind extends BlastSuiEventKind>(
+  kind: Kind,
+  payload: BlastSuiEventPayloads[Kind],
+): Extract<DecodedBlastSuiEvent, { kind: Kind }> {
+  const eventIndex = syntheticIndex++;
+  return {
+    ...fixtureEvent(kind),
+    payload,
+    position: {
+      checkpoint: 20n,
+      transactionDigest: `synthetic-${eventIndex}`,
+      eventIndex,
+    },
+  } as Extract<DecodedBlastSuiEvent, { kind: Kind }>;
+}
+
+/** The request the fixture omits, against custody that lists pool 1. */
+const cancelledRequest = event("BlastSuiDepositRequested", {
+  receipt_id: CANCELLED_RECEIPT_ID,
+  vault_id: vaultId,
+  pool_id: FIXTURE_POOL_1,
+  principal_sui: 2_000_000_000n,
+  activation_epoch: 3n,
+  custody: fixtureEvent("BlastSuiRedeemed").payload.custody,
 });
 
-test("replays package capability events and ignores duplicate events", () => {
-  const adminEvents = [
-    event("PackageCapabilityAdded", {
-      package_admin_id: normalizeSuiObjectId("0x15"),
-      capability_id: normalizeSuiObjectId("0x1d"),
-      capability_type:
-        "0x2::coin_registry::MetadataCap<0x122::fun_sui::FUN_SUI>",
-    }),
-    event("PackageCapabilityAdded", {
-      package_admin_id: normalizeSuiObjectId("0x15"),
-      capability_id: normalizeSuiObjectId("0x1e"),
-      capability_type:
-        "0x2::coin_registry::MetadataCap<0x122::blast_sui::BLAST_SUI>",
-    }),
-    event("PackageCapabilityAdded", {
-      package_admin_id: normalizeSuiObjectId("0x15"),
-      capability_id: normalizeSuiObjectId("0x1f"),
-      capability_type:
-        "0x2::display_registry::DisplayCap<0x122::deposit_receipt::BlastSuiDepositReceipt>",
-    }),
-  ];
-
+function replayFixture(): BlastSuiProjection {
   let projection = createBlastSuiProjection();
+  for (const input of fixture) {
+    if (input.kind === "BlastSuiDepositCancelled") {
+      projection = reduceBlastSuiInput(projection, cancelledRequest);
+    }
+    projection = reduceBlastSuiInput(projection, input);
+    assert.strictEqual(reduceBlastSuiInput(projection, input), projection);
+  }
+  return projection;
+}
+
+let delayedIndex = 0;
+function delayed(
+  kind: DelayedEventKind,
+  name: keyof typeof blastSuiDelayedKeys,
+  payload: Record<string, unknown>,
+): DecodedBlastSuiDelayedEvent {
+  return decodeBlastSuiDelayedEvent(
+    blastSuiDelayedEntry(kind, name, payload, delayedIdentity, delayedIndex++),
+    blastSui,
+  );
+}
+
+const pendingFee = (value: bigint, parent: string = vaultId) => ({
+  parent,
+  key: null,
+  value,
+  delay_ms: 86_400_000n,
+  ready_at_ms: 172_801_000n,
+});
+
+test("replays the Move-printed lifecycle into vault, receipts and totals", () => {
+  const projection = replayFixture();
+  const unwound = fixtureEvent("PoolUnwound").payload.custody;
+
+  assert.deepEqual(projection.vault, {
+    vaultId,
+    validator:
+      "0x5ef2fcf809fb9535ea0aeaea421f683026f06c34569aafc42bcde652ef6dd270",
+    bootstrapPoolId: FIXTURE_POOL_0,
+    funReserveSui: 100_000_000n,
+    bootstrapSui: 10_000_000_000n,
+    lockedBlastSui: 10_000_000_000n,
+    redeemFeeBps: 2n,
+    redeemFeeDelayMs: INITIAL_REDEEM_FEE_DELAY_MS,
+    pendingRedeemFee: null,
+    custody: unwound,
+    syncCount: 1,
+  });
+  assert.equal(INITIAL_REDEEM_FEE_DELAY_MS, 172_800_000n);
+  // The unwind removes pool 1 and leaves the last custody snapshot.
+  assert.strictEqual(projection.latestCustody, unwound);
   assert.deepEqual(
-    projection.eventCounts,
+    unwound.pools.map((pool) => pool.pool_id),
+    [FIXTURE_POOL_0],
+  );
+  assert.equal(unwound.fun_supply, 1_000_000_000n);
+  assert.equal(unwound.blast_supply, 11_608_695_652n);
+
+  assert.deepEqual(projection.totals, {
+    funMintedSui: 2_000_000_000n,
+    funRedeemedFun: 1_000_000_000n,
+    depositPrincipalSui: 5_000_000_000n,
+    depositContributedSui: 3_000_000_000n,
+    depositClaimedPoolTokens: 3_000_000_000n,
+    depositClaimedBlastSui: 2_608_695_652n,
+    depositCancelledReturnedSui: 2_000_000_000n,
+    donatedSui: 1_000_000_000n,
+    funReserveToppedUpSui: 500_000_000n,
+    blastRedeemed: 1_000_000_000n,
+    redemptionGrossSui: 15_744_737_866_606_124n,
+    redemptionFeeSui: 3_148_947_573_322n,
+    redemptionNetSui: 15_741_588_919_032_802n,
+    sweptYieldSui: 25_770_048_299_114_819n,
+  });
+  assert.deepEqual(projection.receipts, {
+    [FIXTURE_RECEIPT_ID]: {
+      receiptId: FIXTURE_RECEIPT_ID,
+      vaultId,
+      poolId: FIXTURE_POOL_0,
+      principalSui: 3_000_000_000n,
+      activationEpoch: 2n,
+      status: "claimed",
+      contributedSui: 3_000_000_000n,
+      claimedPoolTokens: 3_000_000_000n,
+      blastOut: 2_608_695_652n,
+      returnedSui: 0n,
+    },
+    [CANCELLED_RECEIPT_ID]: {
+      receiptId: CANCELLED_RECEIPT_ID,
+      vaultId,
+      poolId: FIXTURE_POOL_1,
+      principalSui: 2_000_000_000n,
+      activationEpoch: 3n,
+      status: "cancelled",
+      contributedSui: 0n,
+      claimedPoolTokens: 0n,
+      blastOut: 0n,
+      returnedSui: 2_000_000_000n,
+    },
+  });
+  assert.deepEqual(projection.eventCounts, {
+    ...Object.fromEntries(
+      Object.keys(blastSuiEventSpecs).map((kind) => [kind, 1]),
+    ),
+    BlastSuiDepositRequested: 2,
+  });
+  assert.equal(Object.keys(projection.appliedEventIds).length, 13);
+  assert.deepEqual(projection.native, createBlastSuiProjection().native);
+});
+
+test("starts empty and keeps custody seen before the vault is discovered", () => {
+  const empty = createBlastSuiProjection();
+  assert.deepEqual(
+    empty.eventCounts,
     Object.fromEntries(
       Object.keys(blastSuiEventSpecs).map((kind) => [kind, 0]),
     ),
   );
-  for (const adminEvent of adminEvents) {
-    projection = reduceBlastSuiInput(projection, adminEvent);
-    assert.strictEqual(reduceBlastSuiInput(projection, adminEvent), projection);
-  }
+  assert.equal(empty.vault, null);
+  assert.equal(empty.latestCustody, null);
 
-  assert.deepEqual(projection.administration, {
-    packageCapabilities: {
-      "0x2::coin_registry::MetadataCap<0x122::fun_sui::FUN_SUI>": {
-        packageAdminId: normalizeSuiObjectId("0x15"),
-        capabilityId: normalizeSuiObjectId("0x1d"),
-      },
-      "0x2::coin_registry::MetadataCap<0x122::blast_sui::BLAST_SUI>": {
-        packageAdminId: normalizeSuiObjectId("0x15"),
-        capabilityId: normalizeSuiObjectId("0x1e"),
-      },
-      "0x2::display_registry::DisplayCap<0x122::deposit_receipt::BlastSuiDepositReceipt>":
-        {
-          packageAdminId: normalizeSuiObjectId("0x15"),
-          capabilityId: normalizeSuiObjectId("0x1f"),
-        },
-    },
-  });
-  for (const kind of Object.keys(blastSuiEventSpecs)) {
-    assert.equal(
-      projection.eventCounts[kind as keyof typeof blastSuiEventSpecs],
-      adminEvents.filter((adminEvent) => adminEvent.kind === kind).length,
+  const minted = fixtureEvent("FunSuiMinted");
+  const projection = reduceBlastSuiInput(empty, minted);
+  assert.equal(projection.vault, null);
+  assert.strictEqual(projection.latestCustody, minted.payload.custody);
+  assert.equal(projection.totals.funMintedSui, 2_000_000_000n);
+
+  // A sync before discovery counts the event but has no vault to update.
+  const synced = reduceBlastSuiInput(projection, fixtureEvent("VaultSynced"));
+  assert.equal(synced.vault, null);
+  assert.equal(synced.eventCounts.VaultSynced, 1);
+});
+
+test("rejects a mint or request into a pool its custody does not list", () => {
+  const created = reduceBlastSuiInput(
+    createBlastSuiProjection(),
+    fixtureEvent("VaultCreated"),
+  );
+  const minted = fixtureEvent("FunSuiMinted");
+  const requested = fixtureEvent("BlastSuiDepositRequested");
+
+  for (const unlisted of [
+    event("FunSuiMinted", { ...minted.payload, pool_id: FIXTURE_POOL_2 }),
+    event("BlastSuiDepositRequested", {
+      ...requested.payload,
+      pool_id: FIXTURE_POOL_2,
+    }),
+    // Pool 1 is listed in later custody, not at creation.
+    event("FunSuiMinted", {
+      ...minted.payload,
+      custody: fixtureEvent("VaultCreated").payload.custody,
+    }),
+  ]) {
+    assert.throws(
+      () => reduceBlastSuiInput(created, unlisted),
+      (error: unknown) =>
+        error instanceof TypeError &&
+        error.message ===
+          `picked pool ${unlisted.payload.pool_id} is not listed`,
     );
   }
+  assert.equal(Object.keys(created.appliedEventIds).length, 1);
+  assert.equal(created.totals.funMintedSui, 0n);
+  assert.equal(created.totals.depositPrincipalSui, 0n);
+  assert.deepEqual(created.receipts, {});
+  assert.strictEqual(
+    created.latestCustody,
+    fixtureEvent("VaultCreated").payload.custody,
+  );
 });
 
-test("retains the latest canonical custody when replay starts mid-history", () => {
-  const latestCustody = custody(20);
-  const projection = reduceBlastSuiInput(
-    createBlastSuiProjection(),
-    event("FunSuiMinted", { sui_in: 9n, custody: latestCustody }),
+test("schedules, cancels and applies the redeem fee from delayed events", () => {
+  const replayed = replayFixture();
+  const scheduled = delayed("DelayedScheduled", "RedeemFee", pendingFee(7n));
+  let projection = reduceBlastSuiInput(replayed, scheduled);
+  assert.deepEqual(projection.vault?.pendingRedeemFee, {
+    value: 7n,
+    delay_ms: 86_400_000n,
+    ready_at_ms: 172_801_000n,
+  });
+  assert.strictEqual(reduceBlastSuiInput(projection, scheduled), projection);
+
+  projection = reduceBlastSuiInput(
+    projection,
+    delayed("DelayedCancelled", "RedeemFee", pendingFee(7n)),
+  );
+  assert.equal(projection.vault?.pendingRedeemFee, null);
+  assert.equal(projection.vault?.redeemFeeBps, 2n);
+
+  projection = reduceBlastSuiInput(
+    projection,
+    delayed("DelayedScheduled", "RedeemFee", pendingFee(9n)),
+  );
+  const applied = delayed("DelayedApplied", "RedeemFee", {
+    parent: vaultId,
+    key: null,
+    previous_value: 2n,
+    value: 9n,
+    delay_ms: 86_400_000n,
+  });
+  projection = reduceBlastSuiInput(projection, applied);
+  assert.equal(projection.vault?.redeemFeeBps, 9n);
+  assert.equal(projection.vault?.redeemFeeDelayMs, 86_400_000n);
+  assert.equal(projection.vault?.pendingRedeemFee, null);
+  assert.strictEqual(reduceBlastSuiInput(projection, applied), projection);
+  assert.equal(
+    Object.keys(projection.appliedEventIds).length,
+    Object.keys(replayed.appliedEventIds).length + 4,
+  );
+  // Delayed events do not count as blast Sui event kinds.
+  assert.deepEqual(projection.eventCounts, replayed.eventCounts);
+});
+
+test("records but ignores validator, foreign-parent and pre-discovery delayed events", () => {
+  const replayed = replayFixture();
+  const ignored = [
+    delayed("DelayedCreated", "RedeemFee", {
+      parent: vaultId,
+      key: null,
+      value: 2n,
+      delay_ms: 172_800_000n,
+    }),
+    delayed(
+      "DelayedScheduled",
+      "RedeemFee",
+      pendingFee(7n, normalizeSuiObjectId("0x99")),
+    ),
+    delayed("SetCreated", "Validators", {
+      parent: vaultId,
+      key: null,
+      delay_ms: 0n,
+    }),
+    delayed("SetScheduled", "Validators", {
+      parent: vaultId,
+      key: null,
+      change: { kind: "Admission", member: FIXTURE_POOL_2 },
+      delay_ms: 0n,
+      ready_at_ms: 1_000n,
+    }),
+    delayed("MemberRemoved", "Validators", {
+      parent: vaultId,
+      key: null,
+      member: FIXTURE_POOL_1,
+    }),
+  ];
+
+  let projection = replayed;
+  for (const input of ignored) {
+    projection = reduceBlastSuiInput(projection, input);
+    assert.strictEqual(reduceBlastSuiInput(projection, input), projection);
+  }
+  assert.deepEqual(projection.vault, replayed.vault);
+  assert.equal(
+    Object.keys(projection.appliedEventIds).length,
+    Object.keys(replayed.appliedEventIds).length + ignored.length,
   );
 
-  assert.equal(projection.vault, null);
-  assert.strictEqual(projection.latestCustody, latestCustody);
-  assert.equal(projection.latestCustody.fun_supply, 20_041n);
-  assert.equal(projection.latestCustody.blast_supply, 20_042n);
+  const early = delayed("DelayedScheduled", "RedeemFee", pendingFee(7n));
+  const before = reduceBlastSuiInput(createBlastSuiProjection(), early);
+  assert.equal(before.vault, null);
+  assert.deepEqual(Object.keys(before.appliedEventIds).length, 1);
+  // A fee scheduled before discovery stays unapplied after VaultCreated.
+  const discovered = reduceBlastSuiInput(before, fixtureEvent("VaultCreated"));
+  assert.equal(discovered.vault?.pendingRedeemFee, null);
+  assert.strictEqual(reduceBlastSuiInput(discovered, early), discovered);
 });
 
-test("rejects duplicate, unknown, and terminal receipt transitions before accounting", () => {
-  const requested = event("BlastSuiDepositRequested", {
-    receipt_id: firstReceiptId,
-    vault_id: vaultId,
-    pool_id: normalizeSuiObjectId("0x5"),
-    principal_sui: 70n,
-    activation_epoch: 9n,
-    custody: custody(30),
-  });
+test("rejects duplicate, unknown and terminal receipt transitions before accounting", () => {
+  const requested = fixtureEvent("BlastSuiDepositRequested");
+  const claimed = fixtureEvent("BlastSuiDepositClaimed");
   const initial = reduceBlastSuiInput(createBlastSuiProjection(), requested);
 
   assert.throws(
@@ -227,173 +374,135 @@ test("rejects duplicate, unknown, and terminal receipt transitions before accoun
         initial,
         event("BlastSuiDepositRequested", requested.payload),
       ),
-    /receipt.*already requested/,
+    new RegExp(`deposit receipt ${FIXTURE_RECEIPT_ID} already requested`),
   );
   assert.throws(
-    () =>
-      reduceBlastSuiInput(
-        createBlastSuiProjection(),
-        event("BlastSuiDepositClaimed", {
-          receipt_id: firstReceiptId,
-          vault_id: vaultId,
-          principal_sui: 70n,
-          contributed_sui: 65n,
-          pool_tokens: 60n,
-          blast_out: 55n,
-          custody: custody(31),
-        }),
-      ),
-    /unknown deposit receipt/,
+    () => reduceBlastSuiInput(createBlastSuiProjection(), claimed),
+    new RegExp(`unknown deposit receipt ${FIXTURE_RECEIPT_ID}`),
   );
 
-  const claimed = reduceBlastSuiInput(
-    initial,
-    event("BlastSuiDepositClaimed", {
-      receipt_id: firstReceiptId,
-      vault_id: vaultId,
-      principal_sui: 70n,
-      contributed_sui: 65n,
-      pool_tokens: 60n,
-      blast_out: 55n,
-      custody: custody(32),
-    }),
-  );
-  const appliedCount = Object.keys(claimed.appliedEventIds).length;
+  const afterClaim = reduceBlastSuiInput(initial, claimed);
+  const appliedCount = Object.keys(afterClaim.appliedEventIds).length;
   assert.throws(
     () =>
       reduceBlastSuiInput(
-        claimed,
+        afterClaim,
         event("BlastSuiDepositCancelled", {
-          receipt_id: firstReceiptId,
+          receipt_id: FIXTURE_RECEIPT_ID,
           vault_id: vaultId,
-          principal_sui: 70n,
-          returned_sui: 69n,
+          principal_sui: 3_000_000_000n,
+          returned_sui: 3_000_000_000n,
         }),
       ),
     /deposit receipt must be requested/,
   );
-  assert.equal(Object.keys(claimed.appliedEventIds).length, appliedCount);
-  assert.equal(claimed.totals.depositCancelledReturnedSui, 0n);
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(
+        afterClaim,
+        event("BlastSuiDepositClaimed", claimed.payload),
+      ),
+    /deposit receipt must be requested/,
+  );
+  assert.equal(Object.keys(afterClaim.appliedEventIds).length, appliedCount);
+  assert.equal(afterClaim.totals.depositCancelledReturnedSui, 0n);
+  assert.equal(afterClaim.totals.depositClaimedBlastSui, 2_608_695_652n);
 });
 
 test("binds receipt events to their discovered vault and principal", () => {
-  const created = event("VaultCreated", {
-    vault_id: vaultId,
-    validator: normalizeSuiAddress("0x4"),
-    pool_id: normalizeSuiObjectId("0x5"),
-    fun_reserve_sui: 1_000n,
-    bootstrap_sui: 200n,
-    locked_blast_sui: 300n,
-    redeem_fee_bps: requireBasisPoints("redeem fee", 25n),
-    custody: custody(40),
-  });
-  const discovered = reduceBlastSuiInput(createBlastSuiProjection(), created);
-  assert.throws(
-    () =>
-      reduceBlastSuiInput(
-        discovered,
-        event("BlastSuiDepositRequested", {
-          receipt_id: firstReceiptId,
-          vault_id: normalizeSuiObjectId("0x99"),
-          pool_id: normalizeSuiObjectId("0x5"),
-          principal_sui: 70n,
-          activation_epoch: 9n,
-          custody: custody(41),
-        }),
-      ),
-    /vault.*does not match/,
+  const other = normalizeSuiObjectId("0x99");
+  const discovered = reduceBlastSuiInput(
+    createBlastSuiProjection(),
+    fixtureEvent("VaultCreated"),
   );
-  const appliedEventIdsBeforeWrongPool = discovered.appliedEventIds;
-  const totalsBeforeWrongPool = discovered.totals;
-  const receiptsBeforeWrongPool = discovered.receipts;
-  const custodyBeforeWrongPool = discovered.latestCustody;
-  assert.throws(
-    () =>
-      reduceBlastSuiInput(
-        discovered,
-        event("BlastSuiDepositRequested", {
-          receipt_id: firstReceiptId,
-          vault_id: vaultId,
-          pool_id: normalizeSuiObjectId("0x99"),
-          principal_sui: 70n,
-          activation_epoch: 9n,
-          custody: custody(42),
-        }),
-      ),
-    /pool.*does not match/,
-  );
-  assert.strictEqual(
-    discovered.appliedEventIds,
-    appliedEventIdsBeforeWrongPool,
-  );
-  assert.strictEqual(discovered.totals, totalsBeforeWrongPool);
-  assert.strictEqual(discovered.receipts, receiptsBeforeWrongPool);
-  assert.strictEqual(discovered.latestCustody, custodyBeforeWrongPool);
-  assert.equal(Object.keys(discovered.appliedEventIds).length, 1);
-  assert.equal(discovered.eventCounts.BlastSuiDepositRequested, 0);
-  assert.equal(discovered.totals.depositPrincipalSui, 0n);
-  assert.equal(discovered.receipts[firstReceiptId], undefined);
+  const requested = fixtureEvent("BlastSuiDepositRequested");
+  const claimed = fixtureEvent("BlastSuiDepositClaimed");
 
-  const requested = reduceBlastSuiInput(
-    discovered,
-    event("BlastSuiDepositRequested", {
-      receipt_id: firstReceiptId,
-      vault_id: vaultId,
-      pool_id: normalizeSuiObjectId("0x5"),
-      principal_sui: 70n,
-      activation_epoch: 9n,
-      custody: custody(43),
-    }),
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(
+        discovered,
+        event("BlastSuiDepositRequested", {
+          ...requested.payload,
+          vault_id: other,
+        }),
+      ),
+    /deposit receipt vault does not match discovered vault/,
   );
-  for (const mismatch of [
-    { vault_id: normalizeSuiObjectId("0x99"), principal_sui: 70n },
-    { vault_id: vaultId, principal_sui: 71n },
-  ]) {
+  assert.equal(discovered.eventCounts.BlastSuiDepositRequested, 0);
+
+  const projection = reduceBlastSuiInput(discovered, requested);
+  for (const [mismatch, message] of [
+    [
+      { vault_id: other },
+      /deposit receipt vault does not match discovered vault/,
+    ],
+    [
+      { principal_sui: 3_000_000_001n },
+      /deposit receipt principal does not match/,
+    ],
+  ] as const) {
     assert.throws(
       () =>
         reduceBlastSuiInput(
-          requested,
-          event("BlastSuiDepositClaimed", {
-            receipt_id: firstReceiptId,
+          projection,
+          event("BlastSuiDepositClaimed", { ...claimed.payload, ...mismatch }),
+        ),
+      message,
+    );
+    assert.throws(
+      () =>
+        reduceBlastSuiInput(
+          projection,
+          event("BlastSuiDepositCancelled", {
+            receipt_id: FIXTURE_RECEIPT_ID,
+            vault_id: vaultId,
+            principal_sui: 3_000_000_000n,
+            returned_sui: 3_000_000_000n,
             ...mismatch,
-            contributed_sui: 65n,
-            pool_tokens: 60n,
-            blast_out: 55n,
-            custody: custody(44),
           }),
         ),
-      /vault.*does not match|principal.*does not match/,
+      message,
     );
   }
+  assert.equal(projection.totals.depositContributedSui, 0n);
+
+  // Without a discovered vault, the receipt's own vault must still match.
+  const undiscovered = reduceBlastSuiInput(
+    createBlastSuiProjection(),
+    requested,
+  );
   assert.throws(
     () =>
       reduceBlastSuiInput(
-        requested,
-        event("BlastSuiDepositCancelled", {
-          receipt_id: firstReceiptId,
-          vault_id: vaultId,
-          principal_sui: 71n,
-          returned_sui: 69n,
+        undiscovered,
+        event("BlastSuiDepositClaimed", {
+          ...claimed.payload,
+          vault_id: other,
         }),
       ),
-    /principal.*does not match/,
+    (error: unknown) =>
+      error instanceof TypeError &&
+      error.message === "deposit receipt vault does not match",
   );
-  assert.equal(requested.totals.depositContributedSui, 0n);
 });
 
 test("rejects a redemption whose gross amount is not fee plus net", () => {
-  const invalid = event("BlastSuiRedeemed", {
-    blast_in: 13n,
-    gross_sui: 12n,
-    fee_sui: 3n,
-    net_sui: 10n,
-    custody: custody(50),
-  });
+  const redeemed = fixtureEvent("BlastSuiRedeemed");
   const projection = createBlastSuiProjection();
 
   assert.throws(
-    () => reduceBlastSuiInput(projection, invalid),
-    /gross SUI must equal fee SUI plus net SUI/,
+    () =>
+      reduceBlastSuiInput(
+        projection,
+        event("BlastSuiRedeemed", {
+          ...redeemed.payload,
+          fee_sui: redeemed.payload.fee_sui + 1n,
+        }),
+      ),
+    (error: unknown) =>
+      error instanceof RangeError &&
+      error.message === "gross SUI must equal fee SUI plus net SUI",
   );
   assert.equal(Object.keys(projection.appliedEventIds).length, 0);
   assert.equal(projection.totals.redemptionGrossSui, 0n);
@@ -404,7 +513,7 @@ test("stores normalized ownership and transaction-effect facts only under native
     source: "objectOwnership",
     kind: "depositReceiptOwnership",
     checkpoint: 20n,
-    receiptId: "0x2",
+    receiptId: FIXTURE_RECEIPT_ID,
     owner: "0x21",
   };
   const returnedCoin: BlastSuiNativeFact = {
@@ -417,7 +526,7 @@ test("stores normalized ownership and transaction-effect facts only under native
   };
 
   let projection = reduceBlastSuiInput(createBlastSuiProjection(), ownership);
-  assert.deepEqual(projection.native.depositReceiptOwners[firstReceiptId], {
+  assert.deepEqual(projection.native.depositReceiptOwners[FIXTURE_RECEIPT_ID], {
     source: "objectOwnership",
     checkpoint: 20n,
     owner: normalizeSuiAddress("0x21"),
@@ -429,10 +538,6 @@ test("stores normalized ownership and transaction-effect facts only under native
   assert.deepEqual(Object.values(projection.native.returnedCoinRecipients), [
     {
       ...returnedCoin,
-      position: {
-        checkpoint: 21n,
-        transactionDigest: "transaction-effects",
-      },
       coinId: normalizeSuiObjectId("0x22"),
       recipient: normalizeSuiAddress("0x23"),
     },
@@ -453,7 +558,7 @@ test("merges receipt ownership monotonically and rejects checkpoint conflicts", 
     source: "objectOwnership",
     kind: "depositReceiptOwnership",
     checkpoint: 20n,
-    receiptId: "0x2",
+    receiptId: FIXTURE_RECEIPT_ID,
     owner: "0x21",
   };
   const latest: BlastSuiNativeFact = {
@@ -469,51 +574,34 @@ test("merges receipt ownership monotonically and rejects checkpoint conflicts", 
     projection,
   );
   assert.equal(
-    projection.native.depositReceiptOwners[firstReceiptId]?.owner,
+    projection.native.depositReceiptOwners[FIXTURE_RECEIPT_ID]?.owner,
     normalizeSuiAddress("0x22"),
   );
   assert.throws(
-    () =>
-      reduceBlastSuiInput(projection, {
-        ...latest,
-        owner: "0x23",
-      }),
+    () => reduceBlastSuiInput(projection, { ...latest, owner: "0x23" }),
     /ownership conflict at checkpoint 22/,
   );
   assert.strictEqual(reduceBlastSuiInput(projection, latest), projection);
 });
 
 test("clears receipt ownership only from a native deletion fact", () => {
-  const request = event("BlastSuiDepositRequested", {
-    receipt_id: firstReceiptId,
-    vault_id: vaultId,
-    pool_id: normalizeSuiObjectId("0x5"),
-    principal_sui: 70n,
-    activation_epoch: 9n,
-    custody: custody(60),
-  });
-  let projection = reduceBlastSuiInput(createBlastSuiProjection(), request);
+  let projection = reduceBlastSuiInput(
+    createBlastSuiProjection(),
+    fixtureEvent("BlastSuiDepositRequested"),
+  );
   projection = reduceBlastSuiInput(projection, {
     source: "objectOwnership",
     kind: "depositReceiptOwnership",
     checkpoint: 30n,
-    receiptId: firstReceiptId,
+    receiptId: FIXTURE_RECEIPT_ID,
     owner: "0x21",
   });
   projection = reduceBlastSuiInput(
     projection,
-    event("BlastSuiDepositClaimed", {
-      receipt_id: firstReceiptId,
-      vault_id: vaultId,
-      principal_sui: 70n,
-      contributed_sui: 65n,
-      pool_tokens: 60n,
-      blast_out: 55n,
-      custody: custody(61),
-    }),
+    fixtureEvent("BlastSuiDepositClaimed"),
   );
   assert.equal(
-    projection.native.depositReceiptOwners[firstReceiptId]?.owner,
+    projection.native.depositReceiptOwners[FIXTURE_RECEIPT_ID]?.owner,
     normalizeSuiAddress("0x21"),
   );
   assert.throws(
@@ -525,7 +613,7 @@ test("clears receipt ownership only from a native deletion fact", () => {
           checkpoint: 30n,
           transactionDigest: "same-checkpoint-deletion",
         },
-        receiptId: firstReceiptId,
+        receiptId: FIXTURE_RECEIPT_ID,
       }),
     /deletion conflicts at checkpoint 30/,
   );
@@ -534,24 +622,24 @@ test("clears receipt ownership only from a native deletion fact", () => {
     source: "transactionEffects",
     kind: "depositReceiptDeleted",
     position: { checkpoint: 31n, transactionDigest: "receipt-deleted" },
-    receiptId: firstReceiptId,
+    receiptId: FIXTURE_RECEIPT_ID,
   };
   projection = reduceBlastSuiInput(projection, deletion);
   assert.equal(
-    projection.native.depositReceiptOwners[firstReceiptId],
+    projection.native.depositReceiptOwners[FIXTURE_RECEIPT_ID],
     undefined,
   );
-  assert.deepEqual(projection.native.depositReceiptDeletions[firstReceiptId], {
-    ...deletion,
-    receiptId: firstReceiptId,
-  });
+  assert.deepEqual(
+    projection.native.depositReceiptDeletions[FIXTURE_RECEIPT_ID],
+    deletion,
+  );
   assert.strictEqual(reduceBlastSuiInput(projection, deletion), projection);
   assert.strictEqual(
     reduceBlastSuiInput(projection, {
       source: "objectOwnership",
       kind: "depositReceiptOwnership",
       checkpoint: 29n,
-      receiptId: firstReceiptId,
+      receiptId: FIXTURE_RECEIPT_ID,
       owner: "0x22",
     }),
     projection,
@@ -562,10 +650,18 @@ test("clears receipt ownership only from a native deletion fact", () => {
         source: "objectOwnership",
         kind: "depositReceiptOwnership",
         checkpoint: 32n,
-        receiptId: firstReceiptId,
+        receiptId: FIXTURE_RECEIPT_ID,
         owner: "0x22",
       }),
     /deleted deposit receipt cannot have an owner/,
+  );
+  assert.throws(
+    () =>
+      reduceBlastSuiInput(projection, {
+        ...deletion,
+        position: { checkpoint: 33n, transactionDigest: "deleted-again" },
+      }),
+    /deletion provenance conflicts/,
   );
 });
 
@@ -594,49 +690,3 @@ test("rejects invalid native fact metadata", () => {
     /transaction digest/,
   );
 });
-
-function event<Kind extends BlastSuiEventKind>(
-  kind: Kind,
-  payload: BlastSuiEventPayloads[Kind],
-): Extract<DecodedBlastSuiEvent, { kind: Kind }> {
-  const eventIndex = nextEventIndex++;
-  return {
-    source: "blastSui",
-    kind,
-    payload,
-    emitterPackageId: normalizeSuiObjectId("0x100"),
-    sender: normalizeSuiAddress("0x101"),
-    position: {
-      checkpoint: BigInt(eventIndex + 1),
-      transactionDigest: `transaction-${eventIndex}`,
-      eventIndex,
-    },
-  } as unknown as Extract<DecodedBlastSuiEvent, { kind: Kind }>;
-}
-
-function custody(seed: number): VaultCustodyEvent {
-  const start = BigInt(seed * 1_000);
-  return {
-    fun_custody: {
-      liquid_sui: start + 11n,
-      pending_sui: start + 12n,
-      active_pool_tokens: start + 13n,
-      active_sui: start + 14n,
-    },
-    blast_custody: {
-      liquid_sui: start + 21n,
-      pending_sui: start + 22n,
-      active_pool_tokens: start + 23n,
-      active_sui: start + 24n,
-    },
-    exchange_rate: {
-      epoch: start + 31n,
-      sui_amount: start + 32n,
-      pool_token_amount: start + 33n,
-    },
-    fun_supply: start + 41n,
-    blast_supply: start + 42n,
-  };
-}
-
-let nextEventIndex = 0;

@@ -91,10 +91,18 @@ export function blastRedemptionQuote(
 }
 
 /**
+ * `math::is_usable_rate`: both components are positive. The vault never
+ * applies an empty native entry, so every rate helper requires a usable one.
+ */
+export function isUsableRate(rateSui: bigint, ratePoolTokens: bigint): boolean {
+  return rateSui > 0n && ratePoolTokens > 0n;
+}
+
+/**
  * Input `poolTokens` and `ratePoolTokens` are native pool-token units;
- * `rateSui` and the output are MIST. It rounds down with a bigint intermediate;
- * an empty rate is one MIST per token. This valuation transfers nothing, and
- * the fractional MIST is omitted as conservative value rather than assigned.
+ * `rateSui` and the output are MIST, at a usable rate. It rounds down with a
+ * bigint intermediate. This valuation transfers nothing, and the fractional
+ * MIST is omitted as conservative value rather than assigned.
  */
 export function suiAtRateDown(
   poolTokens: bigint,
@@ -102,9 +110,7 @@ export function suiAtRateDown(
   ratePoolTokens: bigint,
 ): bigint {
   requireU64("poolTokens", poolTokens);
-  requireU64("rateSui", rateSui);
-  requireU64("ratePoolTokens", ratePoolTokens);
-  if (rateSui === 0n || ratePoolTokens === 0n) return poolTokens;
+  requireUsableRate(rateSui, ratePoolTokens);
   return requireU64(
     "suiAmount",
     mulDivDown(poolTokens, rateSui, ratePoolTokens),
@@ -113,8 +119,8 @@ export function suiAtRateDown(
 
 /**
  * Inputs `suiAmount` and `rateSui` are MIST; `ratePoolTokens` and the output
- * are native pool-token units. It rounds down with a bigint intermediate; an
- * empty rate is one-to-one. This quote transfers nothing, and the fractional
+ * are native pool-token units, at a usable rate. It rounds down with a bigint
+ * intermediate. This quote transfers nothing, and the fractional
  * pool token is omitted so the result is worth at most the input.
  */
 export function poolTokensAtRateDown(
@@ -123,9 +129,7 @@ export function poolTokensAtRateDown(
   ratePoolTokens: bigint,
 ): bigint {
   requireU64("suiAmount", suiAmount);
-  requireU64("rateSui", rateSui);
-  requireU64("ratePoolTokens", ratePoolTokens);
-  if (rateSui === 0n || ratePoolTokens === 0n) return suiAmount;
+  requireUsableRate(rateSui, ratePoolTokens);
   return requireU64(
     "poolTokens",
     mulDivDown(suiAmount, ratePoolTokens, rateSui),
@@ -134,17 +138,15 @@ export function poolTokensAtRateDown(
 
 /**
  * Input `rateSui` is MIST and `ratePoolTokens` is native pool-token units; the
- * output is a MIST loss bound. It rounds up to stay conservative; an empty
- * rate returns zero. No value is transferred or assigned: the ceiling is only
+ * output is a MIST loss bound at a usable rate. It rounds up to stay
+ * conservative. No value is transferred or assigned: the ceiling is only
  * safety headroom for a possible floor-conversion remainder.
  */
 export function funConversionLossBoundUp(
   rateSui: bigint,
   ratePoolTokens: bigint,
 ): bigint {
-  requireU64("rateSui", rateSui);
-  requireU64("ratePoolTokens", ratePoolTokens);
-  if (rateSui === 0n || ratePoolTokens === 0n) return 0n;
+  requireUsableRate(rateSui, ratePoolTokens);
   return requireU64("lossBound", mulDivUp(rateSui, 1n, ratePoolTokens));
 }
 
@@ -168,4 +170,12 @@ export function poolTokensForSuiUp(
     mulDivUp(suiAmount, held, activeSui),
   );
   return requested < held ? requested : held;
+}
+
+function requireUsableRate(rateSui: bigint, ratePoolTokens: bigint): void {
+  requireU64("rateSui", rateSui);
+  requireU64("ratePoolTokens", ratePoolTokens);
+  if (!isUsableRate(rateSui, ratePoolTokens)) {
+    throw new RangeError("exchange rate must be usable");
+  }
 }

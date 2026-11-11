@@ -37,6 +37,7 @@ const blastSuiPackage = {
 };
 const blastSuiObjects = {
   packageVersion: object("0x8", "16"),
+  packageAdmin: object("0xa", "18"),
   vault: object("0x9", "17"),
 };
 
@@ -123,6 +124,7 @@ test("derives every package's call-ready deployment", () => {
     packageId: id("0x423"),
     originalPackageId: id("0x422"),
     packageVersion: { objectId: id("0x8"), initialSharedVersion: "16" },
+    packageAdmin: { objectId: id("0xa"), initialSharedVersion: "18" },
     vault: { objectId: id("0x9"), initialSharedVersion: "17" },
     admin,
   });

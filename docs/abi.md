@@ -29,9 +29,11 @@ treasury caps, PR #219):
 | `abi/production-presale-v1.json` | `blast_presale`, `presale_coin_template` | 11 (`PresaleCreated` + 10 `events`) |
 | `abi/production-aftermath-dao-presale-v1.json` | `blast_aftermath_dao_presale` | 2 |
 
-`blast_sui` and the three Boosts packages adopt the generic package
-administration separately; `abi/production-blast-sui-v1.json` and
-`abi/production-boosts-v1.json` stay frozen at contracts `01d7659`. `sui/vesting`
+`abi/production-blast-sui-v1.json` covers `blast_sui` at contracts `50b8d59a`
+(the validator-list vault with generic package administration);
+`check:abi` compares it against that commit. The Boosts packages adopt the
+generic package administration separately; `abi/production-boosts-v1.json`
+stays frozen at contracts `01d7659`. `sui/vesting`
 is a dependency only; its `Vesting` layout is pinned by the payout tests.
 
 `FROZEN_ABI` in `packages/deployments/src/release.ts` records the baseline
@@ -86,70 +88,89 @@ Metadata updates sign in through
 
 ### Product operations
 
-| Frozen contract surface | SDK implementation | Returned-object routing | Verification |
+| Contract surface | SDK implementation | Returned-object routing | Verification |
 | --- | --- | --- | --- |
-| `vault::mint_fun_sui` | `BlastSuiCalls.mintFunSui`; `BlastSuiTransactions.mintFunSui` | The composable call returns the `funSUI` coin; the transaction transfers it to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
-| `vault::redeem_fun_sui` | `BlastSuiCalls.redeemFunSui`; `BlastSuiTransactions.redeemFunSui` | The composable call returns SUI; the transaction transfers it to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
-| `vault::request_blast_sui` | `BlastSuiCalls.requestBlastSui`; `BlastSuiTransactions.requestBlastSui` | The returned receipt is passed to `deposit_receipt::keep` in the same PTB and becomes sender-owned; no generic transfer is invented. | `test/blast-sui-transactions.test.ts` |
-| `deposit_receipt::keep` | `BlastSuiCalls.keepDepositReceipt` | Intentionally compositional because it consumes the key-only receipt returned by `request_blast_sui` in the same PTB. | `test/blast-sui-transactions.test.ts` |
-| `vault::claim_blast_sui` | `BlastSuiCalls.claimBlastSui`; `BlastSuiTransactions.claimBlastSui` | Consumes the owned receipt and transfers the returned `blastSUI` coin to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
+| `vault::mint_fun_sui` | `BlastSuiCalls.mintFunSui`; `BlastSuiTransactions.mintFunSui` | Takes a listed `poolId`; the composable call returns `funSUI` and the transaction transfers it to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
+| `vault::redeem_fun_sui` | `BlastSuiCalls.redeemFunSui`; `BlastSuiTransactions.redeemFunSui` | Returns SUI; the transaction transfers it to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
+| `vault::request_blast_sui` | `BlastSuiCalls.requestBlastSui`; `BlastSuiTransactions.requestBlastSui` | Takes a listed `poolId`; the receipt goes to `deposit_receipt::keep` in the same PTB and becomes sender-owned. | `test/blast-sui-transactions.test.ts` |
+| `deposit_receipt::keep` | `BlastSuiCalls.keepDepositReceipt` | Compositional only: it consumes the key-only receipt returned by `request_blast_sui`. | `test/blast-sui-transactions.test.ts` |
+| `vault::claim_blast_sui` | `BlastSuiCalls.claimBlastSui`; `BlastSuiTransactions.claimBlastSui` | Consumes the owned receipt and transfers `blastSUI` to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
 | `deposit_receipt::cancel` | `BlastSuiCalls.cancelDepositReceipt`; `BlastSuiTransactions.cancelDepositReceipt` | Consumes the owned receipt and transfers returned SUI to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
-| `vault::donate_sui` | `BlastSuiCalls.donateSui`; `BlastSuiTransactions.donateSui` | No returned object and no synthetic transfer. | `test/blast-sui-transactions.test.ts` |
+| `vault::donate_sui` | `BlastSuiCalls.donateSui`; `BlastSuiTransactions.donateSui` | No returned object. | `test/blast-sui-transactions.test.ts` |
+| `vault::top_up_fun_reserve` | `BlastSuiCalls.topUpFunReserve`; `BlastSuiTransactions.topUpFunReserve` | No returned object; takes no `SuiSystemState`. | `test/blast-sui-transactions.test.ts` |
 | `vault::redeem_blast_sui` | `BlastSuiCalls.redeemBlastSui`; `BlastSuiTransactions.redeemBlastSui` | Returns SUI and transfers it to the explicit recipient. | `test/blast-sui-transactions.test.ts` |
-| `vault::sync` | `BlastSuiCalls.syncVault`; `BlastSuiTransactions.syncVault` | No returned object and no synthetic transfer. | `test/blast-sui-transactions.test.ts` |
-| `vault::set_redeem_fee` | `BlastSuiCalls.setRedeemFee`; `BlastSuiTransactions.setRedeemFee` | Signs in as the typed `blast_sui_domain::FeeAdmin` through the singleton ACL. | `test/blast-sui-transactions.test.ts` |
+| `vault::sync` | `BlastSuiCalls.syncVault`; `BlastSuiTransactions.syncVault` | No returned object. | `test/blast-sui-transactions.test.ts` |
+| `vault::apply_redeem_fee` | `BlastSuiCalls.applyRedeemFee`; `BlastSuiTransactions.applyRedeemFee` | Permissionless once the scheduled fee is ready. | `test/blast-sui-transactions.test.ts` |
+| `vault::apply_validator` | `BlastSuiCalls.applyValidator`; `BlastSuiTransactions.applyValidator` | Permissionless once the pool admission is ready; emits `VaultSynced` without a refresh. | `test/blast-sui-transactions.test.ts` |
+| `vault::apply_validator_delay` | `BlastSuiCalls.applyValidatorDelay`; `BlastSuiTransactions.applyValidatorDelay` | Permissionless once the scheduled delay is ready. | `test/blast-sui-transactions.test.ts` |
+| `vault::schedule_redeem_fee` | `BlastSuiCalls.scheduleRedeemFee`; `BlastSuiTransactions.scheduleRedeemFee` | Signs in as `FeeAdmin`; rejects fees above 100 bps before building. | `test/blast-sui-transactions.test.ts` |
+| `vault::cancel_redeem_fee` | `BlastSuiCalls.cancelRedeemFee`; `BlastSuiTransactions.cancelRedeemFee` | Signs in as `CancelAdmin`. | `test/blast-sui-transactions.test.ts` |
+| `vault::schedule_validator` | `BlastSuiCalls.scheduleValidator`; `BlastSuiTransactions.scheduleValidator` | Signs in as `ValidatorAdmin`; admission waits for the validator delay. | `test/blast-sui-transactions.test.ts` |
+| `vault::cancel_validator` | `BlastSuiCalls.cancelValidator`; `BlastSuiTransactions.cancelValidator` | Signs in as `CancelAdmin`; drops a pending admission. | `test/blast-sui-transactions.test.ts` |
+| `vault::remove_validator` | `BlastSuiCalls.removeValidator`; `BlastSuiTransactions.removeValidator` | Signs in as `ValidatorAdmin`; takes effect at once, unwinding a listed pool (`PoolUnwound`) or dropping a pending admission. | `test/blast-sui-transactions.test.ts` |
+| `vault::schedule_validator_delay` | `BlastSuiCalls.scheduleValidatorDelay`; `BlastSuiTransactions.scheduleValidatorDelay` | Signs in as `ValidatorAdmin`. | `test/blast-sui-transactions.test.ts` |
+| `vault::cancel_validator_delay` | `BlastSuiCalls.cancelValidatorDelay`; `BlastSuiTransactions.cancelValidatorDelay` | Signs in as `CancelAdmin`. | `test/blast-sui-transactions.test.ts` |
+| `vault::unpause` | `BlastSuiCalls.unpause`; `BlastSuiTransactions.unpause` | Signs in as the package `UnpauseAdmin`; bits are fun mint 1, request 2, claim 4. | `test/blast-sui-transactions.test.ts` |
 
-Every Blast SUI call targets the current package, uses the mutable framework
-`SuiSystemState`, mutable `Vault`, and immutable `PackageVersion` required by
-its Move signature, and adds no type argument that the ABI does not define.
-Transaction tests inspect the exact argument order and shared mutability for
-all nine calls. They also pin the exact `Result` or `NestedResult`, normalized
-recipient, and request-result-to-`keep` routing for every returned object.
+Every Blast SUI vault call targets the current package and takes the mutable
+`Vault` and immutable `PackageVersion` first, then the framework
+`SuiSystemState` or `Clock` its Move signature requires; `unpause` takes the
+`Vault` immutably and `PackageVersion` mutably. Admin calls sign in through
+`blast_admin` with a typed `blast_sui_domain` witness. Transaction tests inspect
+the exact argument order, shared mutability and result routing for every call.
 
 ### Arithmetic
 
-| Frozen formula | SDK implementation | Verification |
+| Contract formula | SDK implementation | Verification |
 | --- | --- | --- |
+| Usable native rate (both components positive) | `isUsableRate` | `test/blast-sui-math.test.ts` |
 | Blast shares out, round down | `blastSharesOutDown` | `test/blast-sui-math.test.ts` |
 | Gross SUI out, round down | `blastGrossSuiOutDown` | `test/blast-sui-math.test.ts` |
-| Redemption fee, round up | `blastRedeemFeeUp` with branded `BasisPoints` | `test/blast-sui-math.test.ts`, `test/integers.test.ts` |
+| Redemption fee, round up | `blastRedeemFeeUp` | `test/blast-sui-math.test.ts` |
 | Complete redemption quote | `blastRedemptionQuote` | `test/blast-sui-math.test.ts` |
-| SUI at native pool rate, round down | `suiAtRateDown` | `test/blast-sui-math.test.ts` |
-| Pool tokens at native pool rate, round down | `poolTokensAtRateDown` | `test/blast-sui-math.test.ts` |
-| Fun conversion-loss bound, round up | `funConversionLossBoundUp` | `test/blast-sui-math.test.ts` |
+| SUI at a usable native pool rate, round down | `suiAtRateDown` | `test/blast-sui-math.test.ts` |
+| Pool tokens at a usable native pool rate, round down | `poolTokensAtRateDown` | `test/blast-sui-math.test.ts` |
+| Fun conversion-loss bound at a usable rate, round up | `funConversionLossBoundUp` | `test/blast-sui-math.test.ts` |
 | Pool tokens required for SUI, round up and cap by holdings after checked conversion | `poolTokensForSuiUp` | `test/blast-sui-math.test.ts` |
 
-All atomic protocol inputs and outputs use `bigint`. Contract execution remains
+All atomic protocol inputs and outputs use `bigint`. The rate helpers throw on
+an unusable rate, as the vault never applies one. Contract execution remains
 authoritative, and these helpers do not duplicate mutable admission policy.
 
 ### Wrapped events
 
-All rows validate the generic `events_wrapper::Event<T>` envelope, current
-emitter package, original payload package, ordered fields/types, native event
-position, and their named reducer path.
+All rows validate the `blast_events::Event<T>` envelope, current emitter
+package, original payload package, ordered fields/types, native event
+position, and their named reducer path. Every custody snapshot lists each
+listed pool with its exchange rate and fun/blast positions.
 
-| Frozen payload | Typed decoder and projection effect | Verification |
+| Contract payload | Typed decoder and projection effect | Verification |
 | --- | --- | --- |
-| `PackageCapabilityAdded` | `decodeBlastSuiEvent`; exact typed dynamic child identity | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `VaultCreated` | `decodeBlastSuiEvent`; vault/validator/pool/bootstrap/fee/custody discovery | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `FunSuiMinted` | `decodeBlastSuiEvent`; final custody and cumulative mint input | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `FunSuiRedeemed` | `decodeBlastSuiEvent`; final custody and cumulative fun redemption | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `BlastSuiDepositRequested` | `decodeBlastSuiEvent`; receipt lifecycle and principal total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `BlastSuiDepositClaimed` | `decodeBlastSuiEvent`; receipt claim, pool-token, contribution, and shares totals | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `BlastSuiDepositCancelled` | `decodeBlastSuiEvent`; receipt cancellation and returned-SUI total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `BlastSuiDonated` | `decodeBlastSuiEvent`; final custody and donation total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `BlastSuiRedeemed` | `decodeBlastSuiEvent`; final custody and blast/gross/fee/net totals | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `FunYieldSwept` | `decodeBlastSuiEvent`; final custody and swept-yield total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `RedeemFeeChanged` | `decodeBlastSuiEvent`; branded live redeem fee | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `VaultSynced` | `decodeBlastSuiEvent`; final custody and sync count | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
-| `NativeStakeUnwound` | `decodeBlastSuiEvent`; final custody and unwind-only state | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `VaultCreated` | `decodeBlastSuiEvent`; vault, validator, bootstrap pool, reserves, fee and custody discovery | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `FunSuiMinted` | `decodeBlastSuiEvent`; listed-pool check, final custody, mint total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `FunSuiRedeemed` | `decodeBlastSuiEvent`; final custody, fun redemption total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `BlastSuiDepositRequested` | `decodeBlastSuiEvent`; listed-pool check, receipt lifecycle, principal total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `BlastSuiDepositClaimed` | `decodeBlastSuiEvent`; receipt claim, pool-token, contribution and shares totals | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `BlastSuiDepositCancelled` | `decodeBlastSuiEvent`; receipt cancellation, returned-SUI total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `BlastSuiDonated` | `decodeBlastSuiEvent`; final custody, donation total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `FunReserveToppedUp` | `decodeBlastSuiEvent`; final custody, top-up total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `BlastSuiRedeemed` | `decodeBlastSuiEvent`; final custody, blast/gross/fee/net totals | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `FunYieldSwept` | `decodeBlastSuiEvent`; final custody, swept-yield total | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `VaultSynced` | `decodeBlastSuiEvent`; final custody, sync count | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
+| `PoolUnwound` | `decodeBlastSuiEvent`; final custody after a removed pool unwinds | `test/blast-sui-events.test.ts`, `test/blast-sui-reducer.test.ts` |
 
-`createBlastSuiProjection` and `reduceBlastSuiInput` replay all 24 kinds,
-replace final custody snapshots, accumulate independent audit totals, and
-deduplicate by transaction digest plus event index. Duplicate replay returns the
-same projection instance. Receipt replay rejects duplicate requests, unknown or
-terminal transitions, vault or principal mismatches, and redemption totals that
-do not satisfy `gross = fee + net` before it applies an event.
+`decodeBlastSuiDelayedEvent` decodes the vault's `blast_admin` delayed events:
+the `RedeemFee` setting and the `Validators` set. The reducer tracks the
+pending redeem fee from schedule, cancel and apply; validator membership comes
+from the custody snapshot pools, so set events are recorded and ignored.
+
+`createBlastSuiProjection` and `reduceBlastSuiInput` replace final custody
+snapshots, accumulate independent audit totals, and deduplicate by transaction
+digest plus event index. Duplicate replay returns the same projection instance.
+Replay rejects a mint or request whose pool is not listed, duplicate receipt
+requests, unknown or terminal transitions, vault or principal mismatches, and
+redemption totals that do not satisfy `gross = fee + net` before it applies an
+event.
 
 ### Native facts that events do not prove
 

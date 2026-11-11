@@ -1,14 +1,25 @@
+import type { Proposal } from "@interest-protocol/blast-core/bcs";
 import type { NativeTransactionPosition } from "@interest-protocol/blast-core/events";
-import { normalizeNativeTransactionPosition } from "@interest-protocol/blast-core/events";
+import {
+  normalizeNativeTransactionPosition,
+  suiEventId,
+} from "@interest-protocol/blast-core/events";
 import type { BasisPoints } from "@interest-protocol/blast-core/integers";
-import { requireU64 } from "@interest-protocol/blast-core/integers";
+import {
+  requireBasisPoints,
+  requireU64,
+} from "@interest-protocol/blast-core/integers";
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
 import type {
   BlastSuiEventKind,
+  DecodedBlastSuiDelayedEvent,
   DecodedBlastSuiEvent,
   VaultCustodyEvent,
 } from "./events.ts";
 import { blastSuiEventId, blastSuiEventSpecs } from "./events.ts";
+
+/** `constants::initial_redeem_fee_delay_ms`: the fee delay `create` sets. */
+export const INITIAL_REDEEM_FEE_DELAY_MS = 172_800_000n;
 
 export type BlastSuiNativeFact =
   | {
@@ -38,17 +49,24 @@ export type BlastSuiNativeFact =
       receiptId: string;
     };
 
+/**
+ * The vault from its events. Listed pools are `custody.pools`, in list order:
+ * every custody snapshot carries the whole list, so validator set events add
+ * nothing here. The fee follows its `delayed` lifecycle.
+ */
 export type BlastSuiVaultProjection = {
   vaultId: string;
   validator: string;
-  poolId: string;
+  /** The pool `create` listed and staked the bootstrap with. */
+  bootstrapPoolId: string;
   funReserveSui: bigint;
   bootstrapSui: bigint;
   lockedBlastSui: bigint;
   redeemFeeBps: BasisPoints;
+  redeemFeeDelayMs: bigint;
+  pendingRedeemFee: Proposal<BasisPoints> | null;
   custody: VaultCustodyEvent;
   syncCount: number;
-  unwindOnly: boolean;
 };
 
 export type BlastSuiReceiptProjection = {
@@ -59,7 +77,7 @@ export type BlastSuiReceiptProjection = {
   activationEpoch: bigint;
   status: "requested" | "claimed" | "cancelled";
   contributedSui: bigint;
-  poolTokens: bigint;
+  claimedPoolTokens: bigint;
   blastOut: bigint;
   returnedSui: bigint;
 };
@@ -73,23 +91,12 @@ export type BlastSuiTotalsProjection = {
   depositClaimedBlastSui: bigint;
   depositCancelledReturnedSui: bigint;
   donatedSui: bigint;
+  funReserveToppedUpSui: bigint;
   blastRedeemed: bigint;
   redemptionGrossSui: bigint;
   redemptionFeeSui: bigint;
   redemptionNetSui: bigint;
   sweptYieldSui: bigint;
-};
-
-export type BlastSuiAdministrationProjection = {
-  packageCapabilities: Readonly<
-    Record<
-      string,
-      {
-        packageAdminId: string;
-        capabilityId: string;
-      }
-    >
-  >;
 };
 
 type DepositReceiptOwner = {
@@ -121,11 +128,13 @@ export type BlastSuiProjection = {
   latestCustody: VaultCustodyEvent | null;
   receipts: Readonly<Record<string, BlastSuiReceiptProjection>>;
   totals: BlastSuiTotalsProjection;
-  administration: BlastSuiAdministrationProjection;
   native: BlastSuiNativeProjection;
 };
 
-export type BlastSuiInput = DecodedBlastSuiEvent | BlastSuiNativeFact;
+export type BlastSuiInput =
+  | DecodedBlastSuiEvent
+  | DecodedBlastSuiDelayedEvent
+  | BlastSuiNativeFact;
 
 export function createBlastSuiProjection(): BlastSuiProjection {
   return {
@@ -145,14 +154,12 @@ export function createBlastSuiProjection(): BlastSuiProjection {
       depositClaimedBlastSui: 0n,
       depositCancelledReturnedSui: 0n,
       donatedSui: 0n,
+      funReserveToppedUpSui: 0n,
       blastRedeemed: 0n,
       redemptionGrossSui: 0n,
       redemptionFeeSui: 0n,
       redemptionNetSui: 0n,
       sweptYieldSui: 0n,
-    },
-    administration: {
-      packageCapabilities: {},
     },
     native: {
       appliedFactIds: {},
@@ -168,7 +175,54 @@ export function reduceBlastSuiInput(
   input: BlastSuiInput,
 ): BlastSuiProjection {
   if (input.source === "blastSui") return reduceBlastSuiEvent(state, input);
+  if (input.source === "delayed") return reduceDelayedEvent(state, input);
   return reduceNativeFact(state, input);
+}
+
+/**
+ * The redemption fee's `delayed` lifecycle. Validator set events change
+ * nothing: the next custody snapshot lists the pools. Events of another
+ * parent, or before `VaultCreated`, change nothing.
+ */
+function reduceDelayedEvent(
+  state: BlastSuiProjection,
+  event: DecodedBlastSuiDelayedEvent,
+): BlastSuiProjection {
+  const eventId = suiEventId(event.position);
+  if (state.appliedEventIds[eventId]) return state;
+  const next = {
+    ...state,
+    appliedEventIds: { ...state.appliedEventIds, [eventId]: true as const },
+  };
+  if (
+    event.name !== "RedeemFee" ||
+    next.vault?.vaultId !== event.payload.parent
+  )
+    return next;
+  switch (event.kind) {
+    case "DelayedScheduled":
+      return updateVault(next, (vault) => ({
+        ...vault,
+        pendingRedeemFee: {
+          value: requireBasisPoints("pendingRedeemFee", event.payload.value),
+          delay_ms: event.payload.delay_ms,
+          ready_at_ms: event.payload.ready_at_ms,
+        },
+      }));
+    case "DelayedCancelled":
+      return updateVault(next, (vault) => ({
+        ...vault,
+        pendingRedeemFee: null,
+      }));
+    case "DelayedApplied":
+      return updateVault(next, (vault) => ({
+        ...vault,
+        redeemFeeBps: requireBasisPoints("redeemFeeBps", event.payload.value),
+        redeemFeeDelayMs: event.payload.delay_ms,
+        pendingRedeemFee: null,
+      }));
+  }
+  return next;
 }
 
 function reduceBlastSuiEvent(
@@ -202,14 +256,15 @@ function reduceBlastSuiEvent(
         vault: {
           vaultId: payload.vault_id,
           validator: payload.validator,
-          poolId: payload.pool_id,
+          bootstrapPoolId: payload.pool_id,
           funReserveSui: payload.fun_reserve_sui,
           bootstrapSui: payload.bootstrap_sui,
           lockedBlastSui: payload.locked_blast_sui,
           redeemFeeBps: payload.redeem_fee_bps,
+          redeemFeeDelayMs: INITIAL_REDEEM_FEE_DELAY_MS,
+          pendingRedeemFee: null,
           custody: payload.custody,
           syncCount: 0,
-          unwindOnly: false,
         },
       };
     }
@@ -235,7 +290,7 @@ function reduceBlastSuiEvent(
             activationEpoch: payload.activation_epoch,
             status: "requested",
             contributedSui: 0n,
-            poolTokens: 0n,
+            claimedPoolTokens: 0n,
             blastOut: 0n,
             returnedSui: 0n,
           },
@@ -247,7 +302,7 @@ function reduceBlastSuiEvent(
       return updateReceipt(
         addTotals(next, {
           depositContributedSui: payload.contributed_sui,
-          depositClaimedPoolTokens: payload.pool_tokens,
+          depositClaimedPoolTokens: payload.claimed_pool_tokens,
           depositClaimedBlastSui: payload.blast_out,
         }),
         payload.receipt_id,
@@ -255,7 +310,7 @@ function reduceBlastSuiEvent(
           ...receipt,
           status: "claimed",
           contributedSui: payload.contributed_sui,
-          poolTokens: payload.pool_tokens,
+          claimedPoolTokens: payload.claimed_pool_tokens,
           blastOut: payload.blast_out,
         }),
       );
@@ -276,6 +331,8 @@ function reduceBlastSuiEvent(
     }
     case "BlastSuiDonated":
       return addTotals(next, { donatedSui: event.payload.sui_in });
+    case "FunReserveToppedUp":
+      return addTotals(next, { funReserveToppedUpSui: event.payload.sui_in });
     case "BlastSuiRedeemed":
       return addTotals(next, {
         blastRedeemed: event.payload.blast_in,
@@ -285,29 +342,13 @@ function reduceBlastSuiEvent(
       });
     case "FunYieldSwept":
       return addTotals(next, { sweptYieldSui: event.payload.swept_sui });
-    case "RedeemFeeChanged":
-      return updateVault(next, (vault) => ({
-        ...vault,
-        redeemFeeBps: event.payload.new_redeem_fee_bps,
-      }));
     case "VaultSynced":
       return updateVault(next, (vault) => ({
         ...vault,
         syncCount: vault.syncCount + 1,
       }));
-    case "NativeStakeUnwound":
-      return updateVault(next, (vault) => ({ ...vault, unwindOnly: true }));
-    case "PackageCapabilityAdded":
-      return updateAdministration(next, {
-        ...state.administration,
-        packageCapabilities: {
-          ...state.administration.packageCapabilities,
-          [event.payload.capability_type]: {
-            packageAdminId: event.payload.package_admin_id,
-            capabilityId: event.payload.capability_id,
-          },
-        },
-      });
+    case "PoolUnwound":
+      return next;
   }
 }
 
@@ -372,13 +413,6 @@ function updateVault(
   return { ...state, vault: update(state.vault) };
 }
 
-function updateAdministration(
-  state: BlastSuiProjection,
-  administration: BlastSuiAdministrationProjection,
-): BlastSuiProjection {
-  return { ...state, administration };
-}
-
 function normalizeNativeFact(fact: BlastSuiNativeFact): BlastSuiNativeFact {
   if (fact.kind === "depositReceiptOwnership") {
     requireU64("deposit-receipt ownership checkpoint", fact.checkpoint);
@@ -424,6 +458,9 @@ function validateBlastSuiEvent(
   event: DecodedBlastSuiEvent,
 ): void {
   switch (event.kind) {
+    case "FunSuiMinted":
+      validateListedPool(event.payload.pool_id, event.payload.custody);
+      return;
     case "BlastSuiDepositRequested":
       validateDepositRequest(state, event.payload);
       return;
@@ -441,14 +478,24 @@ function validateBlastSuiEvent(
   }
 }
 
+/** A pick names a pool its own post-event snapshot lists. */
+function validateListedPool(poolId: string, custody: VaultCustodyEvent): void {
+  if (!custody.pools.some((pool) => pool.pool_id === poolId)) {
+    throw new TypeError(`picked pool ${poolId} is not listed`);
+  }
+}
+
 function validateDepositRequest(
   state: BlastSuiProjection,
-  payload: { receipt_id: string; vault_id: string; pool_id: string },
+  payload: {
+    receipt_id: string;
+    vault_id: string;
+    pool_id: string;
+    custody: VaultCustodyEvent;
+  },
 ): void {
   validateDiscoveredVault(state, payload.vault_id);
-  if (state.vault !== null && state.vault.poolId !== payload.pool_id) {
-    throw new TypeError("deposit receipt pool does not match discovered vault");
-  }
+  validateListedPool(payload.pool_id, payload.custody);
   if (state.receipts[payload.receipt_id] !== undefined) {
     throw new TypeError(
       `deposit receipt ${payload.receipt_id} already requested`,

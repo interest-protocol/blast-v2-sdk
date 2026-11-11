@@ -22,8 +22,13 @@ const BASELINE = {
   contractsCommit: BASELINE_COMMIT,
   workingTreeDifferedAtFreeze: false,
 };
-/** blast_sui and boosts adopt the generic administration separately; their artifacts stay frozen here. */
-const BLAST_SUI_BOOSTS_BASELINE = {
+/** blast_sui follows its validator-list release (contracts #281). */
+const BLAST_SUI_BASELINE = {
+  contractsCommit: "50b8d59a15553d06efe30f9611c760d3d1abc7d7",
+  workingTreeDifferedAtFreeze: false,
+};
+/** Boosts adopts the generic administration separately; its artifact stays frozen here. */
+const BOOSTS_BASELINE = {
   contractsCommit: "01d7659617abcd552cece6d05b9db409ec4ff2c0",
   workingTreeDifferedAtFreeze: false,
 };
@@ -120,8 +125,8 @@ const artifactDeclarations = [
   },
   {
     path: "production-blast-sui-v1.json",
-    baseline: BLAST_SUI_BOOSTS_BASELINE,
-    packages: [["blastSui", "blast_sui", "blast_sui"]],
+    baseline: BLAST_SUI_BASELINE,
+    packages: [["blastSui", "defi/blast_sui", "blast_sui"]],
     approvedAbiAmendments: [
       "contracts ADR 0059: remove sender and unchanged state from event payloads",
       "contracts ADR 0060: retain both currency metadata caps and the receipt-display cap in PackageAdmin custody",
@@ -130,11 +135,13 @@ const artifactDeclarations = [
       "contracts ADR 0085: name every explorer-visible type after Blast",
       "contracts ADR 0097: package custody and the redeem fee take blast_admin::blast_acl::AdminWitness of the typed UpgradeAdmin and FeeAdmin roles",
       "contracts ADR 0097 (amended 2026-10-02): PackageVersion lives in the one-time-witness module as blast_sui_package::PackageVersion, seeded from that witness",
+      "contracts ADR 0136 (PR A): generic blast_admin::package_version::PackageVersion<BLAST_SUI_PACKAGE> and package_admin::PackageAdmin<BLAST_SUI_PACKAGE>; the redeem fee is a delayed setting; deposits pause by bit and blast_sui::vault::unpause guards the delays",
+      "contracts ADR 0141 (PR #281): a delayed list of up to 15 validator pools that ValidatorAdmin curates; mints and deposit requests pick a listed pool_id; custody keeps one position per pool and events carry one PoolSnapshot per pool",
     ],
   },
   {
     path: "production-boosts-v1.json",
-    baseline: BLAST_SUI_BOOSTS_BASELINE,
+    baseline: BOOSTS_BASELINE,
     packages: [
       ["boostsCore", "boosts/core", "blast_boosts_core"],
       ["boostsProducts", "boosts/products", "blast_boosts_products"],
@@ -852,26 +859,27 @@ const blastSuiBuilders = new Set([
   "vault::claim_blast_sui",
   "deposit_receipt::cancel",
   "vault::donate_sui",
+  "vault::top_up_fun_reserve",
   "vault::redeem_blast_sui",
   "vault::sync",
-  "vault::set_redeem_fee",
-]);
-const blastSuiDeploymentExclusions = new Set([
-  "vault::create",
-  "package_admin::add_capability",
-  "deposit_receipt::create_display",
-  "package_admin::new",
-  "package_admin::share",
+  "vault::schedule_redeem_fee",
+  "vault::apply_redeem_fee",
+  "vault::cancel_redeem_fee",
+  "vault::schedule_validator",
+  "vault::apply_validator",
+  "vault::cancel_validator",
+  "vault::remove_validator",
+  "vault::schedule_validator_delay",
+  "vault::apply_validator_delay",
+  "vault::cancel_validator_delay",
+  "vault::unpause",
 ]);
 
 function classifyBlastSuiFunction(moduleName, functionName) {
   const key = `${moduleName}::${functionName}`;
   if (blastSuiBuilders.has(key)) return "builder";
-  if (blastSuiDeploymentExclusions.has(key)) {
-    return "intentional-deployment-exclusion";
-  }
-  if (key === "package_admin::has_upgrade_cap") return "move-composition";
-  return classifyPackageAdmin(moduleName, functionName);
+  if (key === "vault::create") return "intentional-deployment-exclusion";
+  return undefined;
 }
 
 /** Every event the SDK decodes and replays; boosts' operator events are excluded. */
@@ -901,7 +909,6 @@ const partnersEventNames = new Set([
   "PartnerListDestroyed",
 ]);
 const blastSuiEventNames = new Set([
-  "PackageCapabilityAdded",
   "VaultCreated",
   "FunSuiMinted",
   "FunSuiRedeemed",
@@ -909,11 +916,11 @@ const blastSuiEventNames = new Set([
   "BlastSuiDepositClaimed",
   "BlastSuiDepositCancelled",
   "BlastSuiDonated",
+  "FunReserveToppedUp",
   "BlastSuiRedeemed",
   "FunYieldSwept",
-  "RedeemFeeChanged",
   "VaultSynced",
-  "NativeStakeUnwound",
+  "PoolUnwound",
 ]);
 
 function isEventStruct(packageName, moduleName, structName) {

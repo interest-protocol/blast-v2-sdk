@@ -95,6 +95,7 @@ export type BlastSharedObjects = Readonly<{
   }>;
   blastSui?: Readonly<{
     packageVersion: SharedObjectIdentity;
+    packageAdmin: SharedObjectIdentity;
     vault: SharedObjectIdentity;
   }>;
   /** Cetus CLMM's and Cetus LP Burn's singletons. */

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "01d7659617abcd552cece6d05b9db409ec4ff2c0",
+    "contractsCommit": "50b8d59a15553d06efe30f9611c760d3d1abc7d7",
     "workingTreeDifferedAtFreeze": false,
     "approvedAbiAmendments": [
       "contracts ADR 0059: remove sender and unchanged state from event payloads",
@@ -10,7 +10,9 @@
       "contracts ADR 0065: retain discoverable TreasuryCap child objects under Vault custody",
       "contracts ADR 0085: name every explorer-visible type after Blast",
       "contracts ADR 0097: package custody and the redeem fee take blast_admin::blast_acl::AdminWitness of the typed UpgradeAdmin and FeeAdmin roles",
-      "contracts ADR 0097 (amended 2026-10-02): PackageVersion lives in the one-time-witness module as blast_sui_package::PackageVersion, seeded from that witness"
+      "contracts ADR 0097 (amended 2026-10-02): PackageVersion lives in the one-time-witness module as blast_sui_package::PackageVersion, seeded from that witness",
+      "contracts ADR 0136 (PR A): generic blast_admin::package_version::PackageVersion<BLAST_SUI_PACKAGE> and package_admin::PackageAdmin<BLAST_SUI_PACKAGE>; the redeem fee is a delayed setting; deposits pause by bit and blast_sui::vault::unpause guards the delays",
+      "contracts ADR 0141 (PR #281): a delayed list of up to 15 validator pools that ValidatorAdmin curates; mints and deposit requests pick a listed pool_id; custody keeps one position per pool and events carry one PoolSnapshot per pool"
     ],
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -76,6 +78,18 @@
           "functions": [],
           "structs": [
             {
+              "name": "CancelAdmin",
+              "abilities": [],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
               "name": "FeeAdmin",
               "abilities": [],
               "typeParameters": [],
@@ -88,7 +102,7 @@
               ]
             },
             {
-              "name": "UpgradeAdmin",
+              "name": "ValidatorAdmin",
               "abilities": [],
               "typeParameters": [],
               "positional": true,
@@ -121,52 +135,16 @@
               ]
             },
             {
-              "name": "PackageVersion",
+              "name": "PackageWitness",
               "abilities": [
-                "Key"
+                "Drop"
               ],
               "typeParameters": [],
-              "positional": false,
+              "positional": true,
               "fields": [
                 {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "generation",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_admin",
-                        "name": "operational_version"
-                      },
-                      "name": "OperationalVersion",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_sui",
-                                "name": "blast_sui_package"
-                              },
-                              "name": "BLAST_SUI_PACKAGE",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": true
-                        }
-                      ]
-                    }
-                  }
+                  "name": "dummy_field",
+                  "type": "bool"
                 }
               ]
             }
@@ -218,6 +196,80 @@
                     }
                   }
                 },
+                {
+                  "name": "positions",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "vec_map"
+                      },
+                      "name": "VecMap",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        },
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_sui",
+                                "name": "custody"
+                              },
+                              "name": "Position",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PoolRate",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "epoch",
+                  "type": "u64"
+                },
+                {
+                  "name": "sui",
+                  "type": "u64"
+                },
+                {
+                  "name": "pool_tokens",
+                  "type": "u64"
+                }
+              ]
+            },
+            {
+              "name": "Position",
+              "abilities": [
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
                 {
                   "name": "pending_stakes",
                   "type": {
@@ -336,85 +388,6 @@
                               "name": "sui"
                             },
                             "name": "SUI",
-                            "type_arguments": []
-                          }
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "create_display",
-              "sdk": "intentional-deployment-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "display_registry"
-                        },
-                        "name": "DisplayRegistry",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "sui",
-                          "name": "tx_context"
-                        },
-                        "name": "TxContext",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "display_registry"
-                    },
-                    "name": "DisplayCap",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "Datatype": {
-                            "module": {
-                              "address": "blast_sui",
-                              "name": "deposit_receipt"
-                            },
-                            "name": "BlastSuiDepositReceipt",
                             "type_arguments": []
                           }
                         },
@@ -547,7 +520,7 @@
               ]
             },
             {
-              "name": "PoolCustody",
+              "name": "PoolSnapshot",
               "abilities": [
                 "Copy",
                 "Drop"
@@ -556,9 +529,68 @@
               "positional": false,
               "fields": [
                 {
-                  "name": "liquid_sui",
-                  "type": "u64"
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
                 },
+                {
+                  "name": "exchange_rate",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_sui",
+                        "name": "events"
+                      },
+                      "name": "ExchangeRate",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "fun_position",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_sui",
+                        "name": "events"
+                      },
+                      "name": "PositionCustody",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "blast_position",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_sui",
+                        "name": "events"
+                      },
+                      "name": "PositionCustody",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PositionCustody",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
                 {
                   "name": "pending_sui",
                   "type": "u64"
@@ -583,41 +615,25 @@
               "positional": false,
               "fields": [
                 {
-                  "name": "fun_custody",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_sui",
-                        "name": "events"
-                      },
-                      "name": "PoolCustody",
-                      "type_arguments": []
-                    }
-                  }
+                  "name": "fun_liquid",
+                  "type": "u64"
                 },
                 {
-                  "name": "blast_custody",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_sui",
-                        "name": "events"
-                      },
-                      "name": "PoolCustody",
-                      "type_arguments": []
-                    }
-                  }
+                  "name": "blast_liquid",
+                  "type": "u64"
                 },
                 {
-                  "name": "exchange_rate",
+                  "name": "pools",
                   "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_sui",
-                        "name": "events"
-                      },
-                      "name": "ExchangeRate",
-                      "type_arguments": []
+                    "vector": {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "events"
+                        },
+                        "name": "PoolSnapshot",
+                        "type_arguments": []
+                      }
                     }
                   }
                 },
@@ -724,7 +740,7 @@
                   "type": "u64"
                 },
                 {
-                  "name": "pool_tokens",
+                  "name": "claimed_pool_tokens",
                   "type": "u64"
                 },
                 {
@@ -890,7 +906,7 @@
               "sdk": "decoder-reducer"
             },
             {
-              "name": "FunSuiMinted",
+              "name": "FunReserveToppedUp",
               "abilities": [
                 "Copy",
                 "Drop"
@@ -900,6 +916,52 @@
               "fields": [
                 {
                   "name": "sui_in",
+                  "type": "u64"
+                },
+                {
+                  "name": "custody",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_sui",
+                        "name": "events"
+                      },
+                      "name": "VaultCustody",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "decoder-reducer"
+            },
+            {
+              "name": "FunSuiMinted",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "sui_in",
+                  "type": "u64"
+                },
+                {
+                  "name": "delegated_sui",
                   "type": "u64"
                 },
                 {
@@ -957,11 +1019,11 @@
               "positional": false,
               "fields": [
                 {
-                  "name": "liquid_sui",
+                  "name": "swept_liquid_sui",
                   "type": "u64"
                 },
                 {
-                  "name": "pool_tokens",
+                  "name": "swept_active_sui",
                   "type": "u64"
                 },
                 {
@@ -985,7 +1047,7 @@
               "sdk": "decoder-reducer"
             },
             {
-              "name": "NativeStakeUnwound",
+              "name": "PoolUnwound",
               "abilities": [
                 "Copy",
                 "Drop"
@@ -993,6 +1055,19 @@
               "typeParameters": [],
               "positional": false,
               "fields": [
+                {
+                  "name": "pool_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
                 {
                   "name": "custody",
                   "type": {
@@ -1005,77 +1080,6 @@
                       "type_arguments": []
                     }
                   }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "PackageCapabilityAdded",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "package_admin_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "capability_id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "capability_type",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "std",
-                        "name": "type_name"
-                      },
-                      "name": "TypeName",
-                      "type_arguments": []
-                    }
-                  }
-                }
-              ],
-              "sdk": "decoder-reducer"
-            },
-            {
-              "name": "RedeemFeeChanged",
-              "abilities": [
-                "Copy",
-                "Drop"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "old_redeem_fee_bps",
-                  "type": "u64"
-                },
-                {
-                  "name": "new_redeem_fee_bps",
-                  "type": "u64"
                 }
               ],
               "sdk": "decoder-reducer"
@@ -1205,22 +1209,13 @@
           "enums": [],
           "events": []
         },
-        "package_admin": {
+        "vault": {
           "functions": [
             {
-              "name": "add_capability",
-              "sdk": "intentional-deployment-exclusion",
+              "name": "apply_redeem_fee",
+              "sdk": "builder",
               "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Capability",
-                  "phantom": false,
-                  "constraints": [
-                    "Key",
-                    "Store"
-                  ]
-                }
-              ],
+              "typeParameters": [],
               "parameters": [
                 {
                   "Reference": [
@@ -1229,24 +1224,9 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_admin"
+                          "name": "vault"
                         },
-                        "name": "PackageAdmin",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
-                        },
-                        "name": "PackageVersion",
+                        "name": "Vault",
                         "type_arguments": []
                       }
                     }
@@ -1259,89 +1239,18 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "blast_acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_sui",
-                                  "name": "blast_sui_domain"
-                                },
-                                "name": "UpgradeAdmin",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "NamedTypeParameter": "Capability"
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "authorize_upgrade",
-              "sdk": "intentional-upgrade-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "package_admin"
-                        },
-                        "name": "PackageAdmin",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
-                        },
-                        "name": "AdminWitness",
                         "type_arguments": [
                           {
                             "argument": {
                               "Datatype": {
                                 "module": {
                                   "address": "blast_sui",
-                                  "name": "blast_sui_domain"
+                                  "name": "blast_sui_package"
                                 },
-                                "name": "UpgradeAdmin",
+                                "name": "BLAST_SUI_PACKAGE",
                                 "type_arguments": []
                               }
                             },
@@ -1353,187 +1262,16 @@
                   ]
                 },
                 {
-                  "vector": "u8"
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "package"
-                    },
-                    "name": "UpgradeTicket",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
-              "name": "commit_upgrade_and_advance",
-              "sdk": "intentional-upgrade-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "package_admin"
-                        },
-                        "name": "PackageAdmin",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
                   "Reference": [
                     false,
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
+                          "address": "sui",
+                          "name": "clock"
                         },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_sui",
-                                  "name": "blast_sui_domain"
-                                },
-                                "name": "UpgradeAdmin",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "package"
-                    },
-                    "name": "UpgradeReceipt",
-                    "type_arguments": []
-                  }
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "has_upgrade_cap",
-              "sdk": "move-composition",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "package_admin"
-                        },
-                        "name": "PackageAdmin",
+                        "name": "Clock",
                         "type_arguments": []
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": [
-                "bool"
-              ]
-            },
-            {
-              "name": "make_immutable",
-              "sdk": "intentional-upgrade-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "package_admin"
-                        },
-                        "name": "PackageAdmin",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
-                        },
-                        "name": "PackageVersion",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_sui",
-                                  "name": "blast_sui_domain"
-                                },
-                                "name": "UpgradeAdmin",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
                       }
                     }
                   ]
@@ -1542,30 +1280,94 @@
               "returns": []
             },
             {
-              "name": "new",
-              "sdk": "intentional-deployment-exclusion",
+              "name": "apply_validator",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
                 {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "package"
-                    },
-                    "name": "Publisher",
-                    "type_arguments": []
-                  }
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui_system",
+                          "name": "sui_system"
+                        },
+                        "name": "SuiSystemState",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 {
                   "Datatype": {
                     "module": {
                       "address": "sui",
-                      "name": "package"
+                      "name": "object"
                     },
-                    "name": "UpgradeCap",
+                    "name": "ID",
                     "type_arguments": []
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 {
                   "Reference": [
@@ -1583,22 +1385,11 @@
                   ]
                 }
               ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "blast_sui",
-                      "name": "package_admin"
-                    },
-                    "name": "PackageAdmin",
-                    "type_arguments": []
-                  }
-                }
-              ]
+              "returns": []
             },
             {
-              "name": "restrict_to_additive",
-              "sdk": "intentional-upgrade-exclusion",
+              "name": "apply_validator_delay",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -1609,9 +1400,9 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_sui",
-                          "name": "package_admin"
+                          "name": "vault"
                         },
-                        "name": "PackageAdmin",
+                        "name": "Vault",
                         "type_arguments": []
                       }
                     }
@@ -1623,11 +1414,93 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
+                          "address": "blast_admin",
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
                         "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "cancel_redeem_fee",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -1650,7 +1523,7 @@
                                   "address": "blast_sui",
                                   "name": "blast_sui_domain"
                                 },
-                                "name": "UpgradeAdmin",
+                                "name": "CancelAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -1665,104 +1538,179 @@
               "returns": []
             },
             {
-              "name": "share",
-              "sdk": "intentional-deployment-exclusion",
+              "name": "cancel_validator",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
                 {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_domain"
+                                },
+                                "name": "CancelAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
                   "Datatype": {
                     "module": {
-                      "address": "blast_sui",
-                      "name": "package_admin"
+                      "address": "sui",
+                      "name": "object"
                     },
-                    "name": "PackageAdmin",
+                    "name": "ID",
                     "type_arguments": []
                   }
                 }
               ],
               "returns": []
-            }
-          ],
-          "structs": [
-            {
-              "name": "CapabilityKey",
-              "abilities": [
-                "Copy",
-                "Drop",
-                "Store"
-              ],
-              "typeParameters": [
-                {
-                  "name": "Capability",
-                  "phantom": true,
-                  "constraints": []
-                }
-              ],
-              "positional": true,
-              "fields": [
-                {
-                  "name": "dummy_field",
-                  "type": "bool"
-                }
-              ]
             },
             {
-              "name": "PackageAdmin",
-              "abilities": [
-                "Key"
-              ],
+              "name": "cancel_validator_delay",
+              "sdk": "builder",
+              "entry": false,
               "typeParameters": [],
-              "positional": false,
-              "fields": [
+              "parameters": [
                 {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": []
+                      }
                     }
-                  }
+                  ]
                 },
                 {
-                  "name": "custody",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_admin",
-                        "name": "upgrade_custody"
-                      },
-                      "name": "UpgradeCustody",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_sui",
-                                "name": "blast_sui_package"
-                              },
-                              "name": "BLAST_SUI_PACKAGE",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": true
-                        }
-                      ]
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
                     }
-                  }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_domain"
+                                },
+                                "name": "CancelAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
                 }
-              ]
-            }
-          ],
-          "enums": [],
-          "events": []
-        },
-        "vault": {
-          "functions": [
+              ],
+              "returns": []
+            },
             {
               "name": "claim_blast_sui",
               "sdk": "builder",
@@ -1790,11 +1738,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
+                          "address": "blast_admin",
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -1880,11 +1842,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
+                          "address": "blast_admin",
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -1899,6 +1875,21 @@
                           "name": "sui_system"
                         },
                         "name": "SuiSystemState",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "display_registry"
+                        },
+                        "name": "DisplayRegistry",
                         "type_arguments": []
                       }
                     }
@@ -1956,6 +1947,54 @@
                   "Datatype": {
                     "module": {
                       "address": "sui",
+                      "name": "coin_registry"
+                    },
+                    "name": "MetadataCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "blast_sui",
+                              "name": "fun_sui"
+                            },
+                            "name": "FUN_SUI",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin_registry"
+                    },
+                    "name": "MetadataCap",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "blast_sui",
+                              "name": "blast_sui"
+                            },
+                            "name": "BLAST_SUI",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
                       "name": "coin"
                     },
                     "name": "Coin",
@@ -1985,6 +2024,21 @@
                     "name": "ID",
                     "type_arguments": []
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 },
                 {
                   "Reference": [
@@ -2031,11 +2085,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
+                          "address": "blast_admin",
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -2124,11 +2192,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
+                          "address": "blast_admin",
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -2147,6 +2229,16 @@
                       }
                     }
                   ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "object"
+                    },
+                    "name": "ID",
+                    "type_arguments": []
+                  }
                 },
                 {
                   "Datatype": {
@@ -2242,11 +2334,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
+                          "address": "blast_admin",
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -2361,11 +2467,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
+                          "address": "blast_admin",
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -2453,6 +2573,128 @@
               ]
             },
             {
+              "name": "remove_validator",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_domain"
+                                },
+                                "name": "ValidatorAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui_system",
+                          "name": "sui_system"
+                        },
+                        "name": "SuiSystemState",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "object"
+                    },
+                    "name": "ID",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
               "name": "request_blast_sui",
               "sdk": "builder",
               "entry": false,
@@ -2479,11 +2721,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
+                          "address": "blast_admin",
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -2502,6 +2758,16 @@
                       }
                     }
                   ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "object"
+                    },
+                    "name": "ID",
+                    "type_arguments": []
+                  }
                 },
                 {
                   "Datatype": {
@@ -2557,7 +2823,7 @@
               ]
             },
             {
-              "name": "set_redeem_fee",
+              "name": "schedule_redeem_fee",
               "sdk": "builder",
               "entry": false,
               "typeParameters": [],
@@ -2583,11 +2849,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
+                          "address": "blast_admin",
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -2621,7 +2901,228 @@
                     }
                   ]
                 },
-                "u64"
+                "u64",
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "schedule_validator",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_domain"
+                                },
+                                "name": "ValidatorAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "object"
+                    },
+                    "name": "ID",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "schedule_validator_delay",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_domain"
+                                },
+                                "name": "ValidatorAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
               ],
               "returns": []
             },
@@ -2652,11 +3153,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_sui",
-                          "name": "blast_sui_package"
+                          "address": "blast_admin",
+                          "name": "package_version"
                         },
                         "name": "PackageVersion",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -2693,9 +3208,250 @@
                 }
               ],
               "returns": []
+            },
+            {
+              "name": "top_up_fun_reserve",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "sui",
+                      "name": "coin"
+                    },
+                    "name": "Coin",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "Datatype": {
+                            "module": {
+                              "address": "sui",
+                              "name": "sui"
+                            },
+                            "name": "SUI",
+                            "type_arguments": []
+                          }
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "unpause",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_sui",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_admin",
+                                  "name": "package_admin"
+                                },
+                                "name": "UnpauseAdmin",
+                                "type_arguments": [
+                                  {
+                                    "argument": {
+                                      "Datatype": {
+                                        "module": {
+                                          "address": "blast_sui",
+                                          "name": "blast_sui_package"
+                                        },
+                                        "name": "BLAST_SUI_PACKAGE",
+                                        "type_arguments": []
+                                      }
+                                    },
+                                    "phantom": true
+                                  }
+                                ]
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_sui",
+                                  "name": "blast_sui_package"
+                                },
+                                "name": "BLAST_SUI_PACKAGE",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u8"
+              ],
+              "returns": []
             }
           ],
           "structs": [
+            {
+              "name": "CapabilityKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Capability",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "RedeemFeeKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
             {
               "name": "TreasuryKey",
               "abilities": [
@@ -2710,6 +3466,22 @@
                   "constraints": []
                 }
               ],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "ValidatorKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
               "positional": true,
               "fields": [
                 {
@@ -2740,15 +3512,82 @@
                   }
                 },
                 {
-                  "name": "pool_id",
+                  "name": "validators",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "delayed_set"
+                      },
+                      "name": "DelayedSet",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_sui",
+                                "name": "vault"
+                              },
+                              "name": "ValidatorKey",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        },
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "pool_rates",
                   "type": {
                     "Datatype": {
                       "module": {
                         "address": "sui",
-                        "name": "object"
+                        "name": "vec_map"
                       },
-                      "name": "ID",
-                      "type_arguments": []
+                      "name": "VecMap",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "sui",
+                                "name": "object"
+                              },
+                              "name": "ID",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        },
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_sui",
+                                "name": "custody"
+                              },
+                              "name": "PoolRate",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
                     }
                   }
                 },
@@ -2779,24 +3618,35 @@
                   }
                 },
                 {
-                  "name": "rate_epoch",
-                  "type": "u64"
-                },
-                {
-                  "name": "rate_sui",
-                  "type": "u64"
-                },
-                {
-                  "name": "rate_pool_tokens",
-                  "type": "u64"
-                },
-                {
-                  "name": "redeem_fee_bps",
-                  "type": "u64"
-                },
-                {
-                  "name": "unwind_only",
-                  "type": "bool"
+                  "name": "redeem_fee",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "delayed"
+                      },
+                      "name": "Delayed",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_sui",
+                                "name": "vault"
+                              },
+                              "name": "RedeemFeeKey",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        },
+                        {
+                          "argument": "u64",
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
             }

@@ -11,6 +11,7 @@ import {
   blastRedemptionQuote,
   blastSharesOutDown,
   funConversionLossBoundUp,
+  isUsableRate,
   poolTokensAtRateDown,
   poolTokensForSuiUp,
   suiAtRateDown,
@@ -49,6 +50,10 @@ test("normalizes blast Sui deployment references with exact mutability", () => {
         objectId: "0x8",
         initialSharedVersion: "16",
       },
+      packageAdmin: {
+        objectId: "0x7",
+        initialSharedVersion: "15",
+      },
       vault: {
         objectId: "0x9",
         initialSharedVersion: "17",
@@ -67,6 +72,11 @@ test("normalizes blast Sui deployment references with exact mutability", () => {
         objectId:
           "0x0000000000000000000000000000000000000000000000000000000000000008",
         initialSharedVersion: "16",
+      },
+      packageAdmin: {
+        objectId:
+          "0x0000000000000000000000000000000000000000000000000000000000000007",
+        initialSharedVersion: "15",
       },
       vault: {
         objectId:
@@ -96,12 +106,79 @@ test("quotes blast shares and redemptions with Move rounding", () => {
   );
 });
 
-test("mirrors native empty-rate and ceiling behavior", () => {
-  assert.equal(suiAtRateDown(7n, 0n, 0n), 7n);
-  assert.equal(poolTokensAtRateDown(7n, 0n, 0n), 7n);
+test("mirrors native rate conversions and ceiling behavior", () => {
+  assert.equal(suiAtRateDown(7n, 3n, 2n), 10n);
+  assert.equal(poolTokensAtRateDown(7n, 3n, 2n), 4n);
   assert.equal(funConversionLossBoundUp(3n, 2n), 2n);
+  assert.equal(funConversionLossBoundUp(4n, 2n), 2n);
   assert.equal(poolTokensForSuiUp(7n, 10n, 9n), 8n);
   assert.equal(poolTokensForSuiUp(20n, 10n, 9n), 10n);
+  // No active SUI: the whole held position is requested.
+  assert.equal(poolTokensForSuiUp(7n, 10n, 0n), 10n);
+});
+
+test("refuses an unusable exchange rate instead of falling back", () => {
+  assert.equal(isUsableRate(1n, 1n), true);
+  for (const [rateSui, ratePoolTokens] of [
+    [0n, 0n],
+    [0n, 5n],
+    [5n, 0n],
+  ] as const) {
+    assert.equal(isUsableRate(rateSui, ratePoolTokens), false);
+    for (const convert of [
+      () => suiAtRateDown(7n, rateSui, ratePoolTokens),
+      () => poolTokensAtRateDown(7n, rateSui, ratePoolTokens),
+      () => funConversionLossBoundUp(rateSui, ratePoolTokens),
+    ]) {
+      assert.throws(
+        convert,
+        (error: unknown) =>
+          error instanceof RangeError &&
+          error.message === "exchange rate must be usable",
+      );
+    }
+  }
+  assert.throws(() => suiAtRateDown(1n, -1n, 1n), /rateSui must be a u64/);
+  assert.throws(
+    () => poolTokensAtRateDown(1n, 1n, 1n << 64n),
+    /ratePoolTokens must be a u64/,
+  );
+});
+
+test("reproduces the Move-printed fixture's conversions", () => {
+  // Pool 0's rate at epoch 3 values the blast ledger's active stake.
+  const rateSui = 1_333_600_113_000_000_000n;
+  const ratePoolTokens = 113_000_000_000n;
+  assert.equal(
+    suiAtRateDown(11_666_167_218n, rateSui, ratePoolTokens),
+    137_681_432_922_138_899n,
+  );
+  // Converting back rounds down by one pool token.
+  assert.equal(
+    poolTokensAtRateDown(137_681_432_922_138_899n, rateSui, ratePoolTokens),
+    11_666_167_217n,
+  );
+  assert.equal(funConversionLossBoundUp(rateSui, ratePoolTokens), 11_801_771n);
+
+  // The 3 SUI claim mints 2.608695652 blastSUI against 11.5 SUI of assets.
+  assert.equal(
+    blastSharesOutDown(3_000_000_000n, 11_500_000_000n, 10_000_000_000n),
+    2_608_695_652n,
+  );
+  // The 1 blastSUI redemption at a 2 bps fee.
+  assert.deepEqual(
+    blastRedemptionQuote(
+      1_000_000_000n,
+      198_520_607_880_556_399n,
+      12_608_695_652n,
+      requireBasisPoints("fee", 2n),
+    ),
+    {
+      grossSui: 15_744_737_866_606_124n,
+      feeSui: 3_148_947_573_322n,
+      netSui: 15_741_588_919_032_802n,
+    },
+  );
 });
 
 test("aborts before capping an overflowing pool-token quote", () => {

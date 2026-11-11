@@ -12,12 +12,20 @@ export type BlastSuiDeployment = {
   packageId: string;
   originalPackageId: string;
   packageVersion: SharedObjectIdentity;
+  packageAdmin: SharedObjectIdentity;
   vault: SharedObjectIdentity;
   admin: AdminDeployment;
 };
 
 /** The typed `blast_sui_domain` roles. */
-export type BlastSuiAdminRole = "UpgradeAdmin" | "FeeAdmin";
+export type BlastSuiAdminRole = "FeeAdmin" | "CancelAdmin" | "ValidatorAdmin";
+
+/** The vault's `PackageVersion` pause bits: one per guarded entry point. */
+export const BLAST_SUI_PAUSE_BITS = {
+  funMint: 1,
+  request: 2,
+  claim: 4,
+} as const;
 
 /** Normalizes blast Sui package and shared-object identities. */
 export function normalizeBlastSuiDeployment(
@@ -28,6 +36,10 @@ export function normalizeBlastSuiDeployment(
     packageVersion: normalizeSharedObjectIdentity(
       "packageVersion",
       deployment.packageVersion,
+    ),
+    packageAdmin: normalizeSharedObjectIdentity(
+      "packageAdmin",
+      deployment.packageAdmin,
     ),
     vault: normalizeSharedObjectIdentity("vault", deployment.vault),
     admin: normalizeAdminDeployment(deployment.admin),

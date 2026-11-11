@@ -1,6 +1,12 @@
+import type {
+  DecodedDelayedEvent,
+  DelayedKeySpecs,
+} from "@interest-protocol/blast-admin-sdk/events";
+import { decodeDelayedEvent } from "@interest-protocol/blast-admin-sdk/events";
 import {
-  moveTypeNameBcs,
   suiObjectIdBcs,
+  u64Bcs,
+  unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import type { SuiEventPosition } from "@interest-protocol/blast-core/events";
 import {
@@ -20,13 +26,13 @@ import {
   normalizeSuiObjectId,
   parseStructTag,
 } from "@mysten/sui/utils";
+import type { BlastSuiDeployment } from "./types.ts";
 
 type BlastSuiEventFieldDescriptor =
   | "id"
   | "address"
   | "u64"
   | "basisPoints"
-  | "typeName"
   | "vaultCustody";
 
 export const blastSuiEventSpecs = {
@@ -41,7 +47,7 @@ export const blastSuiEventSpecs = {
     vault_id: "id",
     principal_sui: "u64",
     contributed_sui: "u64",
-    pool_tokens: "u64",
+    claimed_pool_tokens: "u64",
     blast_out: "u64",
     custody: "vaultCustody",
   },
@@ -64,8 +70,14 @@ export const blastSuiEventSpecs = {
     net_sui: "u64",
     custody: "vaultCustody",
   },
-  FunSuiMinted: {
+  FunReserveToppedUp: {
     sui_in: "u64",
+    custody: "vaultCustody",
+  },
+  FunSuiMinted: {
+    pool_id: "id",
+    sui_in: "u64",
+    delegated_sui: "u64",
     custody: "vaultCustody",
   },
   FunSuiRedeemed: {
@@ -73,22 +85,14 @@ export const blastSuiEventSpecs = {
     custody: "vaultCustody",
   },
   FunYieldSwept: {
-    liquid_sui: "u64",
-    pool_tokens: "u64",
+    swept_liquid_sui: "u64",
+    swept_active_sui: "u64",
     swept_sui: "u64",
     custody: "vaultCustody",
   },
-  NativeStakeUnwound: {
+  PoolUnwound: {
+    pool_id: "id",
     custody: "vaultCustody",
-  },
-  PackageCapabilityAdded: {
-    package_admin_id: "id",
-    capability_id: "id",
-    capability_type: "typeName",
-  },
-  RedeemFeeChanged: {
-    old_redeem_fee_bps: "basisPoints",
-    new_redeem_fee_bps: "basisPoints",
   },
   VaultCreated: {
     vault_id: "id",
@@ -110,8 +114,8 @@ export const blastSuiEventSpecs = {
 
 export type BlastSuiEventKind = keyof typeof blastSuiEventSpecs;
 
-export type PoolCustodyEvent = {
-  liquid_sui: bigint;
+/** One ledger's stake in one pool: pending principal and active pool tokens. */
+export type PositionCustodyEvent = {
   pending_sui: bigint;
   active_pool_tokens: bigint;
   active_sui: bigint;
@@ -123,10 +127,19 @@ export type ExchangeRateEvent = {
   pool_token_amount: bigint;
 };
 
-export type VaultCustodyEvent = {
-  fun_custody: PoolCustodyEvent;
-  blast_custody: PoolCustodyEvent;
+/** One listed pool's cached rate and both ledgers' positions in it. */
+export type PoolSnapshotEvent = {
+  pool_id: string;
   exchange_rate: ExchangeRateEvent;
+  fun_position: PositionCustodyEvent;
+  blast_position: PositionCustodyEvent;
+};
+
+/** Both ledgers after the event, with one snapshot per listed pool in list order. */
+export type VaultCustodyEvent = {
+  fun_liquid: bigint;
+  blast_liquid: bigint;
+  pools: PoolSnapshotEvent[];
   fun_supply: bigint;
   blast_supply: bigint;
 };
@@ -178,8 +191,7 @@ const AddressBcs = bcs.Address.transform({
   output: (value) => normalizeSuiAddress(value),
 });
 
-export const poolCustodyEventBcs = bcs.struct("PoolCustody", {
-  liquid_sui: U64Bcs,
+export const positionCustodyEventBcs = bcs.struct("PositionCustody", {
   pending_sui: U64Bcs,
   active_pool_tokens: U64Bcs,
   active_sui: U64Bcs,
@@ -191,10 +203,17 @@ export const exchangeRateEventBcs = bcs.struct("ExchangeRate", {
   pool_token_amount: U64Bcs,
 });
 
-export const vaultCustodyEventBcs = bcs.struct("VaultCustody", {
-  fun_custody: poolCustodyEventBcs,
-  blast_custody: poolCustodyEventBcs,
+export const poolSnapshotEventBcs = bcs.struct("PoolSnapshot", {
+  pool_id: suiObjectIdBcs,
   exchange_rate: exchangeRateEventBcs,
+  fun_position: positionCustodyEventBcs,
+  blast_position: positionCustodyEventBcs,
+});
+
+export const vaultCustodyEventBcs = bcs.struct("VaultCustody", {
+  fun_liquid: U64Bcs,
+  blast_liquid: U64Bcs,
+  pools: bcs.vector(poolSnapshotEventBcs),
   fun_supply: U64Bcs,
   blast_supply: U64Bcs,
 });
@@ -207,7 +226,6 @@ const BLAST_SUI_EVENT_FIELD_BCS: Record<
   address: AddressBcs as BcsType<unknown, unknown>,
   u64: U64Bcs as BcsType<unknown, unknown>,
   basisPoints: BasisPointsBcs as BcsType<unknown, unknown>,
-  typeName: moveTypeNameBcs as BcsType<unknown, unknown>,
   vaultCustody: vaultCustodyEventBcs as BcsType<unknown, unknown>,
 };
 
@@ -299,4 +317,42 @@ export function decodeBlastSuiEvent(
 
 export function blastSuiEventId(event: DecodedBlastSuiEvent): string {
   return suiEventId(event.position);
+}
+
+/**
+ * The vault's `blast_admin` delayed values, each parented by the vault ID:
+ * the redemption fee (`delayed`) and the validator list (`delayed_set` of
+ * staking pool IDs). Pause and upgrade events come from `blast_admin` itself.
+ */
+export const blastSuiDelayedKeys = {
+  RedeemFee: {
+    key: "vault::RedeemFeeKey",
+    family: "setting",
+    keyBcs: unitKeyBcs,
+    valueBcs: u64Bcs,
+    valueType: "u64",
+  },
+  Validators: {
+    key: "vault::ValidatorKey",
+    family: "set",
+    keyBcs: unitKeyBcs,
+    valueBcs: suiObjectIdBcs,
+    valueType: "0x2::object::ID",
+  },
+} as const satisfies DelayedKeySpecs;
+
+export type DecodedBlastSuiDelayedEvent = DecodedDelayedEvent<
+  typeof blastSuiDelayedKeys
+>;
+
+/** Decodes a `blast_admin` delayed event keyed by the blast Sui vault. */
+export function decodeBlastSuiDelayedEvent(
+  event: SuiClientTypes.EventEntry,
+  blastSui: Pick<BlastSuiDeployment, "originalPackageId" | "admin">,
+): DecodedBlastSuiDelayedEvent {
+  return decodeDelayedEvent(event, {
+    adminPackageId: blastSui.admin.packageId,
+    packageId: blastSui.originalPackageId,
+    keys: blastSuiDelayedKeys,
+  });
 }

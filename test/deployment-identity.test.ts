@@ -696,7 +696,7 @@ test("pins the frozen ABI to the contracts baseline and every artifact key", () 
       createHash("sha256").update(artifact).digest("hex"),
       `FROZEN_ABI.artifacts.${key} is the sha256 of abi/${file}`,
     );
-    // blast-sui and boosts stay frozen at their own earlier baseline.
+    // blast-sui and boosts stay frozen at their own baselines.
     if (key !== "blastSui" && key !== "boosts") {
       assert.equal(
         JSON.parse(artifact.toString("utf8")).baseline.contractsCommit,

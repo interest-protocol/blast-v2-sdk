@@ -30,7 +30,7 @@ const expectedEvents = {
   },
   "production-presale-v1.json": { presale: 11, presaleCoinTemplate: 0 },
   "production-aftermath-dao-presale-v1.json": { aftermathDaoPresale: 2 },
-  "production-blast-sui-v1.json": { blastSui: 13 },
+  "production-blast-sui-v1.json": { blastSui: 12 },
   "production-boosts-v1.json": {
     boostsCore: 0,
     boostsProducts: 0,
@@ -148,7 +148,7 @@ test("rejects unknown Boosts adapter functions", () => {
 });
 
 test("rejects unknown blast_sui function classifications", () => {
-  for (const moduleName of ["math", "acl", "package_admin"]) {
+  for (const moduleName of ["math", "vault", "package_admin"]) {
     const result = spawnSync(
       process.execPath,
       [

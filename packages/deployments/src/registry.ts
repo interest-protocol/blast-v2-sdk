@@ -80,7 +80,7 @@ const SHARED_OBJECT_KEYS = {
     "presaleRegistry",
   ],
   migrators: ["packageVersion", "packageAdmin", "venueConfig"],
-  blastSui: ["packageVersion", "vault"],
+  blastSui: ["packageVersion", "packageAdmin", "vault"],
   cetus: ["config", "pools", "burnManager"],
   bluefin: ["config"],
   aftermath: ["poolRegistry", "daoFeeVersion"],
