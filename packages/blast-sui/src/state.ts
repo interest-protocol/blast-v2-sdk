@@ -145,10 +145,12 @@ export type BlastSuiVaultState = SharedObjectReference<true> & {
   redeemFeeDelayMs: bigint;
   pendingRedeemFee: Proposal<BasisPoints> | null;
   /**
-   * `vault::unpause` succeeds only while both delays are nonzero, no change
-   * would set either to zero, and no admission is pending.
+   * The vault's own `vault::unpause` precondition: both delays are nonzero,
+   * no change would set either to zero, and no admission is pending.
+   * `PackageAdmin` also requires a guarded upgrade delay, and
+   * `PackageVersion` requires one of the bits to be paused; read those apart.
    */
-  unpauseAllowed: boolean;
+  vaultDelaysGuarded: boolean;
 };
 
 export type BlastSuiDepositReceiptState = {
@@ -262,7 +264,7 @@ export function decodeBlastSuiVaultObject(
       ...redeemFee.pending,
       value: requireBasisPoints("pendingRedeemFee", redeemFee.pending.value),
     },
-    unpauseAllowed:
+    vaultDelaysGuarded:
       isDelayedGuarded(redeemFee) && isDelayedSetGuarded(parsed.validators),
   };
 }

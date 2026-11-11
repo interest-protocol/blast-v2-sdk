@@ -309,7 +309,7 @@ test("schedules, cancels and applies the redeem fee from delayed events", () => 
   assert.deepEqual(projection.eventCounts, replayed.eventCounts);
 });
 
-test("records but ignores validator, foreign-parent and pre-discovery delayed events", () => {
+test("records but ignores validator and foreign-parent delayed events; defers pre-discovery ones", () => {
   const replayed = replayFixture();
   const ignored = [
     delayed("DelayedCreated", "RedeemFee", {
@@ -354,13 +354,13 @@ test("records but ignores validator, foreign-parent and pre-discovery delayed ev
   );
 
   const early = delayed("DelayedScheduled", "RedeemFee", pendingFee(7n));
-  const before = reduceBlastSuiInput(createBlastSuiProjection(), early);
-  assert.equal(before.vault, null);
-  assert.deepEqual(Object.keys(before.appliedEventIds).length, 1);
-  // A fee scheduled before discovery stays unapplied after VaultCreated.
-  const discovered = reduceBlastSuiInput(before, fixtureEvent("VaultCreated"));
+  const initial = createBlastSuiProjection();
+  // Before discovery a delayed event is not recorded, so a later replay applies it.
+  assert.strictEqual(reduceBlastSuiInput(initial, early), initial);
+  const discovered = reduceBlastSuiInput(initial, fixtureEvent("VaultCreated"));
   assert.equal(discovered.vault?.pendingRedeemFee, null);
-  assert.strictEqual(reduceBlastSuiInput(discovered, early), discovered);
+  const replayedEarly = reduceBlastSuiInput(discovered, early);
+  assert.equal(replayedEarly.vault?.pendingRedeemFee?.value, 7n);
 });
 
 test("rejects duplicate, unknown and terminal receipt transitions before accounting", () => {

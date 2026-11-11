@@ -76,7 +76,8 @@ export function blastRedeemFeeUp(
  * `blastAssets` is MIST and `redeemFeeBps` is basis points. All three outputs
  * are MIST. Gross rounds down, fee rounds up, and net is their checked exact
  * difference. The caller transfers only net MIST; fee and rounding remainders
- * stay in blast custody. This pure helper transfers nothing.
+ * stay in blast custody. This pure helper transfers nothing. A zero net is
+ * returned as is; `vault::redeem_blast_sui` aborts on it.
  */
 export function blastRedemptionQuote(
   shares: bigint,

@@ -199,7 +199,7 @@ test("decodes the Move-printed vault: list, admissions, rates, custody and fee",
       ready_at_ms: 172_801_000n,
     },
     // The validator delay is still zero and pool 2's admission is pending.
-    unpauseAllowed: false,
+    vaultDelaysGuarded: false,
   });
   // The SDK layout re-encodes the Move bytes exactly.
   assert.deepEqual(
@@ -218,7 +218,7 @@ test("allows unpause only while both delays are guarded and no admission is pend
       pending_delay: null,
     },
   });
-  assert.equal(decodeVault(vaultBytes(guarded)).unpauseAllowed, true);
+  assert.equal(decodeVault(vaultBytes(guarded)).vaultDelaysGuarded, true);
 
   const unguarded: Array<(vault: ParsedVault) => ParsedVault> = [
     // The fixture's pending admission.
@@ -257,7 +257,7 @@ test("allows unpause only while both delays are guarded and no admission is pend
     }),
   ];
   for (const update of unguarded) {
-    assert.equal(decodeVault(vaultBytes(update)).unpauseAllowed, false);
+    assert.equal(decodeVault(vaultBytes(update)).vaultDelaysGuarded, false);
   }
 
   const noPendingFee = decodeVault(

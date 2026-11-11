@@ -66,6 +66,7 @@ export type BlastSuiVaultProjection = {
   redeemFeeDelayMs: bigint;
   pendingRedeemFee: Proposal<BasisPoints> | null;
   custody: VaultCustodyEvent;
+  /** `VaultSynced` events: from `sync`, `apply_validator` and `remove_validator`. */
   syncCount: number;
 };
 
@@ -182,14 +183,15 @@ export function reduceBlastSuiInput(
 /**
  * The redemption fee's `delayed` lifecycle. Validator set events change
  * nothing: the next custody snapshot lists the pools. Events of another
- * parent, or before `VaultCreated`, change nothing.
+ * parent change nothing. An event before `VaultCreated` is not recorded, so
+ * replaying it after discovery still applies it.
  */
 function reduceDelayedEvent(
   state: BlastSuiProjection,
   event: DecodedBlastSuiDelayedEvent,
 ): BlastSuiProjection {
   const eventId = suiEventId(event.position);
-  if (state.appliedEventIds[eventId]) return state;
+  if (state.appliedEventIds[eventId] || state.vault === null) return state;
   const next = {
     ...state,
     appliedEventIds: { ...state.appliedEventIds, [eventId]: true as const },
