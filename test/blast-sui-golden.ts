@@ -1,77 +1,110 @@
-/**
- * Literal `vault::Vault` BCS bytes for the ADR 0065 child-cap layout and pinned
- * Sui revision 06734f6ff0af45d8632a14a4dc4b100197f6b1a2. The fixture follows
- * the Move field order and fixed test values in `blast-sui-state.test.ts`; it
- * is not serialized with the SDK layout under test.
- */
-const VAULT_GOLDEN_HEX = [
-  "0000000000000000000000000000000000000000000000000000000000000044",
-  "0000000000000000000000000000000000000000000000000000000000000055",
-  "0b00000000000000",
-  "01",
-  "00000000000000000000000000000000000000000000000000000000000000a1",
-  "0000000000000000000000000000000000000000000000000000000000000055",
-  "0900000000000000",
-  "0d00000000000000",
-  "01",
-  "00000000000000000000000000000000000000000000000000000000000000a2",
-  "0000000000000000000000000000000000000000000000000000000000000055",
-  "1100000000000000",
-  "1300000000000000",
-  "0b00000000000000",
-  "01",
-  "00000000000000000000000000000000000000000000000000000000000000a1",
-  "0000000000000000000000000000000000000000000000000000000000000055",
-  "0900000000000000",
-  "0d00000000000000",
-  "01",
-  "00000000000000000000000000000000000000000000000000000000000000a2",
-  "0000000000000000000000000000000000000000000000000000000000000055",
-  "1100000000000000",
-  "1300000000000000",
-  "0a00000000000000",
-  "fc03000000000000",
-  "e803000000000000",
-  "6500000000000000",
-  "01",
-].join("");
-
-/** Literal native TreasuryCap bytes for the two vault child objects. */
-const FUN_TREASURY_CAP_GOLDEN_HEX = [
-  "00000000000000000000000000000000000000000000000000000000000000f1",
-  "6400000000000000",
-].join("");
-const BLAST_TREASURY_CAP_GOLDEN_HEX = [
-  "00000000000000000000000000000000000000000000000000000000000000b1",
-  "c800000000000000",
-].join("");
+import type { DelayedEventKind } from "@interest-protocol/blast-admin-sdk/events";
+import {
+  delayedEventBcs,
+  delayedEventModule,
+} from "@interest-protocol/blast-admin-sdk/events";
+import type {
+  BlastSuiEventKind,
+  BlastSuiEventPackageIdentity,
+} from "@interest-protocol/blast-sui-sdk";
+import { blastSuiDelayedKeys } from "@interest-protocol/blast-sui-sdk";
+import type { BcsType } from "@mysten/sui/bcs";
+import type { SuiClientTypes } from "@mysten/sui/client";
+import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
+import { BLAST_SUI_FIXTURE } from "./fixtures/blast-sui-50b8d59.ts";
 
 /**
- * Literal `deposit_receipt::BlastSuiDepositReceipt` bytes from the same pinned
- * Sui revision. Do not regenerate this fixture with
- * `blastSuiDepositReceiptBcs`.
+ * Golden bytes for blast Sui tests. The vault, receipt and event bytes are
+ * the Move-printed fixture at contracts 50b8d59a; read the scenario in
+ * `fixtures/blast-sui-50b8d59.move`. Never regenerate them with the SDK
+ * layouts under test.
  */
-const DEPOSIT_RECEIPT_GOLDEN_HEX = [
-  "0000000000000000000000000000000000000000000000000000000000000077",
-  "0000000000000000000000000000000000000000000000000000000000000044",
-  "00000000000000000000000000000000000000000000000000000000000000a3",
-  "0000000000000000000000000000000000000000000000000000000000000055",
-  "0c00000000000000",
-  "1700000000000000",
-].join("");
+export { BLAST_SUI_FIXTURE };
 
-export const BLAST_SUI_VAULT_GOLDEN_BYTES = Uint8Array.from(
-  Buffer.from(VAULT_GOLDEN_HEX, "hex"),
+export const FIXTURE_VAULT_ID = BLAST_SUI_FIXTURE.vaultId;
+export const FIXTURE_RECEIPT_ID = BLAST_SUI_FIXTURE.receiptId;
+/** Genesis pools: 0 is the bootstrap pool, 1 is listed then removed, 2 is pending. */
+export const [FIXTURE_POOL_0, FIXTURE_POOL_1, FIXTURE_POOL_2] =
+  BLAST_SUI_FIXTURE.pools as readonly [string, string, string];
+
+export function fromHex(hex: string): Uint8Array {
+  return Uint8Array.from(Buffer.from(hex, "hex"));
+}
+
+export const BLAST_SUI_VAULT_GOLDEN_BYTES = fromHex(BLAST_SUI_FIXTURE.vault);
+
+export const BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES = fromHex(
+  BLAST_SUI_FIXTURE.receipt,
 );
 
-export const FUN_TREASURY_CAP_GOLDEN_BYTES = Uint8Array.from(
-  Buffer.from(FUN_TREASURY_CAP_GOLDEN_HEX, "hex"),
+/**
+ * Literal native `TreasuryCap` bytes for the two vault child objects (UID,
+ * then total supply). The fixture prints no caps; these carry its final
+ * supplies, 1 funSUI and 11.608695652 blastSUI.
+ */
+export const FUN_TREASURY_CAP_GOLDEN_BYTES = fromHex(
+  [
+    "00000000000000000000000000000000000000000000000000000000000000f1",
+    "00ca9a3b00000000",
+  ].join(""),
+);
+export const BLAST_TREASURY_CAP_GOLDEN_BYTES = fromHex(
+  [
+    "00000000000000000000000000000000000000000000000000000000000000b1",
+    "64a3eeb302000000",
+  ].join(""),
 );
 
-export const BLAST_TREASURY_CAP_GOLDEN_BYTES = Uint8Array.from(
-  Buffer.from(BLAST_TREASURY_CAP_GOLDEN_HEX, "hex"),
-);
+/** The Move-printed BCS of one event payload. */
+export function fixtureEventBytes(kind: BlastSuiEventKind): Uint8Array {
+  const hex = (BLAST_SUI_FIXTURE.events as Record<string, string>)[kind];
+  if (hex === undefined) throw new TypeError(`no fixture event ${kind}`);
+  return fromHex(hex);
+}
 
-export const BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES = Uint8Array.from(
-  Buffer.from(DEPOSIT_RECEIPT_GOLDEN_HEX, "hex"),
-);
+/** A native `blast_events::Event<events::Kind>` entry carrying `bcs`. */
+export function blastSuiEventEntry(
+  kind: BlastSuiEventKind,
+  bcs: Uint8Array,
+  packages: BlastSuiEventPackageIdentity,
+  eventIndex: number,
+): SuiClientTypes.EventEntry {
+  const original = normalizeSuiObjectId(packages.originalPackageId);
+  return {
+    packageId: packages.packageId,
+    module: "blast_events",
+    sender: "0x16",
+    eventType: `${original}::blast_events::Event<${original}::events::${kind}>`,
+    bcs,
+    json: null,
+    checkpoint: "9",
+    transactionDigest: `transaction-${eventIndex}`,
+    eventIndex,
+  };
+}
+
+/** A `blast_admin` delayed event entry under one of `blastSuiDelayedKeys`. */
+export function blastSuiDelayedEntry(
+  kind: DelayedEventKind,
+  name: keyof typeof blastSuiDelayedKeys,
+  payload: Record<string, unknown>,
+  identity: { adminPackageId: string; originalPackageId: string },
+  eventIndex: number,
+): SuiClientTypes.EventEntry {
+  const spec = blastSuiDelayedKeys[name];
+  const admin = normalizeSuiAddress(identity.adminPackageId);
+  const original = normalizeSuiAddress(identity.originalPackageId);
+  return {
+    packageId: admin,
+    module: delayedEventModule(kind),
+    sender: "0x16",
+    eventType: `${admin}::${delayedEventModule(kind)}::${kind}<${original}::${spec.key}, ${spec.valueType}>`,
+    bcs: (delayedEventBcs(kind, spec) as unknown as BcsType<unknown, unknown>)
+      .serialize(payload)
+      .toBytes(),
+    json: null,
+    checkpoint: "10",
+    transactionDigest: `delayed-${eventIndex}`,
+    eventIndex,
+  };
+}

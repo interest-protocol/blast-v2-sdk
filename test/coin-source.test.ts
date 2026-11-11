@@ -36,6 +36,7 @@ const blastSui: BlastSuiDeployment = {
   packageId: "0x223",
   originalPackageId: "0x222",
   packageVersion: shared("0x10", false),
+  packageAdmin: shared("0x12", false),
   vault: shared("0x11", true),
   admin,
 };
@@ -57,10 +58,17 @@ function builders(construct: CoinSourceOptions) {
   const sale = new PresaleTransactions(presale, construct);
   return {
     mintFunSui: (o: CoinSourceOptions) =>
-      blast.mintFunSui({ amount: 1n, recipient: "0xe", ...o }),
+      blast.mintFunSui({
+        poolId: "0x55",
+        amount: 1n,
+        recipient: "0xe",
+        ...o,
+      }),
     requestBlastSui: (o: CoinSourceOptions) =>
-      blast.requestBlastSui({ amount: 1n, ...o }),
+      blast.requestBlastSui({ poolId: "0x55", amount: 1n, ...o }),
     donateSui: (o: CoinSourceOptions) => blast.donateSui({ amount: 1n, ...o }),
+    topUpFunReserve: (o: CoinSourceOptions) =>
+      blast.topUpFunReserve({ amount: 1n, ...o }),
     buy: (o: CoinSourceOptions) =>
       launch.buy({
         ...sui,
@@ -155,6 +163,7 @@ const SUI_COIN_COUNTS = {
   mintFunSui: 1,
   requestBlastSui: 1,
   donateSui: 1,
+  topUpFunReserve: 1,
   buy: 1,
   joinOpeningRound: 1,
   // The creation fee and the creator's SUI purchase.

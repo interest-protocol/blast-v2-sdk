@@ -1,7 +1,20 @@
+import type {
+  Deadline,
+  PendingDelay,
+  Proposal,
+} from "@interest-protocol/blast-core/bcs";
 import {
+  admission,
+  delayedBcs,
+  delayedSetBcs,
+  isDelayedGuarded,
+  isDelayedSetGuarded,
   suiBalanceBcs,
   suiIdBcs,
+  suiObjectIdBcs,
   suiUidBcs,
+  u64Bcs,
+  unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import type { BasisPoints } from "@interest-protocol/blast-core/integers";
 import {
@@ -40,24 +53,37 @@ const fungibleStakedSuiBcs = bcs.struct("FungibleStakedSui", {
   pool_id: suiIdBcs,
   value: bcs.u64(),
 });
-const custodyBcs = bcs.struct("Custody", {
-  liquid_sui: suiBalanceBcs,
+const positionBcs = bcs.struct("Position", {
   pending_stakes: bcs.vector(stakedSuiBcs),
   active_stake: bcs.option(fungibleStakedSuiBcs),
   active_sui: bcs.u64(),
+});
+const custodyBcs = bcs.struct("Custody", {
+  liquid_sui: suiBalanceBcs,
+  positions: bcs.struct("VecMap", {
+    contents: bcs.vector(
+      bcs.struct("Entry", { key: suiObjectIdBcs, value: positionBcs }),
+    ),
+  }),
+});
+const poolRateBcs = bcs.struct("PoolRate", {
+  epoch: bcs.u64(),
+  sui: bcs.u64(),
+  pool_tokens: bcs.u64(),
 });
 
 /** BCS layout of `blast_sui::vault::Vault` at the pinned Sui revision. */
 export const blastSuiVaultBcs = bcs.struct("Vault", {
   id: suiUidBcs,
-  pool_id: suiIdBcs,
+  validators: delayedSetBcs(unitKeyBcs, suiObjectIdBcs),
+  pool_rates: bcs.struct("VecMap", {
+    contents: bcs.vector(
+      bcs.struct("Entry", { key: suiObjectIdBcs, value: poolRateBcs }),
+    ),
+  }),
   fun_custody: custodyBcs,
   blast_custody: custodyBcs,
-  rate_epoch: bcs.u64(),
-  rate_sui: bcs.u64(),
-  rate_pool_tokens: bcs.u64(),
-  redeem_fee_bps: bcs.u64(),
-  unwind_only: bcs.bool(),
+  redeem_fee: delayedBcs(unitKeyBcs, u64Bcs),
 });
 
 /** BCS layout of `blast_sui::deposit_receipt::BlastSuiDepositReceipt`. */
@@ -69,39 +95,62 @@ export const blastSuiDepositReceiptBcs = bcs.struct("BlastSuiDepositReceipt", {
 
 export type BlastSuiPendingStake = {
   objectId: string;
-  poolId: string;
   activationEpoch: bigint;
   principalSui: bigint;
 };
 
 export type BlastSuiActiveStake = {
   objectId: string;
-  poolId: string;
   poolTokens: bigint;
+};
+
+/** One ledger's stake in one listed pool. */
+export type BlastSuiPositionState = {
+  pendingStakes: readonly BlastSuiPendingStake[];
+  activeStake: BlastSuiActiveStake | null;
+  activeSui: bigint;
 };
 
 export type BlastSuiCustodyState = {
   liquidSui: bigint;
-  pendingStakes: readonly BlastSuiPendingStake[];
-  activeStake: BlastSuiActiveStake | null;
-  activeSui: bigint;
+  /** By pool ID, in list order. */
+  positions: Readonly<Record<string, BlastSuiPositionState>>;
+  /** Liquid SUI plus every position's pending principal and active SUI. */
   assets: bigint;
+};
+
+/** A listed pool's exchange rate, cached at `epoch`. */
+export type BlastSuiPoolRate = {
+  epoch: bigint;
+  suiAmount: bigint;
+  poolTokenAmount: bigint;
 };
 
 export type BlastSuiVaultState = SharedObjectReference<true> & {
   originalPackageId: string;
-  poolId: string;
+  /** Listed staking pools in list order; picks must name one of them. */
+  pools: readonly string[];
+  /** The validator delay; admissions wait it, removals are immediate. */
+  validatorDelayMs: bigint;
+  pendingValidatorDelay: PendingDelay | null;
+  /** Scheduled admissions by pool ID; `apply_validator` lists one once ready. */
+  pendingValidators: Readonly<Record<string, Deadline>>;
+  /** By pool ID, in list order. */
+  poolRates: Readonly<Record<string, BlastSuiPoolRate>>;
   funSupply: bigint;
   blastSupply: bigint;
   funCustody: BlastSuiCustodyState;
   blastCustody: BlastSuiCustodyState;
-  exchangeRate: {
-    epoch: bigint;
-    suiAmount: bigint;
-    poolTokenAmount: bigint;
-  };
   redeemFeeBps: BasisPoints;
-  unwindOnly: boolean;
+  redeemFeeDelayMs: bigint;
+  pendingRedeemFee: Proposal<BasisPoints> | null;
+  /**
+   * The vault's own `vault::unpause` precondition: both delays are nonzero,
+   * no change would set either to zero, and no admission is pending.
+   * `PackageAdmin` also requires a guarded upgrade delay, and
+   * `PackageVersion` requires one of the bits to be paused; read those apart.
+   */
+  vaultDelaysGuarded: boolean;
 };
 
 export type BlastSuiDepositReceiptState = {
@@ -159,6 +208,12 @@ export function decodeBlastSuiVaultObject(
   const parsed = blastSuiVaultBcs.parse(object.content);
   const objectId = normalizeSuiObjectId(object.objectId);
   assertUid("blast Sui vault", objectId, parsed.id.id.bytes);
+  if (
+    parsed.validators.parent !== objectId ||
+    parsed.redeem_fee.parent !== objectId
+  ) {
+    throw new TypeError(`blast Sui vault ${objectId} has a mismatched parent`);
+  }
   const funSupply = decodeTreasuryCap(
     treasuryCaps.fun,
     objectId,
@@ -171,6 +226,8 @@ export function decodeBlastSuiVaultObject(
     blastSuiType(originalPackageId),
     originalPackageId,
   );
+  const validators = admission(parsed.validators);
+  const redeemFee = parsed.redeem_fee;
 
   return {
     objectId,
@@ -180,24 +237,35 @@ export function decodeBlastSuiVaultObject(
     ),
     mutable: true,
     originalPackageId: typePackageId,
-    poolId: normalizeSuiObjectId(parsed.pool_id.bytes),
+    pools: validators.members,
+    validatorDelayMs: validators.delayMs,
+    pendingValidatorDelay: validators.pendingDelay,
+    pendingValidators: validators.pendingMembers,
+    poolRates: Object.fromEntries(
+      parsed.pool_rates.contents.map(({ key, value }) => [
+        key,
+        {
+          epoch: decodedU64(`poolRates[${key}].epoch`, value.epoch),
+          suiAmount: decodedU64(`poolRates[${key}].suiAmount`, value.sui),
+          poolTokenAmount: decodedU64(
+            `poolRates[${key}].poolTokenAmount`,
+            value.pool_tokens,
+          ),
+        },
+      ]),
+    ),
     funSupply,
     blastSupply,
     funCustody: decodeCustody("funCustody", parsed.fun_custody),
     blastCustody: decodeCustody("blastCustody", parsed.blast_custody),
-    exchangeRate: {
-      epoch: decodedU64("exchangeRate.epoch", parsed.rate_epoch),
-      suiAmount: decodedU64("exchangeRate.suiAmount", parsed.rate_sui),
-      poolTokenAmount: decodedU64(
-        "exchangeRate.poolTokenAmount",
-        parsed.rate_pool_tokens,
-      ),
+    redeemFeeBps: requireBasisPoints("redeemFeeBps", redeemFee.value),
+    redeemFeeDelayMs: redeemFee.delay_ms,
+    pendingRedeemFee: redeemFee.pending && {
+      ...redeemFee.pending,
+      value: requireBasisPoints("pendingRedeemFee", redeemFee.pending.value),
     },
-    redeemFeeBps: requireBasisPoints(
-      "redeemFeeBps",
-      BigInt(parsed.redeem_fee_bps),
-    ),
-    unwindOnly: parsed.unwind_only,
+    vaultDelaysGuarded:
+      isDelayedGuarded(redeemFee) && isDelayedSetGuarded(parsed.validators),
   };
 }
 
@@ -309,42 +377,41 @@ function decodeCustody(
   custody: ReturnType<typeof custodyBcs.parse>,
 ): BlastSuiCustodyState {
   const liquidSui = decodedU64(`${name}.liquidSui`, custody.liquid_sui.value);
-  const pendingStakes = custody.pending_stakes.map((stake, index) => ({
-    objectId: normalizeSuiObjectId(stake.id.id.bytes),
-    poolId: normalizeSuiObjectId(stake.pool_id.bytes),
-    activationEpoch: decodedU64(
-      `${name}.pendingStakes[${index}].activationEpoch`,
-      stake.stake_activation_epoch,
-    ),
-    principalSui: decodedU64(
-      `${name}.pendingStakes[${index}].principalSui`,
-      stake.principal.value,
-    ),
-  }));
-  const activeStake = custody.active_stake
-    ? {
-        objectId: normalizeSuiObjectId(custody.active_stake.id.id.bytes),
-        poolId: normalizeSuiObjectId(custody.active_stake.pool_id.bytes),
-        poolTokens: decodedU64(
-          `${name}.activeStake.poolTokens`,
-          custody.active_stake.value,
-        ),
-      }
-    : null;
-  const activeSui = decodedU64(`${name}.activeSui`, custody.active_sui);
-  const assets = requireU64(
-    `${name}.assets`,
-    liquidSui +
+  let assets = liquidSui;
+  const positions: Record<string, BlastSuiPositionState> = {};
+  for (const { key: poolId, value } of custody.positions.contents) {
+    const label = `${name}.positions[${poolId}]`;
+    const pendingStakes = value.pending_stakes.map((stake, index) => ({
+      objectId: normalizeSuiObjectId(stake.id.id.bytes),
+      activationEpoch: decodedU64(
+        `${label}.pendingStakes[${index}].activationEpoch`,
+        stake.stake_activation_epoch,
+      ),
+      principalSui: decodedU64(
+        `${label}.pendingStakes[${index}].principalSui`,
+        stake.principal.value,
+      ),
+    }));
+    const activeStake = value.active_stake
+      ? {
+          objectId: normalizeSuiObjectId(value.active_stake.id.id.bytes),
+          poolTokens: decodedU64(
+            `${label}.activeStake.poolTokens`,
+            value.active_stake.value,
+          ),
+        }
+      : null;
+    const activeSui = decodedU64(`${label}.activeSui`, value.active_sui);
+    assets +=
       pendingStakes.reduce((total, stake) => total + stake.principalSui, 0n) +
-      activeSui,
-  );
+      activeSui;
+    positions[poolId] = { pendingStakes, activeStake, activeSui };
+  }
 
   return {
     liquidSui,
-    pendingStakes,
-    activeStake,
-    activeSui,
-    assets,
+    positions,
+    assets: requireU64(`${name}.assets`, assets),
   };
 }
 

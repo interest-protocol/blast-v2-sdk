@@ -11,11 +11,18 @@ import {
 import type { BlastSuiDeployment } from "@interest-protocol/blast-sui-sdk/types";
 import { TypeTagSerializer } from "@mysten/sui/bcs";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
-import { deriveDynamicFieldID, normalizeSuiAddress } from "@mysten/sui/utils";
+import {
+  deriveDynamicFieldID,
+  normalizeStructTag,
+  normalizeSuiAddress,
+} from "@mysten/sui/utils";
 import {
   BLAST_SUI_DEPOSIT_RECEIPT_GOLDEN_BYTES,
   BLAST_SUI_VAULT_GOLDEN_BYTES,
   BLAST_TREASURY_CAP_GOLDEN_BYTES,
+  FIXTURE_POOL_0,
+  FIXTURE_RECEIPT_ID,
+  FIXTURE_VAULT_ID,
   FUN_TREASURY_CAP_GOLDEN_BYTES,
 } from "./blast-sui-golden.ts";
 
@@ -27,7 +34,8 @@ const deployment: BlastSuiDeployment = {
     objectId: "0x10",
     initialSharedVersion: "8",
   },
-  vault: { objectId: "0x44", initialSharedVersion: "9" },
+  packageAdmin: { objectId: "0x12", initialSharedVersion: "4" },
+  vault: { objectId: FIXTURE_VAULT_ID, initialSharedVersion: "9" },
   admin: {
     packageId: "0xad",
     acl: { objectId: "0xac", initialSharedVersion: "3" },
@@ -40,7 +48,7 @@ test("registers calls, transactions, and exact Core API state reads", async () =
     core: {
       getObject: async (options: { objectId: string }) => {
         requests.push(options);
-        return options.objectId.endsWith("44")
+        return options.objectId === FIXTURE_VAULT_ID
           ? { object: vaultObject() }
           : { object: receiptObject(options.objectId) };
       },
@@ -60,9 +68,14 @@ test("registers calls, transactions, and exact Core API state reads", async () =
   assert.equal(client.tx instanceof BlastSuiTransactions, true);
 
   const vault = await client.getVault();
-  const receipt = await client.getDepositReceipt("0x77");
-  assert.equal(vault.objectId.endsWith("44"), true);
-  assert.equal(receipt.objectId.endsWith("77"), true);
+  const receipt = await client.getDepositReceipt(FIXTURE_RECEIPT_ID);
+  assert.equal(vault.objectId, FIXTURE_VAULT_ID);
+  assert.equal(vault.initialSharedVersion, "9");
+  assert.deepEqual(vault.pools, [FIXTURE_POOL_0]);
+  assert.equal(vault.redeemFeeBps, 2n);
+  assert.equal(receipt.objectId, FIXTURE_RECEIPT_ID);
+  assert.equal(receipt.vaultId, FIXTURE_VAULT_ID);
+  assert.equal(receipt.principalSui, 3_000_000_000n);
   assert.deepEqual(requests, [
     {
       objectId: client.call.deployment.vault.objectId,
@@ -84,20 +97,40 @@ test("registers calls, transactions, and exact Core API state reads", async () =
       },
       include: { content: true },
     },
-    { objectId: "0x77", include: { content: true } },
+    { objectId: FIXTURE_RECEIPT_ID, include: { content: true } },
   ]);
 
   const registration = blastSui(deployment);
   assert.equal(registration.name, "blastSui");
+  const registered = registration.register(coreClient);
+  assert.equal(registered instanceof BlastSuiClient, true);
+  assert.deepEqual(registered.call.deployment, client.call.deployment);
   assert.equal(
-    registration.register(coreClient) instanceof BlastSuiClient,
-    true,
+    blastSui({ ...deployment, name: "liquidStaking" }).name,
+    "liquidStaking",
+  );
+});
+
+test("passes the SUI coin source option to its transaction builder", () => {
+  const coreClient = { core: {} } as unknown as ClientWithCoreApi;
+  const coinType = (client: BlastSuiClient) => {
+    const command = client.tx
+      .donateSui({ amount: 1n })
+      .getData()
+      .commands.find((candidate) => candidate.$kind === "$Intent");
+    assert.ok(command?.$kind === "$Intent");
+    return command.$Intent.data.type;
+  };
+  assert.equal(coinType(new BlastSuiClient(coreClient, deployment)), "gas");
+  assert.equal(
+    coinType(new BlastSuiClient(coreClient, deployment, { useGasCoin: false })),
+    normalizeStructTag("0x2::sui::SUI"),
   );
 });
 
 function vaultObject() {
   return {
-    objectId: "0x44",
+    objectId: FIXTURE_VAULT_ID,
     owner: {
       $kind: "Shared" as const,
       Shared: { initialSharedVersion: "9" },
