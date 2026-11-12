@@ -85,16 +85,6 @@ Use the default Matt triage labels. See `docs/agents/triage-labels.md`.
 
 Use the single-context domain layout. See `docs/agents/domain.md`.
 
-## Unrelated issues found during a task
+## Issues found during a task
 
-When you discover an actionable issue outside the current task, file a GitHub
-issue in the owning repository and continue the current task. This instruction
-authorizes filing these issues without asking for confirmation each time.
-Search existing issues first; reuse a matching issue and add only new evidence.
-Include the impact, affected files or components, reproduction steps or concrete
-evidence, and expected versus actual behavior. Distinguish confirmed findings
-from hypotheses and keep credentials and private data out of issue content.
-Keep fixes scoped to the current task unless the unrelated issue blocks it or
-the user expands the scope. Include created or reused issue links in the final
-handoff. If GitHub access prevents filing, report the blocker and the finding
-in the handoff so it is not lost.
+Follow the workspace `AGENTS.md` section of the same name: fix small finds in the PR, park the rest in the workspace `handoffs/parking-lot.md`, and file a GitHub issue only for production impact, an owner decision, or work larger than one PR.
