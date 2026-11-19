@@ -82,6 +82,7 @@ export function fakeLpCoinClient(chain: FakeLpCoinChain) {
     type: `${SUI}::dynamic_field::Field<${SUI}::dynamic_object_field::Wrapper<${AMM}::pool::${name}>,${SUI}::object::ID>`,
     name: { type: key(name), bcs: new Uint8Array() },
     valueType,
+    value: undefined,
     $kind: "DynamicObject",
     childId,
   });

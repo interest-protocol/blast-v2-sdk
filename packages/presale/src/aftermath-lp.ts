@@ -599,7 +599,8 @@ async function listCapabilityFields(
   const fields: SuiClientTypes.DynamicFieldEntry[] = [];
   let cursor: string | null = null;
   do {
-    const page = await client.core.listDynamicFields({ parentId, cursor });
+    const page: SuiClientTypes.ListDynamicFieldsResponse =
+      await client.core.listDynamicFields({ parentId, cursor });
     fields.push(...page.dynamicFields);
     cursor = page.hasNextPage ? page.cursor : null;
   } while (cursor !== null);

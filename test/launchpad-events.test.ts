@@ -623,6 +623,7 @@ test("replays creator capability claims, reassignments, and metadata", () => {
 test("authenticates events by type, not by the transaction's called package", () => {
   const valid = suiEvent("Migrated", {}, 0);
   assert.throws(
+    // @ts-expect-error The transport payload is intentionally malformed.
     () => decodeLaunchpadEvent({ ...valid, checkpoint: null }, packages),
     /checkpoint metadata/,
   );
