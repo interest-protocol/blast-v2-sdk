@@ -321,6 +321,7 @@ test("rejects malformed BCS and invalid native event metadata", () => {
     decodeBlastSuiEvent({ ...valid, bcs: new Uint8Array([1]) }, packages),
   );
   assert.throws(
+    // @ts-expect-error The transport payload is intentionally malformed.
     () => decodeBlastSuiEvent({ ...valid, checkpoint: null }, packages),
     /checkpoint metadata/,
   );

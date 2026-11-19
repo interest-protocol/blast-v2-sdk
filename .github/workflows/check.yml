@@ -51,4 +51,7 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           tar -xzf sui.tgz -C "$HOME/.local/bin" ./sui
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Check the published utility contract ABI
+        if: env.CONTRACTS_READ_TOKEN != ''
+        run: npm run check:abi --workspace @interest-protocol/blast-util-sdk
       - run: npm test

@@ -42,13 +42,12 @@ export type SdkRelease = Readonly<{
 }>;
 
 /**
- * Coordinated 0.2.1 release with route evidence for the November 6 launch stack.
- * The commit pins the reviewed implementation; the sdk-v0.2.1 Git tag records
- * the packaging commit, which also updates this release metadata.
+ * The 0.3.0 candidate uses Sui SDK v3. The release commit is set when the
+ * coordinated package build is approved for publication.
  */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
-  version: "0.2.1",
-  published: true,
-  commit: "7712284e5089e62acd43e1bc2d2641633a61b32d",
+  version: "0.3.0",
+  published: false,
+  commit: null,
 });

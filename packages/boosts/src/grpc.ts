@@ -160,6 +160,7 @@ export class BoostsGrpcTransport implements BoostsTransport {
     const normalized = normalizeSuiObjectId(packageId);
     const response = await this.#client.movePackageService.getPackage({
       packageId: normalized,
+      selector: { oneofKind: undefined },
     }).response;
     const value = response.package;
     if (!value?.storageId || !value.originalId) {

@@ -16,11 +16,14 @@ The packages are ESM with TypeScript declarations and no Node, browser or
 storage dependencies of their own: they run on Node 22+, browsers, edge
 workers and other ES2023 runtimes. Node 22.12+ can also `require()` them.
 
-The coordinated SDK release is `0.2.1`:
+The latest published coordinated SDK release is `0.2.1`.
 
 ```sh
 npm install @interest-protocol/blast-sdk@0.2.1 @mysten/sui@^2.26.2 @mysten/move-bytecode-template@^0.4.1
 ```
+
+This branch prepares `0.3.0` for `@mysten/sui@^3`. The candidate retains
+the last published mainnet SDK stamp until the replacement release is approved.
 
 ## Packages
 
@@ -44,6 +47,7 @@ root `workspaces` array is the build and publish order, which
 | `packages/holder-rewards` | `@interest-protocol/blast-holder-rewards-sdk` | — | Holder-reward operator workflows over the vault ([docs/holder-rewards.md](docs/holder-rewards.md)) |
 | `packages/deployments` | `@interest-protocol/blast-deployments-sdk` | — | Deployment manifests, identity checks, protocol access, venue readers, the admission runbook |
 | `packages/blast-sdk` | `@interest-protocol/blast-sdk` | — | Re-exports every package above (subpaths `./admin`, `./vault`, `./launchpad`, ...) |
+| `packages/utility` | `@interest-protocol/blast-util-sdk` | `otc`, `vesting` | Independent SDK for the [published utility contracts](packages/utility/README.md) |
 | `packages/partner-client` | `@interest-protocol/blast-partner-client` | — | Authenticated REST read client; no runtime dependencies |
 
 The products (`launchpad`, `presale`) depend on `migrators`, never the

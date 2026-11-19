@@ -1,4 +1,4 @@
-import { FROZEN_ABI, SDK_RELEASE } from "./release.ts";
+import { FROZEN_ABI } from "./release.ts";
 import type { BlastDeploymentInput } from "./types.ts";
 
 /**
@@ -251,7 +251,7 @@ export const CANONICAL_MAINNET_MANIFEST: BlastDeploymentInput = {
     },
   },
   sdk: {
-    version: SDK_RELEASE.version,
+    version: "0.2.1",
     commit: "7712284e5089e62acd43e1bc2d2641633a61b32d",
   },
   evidence: [
