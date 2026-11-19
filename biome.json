@@ -9,7 +9,9 @@
       "test/**/*.mjs",
       "e2e/**/*.ts",
       "!!packages/partner-client",
-      "!packages/partner-client/**"
+      "!packages/partner-client/**",
+      "packages/utility/test/**/*.ts",
+      "packages/utility/scripts/**/*.mjs"
     ]
   },
   "formatter": {

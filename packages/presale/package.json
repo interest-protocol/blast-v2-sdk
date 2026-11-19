@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-presale-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Blast presale SDK",
   "type": "module",
   "repository": {
@@ -89,14 +89,14 @@
     "access": "public"
   },
   "dependencies": {
-    "@interest-protocol/blast-admin-sdk": "0.2.0",
-    "@interest-protocol/blast-core": "0.2.0",
-    "@interest-protocol/blast-migrators-sdk": "0.2.0",
-    "@interest-protocol/blast-partners-sdk": "0.2.0",
-    "@interest-protocol/blast-vault-sdk": "0.2.0"
+    "@interest-protocol/blast-admin-sdk": "0.3.0",
+    "@interest-protocol/blast-core": "0.3.0",
+    "@interest-protocol/blast-migrators-sdk": "0.3.0",
+    "@interest-protocol/blast-partners-sdk": "0.3.0",
+    "@interest-protocol/blast-vault-sdk": "0.3.0"
   },
   "peerDependencies": {
     "@mysten/move-bytecode-template": "^0.4.1",
-    "@mysten/sui": "^2.26.2"
+    "@mysten/sui": "^3"
   }
 }

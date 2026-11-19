@@ -1,6 +1,6 @@
 {
   "name": "@interest-protocol/blast-core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Blast core SDK",
   "type": "module",
   "repository": {
@@ -137,6 +137,6 @@
   },
   "peerDependencies": {
     "@mysten/move-bytecode-template": "^0.4.1",
-    "@mysten/sui": "^2.26.2"
+    "@mysten/sui": "^3"
   }
 }

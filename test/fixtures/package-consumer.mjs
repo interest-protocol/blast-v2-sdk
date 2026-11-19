@@ -59,6 +59,19 @@ await assertReexports(
   "@interest-protocol/blast-sdk",
   await exportsOf(["blast-core", ...new Set(Object.values(subpaths).flat())]),
 );
+const utilities = await exportsOf(["blast-util-sdk"]);
+await assertReexports(
+  "@interest-protocol/blast-util-sdk",
+  Object.assign(
+    {},
+    await exportsOf([
+      "blast-util-sdk/deployments",
+      "blast-util-sdk/otc",
+      "blast-util-sdk/vesting",
+    ]),
+  ),
+);
+assert.equal(typeof utilities.VestingTransactions, "function");
 const metadata = require("@interest-protocol/blast-sdk/package.json");
 assert.equal(metadata.name, "@interest-protocol/blast-sdk");
 assert.equal(metadata.private, undefined);

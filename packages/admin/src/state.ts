@@ -11,7 +11,7 @@ import {
 import { normalizePositiveU64 } from "@interest-protocol/blast-core/integers";
 import type { SharedObjectIdentity } from "@interest-protocol/blast-core/sui";
 import { bcs } from "@mysten/sui/bcs";
-import type { ClientWithCoreApi } from "@mysten/sui/client";
+import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
 import { ObjectError } from "@mysten/sui/client";
 import {
   normalizeStructTag,
@@ -107,11 +107,12 @@ export async function getAcl(
   let cursor: string | null = null;
   const seen = new Set<string>();
   for (let page = 0; page < 100; page++) {
-    const response = await client.core.listDynamicFields({
-      parentId: state.adminsTableId,
-      cursor,
-      limit: 50,
-    });
+    const response: SuiClientTypes.ListDynamicFieldsResponse =
+      await client.core.listDynamicFields({
+        parentId: state.adminsTableId,
+        cursor,
+        limit: 50,
+      });
     await appendAclAdmins(
       client,
       state.adminsTableId,

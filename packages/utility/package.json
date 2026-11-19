@@ -1,0 +1,57 @@
+{
+  "name": "@interest-protocol/blast-util-sdk",
+  "version": "0.2.0",
+  "description": "Transaction builders, state reads, and event decoders for the Blast OTC and vesting packages on Sui",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./deployments": {
+      "types": "./dist/deployments.d.ts",
+      "default": "./dist/deployments.js"
+    },
+    "./otc": {
+      "types": "./dist/otc/index.d.ts",
+      "default": "./dist/otc/index.js"
+    },
+    "./vesting": {
+      "types": "./dist/vesting/index.d.ts",
+      "default": "./dist/vesting/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "check:abi": "node scripts/check-contract-abi.mjs",
+    "check:package": "publint --strict && attw --pack . --profile esm-only",
+    "check": "npm run check:abi && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run check:package",
+    "format": "biome format --write . && biome check --write --only=assist/source/organizeImports .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "test": "node --test --test-concurrency=1 test/*.test.ts",
+    "typecheck": "tsc",
+    "build": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true });\" && tsc -p tsconfig.build.json",
+    "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "@mysten/sui": "^3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interest-protocol/blast-v2-sdk.git",
+    "directory": "packages/utility"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
