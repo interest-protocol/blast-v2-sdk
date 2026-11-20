@@ -251,8 +251,8 @@ export const CANONICAL_MAINNET_MANIFEST: BlastDeploymentInput = {
     },
   },
   sdk: {
-    version: "0.2.1",
-    commit: "7712284e5089e62acd43e1bc2d2641633a61b32d",
+    version: "0.3.0",
+    commit: "77a2fe5aea0439929b8f2b6c10f77d9d909db16c",
   },
   evidence: [
     {

@@ -41,13 +41,10 @@ export type SdkRelease = Readonly<{
   commit: string | null;
 }>;
 
-/**
- * The 0.3.0 candidate uses Sui SDK v3. The release commit is set when the
- * coordinated package build is approved for publication.
- */
+/** The coordinated 0.3.0 package build uses Sui SDK v3. */
 export const SDK_RELEASE: SdkRelease = Object.freeze({
   name: "@interest-protocol/blast-sdk",
   version: "0.3.0",
-  published: false,
-  commit: null,
+  published: true,
+  commit: "77a2fe5aea0439929b8f2b6c10f77d9d909db16c",
 });

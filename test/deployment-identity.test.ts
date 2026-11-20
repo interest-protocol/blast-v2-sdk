@@ -555,7 +555,7 @@ test("never lets a non-production or fixture identity sign in production", () =>
   assert.ok(nonProduction.includes("environment-mismatch"));
   // A different canonical lineage is registered.
   assert.ok(nonProduction.includes("foreign-lineage"));
-  assert.ok(nonProduction.includes("sdk-unreleased"));
+  assert.ok(!nonProduction.includes("sdk-unreleased"));
 
   const relabeled = {
     ...manifest,
@@ -578,13 +578,16 @@ test("never lets a non-production or fixture identity sign in production", () =>
   );
 });
 
-test("the fresh ABI requires a coordinated SDK release and matching runtime", () => {
+test("production requires a coordinated SDK release and matching runtime", () => {
   assert.equal(BLAST_DEPLOYMENTS.mainnet?.environment, "production");
   assert.equal(SDK_RELEASE.name, "@interest-protocol/blast-sdk");
   assert.equal(SDK_RELEASE.version, "0.3.0");
-  assert.equal(SDK_RELEASE.published, false);
-  assert.equal(SDK_RELEASE.commit, null);
-  assert.equal(BLAST_DEPLOYMENTS.mainnet?.sdk.version, "0.2.1");
+  assert.equal(SDK_RELEASE.published, true);
+  assert.equal(SDK_RELEASE.commit, "77a2fe5aea0439929b8f2b6c10f77d9d909db16c");
+  assert.deepEqual(BLAST_DEPLOYMENTS.mainnet?.sdk, {
+    version: SDK_RELEASE.version,
+    commit: SDK_RELEASE.commit,
+  });
   const packageJson = JSON.parse(
     readFileSync(
       new URL("../packages/blast-sdk/package.json", import.meta.url),
@@ -761,21 +764,10 @@ test("canonical mainnet routes pass the SDK gate while pause masks remain in for
   const mainnet = BLAST_DEPLOYMENTS.mainnet;
   assert.ok(mainnet);
   const runtime = runtimeFor(mainnet, { vault: 1, launchpad: 7, presale: 7 });
-  assert.deepEqual(
-    codes(
-      evaluateProtocolAccess({
-        manifest: mainnet,
-        mode: "production",
-        runtime,
-      }),
-    ),
-    ["sdk-unreleased", "sdk-mismatch"],
-  );
   const access = evaluateProtocolAccess({
     manifest: mainnet,
     mode: "production",
     runtime,
-    sdk: { name: SDK_RELEASE.name, ...mainnet.sdk, published: true },
   });
   assert.equal(access.signing, "enabled");
   assert.deepEqual(access.paused, {

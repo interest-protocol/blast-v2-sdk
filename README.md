@@ -16,14 +16,14 @@ The packages are ESM with TypeScript declarations and no Node, browser or
 storage dependencies of their own: they run on Node 22+, browsers, edge
 workers and other ES2023 runtimes. Node 22.12+ can also `require()` them.
 
-The latest published coordinated SDK release is `0.2.1`.
+Install the coordinated `0.3.0` release with Sui SDK v3.
 
 ```sh
-npm install @interest-protocol/blast-sdk@0.2.1 @mysten/sui@^2.26.2 @mysten/move-bytecode-template@^0.4.1
+npm install @interest-protocol/blast-sdk@0.3.0 @mysten/sui@^3 @mysten/move-bytecode-template@^0.4.1
 ```
 
-This branch prepares `0.3.0` for `@mysten/sui@^3`. The candidate retains
-the last published mainnet SDK stamp until the replacement release is approved.
+Version `0.3.0` keeps the deployed contract ABI and deployment fingerprint from
+`0.2.1`.
 
 ## Packages
 
@@ -331,8 +331,7 @@ Each public workspace owns its version, dependencies and export map; internal
 dependencies are ordinary npm versions. Publish in the order of the root
 `workspaces` array with `npm publish --workspace <package-name>`.
 `SDK_RELEASE` identifies the coordinated npm build and its reviewed implementation
-commit. Git tag `sdk-v0.2.1` identifies the exact published source; npm does not
-record `gitHead` for this worktree publication. The partner REST client
+commit. Git tag `sdk-v0.3.0` identifies the exact published source. The partner REST client
 remains at its already published `0.1.0`; its published files are unchanged.
 Version 0.2.1 updates the deployment registry and umbrella package with
 [mainnet route evidence](docs/mainnet-route-evidence.md).
