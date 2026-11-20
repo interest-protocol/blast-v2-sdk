@@ -34,7 +34,24 @@ test("reads one authoritative product through unchecked gRPC simulation", async 
   assert.equal(result.snapshot.rebalance.lastCompleted, null);
   assert.equal(harness.simulations, 1);
   assert.equal(harness.checksEnabled, false);
-  assert.deepEqual(harness.moveCalls, ["operations::observe"]);
+  assert.deepEqual(harness.moveCalls, [
+    "operations::observe",
+    "package_version::is_paused",
+  ]);
+});
+
+test("the deposit pause closes mint and leaves redemption available", async () => {
+  const transport = createBoostsGrpcTransport(
+    grpcHarness({ depositsPaused: true }).client,
+    BOOSTS_FIXTURE_MANIFEST,
+  );
+  const result = await new BoostsClient(
+    transport,
+    BOOSTS_FIXTURE_MANIFEST,
+  ).getProduct("sui-2x-bull");
+  assert.ok(result.ok);
+  assert.equal(result.snapshot.availability.mint, false);
+  assert.equal(result.snapshot.availability.redeem, true);
 });
 
 test("reads exact package lineage and coin metadata for deployment validation", async () => {
@@ -65,6 +82,20 @@ test("rejects the wrong chain before running a product simulation", async () => 
   const product = getBoostsProduct(BOOSTS_FIXTURE_MANIFEST, "sui-2x-bull");
   await assert.rejects(transport.readProduct(product), /wrong chain/);
   assert.equal(harness.simulations, 0);
+});
+
+test("reads the pause state from the version object bound in the manifest", async () => {
+  const harness = grpcHarness();
+  const transport = createBoostsGrpcTransport(
+    harness.client,
+    BOOSTS_FIXTURE_MANIFEST,
+  );
+  const product = getBoostsProduct(BOOSTS_FIXTURE_MANIFEST, "sui-2x-bull");
+  const result = await transport.readProduct({
+    ...product,
+    packageVersion: "0x999",
+  });
+  assert.equal(result.depositsPaused, false);
 });
 
 test("rejects a vault that changes after the simulated observation", async () => {
@@ -154,15 +185,20 @@ function grpcHarness(
     racedVaultOnce?: boolean;
     prunedTransactions?: boolean;
     wrongTreasuryCap?: boolean;
+    depositsPaused?: boolean;
     missingCheckpoint?: boolean;
     checkpointBehindOnce?: boolean;
   }> = {},
 ) {
   const product = getBoostsProduct(BOOSTS_FIXTURE_MANIFEST, "sui-2x-bull");
-  const fixture = fixtureRead("sui-2x-bull");
+  const fixture = {
+    ...fixtureRead("sui-2x-bull"),
+    depositsPaused: options.depositsPaused ?? false,
+  };
   const objectIds = [
     product.vault.objectId,
     product.protocol,
+    product.packageVersion,
     product.venueAccount,
     product.registry,
     product.clearingHouse,
@@ -397,6 +433,12 @@ function simulationOutputs(
         },
         { bcs: bcs.u64().serialize(10_000_000_000n).toBytes() },
         { bcs: bcs.u64().serialize(1_000_000n).toBytes() },
+      ],
+      mutatedReferences: [],
+    },
+    {
+      returnValues: [
+        { bcs: bcs.bool().serialize(fixture.depositsPaused).toBytes() },
       ],
       mutatedReferences: [],
     },

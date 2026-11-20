@@ -22,7 +22,7 @@ import type {
 } from "./types.ts";
 
 export const AFTERMATH_PERPETUALS_PACKAGES = {
-  mainnet: "0x3ec740df8428aa9c93aaef7f8cc1542ac3194fd014826b51bfe245346d64efc7",
+  mainnet: "0xe54757433d663835bda85cfc89c6c44bc8d952e941affa5ae57bba0baa226c1b",
   testnet: "0xec8103a249c6698174cbbf93e931352eb795bbe5fdbadac5984b856efebba9f7",
 } as const;
 
@@ -83,7 +83,6 @@ export type BoostsTransactionShape = Readonly<{
 export type BoostsIconUpdateInput = Readonly<{
   productKey: BoostsProductKey;
   sender: string;
-  adminPackageId: string;
   /** Original core package ID defining the VaultIssuer role. */
   corePackageId: string;
   /** The shared blast_admin::blast_acl::ACL object. */
@@ -297,7 +296,7 @@ export class BoostsTransactions {
       target: `${this.manifest.adapterPackage.packageId}::operations::mint`,
       typeArguments: [product.productType, product.collateralType],
       arguments: [
-        ...boundObjects(transaction, product),
+        ...boundObjects(transaction, product, "mint"),
         cash,
         transaction.pure.u64(minimum),
         transaction.pure.u64(deadline),
@@ -387,18 +386,13 @@ export class BoostsTransactions {
     }
     const transaction = new Transaction();
     transaction.setSender(sender);
-    const clearingHouse = transaction.moveCall({
+    transaction.moveCall({
       target: `${this.manifest.adapterPackage.packageId}::operations::rebalance`,
       typeArguments: [product.productType, product.collateralType],
       arguments: [
         ...boundObjects(transaction, product),
         transaction.object(product.clock),
       ],
-    });
-    transaction.moveCall({
-      target: `${AFTERMATH_PERPETUALS_PACKAGES[this.manifest.network]}::clearing_house::share`,
-      typeArguments: [product.collateralType],
-      arguments: [clearingHouse],
     });
     assertBoostsTransactionShape(transaction, this.manifest, {
       operation: "rebalance",
@@ -443,7 +437,7 @@ export function buildBoostsIconUpdateTransaction(
   const transaction = new Transaction();
   transaction.setSender(normalizeSuiAddress(input.sender));
   const adminWitness = transaction.moveCall({
-    target: `${normalizeSuiObjectId(input.adminPackageId)}::blast_acl::sign_in`,
+    target: `${manifest.adminPackageId}::blast_acl::sign_in`,
     typeArguments: [
       `${normalizeSuiObjectId(input.corePackageId)}::blast_boosts_core::VaultIssuer`,
     ],
@@ -477,9 +471,9 @@ export function inspectBoostsTransactionShape(
   const moveCalls = data.commands.flatMap((command) =>
     command.$kind === "MoveCall" ? [command.MoveCall] : [],
   );
-  if (moveCalls.length !== 2) {
+  if (moveCalls.length !== (moveCalls[0]?.function === "rebalance" ? 1 : 2)) {
     throw new TypeError(
-      "Boosts transaction must contain exactly one Boosts operation and its ClearingHouse share",
+      "Boosts transaction has an unexpected number of Move calls",
     );
   }
   const call = moveCalls[0];
@@ -551,7 +545,7 @@ export function assertBoostsTransactionShape(
   );
   const expectedCommands =
     expected.operation === "rebalance"
-      ? ["MoveCall", "MoveCall"]
+      ? ["MoveCall"]
       : ["$Intent", "MoveCall", "MoveCall", "TransferObjects"];
   if (
     data.commands.length !== expectedCommands.length ||
@@ -561,12 +555,12 @@ export function assertBoostsTransactionShape(
   ) {
     throw new TypeError("Boosts transaction contains an unexpected command");
   }
-  assertReturnedMarketShare(transaction, manifest, product, expected.operation);
   if (expected.operation === "rebalance") {
     if (shape.transfers !== 0) {
       throw new TypeError("rebalance must not transfer an object");
     }
   } else {
+    assertReturnedMarketShare(transaction, manifest, product);
     assertCoinIntent(transaction, product, expected.operation);
     assertReturnedCoinTransfer(transaction, sender);
   }
@@ -577,19 +571,14 @@ function assertReturnedMarketShare(
   transaction: Transaction,
   manifest: BoostsManifest,
   product: BoostsProductManifest,
-  operation: BoostsOperation,
 ): void {
-  const data = transaction.getData();
-  const operationIndex = operation === "rebalance" ? 0 : 1;
-  const share = data.commands[operationIndex + 1];
+  const share = transaction.getData().commands[2];
   const market =
     share?.$kind === "MoveCall" ? share.MoveCall.arguments[0] : undefined;
   const returnedMarket =
-    operation === "rebalance"
-      ? market?.$kind === "Result" && market.Result === operationIndex
-      : market?.$kind === "NestedResult" &&
-        market.NestedResult[0] === operationIndex &&
-        market.NestedResult[1] === 1;
+    market?.$kind === "NestedResult" &&
+    market.NestedResult[0] === 1 &&
+    market.NestedResult[1] === 1;
   if (
     share?.$kind !== "MoveCall" ||
     normalizeSuiObjectId(share.MoveCall.package) !==
@@ -608,10 +597,14 @@ function assertReturnedMarketShare(
 function boundObjects(
   transaction: Transaction,
   product: BoostsProductManifest,
+  operation?: "mint",
 ) {
   return [
     transaction.sharedObjectRef(product.vault),
     transaction.object(product.protocol),
+    ...(operation === "mint"
+      ? [transaction.object(product.packageVersion)]
+      : []),
     transaction.object(product.venueAccount),
     transaction.object(product.registry),
     transaction.object(product.clearingHouse),
@@ -698,13 +691,14 @@ function assertExactMoveArguments(
   const objectIds = [
     product.vault.objectId,
     product.protocol,
+    ...(operation === "mint" ? [product.packageVersion] : []),
     product.venueAccount,
     product.registry,
     product.clearingHouse,
     product.baseOracleStorage,
     product.collateralOracleStorage,
   ];
-  const expectedLength = operation === "rebalance" ? 8 : 11;
+  const expectedLength = objectIds.length + (operation === "rebalance" ? 1 : 4);
   if (args.length !== expectedLength) {
     throw new TypeError("Boosts transaction has the wrong Move argument count");
   }
@@ -717,18 +711,18 @@ function assertExactMoveArguments(
     );
   });
   if (operation === "rebalance") {
-    assertObjectInput(args[7], inputs, product.clock, null);
+    assertObjectInput(args[objectIds.length], inputs, product.clock, null);
     return;
   }
-  const coin = args[7];
+  const coin = args[objectIds.length];
   if (coin?.$kind !== "Result" || coin.Result !== 0) {
     throw new TypeError(
       "Boosts input coin must come from the exact coin-selection intent",
     );
   }
-  assertPureU64Input(args[8], inputs, "minimum output");
-  assertPureU64Input(args[9], inputs, "deadline");
-  assertObjectInput(args[10], inputs, product.clock, null);
+  assertPureU64Input(args[objectIds.length + 1], inputs, "minimum output");
+  assertPureU64Input(args[objectIds.length + 2], inputs, "deadline");
+  assertObjectInput(args[objectIds.length + 3], inputs, product.clock, null);
 }
 
 function assertObjectInput(

@@ -171,6 +171,7 @@ export function createBoostsSnapshot(
     transactionDigest: string;
     checkpoint: bigint;
   },
+  depositsPaused: boolean,
 ): BoostsProductSnapshotV1 {
   requireU64("currentSupplyAtoms", currentSupplyAtoms);
   const derived = deriveBoostsEconomics(vault, market, nowMs);
@@ -205,7 +206,7 @@ export function createBoostsSnapshot(
     lifecycle: vault.lifecycle,
     availability: {
       read: true,
-      mint: active && healthy && capMatches,
+      mint: depositsPaused === false && active && healthy && capMatches,
       redeem: active,
       rebalance: active && derived.needsRebalance,
       code: capMatches ? null : "CAP_CONFIGURATION_MISMATCH",

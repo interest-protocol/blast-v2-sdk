@@ -53,7 +53,7 @@ export class BoostsGrpcTransport implements BoostsTransport {
   async readProduct(
     product: BoostsProductManifest,
   ): Promise<BoostsProductRead> {
-    this.#assertManifestProduct(product);
+    const manifestProduct = this.#resolveManifestProduct(product);
     const chainIdentifier = await this.getChainIdentifier();
     if (chainIdentifier !== this.#manifest.chainIdentifier) {
       throw new TypeError("Boosts gRPC client is connected to the wrong chain");
@@ -62,7 +62,7 @@ export class BoostsGrpcTransport implements BoostsTransport {
     let lastRace: unknown;
     for (let attempt = 0; attempt < MAX_OBSERVATION_ATTEMPTS; attempt += 1) {
       try {
-        return await this.#readProductAttempt(product, chainIdentifier);
+        return await this.#readProductAttempt(manifestProduct, chainIdentifier);
       } catch (error) {
         if (!isObservationRace(error)) throw error;
         lastRace = error;
@@ -142,6 +142,9 @@ export class BoostsGrpcTransport implements BoostsTransport {
       checkpoint,
       observedAt,
       clockTimestampMs,
+      depositsPaused: bcs
+        .bool()
+        .parse(commandOutput(commandResults, 1, 0, "deposits pause bit")),
       vault: vaultObject,
       currentSupplyAtoms,
       market,
@@ -312,7 +315,7 @@ export class BoostsGrpcTransport implements BoostsTransport {
     throw new TypeError("Boosts rebalance history exceeded the bounded scan");
   }
 
-  #assertManifestProduct(product: BoostsProductManifest) {
+  #resolveManifestProduct(product: BoostsProductManifest) {
     const expected = getBoostsProduct(this.#manifest, product.productKey);
     if (
       normalizeSuiObjectId(product.vault.objectId) !==
@@ -324,6 +327,7 @@ export class BoostsGrpcTransport implements BoostsTransport {
     ) {
       throw new TypeError("Boosts product is not in this transport manifest");
     }
+    return expected;
   }
 }
 
@@ -362,6 +366,16 @@ function buildObservationTransaction(
       transaction.object(product.clock),
     ],
   });
+  transaction.moveCall({
+    target: `${manifest.adminPackageId}::package_version::is_paused`,
+    typeArguments: [
+      `${manifest.adapterPackage.originalPackageId}::blast_boosts_aftermath::BLAST_BOOSTS_AFTERMATH`,
+    ],
+    arguments: [
+      transaction.object(product.packageVersion),
+      transaction.pure.u8(1),
+    ],
+  });
   return transaction;
 }
 
@@ -372,6 +386,7 @@ function exactReadOnlyInputs(
   const expectedIds = [
     product.vault.objectId,
     product.protocol,
+    product.packageVersion,
     product.venueAccount,
     product.registry,
     product.clearingHouse,

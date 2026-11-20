@@ -34,7 +34,7 @@ const expectedEvents = {
   "production-boosts-v1.json": {
     boostsCore: 0,
     boostsProducts: 0,
-    boostsAftermath: 21,
+    boostsAftermath: 25,
   },
 };
 

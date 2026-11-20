@@ -27,9 +27,9 @@ const BLAST_SUI_BASELINE = {
   contractsCommit: "50b8d59a15553d06efe30f9611c760d3d1abc7d7",
   workingTreeDifferedAtFreeze: false,
 };
-/** Boosts adopts the generic administration separately; its artifact stays frozen here. */
+/** Boosts follows its shared governance and timelock release (contracts #288). */
 const BOOSTS_BASELINE = {
-  contractsCommit: "01d7659617abcd552cece6d05b9db409ec4ff2c0",
+  contractsCommit: "ca076654c8577fdd0608b612e4379b8013fd51a2",
   workingTreeDifferedAtFreeze: false,
 };
 const LAUNCH_STACK_FREEZE =
@@ -143,9 +143,13 @@ const artifactDeclarations = [
     path: "production-boosts-v1.json",
     baseline: BOOSTS_BASELINE,
     packages: [
-      ["boostsCore", "boosts/core", "blast_boosts_core"],
-      ["boostsProducts", "boosts/products", "blast_boosts_products"],
-      ["boostsAftermath", "boosts/aftermath_adapter", "blast_boosts_aftermath"],
+      ["boostsCore", "defi/boosts/core", "blast_boosts_core"],
+      ["boostsProducts", "defi/boosts/products", "blast_boosts_products"],
+      [
+        "boostsAftermath",
+        "defi/boosts/aftermath_adapter",
+        "blast_boosts_aftermath",
+      ],
     ],
   },
 ];
@@ -786,17 +790,29 @@ function classifyPresaleFunction(moduleName, functionName) {
   return undefined;
 }
 
-/** The consumer SDK builds active trades, maintenance and issuer metadata updates. */
 const boostsBuilders = new Set([
   "operations::mint",
   "operations::redeem",
   "operations::rebalance",
   "vault::update_metadata",
+  "vault::schedule_fees",
+  "vault::apply_fees",
+  "vault::cancel_fees",
+  "vault::schedule_nav_cap",
+  "vault::apply_nav_cap",
+  "vault::cancel_nav_cap",
+  "vault::schedule_max_order_notional",
+  "operations::apply_max_order_notional",
+  "vault::cancel_max_order_notional",
+  "package_admin::unpause",
+  "package_admin::activate_upgrade",
+  "package_admin::make_immutable",
+  "operations::add_partner",
+  "operations::remove_partner",
+  "vault::withdraw_admin_fees",
 ]);
 const boostsOperatorFunctions = new Set([
   "operations::initialize",
-  "operations::add_partner",
-  "operations::remove_partner",
   "operations::mint_with_partner",
   "operations::redeem_with_partner",
   "operations::donate",
@@ -807,10 +823,9 @@ const boostsOperatorFunctions = new Set([
   "vault::share",
   "vault::begin_shutdown",
   "vault::redeem_shutdown",
-  "vault::set_fees",
-  "vault::set_nav_cap",
-  "vault::set_max_order_notional",
-  "vault::withdraw_admin_fees",
+  "operations::rebaseline",
+  "operations::realize_profit",
+  "operations::begin_protected_shutdown",
 ]);
 
 function classifyBoostsFunction(moduleName, functionName) {
@@ -819,35 +834,7 @@ function classifyBoostsFunction(moduleName, functionName) {
   if (key === "operations::needs_rebalance" || key === "operations::observe") {
     return "read";
   }
-  // Issuance, partner trades, risk administration and shutdown remain operator PTBs.
   if (boostsOperatorFunctions.has(key)) return "intentional-operator-exclusion";
-  if (
-    moduleName === "package_admin" &&
-    functionName === "restrict_to_dependency_only"
-  ) {
-    return "intentional-upgrade-exclusion";
-  }
-  return classifyPackageAdmin(moduleName, functionName);
-}
-
-/**
- * blast_sui's and boosts' own `package_admin` (frozen before the generic
- * administration): wrapping is publishing, and upgrades are publish tooling.
- */
-const upgradeCustodyFunctions = new Set([
-  "authorize_upgrade",
-  "commit_upgrade",
-  "commit_upgrade_and_advance",
-  "restrict_to_additive",
-  "make_immutable",
-]);
-
-function classifyPackageAdmin(moduleName, functionName) {
-  if (moduleName !== "package_admin") return undefined;
-  if (functionName === "wrap") return "intentional-deployment-exclusion";
-  if (upgradeCustodyFunctions.has(functionName)) {
-    return "intentional-upgrade-exclusion";
-  }
   return undefined;
 }
 
@@ -945,6 +932,12 @@ function isEventStruct(packageName, moduleName, structName) {
       );
     case "blast_aftermath_dao_presale":
       return structName === "PoolCreationReserved" || structName === "Migrated";
+    case "blast_boosts_aftermath":
+      return (
+        moduleName === "events" ||
+        (moduleName === "blast_boosts_aftermath" &&
+          structName === "GenerationActivated")
+      );
     case "blast_sui":
       return moduleName === "events" && blastSuiEventNames.has(structName);
     default:

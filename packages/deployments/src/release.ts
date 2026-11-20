@@ -26,7 +26,7 @@ export const FROZEN_ABI: Readonly<{
       "f16bcfd27db79f71f347647a03dab47307b6924549f0969054268fc9eb2bbf00",
     blastSui:
       "421cee774549dfb55a789b1954056c7236d5300d22d681699c4f20cf311d57b0",
-    boosts: "917665645d05883fffdfd581367c2b45522aa8de52f57aa9730c101bb329cd8b",
+    boosts: "4d4cd42e8525aec5dfe987433e599847789b96c2a81544db0a03fbb5fc01da09",
   }),
 });
 

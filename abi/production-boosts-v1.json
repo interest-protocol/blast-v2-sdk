@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "contractsCommit": "01d7659617abcd552cece6d05b9db409ec4ff2c0",
+    "contractsCommit": "ca076654c8577fdd0608b612e4379b8013fd51a2",
     "workingTreeDifferedAtFreeze": false,
     "suiCli": "1.77.2-51d177ad7d65"
   },
@@ -32,18 +32,6 @@
             },
             {
               "name": "ShutdownAdmin",
-              "abilities": [],
-              "typeParameters": [],
-              "positional": true,
-              "fields": [
-                {
-                  "name": "dummy_field",
-                  "type": "bool"
-                }
-              ]
-            },
-            {
-              "name": "UpgradeAdmin",
               "abilities": [],
               "typeParameters": [],
               "positional": true,
@@ -139,7 +127,16 @@
                 },
                 {
                   "name": "Unwinding",
-                  "fields": []
+                  "fields": [
+                    {
+                      "name": "began_at_ms",
+                      "type": "u64"
+                    },
+                    {
+                      "name": "protect_balances",
+                      "type": "bool"
+                    }
+                  ]
                 },
                 {
                   "name": "Settled",
@@ -413,6 +410,61 @@
         "policy": {
           "functions": [
             {
+              "name": "assert_execution",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "policy"
+                        },
+                        "name": "ExecutionBound",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "u64"
+              ],
+              "returns": []
+            },
+            {
+              "name": "limit_price",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "policy"
+                        },
+                        "name": "ExecutionBound",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "bool",
+                "u64"
+              ],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
               "name": "long",
               "sdk": "move-composition",
               "entry": false,
@@ -557,9 +609,50 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "slippage_bps",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "policy"
+                        },
+                        "name": "ExecutionBound",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                "u64"
+              ]
             }
           ],
           "structs": [
+            {
+              "name": "ExecutionBound",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "slippage_bps",
+                  "type": "u64"
+                }
+              ]
+            },
             {
               "name": "PricePolicy",
               "abilities": [
@@ -1007,7 +1100,7 @@
               "returns": []
             },
             {
-              "name": "assert_execution",
+              "name": "assert_fee_update",
               "sdk": "move-composition",
               "entry": false,
               "typeParameters": [
@@ -1040,8 +1133,124 @@
                     }
                   ]
                 },
-                "bool",
                 "u64",
+                "u64",
+                "u64"
+              ],
+              "returns": []
+            },
+            {
+              "name": "assert_initial_margin_headroom",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "Issuance",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "u64",
+                "u64"
+              ],
+              "returns": []
+            },
+            {
+              "name": "assert_max_order_notional_update",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "State",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64"
+              ],
+              "returns": []
+            },
+            {
+              "name": "assert_nav_cap_update",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "State",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
                 "u64"
               ],
               "returns": []
@@ -1080,12 +1289,15 @@
                     }
                   ]
                 },
-                "u64"
+                "u64",
+                "u64",
+                "u64",
+                "bool"
               ],
               "returns": []
             },
             {
-              "name": "assert_seed_execution",
+              "name": "assert_recoverable_position",
               "sdk": "move-composition",
               "entry": false,
               "typeParameters": [
@@ -1105,7 +1317,7 @@
                           "address": "blast_boosts_core",
                           "name": "state"
                         },
-                        "name": "Issuance",
+                        "name": "State",
                         "type_arguments": [
                           {
                             "argument": {
@@ -1118,7 +1330,16 @@
                     }
                   ]
                 },
-                "u64",
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "observation"
+                    },
+                    "name": "PositionObservation",
+                    "type_arguments": []
+                  }
+                },
                 "u64"
               ],
               "returns": []
@@ -1327,6 +1548,45 @@
               ]
             },
             {
+              "name": "base_to_realize",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "ProfitRealizationPlan",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
               "name": "base_to_sell",
               "sdk": "move-composition",
               "entry": false,
@@ -1366,6 +1626,48 @@
               ]
             },
             {
+              "name": "begin_protected_shutdown",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "State",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "u64",
+                "u64",
+                "u64",
+                "u64"
+              ],
+              "returns": []
+            },
+            {
               "name": "begin_shutdown",
               "sdk": "move-composition",
               "entry": false,
@@ -1398,9 +1700,45 @@
                       }
                     }
                   ]
-                }
+                },
+                "u64"
               ],
               "returns": []
+            },
+            {
+              "name": "bound",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "RebalanceOrder",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "policy"
+                    },
+                    "name": "ExecutionBound",
+                    "type_arguments": []
+                  }
+                }
+              ]
             },
             {
               "name": "collateral_price",
@@ -1493,6 +1831,76 @@
               ],
               "returns": [
                 "u64",
+                "u64",
+                "u64",
+                "u64",
+                "u64"
+              ]
+            },
+            {
+              "name": "complete_profit_realization",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "State",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "state"
+                    },
+                    "name": "ProfitRealizationPlan",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Product"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "observation"
+                    },
+                    "name": "PositionObservation",
+                    "type_arguments": []
+                  }
+                },
+                "u64"
+              ],
+              "returns": [
                 "u64",
                 "u64",
                 "u64",
@@ -1705,6 +2113,54 @@
               ]
             },
             {
+              "name": "execution_bound",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "State",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "policy"
+                    },
+                    "name": "ExecutionBound",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
               "name": "finalize_shutdown",
               "sdk": "move-composition",
               "entry": false,
@@ -1739,9 +2195,12 @@
                   ]
                 },
                 "u64",
+                "u64",
                 "u64"
               ],
               "returns": [
+                "u64",
+                "u64",
                 "u64"
               ]
             },
@@ -1762,6 +2221,45 @@
                         },
                         "name": "RebalanceOrder",
                         "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                "bool"
+              ]
+            },
+            {
+              "name": "is_emergency_rebalance",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "RebalancePlan",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -2025,8 +2523,19 @@
                       }
                     }
                   ]
-                }
+                },
+                "bool"
               ],
+              "returns": [
+                "u64"
+              ]
+            },
+            {
+              "name": "max_rebalance_orders",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [],
               "returns": [
                 "u64"
               ]
@@ -2123,6 +2632,18 @@
                     "type_arguments": []
                   }
                 },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "observation"
+                    },
+                    "name": "FundingSettlement",
+                    "type_arguments": []
+                  }
+                },
+                "bool",
+                "u64",
                 "u64"
               ],
               "returns": [
@@ -2298,6 +2819,7 @@
                 "u64",
                 "u64",
                 "u64",
+                "u64",
                 "u64"
               ],
               "returns": [
@@ -2308,6 +2830,75 @@
                       "name": "state"
                     },
                     "name": "MintPlan",
+                    "type_arguments": [
+                      {
+                        "argument": {
+                          "NamedTypeParameter": "Product"
+                        },
+                        "phantom": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "prepare_profit_realization",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "State",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "observation"
+                    },
+                    "name": "PositionObservation",
+                    "type_arguments": []
+                  }
+                },
+                "u64",
+                "u64",
+                "u64",
+                "u64"
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "state"
+                    },
+                    "name": "ProfitRealizationPlan",
                     "type_arguments": [
                       {
                         "argument": {
@@ -2457,6 +3048,54 @@
               ]
             },
             {
+              "name": "realization_position",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "ProfitRealizationPlan",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "state"
+                    },
+                    "name": "ActivePosition",
+                    "type_arguments": []
+                  }
+                }
+              ]
+            },
+            {
               "name": "rebalance_position",
               "sdk": "move-composition",
               "entry": false,
@@ -2589,6 +3228,54 @@
               ],
               "returns": [
                 "u64"
+              ]
+            },
+            {
+              "name": "seed_execution_bound",
+              "sdk": "move-composition",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_core",
+                          "name": "state"
+                        },
+                        "name": "Issuance",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": [
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "policy"
+                    },
+                    "name": "ExecutionBound",
+                    "type_arguments": []
+                  }
+                }
               ]
             },
             {
@@ -2778,6 +3465,28 @@
                     }
                   ]
                 },
+                "u64",
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "observation"
+                    },
+                    "name": "PriceObservation",
+                    "type_arguments": []
+                  }
+                },
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "observation"
+                    },
+                    "name": "PriceObservation",
+                    "type_arguments": []
+                  }
+                },
+                "u64",
                 "u64"
               ],
               "returns": [
@@ -3037,7 +3746,17 @@
                 },
                 "u64",
                 "u64",
-                "u64"
+                "u64",
+                {
+                  "Datatype": {
+                    "module": {
+                      "address": "blast_boosts_core",
+                      "name": "policy"
+                    },
+                    "name": "ExecutionBound",
+                    "type_arguments": []
+                  }
+                }
               ]
             }
           ],
@@ -3168,6 +3887,49 @@
                 {
                   "name": "base_to_buy",
                   "type": "u64"
+                },
+                {
+                  "name": "recovery",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "ProfitRealizationPlan",
+              "abilities": [],
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "before",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_boosts_core",
+                        "name": "state"
+                      },
+                      "name": "ActivePosition",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "base_to_realize",
+                  "type": "u64"
+                },
+                {
+                  "name": "max_cost",
+                  "type": "u64"
+                },
+                {
+                  "name": "reserve_priced",
+                  "type": "u64"
                 }
               ]
             },
@@ -3189,6 +3951,23 @@
                 },
                 {
                   "name": "emergency",
+                  "type": "bool"
+                },
+                {
+                  "name": "bound",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_boosts_core",
+                        "name": "policy"
+                      },
+                      "name": "ExecutionBound",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "band_landing",
                   "type": "bool"
                 }
               ]
@@ -3250,6 +4029,14 @@
                 {
                   "name": "steps",
                   "type": "u64"
+                },
+                {
+                  "name": "full_fills",
+                  "type": "bool"
+                },
+                {
+                  "name": "band_landing",
+                  "type": "bool"
                 }
               ]
             },
@@ -4359,27 +5146,16 @@
               ]
             },
             {
-              "name": "PartnerKey",
+              "name": "PackageWitness",
               "abilities": [
-                "Copy",
-                "Drop",
-                "Store"
+                "Drop"
               ],
               "typeParameters": [],
               "positional": true,
               "fields": [
                 {
-                  "name": "pos0",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "ID",
-                      "type_arguments": []
-                    }
-                  }
+                  "name": "dummy_field",
+                  "type": "bool"
                 }
               ]
             },
@@ -4406,28 +5182,18 @@
                 },
                 {
                   "name": "generation",
+                  "type": "u64"
+                },
+                {
+                  "name": "partners",
                   "type": {
                     "Datatype": {
                       "module": {
-                        "address": "blast_admin",
-                        "name": "operational_version"
+                        "address": "blast_partners",
+                        "name": "partner_list"
                       },
-                      "name": "OperationalVersion",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_boosts_aftermath",
-                                "name": "blast_boosts_aftermath"
-                              },
-                              "name": "BLAST_BOOSTS_AFTERMATH",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": true
-                        }
-                      ]
+                      "name": "PartnerList",
+                      "type_arguments": []
                     }
                   }
                 }
@@ -4435,7 +5201,41 @@
             }
           ],
           "enums": [],
-          "events": []
+          "events": [
+            {
+              "name": "GenerationActivated",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "protocol",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "previous",
+                  "type": "u64"
+                },
+                {
+                  "name": "current",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "intentional-operator-exclusion"
+            }
+          ]
         },
         "blast_events": {
           "functions": [],
@@ -4673,6 +5473,63 @@
                         "name": "object"
                       },
                       "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "checkpoint",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_boosts_aftermath",
+                        "name": "checkpoint"
+                      },
+                      "name": "Checkpoint",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "intentional-operator-exclusion"
+            },
+            {
+              "name": "CheckpointRebaselined",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "previous_checkpoint",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_boosts_aftermath",
+                        "name": "checkpoint"
+                      },
+                      "name": "Checkpoint",
                       "type_arguments": []
                     }
                   }
@@ -5150,10 +6007,6 @@
                   "type": "bool"
                 },
                 {
-                  "name": "emergency",
-                  "type": "bool"
-                },
-                {
                   "name": "requested_base",
                   "type": "u64"
                 },
@@ -5167,6 +6020,10 @@
                 },
                 {
                   "name": "reference_price",
+                  "type": "u64"
+                },
+                {
+                  "name": "limit_price",
                   "type": "u64"
                 },
                 {
@@ -5277,6 +6134,135 @@
                 },
                 {
                   "name": "accepted_until_ms",
+                  "type": "u64"
+                }
+              ],
+              "sdk": "intentional-operator-exclusion"
+            },
+            {
+              "name": "ProfitRealized",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "equity_before",
+                  "type": "u64"
+                },
+                {
+                  "name": "equity_after",
+                  "type": "u64"
+                },
+                {
+                  "name": "base_realized",
+                  "type": "u64"
+                },
+                {
+                  "name": "shortfall_before",
+                  "type": "u64"
+                },
+                {
+                  "name": "shortfall_after",
+                  "type": "u64"
+                },
+                {
+                  "name": "previous_checkpoint",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_boosts_aftermath",
+                        "name": "checkpoint"
+                      },
+                      "name": "Checkpoint",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "checkpoint",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_boosts_aftermath",
+                        "name": "checkpoint"
+                      },
+                      "name": "Checkpoint",
+                      "type_arguments": []
+                    }
+                  }
+                }
+              ],
+              "sdk": "intentional-operator-exclusion"
+            },
+            {
+              "name": "ProtectedShutdownBegun",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": true,
+                  "constraints": []
+                }
+              ],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "vault_id",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "object"
+                      },
+                      "name": "ID",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "checkpoint",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_boosts_aftermath",
+                        "name": "checkpoint"
+                      },
+                      "name": "Checkpoint",
+                      "type_arguments": []
+                    }
+                  }
+                },
+                {
+                  "name": "total_supply",
+                  "type": "u64"
+                },
+                {
+                  "name": "locked_shares",
                   "type": "u64"
                 }
               ],
@@ -5530,6 +6516,14 @@
                 {
                   "name": "unrecoverable_collateral_raw",
                   "type": "u256"
+                },
+                {
+                  "name": "protected_reserve_cash",
+                  "type": "u64"
+                },
+                {
+                  "name": "protected_seed_cash",
+                  "type": "u64"
                 }
               ],
               "sdk": "intentional-operator-exclusion"
@@ -5839,7 +6833,7 @@
           "functions": [
             {
               "name": "add_partner",
-              "sdk": "intentional-operator-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -5873,10 +6867,10 @@
                             "argument": {
                               "Datatype": {
                                 "module": {
-                                  "address": "blast_boosts_core",
-                                  "name": "blast_boosts_core"
+                                  "address": "blast_core",
+                                  "name": "blast_domain"
                                 },
-                                "name": "RiskAdmin",
+                                "name": "FeeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -5897,6 +6891,340 @@
                           "name": "blast_partners"
                         },
                         "name": "Partner",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "apply_max_order_notional",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Collateral",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "perpetuals",
+                          "name": "account"
+                        },
+                        "name": "Account",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "perpetuals",
+                          "name": "registry"
+                        },
+                        "name": "Registry",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "perpetuals",
+                          "name": "clearing_house"
+                        },
+                        "name": "ClearingHouse",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "oracle_aggregator",
+                          "name": "price_feed_storage"
+                        },
+                        "name": "PriceFeedStorage",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "oracle_aggregator",
+                          "name": "price_feed_storage"
+                        },
+                        "name": "PriceFeedStorage",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "begin_protected_shutdown",
+              "sdk": "intentional-operator-exclusion",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Collateral",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "perpetuals",
+                          "name": "account"
+                        },
+                        "name": "Account",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "perpetuals",
+                          "name": "registry"
+                        },
+                        "name": "Registry",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "perpetuals",
+                          "name": "clearing_house"
+                        },
+                        "name": "ClearingHouse",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "oracle_aggregator",
+                          "name": "price_feed_storage"
+                        },
+                        "name": "PriceFeedStorage",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "oracle_aggregator",
+                          "name": "price_feed_storage"
+                        },
+                        "name": "PriceFeedStorage",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
                         "type_arguments": []
                       }
                     }
@@ -6565,6 +7893,35 @@
                 },
                 {
                   "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_boosts_aftermath",
+                                  "name": "blast_boosts_aftermath"
+                                },
+                                "name": "BLAST_BOOSTS_AFTERMATH",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
                     true,
                     {
                       "Datatype": {
@@ -6804,6 +8161,35 @@
                         },
                         "name": "Protocol",
                         "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_boosts_aftermath",
+                                  "name": "blast_boosts_aftermath"
+                                },
+                                "name": "BLAST_BOOSTS_AFTERMATH",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -7368,9 +8754,9 @@
               ]
             },
             {
-              "name": "rebalance",
-              "sdk": "builder",
-              "entry": false,
+              "name": "realize_profit",
+              "sdk": "intentional-operator-exclusion",
+              "entry": true,
               "typeParameters": [
                 {
                   "name": "Product",
@@ -7528,7 +8914,7 @@
                 },
                 {
                   "Reference": [
-                    true,
+                    false,
                     {
                       "Datatype": {
                         "module": {
@@ -7542,7 +8928,105 @@
                   ]
                 }
               ],
-              "returns": [
+              "returns": []
+            },
+            {
+              "name": "rebalance",
+              "sdk": "builder",
+              "entry": true,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Collateral",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "perpetuals",
+                          "name": "account"
+                        },
+                        "name": "Account",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "perpetuals",
+                          "name": "registry"
+                        },
+                        "name": "Registry",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
                 {
                   "Datatype": {
                     "module": {
@@ -7559,8 +9043,265 @@
                       }
                     ]
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "oracle_aggregator",
+                          "name": "price_feed_storage"
+                        },
+                        "name": "PriceFeedStorage",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "oracle_aggregator",
+                          "name": "price_feed_storage"
+                        },
+                        "name": "PriceFeedStorage",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "tx_context"
+                        },
+                        "name": "TxContext",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
                 }
-              ]
+              ],
+              "returns": []
+            },
+            {
+              "name": "rebaseline",
+              "sdk": "intentional-operator-exclusion",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Collateral",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_boosts_core",
+                                  "name": "blast_boosts_core"
+                                },
+                                "name": "RiskAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "perpetuals",
+                          "name": "account"
+                        },
+                        "name": "Account",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "perpetuals",
+                          "name": "registry"
+                        },
+                        "name": "Registry",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "perpetuals",
+                          "name": "clearing_house"
+                        },
+                        "name": "ClearingHouse",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "oracle_aggregator",
+                          "name": "price_feed_storage"
+                        },
+                        "name": "PriceFeedStorage",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "oracle_aggregator",
+                          "name": "price_feed_storage"
+                        },
+                        "name": "PriceFeedStorage",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
             },
             {
               "name": "redeem",
@@ -8069,7 +9810,7 @@
             },
             {
               "name": "remove_partner",
-              "sdk": "intentional-operator-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -8103,10 +9844,10 @@
                             "argument": {
                               "Datatype": {
                                 "module": {
-                                  "address": "blast_boosts_core",
-                                  "name": "blast_boosts_core"
+                                  "address": "blast_core",
+                                  "name": "blast_domain"
                                 },
-                                "name": "RiskAdmin",
+                                "name": "FeeAdmin",
                                 "type_arguments": []
                               }
                             },
@@ -8320,7 +10061,7 @@
             {
               "name": "unwind",
               "sdk": "intentional-operator-exclusion",
-              "entry": false,
+              "entry": true,
               "typeParameters": [
                 {
                   "name": "Product",
@@ -8478,7 +10219,7 @@
                 },
                 {
                   "Reference": [
-                    true,
+                    false,
                     {
                       "Datatype": {
                         "module": {
@@ -8492,25 +10233,7 @@
                   ]
                 }
               ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "perpetuals",
-                      "name": "clearing_house"
-                    },
-                    "name": "ClearingHouse",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Collateral"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
+              "returns": []
             }
           ],
           "structs": [],
@@ -8521,10 +10244,8 @@
           "functions": [],
           "structs": [
             {
-              "name": "Fill",
-              "abilities": [
-                "Drop"
-              ],
+              "name": "FillReceipt",
+              "abilities": [],
               "typeParameters": [],
               "positional": false,
               "fields": [
@@ -8570,6 +10291,19 @@
                 {
                   "name": "collateral_price",
                   "type": "u64"
+                },
+                {
+                  "name": "bound",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_boosts_core",
+                        "name": "policy"
+                      },
+                      "name": "ExecutionBound",
+                      "type_arguments": []
+                    }
+                  }
                 }
               ]
             }
@@ -8580,108 +10314,11 @@
         "package_admin": {
           "functions": [
             {
-              "name": "authorize_upgrade",
-              "sdk": "intentional-upgrade-exclusion",
+              "name": "activate_upgrade",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_boosts_aftermath",
-                          "name": "package_admin"
-                        },
-                        "name": "PackageAdmin",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_boosts_aftermath",
-                          "name": "blast_boosts_aftermath"
-                        },
-                        "name": "Protocol",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_boosts_core",
-                                  "name": "blast_boosts_core"
-                                },
-                                "name": "UpgradeAdmin",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "vector": "u8"
-                }
-              ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "package"
-                    },
-                    "name": "UpgradeTicket",
-                    "type_arguments": []
-                  }
-                }
-              ]
-            },
-            {
-              "name": "commit_upgrade_and_advance",
-              "sdk": "intentional-upgrade-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_boosts_aftermath",
-                          "name": "package_admin"
-                        },
-                        "name": "PackageAdmin",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
                 {
                   "Reference": [
                     true,
@@ -8712,11 +10349,25 @@
                             "argument": {
                               "Datatype": {
                                 "module": {
-                                  "address": "blast_boosts_core",
-                                  "name": "blast_boosts_core"
+                                  "address": "blast_admin",
+                                  "name": "package_admin"
                                 },
                                 "name": "UpgradeAdmin",
-                                "type_arguments": []
+                                "type_arguments": [
+                                  {
+                                    "argument": {
+                                      "Datatype": {
+                                        "module": {
+                                          "address": "blast_boosts_aftermath",
+                                          "name": "blast_boosts_aftermath"
+                                        },
+                                        "name": "BLAST_BOOSTS_AFTERMATH",
+                                        "type_arguments": []
+                                      }
+                                    },
+                                    "phantom": true
+                                  }
+                                ]
                               }
                             },
                             "phantom": true
@@ -8725,23 +10376,13 @@
                       }
                     }
                   ]
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "package"
-                    },
-                    "name": "UpgradeReceipt",
-                    "type_arguments": []
-                  }
                 }
               ],
               "returns": []
             },
             {
               "name": "make_immutable",
-              "sdk": "intentional-upgrade-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [],
               "parameters": [
@@ -8751,11 +10392,25 @@
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_boosts_aftermath",
+                          "address": "blast_admin",
                           "name": "package_admin"
                         },
                         "name": "PackageAdmin",
-                        "type_arguments": []
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_boosts_aftermath",
+                                  "name": "blast_boosts_aftermath"
+                                },
+                                "name": "BLAST_BOOSTS_AFTERMATH",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -8782,63 +10437,24 @@
                       "Datatype": {
                         "module": {
                           "address": "blast_admin",
-                          "name": "blast_acl"
+                          "name": "package_version"
                         },
-                        "name": "AdminWitness",
+                        "name": "PackageVersion",
                         "type_arguments": [
                           {
                             "argument": {
                               "Datatype": {
                                 "module": {
-                                  "address": "blast_boosts_core",
-                                  "name": "blast_boosts_core"
+                                  "address": "blast_boosts_aftermath",
+                                  "name": "blast_boosts_aftermath"
                                 },
-                                "name": "UpgradeAdmin",
+                                "name": "BLAST_BOOSTS_AFTERMATH",
                                 "type_arguments": []
                               }
                             },
                             "phantom": true
                           }
                         ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "restrict_to_additive",
-              "sdk": "intentional-upgrade-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_boosts_aftermath",
-                          "name": "package_admin"
-                        },
-                        "name": "PackageAdmin",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_boosts_aftermath",
-                          "name": "blast_boosts_aftermath"
-                        },
-                        "name": "Protocol",
-                        "type_arguments": []
                       }
                     }
                   ]
@@ -8858,11 +10474,25 @@
                             "argument": {
                               "Datatype": {
                                 "module": {
-                                  "address": "blast_boosts_core",
-                                  "name": "blast_boosts_core"
+                                  "address": "blast_admin",
+                                  "name": "package_admin"
                                 },
                                 "name": "UpgradeAdmin",
-                                "type_arguments": []
+                                "type_arguments": [
+                                  {
+                                    "argument": {
+                                      "Datatype": {
+                                        "module": {
+                                          "address": "blast_boosts_aftermath",
+                                          "name": "blast_boosts_aftermath"
+                                        },
+                                        "name": "BLAST_BOOSTS_AFTERMATH",
+                                        "type_arguments": []
+                                      }
+                                    },
+                                    "phantom": true
+                                  }
+                                ]
                               }
                             },
                             "phantom": true
@@ -8871,115 +10501,158 @@
                       }
                     }
                   ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "restrict_to_dependency_only",
-              "sdk": "intentional-upgrade-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_boosts_aftermath",
-                          "name": "package_admin"
-                        },
-                        "name": "PackageAdmin",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
                 },
                 {
                   "Reference": [
                     false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_boosts_aftermath",
-                          "name": "blast_boosts_aftermath"
-                        },
-                        "name": "Protocol",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_boosts_core",
-                                  "name": "blast_boosts_core"
-                                },
-                                "name": "UpgradeAdmin",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "returns": []
-            },
-            {
-              "name": "wrap",
-              "sdk": "intentional-deployment-exclusion",
-              "entry": false,
-              "typeParameters": [],
-              "parameters": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "package"
-                    },
-                    "name": "Publisher",
-                    "type_arguments": []
-                  }
-                },
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "package"
-                    },
-                    "name": "UpgradeCap",
-                    "type_arguments": []
-                  }
-                },
-                {
-                  "Reference": [
-                    true,
                     {
                       "Datatype": {
                         "module": {
                           "address": "sui",
-                          "name": "tx_context"
+                          "name": "clock"
                         },
-                        "name": "TxContext",
+                        "name": "Clock",
                         "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "unpause",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [],
+              "parameters": [
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_admin"
+                        },
+                        "name": "PackageAdmin",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_boosts_aftermath",
+                                  "name": "blast_boosts_aftermath"
+                                },
+                                "name": "BLAST_BOOSTS_AFTERMATH",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_boosts_aftermath",
+                                  "name": "blast_boosts_aftermath"
+                                },
+                                "name": "BLAST_BOOSTS_AFTERMATH",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "blast_treasury"
+                        },
+                        "name": "Treasury",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_admin",
+                                  "name": "package_admin"
+                                },
+                                "name": "UnpauseAdmin",
+                                "type_arguments": [
+                                  {
+                                    "argument": {
+                                      "Datatype": {
+                                        "module": {
+                                          "address": "blast_boosts_aftermath",
+                                          "name": "blast_boosts_aftermath"
+                                        },
+                                        "name": "BLAST_BOOSTS_AFTERMATH",
+                                        "type_arguments": []
+                                      }
+                                    },
+                                    "phantom": true
+                                  }
+                                ]
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -8988,58 +10661,7 @@
               "returns": []
             }
           ],
-          "structs": [
-            {
-              "name": "PackageAdmin",
-              "abilities": [
-                "Key"
-              ],
-              "typeParameters": [],
-              "positional": false,
-              "fields": [
-                {
-                  "name": "id",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "sui",
-                        "name": "object"
-                      },
-                      "name": "UID",
-                      "type_arguments": []
-                    }
-                  }
-                },
-                {
-                  "name": "custody",
-                  "type": {
-                    "Datatype": {
-                      "module": {
-                        "address": "blast_admin",
-                        "name": "upgrade_custody"
-                      },
-                      "name": "UpgradeCustody",
-                      "type_arguments": [
-                        {
-                          "argument": {
-                            "Datatype": {
-                              "module": {
-                                "address": "blast_boosts_aftermath",
-                                "name": "blast_boosts_aftermath"
-                              },
-                              "name": "BLAST_BOOSTS_AFTERMATH",
-                              "type_arguments": []
-                            }
-                          },
-                          "phantom": true
-                        }
-                      ]
-                    }
-                  }
-                }
-              ]
-            }
-          ],
+          "structs": [],
           "enums": [],
           "events": []
         },
@@ -9133,6 +10755,29 @@
                   "type": "u256"
                 }
               ]
+            },
+            {
+              "name": "CashLiquidity",
+              "abilities": [
+                "Copy",
+                "Drop"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "releasable",
+                  "type": "u64"
+                },
+                {
+                  "name": "shortfall",
+                  "type": "u64"
+                },
+                {
+                  "name": "unrealized_profit",
+                  "type": "u64"
+                }
+              ]
             }
           ],
           "enums": [],
@@ -9140,6 +10785,162 @@
         },
         "vault": {
           "functions": [
+            {
+              "name": "apply_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Collateral",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "apply_nav_cap",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Collateral",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
             {
               "name": "begin_shutdown",
               "sdk": "intentional-operator-exclusion",
@@ -9238,6 +11039,297 @@
                     "name": "ShutdownReason",
                     "type_arguments": []
                   }
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "cancel_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Collateral",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_core",
+                                  "name": "blast_domain"
+                                },
+                                "name": "CancelAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "cancel_max_order_notional",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Collateral",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_core",
+                                  "name": "blast_domain"
+                                },
+                                "name": "CancelAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "cancel_nav_cap",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Collateral",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_core",
+                                  "name": "blast_domain"
+                                },
+                                "name": "CancelAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
                 }
               ],
               "returns": []
@@ -9270,6 +11362,35 @@
                         },
                         "name": "Protocol",
                         "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "package_version"
+                        },
+                        "name": "PackageVersion",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_boosts_aftermath",
+                                  "name": "blast_boosts_aftermath"
+                                },
+                                "name": "BLAST_BOOSTS_AFTERMATH",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
                       }
                     }
                   ]
@@ -9557,8 +11678,118 @@
               ]
             },
             {
-              "name": "set_fees",
-              "sdk": "intentional-operator-exclusion",
+              "name": "schedule_fees",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Collateral",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_core",
+                                  "name": "blast_domain"
+                                },
+                                "name": "FeeAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "u64",
+                "u64",
+                "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "schedule_max_order_notional",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -9646,194 +11877,129 @@
                   ]
                 },
                 "u64",
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "sui",
+                          "name": "clock"
+                        },
+                        "name": "Clock",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returns": []
+            },
+            {
+              "name": "schedule_nav_cap",
+              "sdk": "builder",
+              "entry": false,
+              "typeParameters": [
+                {
+                  "name": "Product",
+                  "phantom": false,
+                  "constraints": []
+                },
+                {
+                  "name": "Collateral",
+                  "phantom": false,
+                  "constraints": []
+                }
+              ],
+              "parameters": [
+                {
+                  "Reference": [
+                    true,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "vault"
+                        },
+                        "name": "Vault",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Product"
+                            },
+                            "phantom": true
+                          },
+                          {
+                            "argument": {
+                              "NamedTypeParameter": "Collateral"
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_boosts_aftermath",
+                          "name": "blast_boosts_aftermath"
+                        },
+                        "name": "Protocol",
+                        "type_arguments": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_admin",
+                          "name": "blast_acl"
+                        },
+                        "name": "AdminWitness",
+                        "type_arguments": [
+                          {
+                            "argument": {
+                              "Datatype": {
+                                "module": {
+                                  "address": "blast_boosts_core",
+                                  "name": "blast_boosts_core"
+                                },
+                                "name": "RiskAdmin",
+                                "type_arguments": []
+                              }
+                            },
+                            "phantom": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
                 "u64",
-                "u64"
-              ],
-              "returns": []
-            },
-            {
-              "name": "set_max_order_notional",
-              "sdk": "intentional-operator-exclusion",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Product",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Collateral",
-                  "phantom": false,
-                  "constraints": []
-                }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_boosts_aftermath",
-                          "name": "vault"
-                        },
-                        "name": "Vault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Product"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Collateral"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
                 {
                   "Reference": [
                     false,
                     {
                       "Datatype": {
                         "module": {
-                          "address": "blast_boosts_aftermath",
-                          "name": "blast_boosts_aftermath"
+                          "address": "sui",
+                          "name": "clock"
                         },
-                        "name": "Protocol",
+                        "name": "Clock",
                         "type_arguments": []
                       }
                     }
                   ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_boosts_core",
-                                  "name": "blast_boosts_core"
-                                },
-                                "name": "RiskAdmin",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "u64"
-              ],
-              "returns": []
-            },
-            {
-              "name": "set_nav_cap",
-              "sdk": "intentional-operator-exclusion",
-              "entry": false,
-              "typeParameters": [
-                {
-                  "name": "Product",
-                  "phantom": false,
-                  "constraints": []
-                },
-                {
-                  "name": "Collateral",
-                  "phantom": false,
-                  "constraints": []
                 }
-              ],
-              "parameters": [
-                {
-                  "Reference": [
-                    true,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_boosts_aftermath",
-                          "name": "vault"
-                        },
-                        "name": "Vault",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Product"
-                            },
-                            "phantom": true
-                          },
-                          {
-                            "argument": {
-                              "NamedTypeParameter": "Collateral"
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_boosts_aftermath",
-                          "name": "blast_boosts_aftermath"
-                        },
-                        "name": "Protocol",
-                        "type_arguments": []
-                      }
-                    }
-                  ]
-                },
-                {
-                  "Reference": [
-                    false,
-                    {
-                      "Datatype": {
-                        "module": {
-                          "address": "blast_admin",
-                          "name": "blast_acl"
-                        },
-                        "name": "AdminWitness",
-                        "type_arguments": [
-                          {
-                            "argument": {
-                              "Datatype": {
-                                "module": {
-                                  "address": "blast_boosts_core",
-                                  "name": "blast_boosts_core"
-                                },
-                                "name": "RiskAdmin",
-                                "type_arguments": []
-                              }
-                            },
-                            "phantom": true
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "u64"
               ],
               "returns": []
             },
@@ -10040,7 +12206,7 @@
             },
             {
               "name": "withdraw_admin_fees",
-              "sdk": "intentional-operator-exclusion",
+              "sdk": "builder",
               "entry": false,
               "typeParameters": [
                 {
@@ -10113,16 +12279,31 @@
                             "argument": {
                               "Datatype": {
                                 "module": {
-                                  "address": "blast_boosts_core",
-                                  "name": "blast_boosts_core"
+                                  "address": "blast_core",
+                                  "name": "blast_domain"
                                 },
-                                "name": "RiskAdmin",
+                                "name": "TreasuryAdmin",
                                 "type_arguments": []
                               }
                             },
                             "phantom": true
                           }
                         ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Reference": [
+                    false,
+                    {
+                      "Datatype": {
+                        "module": {
+                          "address": "blast_core",
+                          "name": "blast_treasury"
+                        },
+                        "name": "Treasury",
+                        "type_arguments": []
                       }
                     }
                   ]
@@ -10144,28 +12325,50 @@
                   ]
                 }
               ],
-              "returns": [
-                {
-                  "Datatype": {
-                    "module": {
-                      "address": "sui",
-                      "name": "coin"
-                    },
-                    "name": "Coin",
-                    "type_arguments": [
-                      {
-                        "argument": {
-                          "NamedTypeParameter": "Collateral"
-                        },
-                        "phantom": true
-                      }
-                    ]
-                  }
-                }
-              ]
+              "returns": []
             }
           ],
           "structs": [
+            {
+              "name": "Fees",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": false,
+              "fields": [
+                {
+                  "name": "mint_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "redeem_bps",
+                  "type": "u64"
+                },
+                {
+                  "name": "admin_share_bps",
+                  "type": "u64"
+                }
+              ]
+            },
+            {
+              "name": "FeesKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
             {
               "name": "MetadataKey",
               "abilities": [
@@ -10180,6 +12383,38 @@
                   "constraints": []
                 }
               ],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "NavCapKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
+              "positional": true,
+              "fields": [
+                {
+                  "name": "dummy_field",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "name": "OrderCapKey",
+              "abilities": [
+                "Copy",
+                "Drop",
+                "Store"
+              ],
+              "typeParameters": [],
               "positional": true,
               "fields": [
                 {
@@ -10263,6 +12498,108 @@
                   }
                 },
                 {
+                  "name": "fees",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "delayed_action"
+                      },
+                      "name": "DelayedAction",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_boosts_aftermath",
+                                "name": "vault"
+                              },
+                              "name": "FeesKey",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        },
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_boosts_aftermath",
+                                "name": "vault"
+                              },
+                              "name": "Fees",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "nav_cap",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "delayed_action"
+                      },
+                      "name": "DelayedAction",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_boosts_aftermath",
+                                "name": "vault"
+                              },
+                              "name": "NavCapKey",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        },
+                        {
+                          "argument": "u64",
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "order_cap",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "blast_admin",
+                        "name": "delayed_action"
+                      },
+                      "name": "DelayedAction",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "Datatype": {
+                              "module": {
+                                "address": "blast_boosts_aftermath",
+                                "name": "vault"
+                              },
+                              "name": "OrderCapKey",
+                              "type_arguments": []
+                            }
+                          },
+                          "phantom": false
+                        },
+                        {
+                          "argument": "u64",
+                          "phantom": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
                   "name": "venue_account",
                   "type": {
                     "Datatype": {
@@ -10301,6 +12638,26 @@
                 },
                 {
                   "name": "terminal_cash",
+                  "type": {
+                    "Datatype": {
+                      "module": {
+                        "address": "sui",
+                        "name": "balance"
+                      },
+                      "name": "Balance",
+                      "type_arguments": [
+                        {
+                          "argument": {
+                            "NamedTypeParameter": "Collateral"
+                          },
+                          "phantom": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "protected_cash",
                   "type": {
                     "Datatype": {
                       "module": {

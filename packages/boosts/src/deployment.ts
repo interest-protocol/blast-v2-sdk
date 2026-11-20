@@ -137,6 +137,7 @@ export function boostsDeploymentFingerprint(manifest: BoostsManifest): string {
   const identity = JSON.stringify({
     network: manifest.network,
     chainIdentifier: manifest.chainIdentifier,
+    adminPackageId: manifest.adminPackageId,
     adapterPackage: manifest.adapterPackage,
     productsPackage: manifest.productsPackage,
     products: manifest.products.map((product) => ({
@@ -152,6 +153,7 @@ export function boostsDeploymentFingerprint(manifest: BoostsManifest): string {
       baseOracleStorage: product.baseOracleStorage,
       collateralOracleStorage: product.collateralOracleStorage,
       protocol: product.protocol,
+      packageVersion: product.packageVersion,
       clock: product.clock,
       collateralDecimals: product.collateralDecimals,
       shareDecimals: product.shareDecimals,

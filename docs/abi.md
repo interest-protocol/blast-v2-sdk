@@ -31,10 +31,9 @@ treasury caps, PR #219):
 
 `abi/production-blast-sui-v1.json` covers `blast_sui` at contracts `50b8d59a`
 (the validator-list vault with generic package administration);
-`check:abi` compares it against that commit. The Boosts packages adopt the
-generic package administration separately; `abi/production-boosts-v1.json`
-stays frozen at contracts `01d7659`. `sui/vesting`
-is a dependency only; its `Vesting` layout is pinned by the payout tests.
+`check:abi` compares it against that commit. The Boosts artifact tracks shared
+governance and Aftermath Perps v2 at contracts `ca076654`. The payout tests
+pin the `Vesting` layout from the `sui/vesting` dependency.
 
 `FROZEN_ABI` in `packages/deployments/src/release.ts` records the baseline
 commit and the sha256 of every artifact. A deployment manifest must name the
@@ -70,11 +69,12 @@ package ID. The deployment model stores both.
 
 ## Boosts
 
-Boosts snapshots cover all three packages, the private `operations::observe`
-simulation hook, and its active mint/redeem/rebalance tuple results. The consumer
-SDK builds these active operations and issuer metadata updates; issuance,
-partner-specific trades, risk administration and shutdown remain explicit
-operator PTBs. Only Minted, Redeemed and Rebalanced have consumer event decoders.
+Boosts snapshots cover all three packages. The read transaction calls
+`operations::observe` and reads the deposits pause bit from the shared admin
+package. Mint and redeem return the coin and clearing house. The rebalance
+entry shares the market internally. The SDK also builds issuer metadata and
+governance calls. Issuance, partner-specific trades and shutdown use operator
+PTBs. The SDK decodes the Minted, Redeemed and Rebalanced activity events.
 `test/boosts-abi.test.ts`, `test/boosts-transactions.test.ts` and
 `test/boosts-grpc.test.ts` compare decoded layouts and generated calls against
 the snapshot. The vault's `Binding` holds only account object/number, registry
