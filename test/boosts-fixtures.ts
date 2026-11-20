@@ -15,7 +15,7 @@ import type {
   BoostsProductManifest,
   BoostsTreasuryProductRead,
 } from "@interest-protocol/blast-boosts-sdk/types";
-import { bcs, TypeTagSerializer } from "@mysten/sui/bcs";
+import { TypeTagSerializer } from "@mysten/sui/bcs";
 import type { SuiClientTypes } from "@mysten/sui/client";
 import { deriveDynamicFieldID } from "@mysten/sui/utils";
 
@@ -31,6 +31,7 @@ const common = {
   baseOracleStorage: "0x33",
   collateralOracleStorage: "0x34",
   protocol: "0x37",
+  packageVersion: "0x38",
   clock: "0x6",
   collateralDecimals: 6 as const,
   shareDecimals: 9 as const,
@@ -40,6 +41,7 @@ const common = {
 export const BOOSTS_FIXTURE_MANIFEST = defineBoostsManifest({
   network: "testnet",
   chainIdentifier: "fixture-chain",
+  adminPackageId: "0xad",
   adapterPackage: {
     packageId: ADAPTER_CURRENT,
     originalPackageId: ADAPTER_ORIGINAL,
@@ -158,6 +160,7 @@ export function fixtureRead(
     checkpoint: "10",
     observedAt: "2026-09-21T00:00:00.000Z",
     clockTimestampMs: 1_000_000n,
+    depositsPaused: false,
     vault: {
       ...product.vault,
       type: `${ADAPTER_ORIGINAL}::vault::Vault<${product.productType},${product.collateralType}>`,
@@ -291,12 +294,30 @@ function vaultBytes(
           lifecycle === "Active"
             ? { Active: true }
             : lifecycle === "Unwinding"
-              ? { Unwinding: true }
+              ? { Unwinding: { began_at_ms: 100n, protect_balances: true } }
               : { Settled: true },
         mint_fee_bps: 30n,
         redeem_fee_bps: 40n,
         admin_share_bps: 1_000n,
         nav_cap: options.navCapAtoms ?? 1_000_000_000n,
+      },
+      fees: {
+        parent: product.vault.objectId,
+        key: null,
+        delay_ms: 172800000n,
+        pending: null,
+      },
+      nav_cap: {
+        parent: product.vault.objectId,
+        key: null,
+        delay_ms: 172800000n,
+        pending: null,
+      },
+      order_cap: {
+        parent: product.vault.objectId,
+        key: null,
+        delay_ms: 172800000n,
+        pending: null,
       },
       venue_account: {
         binding,
@@ -306,6 +327,7 @@ function vaultBytes(
       locked_shares: options.lockedSharesAtoms ?? 1_000_000_000n,
       admin_cash: { value: 0n },
       terminal_cash: { value: 0n },
+      protected_cash: { value: 0n },
     })
     .toBytes();
 }
@@ -315,7 +337,7 @@ function treasuryCap(product: BoostsProductManifest, supply: bigint) {
   const wrapper = TypeTagSerializer.parseFromStr(
     `0x2::dynamic_object_field::Wrapper<${keyType}>`,
   );
-  const keyBytes = bcs.struct("TreasuryKey", {}).serialize({}).toBytes();
+  const keyBytes = Uint8Array.of(0);
   return {
     objectId: product.direction === "bull" ? "0x51" : "0x52",
     ownerObjectId: deriveDynamicFieldID(

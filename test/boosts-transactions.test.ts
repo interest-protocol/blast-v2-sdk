@@ -39,7 +39,7 @@ test("builds an issuer-authorized icon-only metadata update", () => {
     {
       productKey: "nvda-2x-bull",
       sender: SENDER,
-      adminPackageId: "0xad",
+
       corePackageId: "0xc0",
       authorityId: "0xa2",
       adminCapId: "0xa3",
@@ -95,7 +95,7 @@ test("builds an issuer-authorized icon-only metadata update", () => {
       buildBoostsIconUpdateTransaction(BOOSTS_FIXTURE_MANIFEST, {
         productKey: "nvda-2x-bull",
         sender: SENDER,
-        adminPackageId: "0xad",
+
         corePackageId: "0xc0",
         authorityId: "0xa2",
         adminCapId: "0xa3",
@@ -111,7 +111,7 @@ test("builds an issuer-authorized icon-only metadata update", () => {
       buildBoostsIconUpdateTransaction(BOOSTS_FIXTURE_MANIFEST, {
         productKey: "nvda-2x-bull",
         sender: SENDER,
-        adminPackageId: "0xad",
+
         corePackageId: "0xc0",
         authorityId: "0xa2",
         adminCapId: "0xa3",
@@ -162,7 +162,7 @@ test("builds the exact public mint redeem and rebalance ABI for every Bull produ
     });
 
     for (const [transaction, operation, argumentCount, transfers] of [
-      [mint, "mint", 11, 1],
+      [mint, "mint", 12, 1],
       [redeem, "redeem", 11, 1],
       [rebalance, "rebalance", 8, 0],
     ] as const) {
@@ -181,7 +181,11 @@ test("builds the exact public mint redeem and rebalance ABI for every Bull produ
       assertMarketAndCoinResults(transaction, operation, productKey);
       assert.deepEqual(shape.moveTargets, [
         `${BOOSTS_FIXTURE_MANIFEST.adapterPackage.packageId}::operations::${operation}`,
-        `${AFTERMATH_PERPETUALS_PACKAGES.testnet}::clearing_house::share`,
+        ...(operation === "rebalance"
+          ? []
+          : [
+              `${AFTERMATH_PERPETUALS_PACKAGES.testnet}::clearing_house::share`,
+            ]),
       ]);
       const call = transaction
         .getData()
@@ -308,7 +312,7 @@ test("fails closed on stale identity lifecycle balance deadline and extra-call s
         productKey: "sui-2x-bull",
         sender: SENDER,
       }),
-    /exactly one Boosts operation/,
+    /unexpected number of Move calls/,
   );
 
   for (const invalid of ["result", "package", "type"] as const) {
@@ -347,14 +351,9 @@ test("fails closed on stale identity lifecycle balance deadline and extra-call s
   const product = BOOSTS_FIXTURE_MANIFEST.products[0];
   const missingArguments = new Transaction();
   missingArguments.setSender(SENDER);
-  const missingResult = missingArguments.moveCall({
+  missingArguments.moveCall({
     target: `${BOOSTS_FIXTURE_MANIFEST.adapterPackage.packageId}::operations::rebalance`,
     typeArguments: [product.productType, product.collateralType],
-  });
-  missingArguments.moveCall({
-    target: `${AFTERMATH_PERPETUALS_PACKAGES.testnet}::clearing_house::share`,
-    typeArguments: [product.collateralType],
-    arguments: [missingResult],
   });
   assert.throws(
     () =>
@@ -430,14 +429,16 @@ function assertMarketAndCoinResults(
   productKey: BoostsProductKey,
 ): void {
   const commands = transaction.getData().commands;
-  const operationIndex = operation === "rebalance" ? 0 : 1;
+  if (operation === "rebalance") {
+    assert.equal(commands.length, 1);
+    return;
+  }
+  const operationIndex = 1;
   const share = commands[operationIndex + 1];
   assert.equal(share?.$kind, "MoveCall");
   if (share?.$kind === "MoveCall") {
     assert.deepEqual(share.MoveCall.arguments, [
-      operation === "rebalance"
-        ? { $kind: "Result", Result: operationIndex }
-        : { $kind: "NestedResult", NestedResult: [operationIndex, 1] },
+      { $kind: "NestedResult", NestedResult: [operationIndex, 1] },
     ]);
     assert.deepEqual(share.MoveCall.typeArguments, [
       BOOSTS_FIXTURE_MANIFEST.products.find(
@@ -445,7 +446,7 @@ function assertMarketAndCoinResults(
       )?.collateralType,
     ]);
   }
-  if (operation !== "rebalance") {
+  {
     const transfer = commands[3];
     assert.equal(transfer?.$kind, "TransferObjects");
     if (transfer?.$kind === "TransferObjects") {

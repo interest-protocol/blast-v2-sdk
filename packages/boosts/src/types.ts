@@ -1,3 +1,4 @@
+import type { DelayedAction } from "@interest-protocol/blast-core/bcs";
 import type { NativeTransactionPosition } from "@interest-protocol/blast-core/events";
 import type {
   SharedObjectReference,
@@ -29,6 +30,7 @@ export type BoostsProductManifest = Readonly<{
   baseOracleStorage: string;
   collateralOracleStorage: string;
   protocol: string;
+  packageVersion: string;
   clock: string;
   collateralDecimals: 6;
   shareDecimals: 9;
@@ -38,6 +40,7 @@ export type BoostsProductManifest = Readonly<{
 export type BoostsManifest = Readonly<{
   network: "mainnet" | "testnet";
   chainIdentifier: string;
+  adminPackageId: string;
   adapterPackage: SuiPackageReference;
   productsPackage: SuiPackageReference;
   explorerTransactionUrlPrefix: string;
@@ -113,6 +116,15 @@ export type BoostsVaultState = Readonly<{
   lockedSharesAtoms: bigint;
   adminCashAtoms: bigint;
   terminalCashAtoms: bigint;
+  protectedCashAtoms: bigint;
+  policyNotices: Readonly<{
+    fees: DelayedAction<
+      null,
+      { mint_bps: bigint; redeem_bps: bigint; admin_share_bps: bigint }
+    >;
+    navCap: DelayedAction<null, bigint>;
+    maxOrderNotional: DelayedAction<null, bigint>;
+  }>;
 }>;
 
 export type BoostsVaultObject = SharedObjectReference<true> & {
@@ -159,6 +171,7 @@ type BoostsProductReadBase = Readonly<{
   checkpoint: string;
   observedAt: string;
   clockTimestampMs: bigint;
+  depositsPaused: boolean;
   vault: BoostsVaultObject;
   market: BoostsMarketObservation;
   lastCompletedRebalance: NativeTransactionPosition | null;

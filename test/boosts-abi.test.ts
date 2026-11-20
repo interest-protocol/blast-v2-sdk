@@ -5,9 +5,14 @@ import { boostsActivityEventBcs } from "@interest-protocol/blast-boosts-sdk/even
 import {
   boostsCapturedSnapshotBcs,
   boostsVaultBcs,
+  decodeBoostsVaultObject,
 } from "@interest-protocol/blast-boosts-sdk/state";
 import { readAbi } from "./abi.ts";
-import { fixtureEvent, fixtureRead } from "./boosts-fixtures.ts";
+import {
+  BOOSTS_FIXTURE_MANIFEST,
+  fixtureEvent,
+  fixtureRead,
+} from "./boosts-fixtures.ts";
 
 const core = readAbi("production-boosts-v1.json", "boostsCore");
 const adapter = readAbi("production-boosts-v1.json", "boostsAftermath");
@@ -62,14 +67,14 @@ test("Boosts observation and active operations retain their return shapes", () =
     ["observe", 4],
     ["mint", 2],
     ["redeem", 2],
-    ["rebalance", 1],
+    ["rebalance", 0],
   ] as const) {
     const operation: (typeof functions)[number] | undefined = functions.find(
       (candidate) => candidate.name === name,
     );
     assert.ok(operation, name);
     assert.equal(operation.returns.length, returnCount, name);
-    if (name !== "observe") {
+    if (name === "mint" || name === "redeem") {
       assert.match(
         JSON.stringify(operation.returns.at(-1)),
         /"name":"ClearingHouse"/,
@@ -106,4 +111,29 @@ test("Boosts observation and active operations retain their return shapes", () =
     Object.keys(snapshot),
     captured.fields.map((field) => field.name),
   );
+});
+
+test("a pending fee change decodes separately from the active fee", () => {
+  const product = BOOSTS_FIXTURE_MANIFEST.products[0];
+  const object = fixtureRead(product.productKey).vault;
+  const vault = boostsVaultBcs.parse(object.content);
+  const notice = {
+    value: {
+      kind: "Action" as const,
+      action: { mint_bps: 45n, redeem_bps: 55n, admin_share_bps: 500n },
+    },
+    delay_ms: 172800000n,
+    ready_at_ms: 200000000n,
+  };
+  const content = boostsVaultBcs
+    .serialize({ ...vault, fees: { ...vault.fees, pending: notice } })
+    .toBytes();
+  const decoded = decodeBoostsVaultObject(
+    { ...object, content },
+    product,
+    BOOSTS_FIXTURE_MANIFEST.adapterPackage.originalPackageId,
+  );
+  assert.equal(decoded.mintFeeBps, 30n);
+  assert.deepEqual(decoded.policyNotices.fees.pending, notice);
+  assert.equal(decoded.policyNotices.navCap.pending, null);
 });

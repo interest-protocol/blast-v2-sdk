@@ -94,6 +94,7 @@ export class BoostsClient {
           read.market,
           requireU64("clockTimestampMs", read.clockTimestampMs),
           lastCompleted,
+          read.depositsPaused,
         ),
       };
     } catch (error) {

@@ -109,6 +109,7 @@ export function defineBoostsManifest(manifest: BoostsManifest): BoostsManifest {
   return Object.freeze({
     network: manifest.network,
     chainIdentifier,
+    adminPackageId: objectId("adminPackageId", manifest.adminPackageId),
     adapterPackage,
     productsPackage,
     explorerTransactionUrlPrefix,
@@ -182,6 +183,7 @@ function normalizeProduct(
       `${key}.collateralOracleStorage`,
       product.collateralOracleStorage,
     ),
+    packageVersion: objectId(`${key}.packageVersion`, product.packageVersion),
     protocol: objectId(`${key}.protocol`, product.protocol),
     clock: objectId(`${key}.clock`, product.clock),
   });

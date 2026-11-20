@@ -1,7 +1,10 @@
 import {
+  delayedActionBcs,
   suiBalanceBcs,
   suiIdBcs,
   suiUidBcs,
+  u64Bcs,
+  unitKeyBcs,
 } from "@interest-protocol/blast-core/bcs";
 import {
   normalizePositiveU64,
@@ -27,7 +30,10 @@ import type {
 const positionSideBcs = bcs.enum("PositionSide", { Long: null, Short: null });
 const lifecycleBcs = bcs.enum("Lifecycle", {
   Active: null,
-  Unwinding: null,
+  Unwinding: bcs.struct("Unwinding", {
+    began_at_ms: bcs.u64(),
+    protect_balances: bcs.bool(),
+  }),
   Settled: null,
 });
 const rebalancePolicyBcs = bcs.struct("RebalancePolicy", {
@@ -126,10 +132,21 @@ const venueAccountBcs = bcs.struct("VenueAccount", {
 export const boostsVaultBcs = bcs.struct("Vault", {
   id: suiUidBcs,
   state: stateBcs,
+  fees: delayedActionBcs(
+    unitKeyBcs,
+    bcs.struct("Fees", {
+      mint_bps: u64Bcs,
+      redeem_bps: u64Bcs,
+      admin_share_bps: u64Bcs,
+    }),
+  ),
+  nav_cap: delayedActionBcs(unitKeyBcs, u64Bcs),
+  order_cap: delayedActionBcs(unitKeyBcs, u64Bcs),
   venue_account: venueAccountBcs,
   locked_shares: bcs.u64(),
   admin_cash: suiBalanceBcs,
   terminal_cash: suiBalanceBcs,
+  protected_cash: suiBalanceBcs,
 });
 
 const supplyBcs = bcs.struct("Supply", { value: bcs.u64() });
@@ -137,7 +154,6 @@ export const boostsTreasuryCapBcs = bcs.struct("TreasuryCap", {
   id: suiUidBcs,
   total_supply: supplyBcs,
 });
-const treasuryKeyBcs = bcs.struct("TreasuryKey", {});
 
 export function decodeBoostsVaultObject(
   object: BoostsVaultObject,
@@ -273,6 +289,12 @@ export function decodeBoostsVaultObject(
     checkpoint: decodeBoostsCheckpoint(parsed.venue_account.checkpoint),
     lockedSharesAtoms: u64("lockedSharesAtoms", parsed.locked_shares),
     adminCashAtoms: u64("adminCashAtoms", parsed.admin_cash.value),
+    policyNotices: {
+      fees: parsed.fees,
+      navCap: parsed.nav_cap,
+      maxOrderNotional: parsed.order_cap,
+    },
+    protectedCashAtoms: u64("protectedCashAtoms", parsed.protected_cash.value),
     terminalCashAtoms: u64("terminalCashAtoms", parsed.terminal_cash.value),
   };
 }
@@ -295,7 +317,7 @@ export function decodeBoostsTreasurySupply(
   const expectedOwner = deriveDynamicFieldID(
     product.vault.objectId,
     wrapperType,
-    treasuryKeyBcs.serialize({}).toBytes(),
+    unitKeyBcs.serialize(null).toBytes(),
   );
   if (
     normalizeSuiObjectId(object.ownerObjectId) !==
