@@ -338,3 +338,30 @@ Version 0.2.1 updates the deployment registry and umbrella package with
 [mainnet route evidence](docs/mainnet-route-evidence.md).
 
 The canonical manifest is backed by the [November 6 deployment record](https://github.com/interest-protocol/blast-v2-contracts/blob/main/deployments/sui/mainnet/2026-11-06-canonical-launch-stack.json). Auto-LP compounding now requires an `AutoLpAdmin` cap and inclusive Q64.64 price bounds; its private entry consumes and re-shares the pool. Collection stays permissionless.
+
+## License for SDK 0.3.0
+
+The first-party code in the npm packages below at version 0.3.0, including
+their corresponding source, is licensed under [Apache 2.0](LICENSE-SDK).
+This grant applies to copies of these releases already on npm.
+
+- `@interest-protocol/blast-admin-sdk`
+- `@interest-protocol/blast-boosts-sdk`
+- `@interest-protocol/blast-cctp-sdk`
+- `@interest-protocol/blast-coin-sdk`
+- `@interest-protocol/blast-core`
+- `@interest-protocol/blast-deployments-sdk`
+- `@interest-protocol/blast-holder-rewards-sdk`
+- `@interest-protocol/blast-launchpad-sdk`
+- `@interest-protocol/blast-migrators-sdk`
+- `@interest-protocol/blast-partners-sdk`
+- `@interest-protocol/blast-presale-sdk`
+- `@interest-protocol/blast-sdk`
+- `@interest-protocol/blast-sui-sdk`
+- `@interest-protocol/blast-vault-sdk`
+
+The [utility SDK](packages/utility/LICENSE) and
+[partner client](packages/partner-client/LICENSE) retain their MIT licenses.
+Third-party code keeps its own terms. See the
+[Blast Move contract license](https://github.com/interest-protocol/blast-v2-contracts/blob/main/LICENSE)
+for the on-chain software.
